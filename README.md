@@ -13,7 +13,7 @@ Full build spec: [`docs/spec.md`](docs/spec.md).
 - **Frontend:** Next.js (App Router), Tailwind v4, shadcn/ui
 - **Backend:** Supabase (`compass-client-platform` project) — Postgres, Auth
   (team magic link), Storage, Edge Functions
-- **Hosting:** Vercel
+- **Hosting:** Vercel — production: https://compass-crm-ten.vercel.app
 
 ## Getting started
 
