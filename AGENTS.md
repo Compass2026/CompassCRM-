@@ -41,9 +41,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
    geo-grid configs with a radius helper, rank matrix + City Index, BrightLocal
    sync, GSC sync, Content tracker, Social tracker + calendar, Reports tab,
    monthly cycle automation.
-3. **Billing — next.** Stripe subscriptions ported from the Show Me Electrical
-   CRM. Subscription model only; paid status is webhook-driven. See
-   `docs/spec.md` §6.5b and §9.
+3. **Billing — built, awaiting Stripe keys.** Subscription model only; paid
+   status is webhook-driven (`docs/spec.md` §6.5b and §9). See "Billing
+   architecture" below for what's deployed and the two secrets still missing.
 4. Views & publishing (Board, Tasks, Looker export, Meta publishing).
 5. Client portal (RLS policies + read-only views).
 
@@ -69,7 +69,40 @@ and finishing in the background via `EdgeRuntime.waitUntil`:
 Both are idempotent: natural-key unique indexes on `rank_snapshots`,
 `grid_snapshots`, and `gsc_snapshots` make re-ingestion a no-op.
 
+## Billing architecture (Phase 3)
+
+Two more Edge Functions in `supabase/functions/`, deployed to the remote
+project (migration `0008_stripe_billing.sql` applied):
+
+- **`stripe-billing`** — JWT-authorized actions called from
+  `src/app/billing-actions.ts`: `setup` (create Stripe customer + monthly
+  subscription priced from `plans.monthly_fee`, `default_incomplete`, card +
+  `us_bank_account`; the first hosted-invoice link is stored on
+  `subscriptions.latest_invoice_url` for sending to the client),
+  `pause` / `resume` (`pause_collection`).
+- **`stripe-webhook`** — deployed with `verify_jwt = false`; authenticity
+  comes from the Stripe signature (`STRIPE_WEBHOOK_SECRET`). Sole writer of
+  `paid_status`: `invoice.paid` → payment row + `paid`,
+  `invoice.payment_failed` → `past_due`, `payment_intent.processing` →
+  `processing` (ACH settling), `customer.subscription.updated/deleted` →
+  mirror status/price/period (a new period resets `paid_status` to `open`).
+  `stripe_events` dedupes Stripe's retried deliveries.
+
+A daily pg_cron sweep (06:30 UTC, `mark_past_due_subscriptions()`) flips
+subscriptions still `open` 3+ days past `current_period_end` to `past_due`;
+the Dashboard surfaces those under "Payments past due". UI: Billing tab
+(subscription card, payment history, lifetime paid, pause/resume, open in
+Stripe) plus a setup card on the Plan tab.
+
 ## Known state / open items (as of Aug 31 2026)
+
+- **Stripe secrets are not in Vault yet.** Billing code is deployed but inert
+  until `STRIPE_SECRET_KEY` is added to Supabase Vault, a webhook endpoint
+  pointing at `/functions/v1/stripe-webhook` is created in the Stripe
+  dashboard (events: `invoice.paid`, `invoice.payment_failed`,
+  `payment_intent.processing`, `customer.subscription.updated`,
+  `customer.subscription.deleted`), and its signing secret is stored as
+  `STRIPE_WEBHOOK_SECRET`. No Stripe objects have been created.
 
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly
   sync. Get a production key before that runs out.

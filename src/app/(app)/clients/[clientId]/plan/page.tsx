@@ -1,9 +1,12 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import {
   enrollPipelineAction,
   unenrollPipelineAction,
   upsertPlanAction,
 } from "@/app/actions";
+import { setupBillingAction } from "@/app/billing-actions";
+import { paidStatusLabels, paidStatusStyles } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,19 +26,32 @@ export default async function PlanPage({
 }) {
   const { clientId } = await params;
   const supabase = await createClient();
-  const [{ data: plan }, { data: pipelines }, { data: enrollments }] =
-    await Promise.all([
-      supabase.from("plans").select("*").eq("client_id", clientId).maybeSingle(),
-      supabase
-        .from("pipelines")
-        .select("*")
-        .eq("is_recurring", false)
-        .order("sort_order"),
-      supabase
-        .from("client_pipelines")
-        .select("*, pipelines(name, is_recurring)")
-        .eq("client_id", clientId),
-    ]);
+  const [
+    { data: plan },
+    { data: pipelines },
+    { data: enrollments },
+    { data: subscription },
+  ] = await Promise.all([
+    supabase.from("plans").select("*").eq("client_id", clientId).maybeSingle(),
+    supabase
+      .from("pipelines")
+      .select("*")
+      .eq("is_recurring", false)
+      .order("sort_order"),
+    supabase
+      .from("client_pipelines")
+      .select("*, pipelines(name, is_recurring)")
+      .eq("client_id", clientId),
+    supabase
+      .from("subscriptions")
+      .select("id, status, amount, interval, paid_status")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const setupBilling = setupBillingAction.bind(null, clientId);
 
   const savePlan = upsertPlanAction.bind(null, clientId);
   const enrolledByPipeline = new Map(
@@ -155,6 +171,54 @@ export default async function PlanPage({
                 enrolled
               </Badge>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">Billing</CardTitle>
+            {subscription && (
+              <Badge
+                variant="outline"
+                className={paidStatusStyles[subscription.paid_status]}
+              >
+                {paidStatusLabels[subscription.paid_status]}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {subscription ? (
+            <p className="text-sm text-muted-foreground">
+              Stripe subscription {subscription.status ?? "active"} —{" "}
+              {subscription.amount != null
+                ? `$${subscription.amount}/${subscription.interval}`
+                : "amount TBD"}
+              . Details and payment history on the{" "}
+              <Link href={`/clients/${clientId}/billing`} className="underline">
+                Billing tab
+              </Link>
+              .
+            </p>
+          ) : plan?.monthly_fee ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Creates the Stripe customer and a ${plan.monthly_fee}/month
+                subscription, payable by card or ACH debit. Paid status stays
+                webhook-driven from there.
+              </p>
+              <form action={setupBilling}>
+                <Button type="submit">
+                  Create Stripe customer + subscription
+                </Button>
+              </form>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Save a monthly fee above to enable Stripe billing setup.
+            </p>
           )}
         </CardContent>
       </Card>

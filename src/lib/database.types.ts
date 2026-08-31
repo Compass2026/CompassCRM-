@@ -1204,6 +1204,24 @@ export type Database = {
           },
         ]
       }
+      stripe_events: {
+        Row: {
+          id: string
+          received_at: string
+          type: string
+        }
+        Insert: {
+          id: string
+          received_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          received_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           amount: number | null
@@ -1214,6 +1232,7 @@ export type Database = {
           current_period_start: string | null
           id: string
           interval: string
+          latest_invoice_url: string | null
           paid_status: Database["public"]["Enums"]["paid_status_type"]
           status: string | null
           stripe_price_id: string | null
@@ -1228,6 +1247,7 @@ export type Database = {
           current_period_start?: string | null
           id?: string
           interval?: string
+          latest_invoice_url?: string | null
           paid_status?: Database["public"]["Enums"]["paid_status_type"]
           status?: string | null
           stripe_price_id?: string | null
@@ -1242,6 +1262,7 @@ export type Database = {
           current_period_start?: string | null
           id?: string
           interval?: string
+          latest_invoice_url?: string | null
           paid_status?: Database["public"]["Enums"]["paid_status_type"]
           status?: string | null
           stripe_price_id?: string | null

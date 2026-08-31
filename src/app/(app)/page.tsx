@@ -12,28 +12,38 @@ import { clientStatusStyles, ownerLabels } from "@/lib/labels";
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: clients }, { data: blockedStages }, { data: attentionTasks }] =
-    await Promise.all([
-      supabase
-        .from("clients")
-        .select(
-          "id, name, status, client_pipelines(id, status, pipelines(name, key, is_recurring), client_stages(status))"
-        )
-        .order("name"),
-      supabase
-        .from("client_stages")
-        .select(
-          "id, status, stages(name), client_pipelines!inner(client_id, pipelines(name), clients(id, name))"
-        )
-        .eq("status", "blocked"),
-      supabase
-        .from("tasks")
-        .select("id, title, owner, status, due_date, clients(id, name)")
-        .neq("status", "done")
-        .or(`owner.eq.CLAUDE_APPROVAL,due_date.lt.${new Date().toISOString().slice(0, 10)}`)
-        .order("due_date", { ascending: true, nullsFirst: false })
-        .limit(20),
-    ]);
+  const [
+    { data: clients },
+    { data: blockedStages },
+    { data: attentionTasks },
+    { data: pastDueSubs },
+  ] = await Promise.all([
+    supabase
+      .from("clients")
+      .select(
+        "id, name, status, client_pipelines(id, status, pipelines(name, key, is_recurring), client_stages(status))"
+      )
+      .order("name"),
+    supabase
+      .from("client_stages")
+      .select(
+        "id, status, stages(name), client_pipelines!inner(client_id, pipelines(name), clients(id, name))"
+      )
+      .eq("status", "blocked"),
+    supabase
+      .from("tasks")
+      .select("id, title, owner, status, due_date, clients(id, name)")
+      .neq("status", "done")
+      .or(`owner.eq.CLAUDE_APPROVAL,due_date.lt.${new Date().toISOString().slice(0, 10)}`)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(20),
+    supabase
+      .from("subscriptions")
+      .select("id, client_id, amount, current_period_end, clients(id, name)")
+      .eq("paid_status", "past_due"),
+  ]);
+
+  const pastDueClientIds = new Set((pastDueSubs ?? []).map((s) => s.client_id));
 
   return (
     <div className="space-y-8">
@@ -51,9 +61,19 @@ export default async function DashboardPage() {
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-base">{client.name}</CardTitle>
-                      <Badge variant="outline" className={clientStatusStyles[client.status]}>
-                        {client.status}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        {pastDueClientIds.has(client.id) && (
+                          <Badge
+                            variant="outline"
+                            className="bg-red-100 text-red-800 border-red-200"
+                          >
+                            past due
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className={clientStatusStyles[client.status]}>
+                          {client.status}
+                        </Badge>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -106,6 +126,35 @@ export default async function DashboardPage() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight mb-3">Needs attention</h2>
         <div className="grid gap-4 lg:grid-cols-2">
+          {(pastDueSubs ?? []).length > 0 && (
+            <Card className="lg:col-span-2 border-red-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-red-800">
+                  Payments past due
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm">
+                  {(pastDueSubs ?? []).map((s) => (
+                    <li key={s.id} className="flex items-center gap-2">
+                      <Link
+                        className="hover:underline font-medium"
+                        href={`/clients/${s.client_id}/billing`}
+                      >
+                        {s.clients?.name}
+                      </Link>
+                      <span className="text-muted-foreground">
+                        {s.amount != null ? `$${s.amount}/mo` : ""}
+                        {s.current_period_end
+                          ? ` — period ended ${s.current_period_end.slice(0, 10)}`
+                          : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Blocked stages</CardTitle>
