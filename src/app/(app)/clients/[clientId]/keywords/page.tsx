@@ -3,6 +3,7 @@ import {
   addKeywordAction,
   deleteKeywordAction,
   importRankCsvAction,
+  runBrightLocalSyncAction,
   updateKeywordAction,
 } from "@/app/rank-actions";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +74,31 @@ export default async function KeywordsPage({
         )
     : { data: [] };
 
+  const [{ data: lastRun }, { data: gridSnaps }] = await Promise.all([
+    supabase
+      .from("rank_runs")
+      .select("triggered_by, status, started_at, completed_at, checks_count, error")
+      .eq("client_id", clientId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    (gridConfigs ?? []).length
+      ? supabase
+          .from("grid_snapshots")
+          .select("grid_config_id, keyword_id, avg_map_rank, recorded_at, report_url, keywords(keyword)")
+          .in("grid_config_id", (gridConfigs ?? []).map((g) => g.id))
+          .order("recorded_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // Latest grid snapshot per config × keyword
+  const latestGrid = new Map<string, NonNullable<typeof gridSnaps>[number]>();
+  for (const g of gridSnaps ?? []) {
+    const key = `${g.grid_config_id}:${g.keyword_id}`;
+    if (!latestGrid.has(key)) latestGrid.set(key, g);
+  }
+
   // Latest position per keyword × location × result_type (snapshots are
   // ordered newest first, so first hit wins).
   const latest = new Map<string, number | null>();
@@ -101,9 +127,28 @@ export default async function KeywordsPage({
 
   const addKeyword = addKeywordAction.bind(null, clientId);
   const importCsv = importRankCsvAction.bind(null, clientId);
+  const runSync = runBrightLocalSyncAction.bind(null, clientId);
+  const hasBrightLocal = (locations ?? []).some(
+    (l) => l.brightlocal_lrt_report_id
+  );
 
   return (
     <div className="space-y-4">
+      {hasBrightLocal && (
+        <div className="flex items-center gap-3 border rounded-md bg-card px-3 py-2">
+          <form action={runSync}>
+            <Button type="submit" size="sm">
+              Sync BrightLocal now
+            </Button>
+          </form>
+          <span className="text-xs text-muted-foreground">
+            {lastRun
+              ? `Last sync: ${lastRun.status} · ${lastRun.started_at?.slice(0, 16).replace("T", " ")} UTC · ${lastRun.checks_count ?? 0} snapshots (${lastRun.triggered_by})`
+              : "No syncs yet — BrightLocal reports run weekly; sync pulls the latest results."}
+            {lastRun?.error && ` · ${lastRun.error.slice(0, 120)}`}
+          </span>
+        </div>
+      )}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Keywords</CardTitle>
@@ -224,21 +269,66 @@ export default async function KeywordsPage({
                 search) to configure a grid.
               </p>
             )}
-            {physicalLocations.map((loc) => (
-              <GridConfigCard
-                key={loc.id}
-                clientId={clientId}
-                locationId={loc.id}
-                locationName={loc.name}
-                locationLat={loc.lat}
-                locationLng={loc.lng}
-                config={
-                  (gridConfigs ?? []).find((g) => g.location_id === loc.id) ??
-                  null
-                }
-                activeKeywordCount={activeKeywords.length}
-              />
-            ))}
+            {physicalLocations.map((loc) => {
+              const config =
+                (gridConfigs ?? []).find((g) => g.location_id === loc.id) ??
+                null;
+              const snaps = config
+                ? [...latestGrid.entries()]
+                    .filter(([k]) => k.startsWith(`${config.id}:`))
+                    .map(([, v]) => v)
+                : [];
+              return (
+                <div key={loc.id} className="space-y-1">
+                  <GridConfigCard
+                    clientId={clientId}
+                    locationId={loc.id}
+                    locationName={loc.name}
+                    locationLat={loc.lat}
+                    locationLng={loc.lng}
+                    config={config}
+                    activeKeywordCount={activeKeywords.length}
+                  />
+                  {snaps.length > 0 && (
+                    <div className="border rounded-md px-3 py-2 bg-muted/30 text-xs space-y-1">
+                      <p className="text-muted-foreground">
+                        Latest grid run ({snaps[0].recorded_at?.slice(0, 10)}) —
+                        avg map rank per keyword:
+                      </p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        {snaps.map((s) => (
+                          <span key={s.keyword_id}>
+                            {s.keywords?.keyword}:{" "}
+                            <span
+                              className={cn(
+                                "px-1 py-0.5 rounded font-medium",
+                                heat(
+                                  s.avg_map_rank == null
+                                    ? null
+                                    : Math.round(Number(s.avg_map_rank))
+                                )
+                              )}
+                            >
+                              {s.avg_map_rank ?? "—"}
+                            </span>
+                          </span>
+                        ))}
+                        {snaps[0].report_url && (
+                          <a
+                            href={snaps[0].report_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            View grid →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       </div>

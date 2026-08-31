@@ -268,6 +268,34 @@ export async function deleteGridConfigAction(
   revalidatePath(`/clients/${clientId}/keywords`);
 }
 
+// ── BrightLocal sync (Edge Function) ───────────────────────────────────────
+// Ingests the latest LRT + LSG results for this client's linked locations.
+// Read-only against BrightLocal — never triggers billable report runs.
+export async function runBrightLocalSyncAction(clientId: string) {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not signed in");
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/brightlocal-sync`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ client_id: clientId }),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Sync failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  revalidatePath(`/clients/${clientId}/keywords`);
+}
+
 // ── CSV rank import (fallback until BrightLocal sync) ──────────────────────
 // Expected columns: keyword, location, position, date[, type]
 // type: organic (default) | map_pack. Blank/"-" position = not in top 100.
