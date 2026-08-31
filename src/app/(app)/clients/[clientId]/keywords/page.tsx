@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import {
+  addDiscoveredKeywordAction,
   addKeywordAction,
   deleteKeywordAction,
   importRankCsvAction,
   runBrightLocalSyncAction,
+  runGscSyncAction,
   updateKeywordAction,
 } from "@/app/rank-actions";
 import { Badge } from "@/components/ui/badge";
@@ -99,6 +101,57 @@ export default async function KeywordsPage({
     if (!latestGrid.has(key)) latestGrid.set(key, g);
   }
 
+  // GSC: latest period's snapshots — per-keyword rollups + discovered queries
+  const { data: gscRows } = await supabase
+    .from("gsc_snapshots")
+    .select("keyword_id, query, page, clicks, impressions, avg_position, period_end")
+    .eq("client_id", clientId)
+    .order("period_end", { ascending: false })
+    .limit(1000);
+  const latestPeriod = gscRows?.[0]?.period_end ?? null;
+  const currentGsc = (gscRows ?? []).filter((r) => r.period_end === latestPeriod);
+  const gscByKeyword = new Map<
+    string,
+    { clicks: number; impressions: number; posWeight: number }
+  >();
+  const discovered = new Map<
+    string,
+    { clicks: number; impressions: number; posWeight: number }
+  >();
+  for (const r of currentGsc) {
+    const bucket = r.keyword_id
+      ? gscByKeyword
+      : discovered;
+    const key = r.keyword_id ?? r.query.toLowerCase();
+    const agg = bucket.get(key) ?? { clicks: 0, impressions: 0, posWeight: 0 };
+    agg.clicks += r.clicks;
+    agg.impressions += r.impressions;
+    agg.posWeight += Number(r.avg_position ?? 0) * r.impressions;
+    bucket.set(key, agg);
+  }
+  const gscStats = (key: string) => {
+    const agg = gscByKeyword.get(key);
+    if (!agg) return null;
+    return {
+      clicks: agg.clicks,
+      impressions: agg.impressions,
+      avgPos: agg.impressions
+        ? Math.round((agg.posWeight / agg.impressions) * 10) / 10
+        : null,
+    };
+  };
+  const topDiscovered = [...discovered.entries()]
+    .map(([query, agg]) => ({
+      query,
+      clicks: agg.clicks,
+      impressions: agg.impressions,
+      avgPos: agg.impressions
+        ? Math.round((agg.posWeight / agg.impressions) * 10) / 10
+        : null,
+    }))
+    .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
+    .slice(0, 15);
+
   // Latest position per keyword × location × result_type (snapshots are
   // ordered newest first, so first hit wins).
   const latest = new Map<string, number | null>();
@@ -134,21 +187,27 @@ export default async function KeywordsPage({
 
   return (
     <div className="space-y-4">
-      {hasBrightLocal && (
-        <div className="flex items-center gap-3 border rounded-md bg-card px-3 py-2">
+      <div className="flex items-center gap-3 border rounded-md bg-card px-3 py-2 flex-wrap">
+        {hasBrightLocal && (
           <form action={runSync}>
             <Button type="submit" size="sm">
               Sync BrightLocal now
             </Button>
           </form>
-          <span className="text-xs text-muted-foreground">
-            {lastRun
-              ? `Last sync: ${lastRun.status} · ${lastRun.started_at?.slice(0, 16).replace("T", " ")} UTC · ${lastRun.checks_count ?? 0} snapshots (${lastRun.triggered_by})`
-              : "No syncs yet — BrightLocal reports run weekly; sync pulls the latest results."}
-            {lastRun?.error && ` · ${lastRun.error.slice(0, 120)}`}
-          </span>
-        </div>
-      )}
+        )}
+        <form action={runGscSyncAction.bind(null, clientId)}>
+          <Button type="submit" size="sm" variant="outline">
+            Sync GSC now
+          </Button>
+        </form>
+        <span className="text-xs text-muted-foreground">
+          {lastRun
+            ? `Last rank sync: ${lastRun.status} · ${lastRun.started_at?.slice(0, 16).replace("T", " ")} UTC · ${lastRun.checks_count ?? 0} snapshots (${lastRun.triggered_by})`
+            : "BrightLocal reports run weekly; sync pulls the latest results."}
+          {lastRun?.error && ` · ${lastRun.error.slice(0, 120)}`}
+          {latestPeriod && ` · GSC through ${latestPeriod}`}
+        </span>
+      </div>
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Keywords</CardTitle>
@@ -201,6 +260,15 @@ export default async function KeywordsPage({
                           <span className={cn("px-1.5 py-0.5 rounded text-xs", heat(best))}>
                             {best ?? "—"}
                           </span>
+                          {(() => {
+                            const g = gscStats(k.id);
+                            return g ? (
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                GSC {g.clicks}c · {g.impressions}i · pos{" "}
+                                {g.avgPos ?? "—"}
+                              </span>
+                            ) : null;
+                          })()}
                           <label className="text-xs flex items-center gap-1">
                             <input type="checkbox" name="is_active" defaultChecked={k.is_active} />
                           </label>
@@ -250,6 +318,43 @@ export default async function KeywordsPage({
           </form>
         </CardContent>
       </Card>
+
+      {topDiscovered.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              Discovered queries (GSC, last 28 days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-2">
+              Queries this client already ranks for that aren&apos;t in the
+              keyword set yet.
+            </p>
+            <div className="space-y-1">
+              {topDiscovered.map((d) => (
+                <div key={d.query} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 truncate">{d.query}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {d.clicks} clicks · {d.impressions} impr · pos {d.avgPos ?? "—"}
+                  </span>
+                  <form
+                    action={addDiscoveredKeywordAction.bind(
+                      null,
+                      clientId,
+                      d.query
+                    )}
+                  >
+                    <Button type="submit" size="sm" variant="outline">
+                      + Track
+                    </Button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <LocationsPanel clientId={clientId} locations={locations ?? []} />

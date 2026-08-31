@@ -296,6 +296,58 @@ export async function runBrightLocalSyncAction(clientId: string) {
   revalidatePath(`/clients/${clientId}/keywords`);
 }
 
+// ── GSC sync (Edge Function) ───────────────────────────────────────────────
+export async function runGscSyncAction(clientId: string) {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not signed in");
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/gsc-sync`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ client_id: clientId }),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GSC sync failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  revalidatePath(`/clients/${clientId}/keywords`);
+}
+
+// Promote a discovered GSC query into the tracked keyword set and link its
+// existing snapshots.
+export async function addDiscoveredKeywordAction(
+  clientId: string,
+  query: string
+) {
+  const supabase = await createClient();
+  const { data: created, error } = await supabase
+    .from("keywords")
+    .insert({
+      client_id: clientId,
+      keyword: query.toLowerCase(),
+      department: "seo",
+      priority: "p3",
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  await supabase
+    .from("gsc_snapshots")
+    .update({ keyword_id: created.id })
+    .eq("client_id", clientId)
+    .ilike("query", query);
+  revalidatePath(`/clients/${clientId}/keywords`);
+}
+
 // ── CSV rank import (fallback until BrightLocal sync) ──────────────────────
 // Expected columns: keyword, location, position, date[, type]
 // type: organic (default) | map_pack. Blank/"-" position = not in top 100.
