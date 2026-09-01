@@ -24,28 +24,32 @@ export default async function ClientLayout({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Link href="/clients" className="text-sm text-muted-foreground hover:underline">
-          Clients
+      <div className="space-y-1">
+        <Link
+          href="/clients"
+          className="text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors"
+        >
+          &larr; All clients
         </Link>
-        <span className="text-muted-foreground">/</span>
-        <h1 className="text-2xl font-semibold tracking-tight">{client.name}</h1>
-        {client.dba && (
-          <span className="text-muted-foreground text-sm">dba {client.dba}</span>
-        )}
-        <Badge variant="outline" className={clientStatusStyles[client.status]}>
-          {client.status}
-        </Badge>
-        {client.website_url && (
-          <a
-            href={client.website_url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            {client.website_url.replace(/^https?:\/\//, "")}
-          </a>
-        )}
+        <div className="kicker flex items-center gap-3 flex-wrap">
+          <h1 className="page-title">{client.name}</h1>
+          {client.dba && (
+            <span className="text-muted-foreground text-sm">dba {client.dba}</span>
+          )}
+          <Badge variant="outline" className={clientStatusStyles[client.status]}>
+            {client.status}
+          </Badge>
+          {client.website_url && (
+            <a
+              href={client.website_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm text-muted-foreground hover:text-primary hover:underline transition-colors"
+            >
+              {client.website_url.replace(/^https?:\/\//, "")}
+            </a>
+          )}
+        </div>
       </div>
       <ClientTabs clientId={client.id} />
       <div>{children}</div>

@@ -30,7 +30,7 @@ export default async function TasksPage({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
+      <h1 className="page-title kicker">Tasks</h1>
       <div className="flex gap-2 flex-wrap">
         <Link
           href="/tasks"

@@ -38,7 +38,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight mb-4">Dashboard</h1>
+        <h1 className="page-title kicker mb-4">Dashboard</h1>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(clients ?? []).map((client) => {
             const launch = client.client_pipelines.filter(
