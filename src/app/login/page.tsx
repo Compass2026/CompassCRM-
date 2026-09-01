@@ -59,8 +59,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-navy-900 bg-gradient-to-b from-navy-950 to-navy-800">
+      <Card className="w-full max-w-sm border-t-4 border-t-orange-500">
         <CardHeader>
           <CardTitle>Compass Client Platform</CardTitle>
           <CardDescription>Team sign-in</CardDescription>
