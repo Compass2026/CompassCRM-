@@ -46,75 +46,88 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Compass brand palette (compasswebsite-topaz.vercel.app) */
+  --color-navy-950: #060d1a;
+  --color-navy-900: #0b162a;
+  --color-navy-800: #101f3c;
+  --color-navy-700: #16294e;
+  --color-orange-600: #c83803;
+  --color-orange-500: #e85d04;
+  --color-orange-400: #ff6b1a;
+  --color-orange-300: #ff8a3d;
+  --color-cream: #f7f4ef;
 }
 
+/* Compass brand theme — navy & orange from the marketing site,
+   cream ground with white cards for the light app shell. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #f7f4ef;
+  --foreground: #0b162a;
+  --card: #ffffff;
+  --card-foreground: #0b162a;
+  --popover: #ffffff;
+  --popover-foreground: #0b162a;
+  --primary: #e85d04;
+  --primary-foreground: #ffffff;
+  --secondary: #e9e4da;
+  --secondary-foreground: #0b162a;
+  --muted: #efebe3;
+  --muted-foreground: rgba(11, 22, 42, 0.66);
+  --accent: #f7e5d6;
+  --accent-foreground: #0b162a;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: rgba(11, 22, 42, 0.14);
+  --input: rgba(11, 22, 42, 0.18);
+  --ring: #e85d04;
+  --chart-1: #e85d04;
+  --chart-2: #16294e;
+  --chart-3: #ff8a3d;
+  --chart-4: #0b162a;
+  --chart-5: #c83803;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #0b162a;
+  --sidebar-foreground: #f7f4ef;
+  --sidebar-primary: #e85d04;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #101f3c;
+  --sidebar-accent-foreground: #f7f4ef;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #ff6b1a;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #0b162a;
+  --foreground: #f7f4ef;
+  --card: #101f3c;
+  --card-foreground: #f7f4ef;
+  --popover: #101f3c;
+  --popover-foreground: #f7f4ef;
+  --primary: #e85d04;
+  --primary-foreground: #ffffff;
+  --secondary: #16294e;
+  --secondary-foreground: #f7f4ef;
+  --muted: #101f3c;
+  --muted-foreground: rgba(247, 244, 239, 0.68);
+  --accent: #16294e;
+  --accent-foreground: #f7f4ef;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #ff6b1a;
+  --chart-1: #ff6b1a;
+  --chart-2: #ff8a3d;
+  --chart-3: #f7f4ef;
+  --chart-4: #e85d04;
+  --chart-5: #c83803;
+  --sidebar: #060d1a;
+  --sidebar-foreground: #f7f4ef;
+  --sidebar-primary: #e85d04;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #101f3c;
+  --sidebar-accent-foreground: #f7f4ef;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #ff6b1a;
 }
 
 @layer base {
