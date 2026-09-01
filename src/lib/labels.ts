@@ -91,3 +91,75 @@ export const documentCategories: DocumentCategory[] = [
   "report",
   "other",
 ];
+
+// ── Brand board ────────────────────────────────────────────────────────────
+export type BrandColorRole = Database["public"]["Enums"]["brand_color_role"];
+export type BrandFontRole = Database["public"]["Enums"]["brand_font_role"];
+export type BrandAssetKind = Database["public"]["Enums"]["brand_asset_kind"];
+
+export const brandColorRoles: BrandColorRole[] = [
+  "primary",
+  "secondary",
+  "accent",
+  "neutral",
+  "background",
+  "text",
+  "other",
+];
+
+export const brandColorRoleLabels: Record<BrandColorRole, string> = {
+  primary: "Primary",
+  secondary: "Secondary",
+  accent: "Accent",
+  neutral: "Neutral",
+  background: "Background",
+  text: "Text",
+  other: "Other",
+};
+
+export const brandFontRoles: BrandFontRole[] = ["heading", "body", "accent", "other"];
+
+export const brandFontRoleLabels: Record<BrandFontRole, string> = {
+  heading: "Headings",
+  body: "Body",
+  accent: "Accent",
+  other: "Other",
+};
+
+export const brandAssetKinds: BrandAssetKind[] = [
+  "logo_primary",
+  "logo_alt",
+  "logo_icon",
+  "wordmark",
+  "photo",
+  "website_screenshot",
+  "social_post",
+  "ad",
+  "print",
+  "pattern",
+  "video",
+  "other",
+];
+
+export const brandAssetKindLabels: Record<BrandAssetKind, string> = {
+  logo_primary: "Primary logo",
+  logo_alt: "Alternate logo",
+  logo_icon: "Icon / favicon",
+  wordmark: "Wordmark",
+  photo: "Photo",
+  website_screenshot: "Website screenshot",
+  social_post: "Social post",
+  ad: "Ad creative",
+  print: "Print piece",
+  pattern: "Pattern / texture",
+  video: "Video",
+  other: "Other",
+};
+
+// Kinds that render in the logo block of the board (vs. the reference gallery)
+export const brandLogoKinds: BrandAssetKind[] = [
+  "logo_primary",
+  "logo_alt",
+  "logo_icon",
+  "wordmark",
+];

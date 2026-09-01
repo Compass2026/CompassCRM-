@@ -34,7 +34,7 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 
 ## Phases
 
-1. **Foundation — done.** Clients list, Overview / Plan / Documents /
+1. **Foundation — done.** Clients list, Overview / Plan / Brand / Documents /
    Pipelines tabs, Dashboard, Tasks by owner, Settings.
 2. **Trackers — done.** Keywords, locations (with a "cities within N miles"
    suggester backed by a bundled GeoNames dataset, `src/data/us-cities.json`),
@@ -69,6 +69,38 @@ and finishing in the background via `EdgeRuntime.waitUntil`:
 Both are idempotent: natural-key unique indexes on `rank_snapshots`,
 `grid_snapshots`, and `gsc_snapshots` make re-ingestion a no-op.
 
+## Brand board (spec §6.2b)
+
+Every client has a brand board on the **Brand** tab — the team's visual
+reference and the structured "brain" AI reads before writing anything for the
+client. Migration `0009_brand_board.sql`.
+
+- **Data:** `client_brands` (1:1 with clients — tagline, positioning, story,
+  audience, differentiators, voice & tone, content pillars, words we use /
+  avoid, imagery style, typography notes, AI guidance, approval stamp),
+  `brand_colors`, `brand_fonts`, `brand_assets`. Files live in the private
+  `brand-assets` bucket; the browser uploads straight to Storage
+  (`src/components/brand-asset-uploader.tsx`) and a server action records the
+  row, so uploads aren't bound by the server-action body limit.
+- **AI access:** `select get_brand_profile('<client uuid>')` returns the whole
+  brand as one JSON document (client basics, identity fields, colors, fonts,
+  assets with bucket + storage path). Any Claude session with the Supabase
+  connector should call this before generating content for a client; sign
+  `storage_path`s against `brand-assets` to fetch the images.
+- **Process hook:** creating a client inserts the empty brand row and a
+  "Build brand board" task (owner CLAUDE+APPROVAL, `tasks.key = 'brand_board'`).
+  Enrolling in SEO attaches that task to the Onboarding stage. Claude drafts
+  the board (website scan + intake), Tom approves on the tab, which closes the
+  task.
+- **Website scan** (`scanWebsiteAction` in `src/app/brand-actions.ts`) pulls
+  colors, fonts, logo, favicon and og:image from `clients.website_url` as a
+  starting point — heuristic, always review the result.
+- **Outputs:** `/clients/[id]/brand-board` is a print-ready page (Save as
+  PDF); "Publish snapshot to Documents" writes a self-contained HTML board into
+  the `documents` bucket as a `brand` document. Filing a copy in
+  Compass Clients / <Client> on Drive is done by Claude via the Drive
+  connector — the app itself has no Google credentials.
+
 ## Known state / open items (as of Aug 31 2026)
 
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly
@@ -81,6 +113,9 @@ Both are idempotent: natural-key unique indexes on `rank_snapshots`,
   data for it at all (likely created recently — GSC does not backfill).
   Pensacola Equipment Rentals has no Search Console property; one needs to be
   created and verified.
+- **Brand boards are empty** (Sep 1 2026) — the tab and tables exist, but no
+  client has colors, fonts or logos yet. The "Build brand board" task is open
+  for all six clients; run the website scan + intake per client.
 - **Client seed data is partial** — several clients still need enrolled
   pipelines, plan details, and contacts filled in. Pensacola also has no
   `website_url`.
