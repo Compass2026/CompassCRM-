@@ -102,6 +102,11 @@ client. Migration `0009_brand_board.sql`.
   body '{"client_id": "..."}')` and read the result from `net._http_response`.
   WordPress sites leak the Gutenberg default palette (#ff6900, #cf2e2e,
   #fcb900, #0693e3, #9b51e0) — delete those and assign roles by hand.
+  For sites the scan can't read (JavaScript-rendered, logos only on inner
+  pages) the same function has an **import mode**: body
+  `{"client_id": "...", "import": [{"url", "kind", "label", "notes",
+  "is_primary"}], "remove": ["<asset id>"]}` files specific images (by URL
+  or `data_base64` + `mime_type`) into the bucket and `brand_assets`.
 - **Outputs:** `/clients/[id]/brand-board` is a print-ready page (Save as
   PDF); "Publish snapshot to Documents" writes a self-contained HTML board into
   the `documents` bucket as a `brand` document. Filing a copy in

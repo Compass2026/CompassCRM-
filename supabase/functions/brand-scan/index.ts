@@ -7,6 +7,13 @@
 // with the cron secret, and the app can call it with a team member's JWT.
 // Body: { client_id } for one client, or { all: true } for every client with
 // a website. Responds synchronously with a per-client summary.
+//
+// Import mode — body { client_id, import: [...] , remove?: [...] } — skips the
+// scan and files specific assets instead, for sites the heuristic scan can't
+// read (JavaScript-rendered pages, logos that only exist on inner pages).
+// Each import entry is { url } or { data_base64, mime_type } plus optional
+// kind / label / notes / is_primary; `remove` lists brand_assets ids to
+// delete (row + storage object) in the same call.
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
@@ -346,6 +353,86 @@ async function scanClient(
   };
 }
 
+type ImportItem = {
+  url?: string;
+  data_base64?: string;
+  mime_type?: string;
+  kind?: AssetKind;
+  label?: string;
+  notes?: string;
+  is_primary?: boolean;
+  file_name?: string;
+};
+
+function decodeBase64(b64: string): Uint8Array {
+  const bin = atob(b64.replace(/\s+/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function importAssets(
+  supabase: SupabaseClient,
+  clientId: string,
+  items: ImportItem[],
+  remove: string[]
+) {
+  const removed: string[] = [];
+  const errors: string[] = [];
+  if (remove.length) {
+    const { data: rows } = await supabase
+      .from("brand_assets").select("id, storage_path").eq("client_id", clientId).in("id", remove);
+    const paths = (rows ?? []).map((r: { storage_path: string | null }) => r.storage_path).filter(Boolean) as string[];
+    if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
+    const { error } = await supabase.from("brand_assets").delete().eq("client_id", clientId).in("id", remove);
+    if (error) errors.push(`remove: ${error.message}`);
+    else removed.push(...(rows ?? []).map((r: { id: string }) => r.id));
+  }
+
+  const imported: { id: string; label: string | null; storage_path: string }[] = [];
+  for (const [i, item] of items.entries()) {
+    let bytes: Uint8Array | null = null;
+    let type = item.mime_type ?? "";
+    if (item.data_base64) {
+      bytes = decodeBase64(item.data_base64);
+      if (!type) type = "image/png";
+    } else if (item.url) {
+      const img = await fetchImage(item.url);
+      if (!img) { errors.push(`${item.url}: fetch failed or not an image`); continue; }
+      bytes = img.bytes;
+      type = img.type;
+    } else {
+      errors.push(`item ${i}: needs url or data_base64`);
+      continue;
+    }
+    const ext = type === "image/svg+xml" ? "svg" : (type.split("/")[1] ?? "png").replace("jpeg", "jpg");
+    const path = `${clientId}/import/${Date.now()}-${i}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET).upload(path, bytes, { contentType: type });
+    if (upErr) { errors.push(`item ${i}: ${upErr.message}`); continue; }
+    if (item.is_primary) {
+      await supabase.from("brand_assets").update({ is_primary: false }).eq("client_id", clientId);
+    }
+    const { data, error } = await supabase.from("brand_assets").insert({
+      client_id: clientId,
+      kind: item.kind ?? "other",
+      label: item.label ?? null,
+      source: item.data_base64 ? "upload" : "link",
+      storage_path: path,
+      url: item.url ?? null,
+      file_name: item.file_name ?? path.split("/").pop() ?? null,
+      mime_type: type,
+      size_bytes: bytes.byteLength,
+      is_primary: item.is_primary ?? false,
+      notes: item.notes ?? null,
+      uploaded_by: "brand-scan",
+    }).select("id, label, storage_path").single();
+    if (error) errors.push(`item ${i}: ${error.message}`);
+    else if (data) imported.push(data);
+  }
+  return { ok: errors.length === 0, imported, removed, errors };
+}
+
 Deno.serve(async (req) => {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -369,6 +456,12 @@ Deno.serve(async (req) => {
   }
 
   const body = await req.json().catch(() => ({}));
+  if (body.client_id && (Array.isArray(body.import) || Array.isArray(body.remove))) {
+    const result = await importAssets(
+      supabase, body.client_id, body.import ?? [], body.remove ?? []
+    );
+    return Response.json(result, { status: result.ok ? 200 : 207 });
+  }
   let query = supabase.from("clients").select("id, name, website_url");
   if (body.client_id) query = query.eq("id", body.client_id);
   else if (!body.all) return Response.json({ error: "pass client_id or all: true" }, { status: 400 });
