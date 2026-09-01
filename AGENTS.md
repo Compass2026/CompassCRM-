@@ -94,7 +94,14 @@ client. Migration `0009_brand_board.sql`.
   task.
 - **Website scan** (`scanWebsiteAction` in `src/app/brand-actions.ts`) pulls
   colors, fonts, logo, favicon and og:image from `clients.website_url` as a
-  starting point — heuristic, always review the result.
+  starting point — heuristic, always review the result. The same scan runs
+  server-side as the `brand-scan` Edge Function (service role; authorized by
+  a team JWT or `x-cron-secret`), so Claude can seed boards without a browser
+  session: `select net.http_post('.../functions/v1/brand-scan', headers with
+  get_secret('SUPABASE_ANON_KEY') + get_secret('SYNC_CRON_SECRET'),
+  body '{"client_id": "..."}')` and read the result from `net._http_response`.
+  WordPress sites leak the Gutenberg default palette (#ff6900, #cf2e2e,
+  #fcb900, #0693e3, #9b51e0) — delete those and assign roles by hand.
 - **Outputs:** `/clients/[id]/brand-board` is a print-ready page (Save as
   PDF); "Publish snapshot to Documents" writes a self-contained HTML board into
   the `documents` bucket as a `brand` document. Filing a copy in
@@ -113,9 +120,12 @@ client. Migration `0009_brand_board.sql`.
   data for it at all (likely created recently — GSC does not backfill).
   Pensacola Equipment Rentals has no Search Console property; one needs to be
   created and verified.
-- **Brand boards are empty** (Sep 1 2026) — the tab and tables exist, but no
-  client has colors, fonts or logos yet. The "Build brand board" task is open
-  for all six clients; run the website scan + intake per client.
+- **Brand boards are drafted, not approved** (Sep 1 2026) — website scan +
+  intake done for the five clients with websites (palette roles assigned, logos
+  from the site, identity/voice/AI-guidance fields written from site copy).
+  Pensacola has a placeholder only (no website, no material). Each client's
+  "Build brand board" task stays open until Tom approves on the Brand tab.
+  Draft boards are filed in Drive under Compass Clients / <Client>.
 - **Client seed data is partial** — several clients still need enrolled
   pipelines, plan details, and contacts filled in. Pensacola also has no
   `website_url`.
