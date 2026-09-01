@@ -34,7 +34,7 @@ export default async function ClientsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
+        <h1 className="page-title kicker">Clients</h1>
         <Dialog>
           <DialogTrigger render={<Button>New client</Button>} />
           <DialogContent>

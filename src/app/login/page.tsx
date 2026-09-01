@@ -62,7 +62,20 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-navy-900 bg-gradient-to-b from-navy-950 to-navy-800">
       <Card className="w-full max-w-sm border-t-4 border-t-orange-500">
         <CardHeader>
-          <CardTitle>Compass Client Platform</CardTitle>
+          <svg
+            viewBox="0 0 24 24"
+            className="size-8 text-orange-500 mb-1"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88" fill="currentColor" stroke="none" />
+          </svg>
+          <CardTitle className="text-lg">Compass Client Platform</CardTitle>
           <CardDescription>Team sign-in</CardDescription>
         </CardHeader>
         <CardContent>

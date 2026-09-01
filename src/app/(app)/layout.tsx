@@ -25,8 +25,24 @@ export default async function AppLayout({
     <div className="min-h-screen">
       <header className="bg-navy-900 text-cream">
         <div className="mx-auto max-w-6xl px-4 flex h-14 items-center gap-6">
-          <Link href="/" className="font-semibold tracking-tight text-white">
-            Compass<span className="text-cream/60"> Client Platform</span>
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-heading font-semibold tracking-tight text-white"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="size-5 text-orange-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88" fill="currentColor" stroke="none" />
+            </svg>
+            Compass<span className="text-cream/60 font-normal">&nbsp;Client Platform</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm">
             <Link href="/" className="text-cream/70 transition-colors hover:text-white">
@@ -60,7 +76,7 @@ export default async function AppLayout({
         </div>
         <div className="h-0.5 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-400" />
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
   );
 }

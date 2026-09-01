@@ -36,7 +36,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="page-title kicker">Settings</h1>
       <p className="text-sm text-muted-foreground">
         Pipeline, stage, and task templates (seeded from the Compass process
         spec). Template editing lands with the Trackers phase — changes for now
