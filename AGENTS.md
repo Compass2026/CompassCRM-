@@ -90,9 +90,9 @@ City Index fix; the Services / Brand board / Keywords / Tasks / brief work
 - **0013** City Index in SQL, P1 only; `brightlocal-sync` calls
   `recompute_location_indexes` instead of computing it in TypeScript.
 
-Remote state at the time of the PR: 0010 applied; 0011–0013 validated in a
-rolled-back dry run but **not applied** — apply them after merge, then redeploy
-`brightlocal-sync`. 0008 (Stripe) and 0009 (brand board) are applied remotely
+All four were applied to the remote project on Sept 7 2026 and
+`brightlocal-sync` redeployed. Clients that existed before Foundation did have
+it marked complete (0011), so the gate only bites new clients. 0008 (Stripe) and 0009 (brand board) are applied remotely
 from their own unmerged branches; the brand-board branch's enrollment hook
 attaches its task to the old SEO "Onboarding" stage, which no longer exists,
 so it needs re-pointing at Foundation › Brand Build when that branch lands.

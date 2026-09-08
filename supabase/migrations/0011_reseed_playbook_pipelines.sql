@@ -144,3 +144,25 @@ insert into task_templates (pipeline_id, department, title, default_owner, sort_
 select p.id, null, 'Industry Pulse — one per vertical, before client refreshes', 'CLAUDE', 1, 'PB6', 'run_flag'
 from pipelines p
 where p.key = 'reporting';
+
+-- ── Existing clients are not gated retroactively ─────────────────────────
+-- Every client onboarded before Foundation existed gets it marked complete,
+-- so the gate applies to new clients only and nothing in flight goes
+-- pending. The convergence trigger is paused for this bookkeeping so a
+-- client with nothing else enrolled is not flipped to active / Reporting.
+alter table client_pipelines disable trigger client_pipelines_convergence;
+
+update client_stages cs
+set status = 'complete',
+    evidence = coalesce(cs.evidence,
+      'Backfilled by migration 0011: client onboarded before the Foundation pipeline existed.')
+from client_pipelines cp
+join pipelines p on p.id = cp.pipeline_id and p.key = 'foundation'
+where cs.client_pipeline_id = cp.id and cs.status <> 'complete';
+
+update client_pipelines cp
+set status = 'complete', completed_at = coalesce(cp.completed_at, now())
+from pipelines p
+where p.id = cp.pipeline_id and p.key = 'foundation' and cp.status <> 'complete';
+
+alter table client_pipelines enable trigger client_pipelines_convergence;
