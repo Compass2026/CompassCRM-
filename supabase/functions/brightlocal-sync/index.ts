@@ -253,52 +253,15 @@ Deno.serve(async (req) => {
     }
 
     // ── City Index rollup for the current month ──────────────────────────
+    // P1 keywords only — computed in Postgres (compute_location_index,
+    // migration 0013) rather than here, so there is one definition of it.
     const period = new Date().toISOString().slice(0, 7) + "-01";
-    for (const loc of locations ?? []) {
-      const { data: kws } = await supabase
-        .from("keywords")
-        .select("id, priority")
-        .eq("client_id", loc.client_id)
-        .eq("is_active", true);
-      const p1 = (kws ?? []).filter((k) => k.priority === "p1");
-      const scope = p1.length > 0 ? p1 : kws ?? []; // all until P1s are set
-      const kwIds = scope.map((k) => k.id);
-      if (kwIds.length === 0) continue;
-
-      const { data: snaps } = await supabase
-        .from("rank_snapshots")
-        .select("keyword_id, result_type, position, recorded_at")
-        .eq("location_id", loc.id)
-        .in("keyword_id", kwIds)
-        .gte("recorded_at", period)
-        .order("recorded_at", { ascending: false });
-
-      const best = new Map<string, number>();
-      for (const s of snaps ?? []) {
-        if (s.position == null) continue;
-        const key = `${s.keyword_id}:${s.result_type}`;
-        if (!best.has(key)) best.set(key, s.position);
-      }
-      const avg = (type: string) => {
-        const vals = kwIds
-          .map((id) => best.get(`${id}:${type}`))
-          .filter((v): v is number => typeof v === "number");
-        return vals.length
-          ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) /
-              100
-          : null;
-      };
-      await supabase.from("location_index").upsert(
-        {
-          location_id: loc.id,
-          period,
-          organic_index: avg("organic"),
-          map_index: avg("map_pack"),
-          keywords_counted: kwIds.length,
-          computed_at: new Date().toISOString(),
-        },
-        { onConflict: "location_id,period" }
-      );
+    for (const cid of clientIds) {
+      const { error } = await supabase.rpc("recompute_location_indexes", {
+        p_client_id: cid,
+        p_period: period,
+      });
+      if (error) stats.errors.push(`city index: ${error.message}`);
     }
 
     // Close out run rows and attach a summary to open monthly cycles

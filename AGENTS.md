@@ -17,7 +17,7 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 - **Stack:** Next.js (App Router) + Tailwind v4 + shadcn/ui (Base UI — triggers
   use `render`, not `asChild`), Supabase (project `compass-client-platform`,
   ref `iokcopiyzajigvhwexhe`), deployed on Vercel (project `compass-crm`) at
-  https://compass-crm-ten.vercel.app.
+  https://compass-crm-ten.vercel.app. Production deploys from `main`.
 - **Schema:** `supabase/migrations/` mirrors what is applied to the remote
   project via the Supabase MCP. Enrollment / convergence / monthly-cycle
   automations live in Postgres triggers and functions — see
@@ -69,13 +69,41 @@ and finishing in the background via `EdgeRuntime.waitUntil`:
 Both are idempotent: natural-key unique indexes on `rank_snapshots`,
 `grid_snapshots`, and `gsc_snapshots` make re-ingestion a no-op.
 
+## Playbook model (Sept 7 2026)
+
+`docs/reconciliation.md` reconciles the department pipelines with the delivery
+playbooks. Migrations 0010–0013 implement its build-order steps 1–3 plus the
+City Index fix; the Services / Brand board / Keywords / Tasks / brief work
+(steps 4–9) is still open.
+
+- **0010** additive playbook schema: services, page_groups, money_keywords,
+  alerts, change_log, decisions, brand_boards, claims, sites, client_requests,
+  placeholders, industry_pulse; new columns on clients, keywords, stages,
+  task_templates and tasks; `pipeline_key` gains `foundation`,
+  `enrollment_status` gains `pending`.
+- **0011** reseeds pipelines: Foundation (every client), SEO and Website
+  rewritten to Playbooks 4a / 4b (Astro), Reporting task templates extended
+  with PB5 / PB6. Existing stage progress is preserved.
+- **0012** triggers: new clients are enrolled in Foundation and cannot leave it;
+  SEO / Website enrollments stay `pending` until Foundation completes and their
+  gated stages cannot start early; Foundation stages 2–3 wait for the taxonomy.
+- **0013** City Index in SQL, P1 only; `brightlocal-sync` calls
+  `recompute_location_indexes` instead of computing it in TypeScript.
+
+All four were applied to the remote project on Sept 7 2026 and
+`brightlocal-sync` redeployed. Clients that existed before Foundation did have
+it marked complete (0011), so the gate only bites new clients. 0008 (Stripe) and 0009 (brand board) are applied remotely
+from their own unmerged branches; the brand-board branch's enrollment hook
+attaches its task to the old SEO "Onboarding" stage, which no longer exists,
+so it needs re-pointing at Foundation › Brand Build when that branch lands.
+
 ## Known state / open items (as of Aug 31 2026)
 
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly
   sync. Get a production key before that runs out.
-- **Keyword priorities are unset.** The City Index is specified as the average
-  of P1 keywords but currently falls back to *all* active keywords because no
-  P1s exist yet. Setting priorities in the Keywords tab makes it behave per spec.
+- **Keyword priorities are unset.** The City Index averages P1 keywords only
+  (`compute_location_index`, migration 0013), so every location's index is
+  blank until priorities are set in the Keywords tab.
 - **GSC coverage is partial.** Logic Solar, Lucas Construction, Ginger Huff and
   Show Me Design sync. Show Me Electrical's property exists but Google has no
   data for it at all (likely created recently — GSC does not backfill).
