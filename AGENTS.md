@@ -97,6 +97,31 @@ from their own unmerged branches; the brand-board branch's enrollment hook
 attaches its task to the old SEO "Onboarding" stage, which no longer exists,
 so it needs re-pointing at Foundation › Brand Build when that branch lands.
 
+## Schema notes learned from the Shewmaker load (Sept 10 2026)
+
+- `brand_colors.hex` has a check constraint: lowercase `#rrggbb` only.
+- `page_groups.supporting_keyword_ids` is NOT NULL; use `'{}'::uuid[]` when empty.
+- Inserting a client fires `enroll_client_in_foundation` (Foundation enrollment + 3
+  stages) and, from the unmerged brand-board branch, `handle_client_created`
+  (blank `client_brands` row + a `brand_board` task; `tasks.key` exists remotely only).
+- Enrolling in a pipeline whose stages `requires_foundation` is parked as `pending`
+  by `gate_pipeline_enrollment` and activated by `handle_foundation_completion`.
+  `enforce_stage_gates` blocks gated stages, and Foundation stages 2–3 until the
+  taxonomy stage is complete.
+- `handle_pipeline_completion` flips a client to `active` and enrolls Reporting as
+  soon as no non-recurring enrollment is incomplete — so a client enrolled in
+  nothing but Foundation converges when Foundation completes. Enroll Website or
+  SEO first, or complete Foundation with the convergence trigger disabled (as the
+  0011 backfill did). Proposed fix: convergence should require at least one
+  non-Foundation pipeline.
+- `clients.drive_folders` is `{"root": id, "01 Onboarding": id, …, "Media": id}` —
+  Drive folder ids keyed by folder name. See docs/reconciliation.md "Drive layout".
+- Client data loads use deterministic uuid5 ids (`uuid_generate_v5(uuid_ns_dns(),
+  '<client>:<table>:<key>')`) so re-running a load is idempotent; loads are data
+  scripts, not migrations. Shewmaker (`a88f5ce2-30ac-508b-b217-cf22d277b278`) is the
+  blueprint record; nothing about it is deleted or rewritten without Tom.
+- RLS on every table is the single "team full access" policy for authenticated users.
+
 ## Known state / open items (as of Aug 31 2026)
 
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly

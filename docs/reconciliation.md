@@ -245,3 +245,42 @@ The reference run already exists in docs. Seed it into the platform as the proof
 - Foundation: all three stages complete. Website: stage 2 in progress.
 
 If Shewmaker seeds cleanly, the model holds. If a field has nowhere to go, the schema is wrong and this doc gets a v1.1.
+
+## Drive layout and artifact map (added 2026-09-10)
+
+Every client folder lives under **My Drive › Compass Clients › \<Client name\>** with the
+same six children. The CRM stores the folder ids on `clients.drive_folders`, keyed by
+folder name (the shape the Shewmaker load established):
+
+```
+{ "root": "<folder id>", "01 Onboarding": "…", "02 Brand": "…", "03 Keywords": "…",
+  "04 Website": "…", "05 Reports": "…", "Media": "…" }
+```
+
+A folder URL is `https://drive.google.com/drive/folders/<id>`. Drive remains the file store;
+the CRM holds structured rows plus links.
+
+What each stage produces, where it lands, and which CRM rows it fills (from the Shewmaker
+build, the blueprint client):
+
+| Stage | Playbook | Drive output | CRM rows |
+| --- | --- | --- | --- |
+| Foundation 1 — Onboarding & Service Taxonomy | PB1 | 01 Onboarding: intake, access, business record. Taxonomy doc currently ships combined with PB3 in 03 Keywords. | clients (vertical, business_type, phone, drive_folders), client_contacts, client_access, services (one per GBP entry / page / primary keyword, folded children via parent_service_id) |
+| Foundation 2 — Brand Build | PB2 | 02 Brand: brand board doc. Media: logo and photography originals. | brand_boards (palette, typography, positioning line, standing CTA, hard rules), claims (sourced / unverified / confirmed), brand_assets |
+| Foundation 3 — Keyword Research | PB3 | 03 Keywords: taxonomy + keyword map + tracked list doc | keywords (volume, cpc, competition, intent, is_tracked), money_keywords (thresholds, confirmed_on), page_groups (home / service / city with tier / hub / other) |
+| SEO — Audit & Adjust … Tracking Setup | PB4a | 04 Website (audit report, fix list) and 05 Reports | tasks with playbook_step / autonomy_level, change_log, decisions, deliverables per stage |
+| Website — Discovery … Launch | PB4b | 04 Website: site plan, punch list; the build itself lives in the GitHub repo and Vercel | sites, page_groups, placeholders, client_requests, decisions, deliverables per stage |
+| Reporting — monthly | PB5 / PB6 | 05 Reports: monthly report; industry pulse per vertical | monthly_cycles (report_url), industry_pulse, tasks |
+
+Shewmaker Brothers Masonry (client `a88f5ce2-30ac-508b-b217-cf22d277b278`) is the reference
+record: every table above has rows for it, loaded with deterministic uuid5 ids so the load is
+idempotent. Its site repo (`Compass2026/shewmakerbrothersmasonry`) carries the source
+artifacts: `DESIGN.md`, `PRODUCT.md`, `docs/brand-board.md`, `docs/keyword-map.md`,
+`docs/placeholders.md`, `public/images/projects/manifest.json`. Client-specific hard rules
+(no street address, one phone number, unverified claims stay unverified) live in that brand
+board and in `claims`.
+
+Working backwards for the existing clients, in this order: Show Me Electrical (taxonomy and
+keyword map already approved in Drive), Logic Solar, Lucas Construction, Show Me Design,
+Ginger Huff, Pensacola. Each client's Foundation is reopened when its turn comes so the
+stages complete for real; the Sept 7 backfill only kept in-flight work unblocked.
