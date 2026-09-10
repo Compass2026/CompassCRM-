@@ -105,3 +105,24 @@ export const taxonomyStatusLabels: Record<TaxonomyStatus, string> = {
   approved: "Approved",
   retired: "Retired",
 };
+
+export type ClaimStatus = Database["public"]["Enums"]["claim_status"];
+
+export const claimStatusStyles: Record<ClaimStatus, string> = {
+  sourced: "bg-blue-100 text-blue-800 border-blue-200",
+  unverified: "bg-amber-100 text-amber-800 border-amber-200",
+  confirmed: "bg-green-100 text-green-800 border-green-200",
+};
+
+export const claimStatusLabels: Record<ClaimStatus, string> = {
+  sourced: "Sourced",
+  unverified: "Unverified",
+  confirmed: "Confirmed",
+};
+
+export type BrandBoardStatus = Database["public"]["Enums"]["brand_board_status"];
+
+export const brandBoardStatusStyles: Record<BrandBoardStatus, string> = {
+  draft: "bg-amber-100 text-amber-800 border-amber-200",
+  approved: "bg-green-100 text-green-800 border-green-200",
+};

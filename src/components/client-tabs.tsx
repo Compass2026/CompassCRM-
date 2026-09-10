@@ -9,6 +9,7 @@ const tabs = [
   { label: "Plan", segment: "plan" },
   { label: "Documents", segment: "documents" },
   { label: "Pipelines", segment: "pipelines" },
+  { label: "Foundation", segment: "foundation" },
   { label: "Services", segment: "services" },
   { label: "Keywords", segment: "keywords" },
   { label: "Content", segment: "content" },

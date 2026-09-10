@@ -89,6 +89,14 @@ City Index fix; the Services / Brand board / Keywords / Tasks / brief work
   gated stages cannot start early; Foundation stages 2–3 wait for the taxonomy.
 - **0013** City Index in SQL, P1 only; `brightlocal-sync` calls
   `recompute_location_indexes` instead of computing it in TypeScript.
+- **Services tab** (`/clients/[id]/services`, step 5): the taxonomy grouped by
+  segment with folded children, edit / approve / retire / reorder, page groups
+  read-only. **Foundation tab** (`/clients/[id]/foundation`): the three
+  Foundation stages with evidence and next action, Drive folder links, the
+  brand board (palette, typography, positioning, CTA, hard rules, approve /
+  reopen), claims with confirm, money keywords with thresholds and
+  confirmation, and the keyword map. `src/lib/brand-board.ts` renders both
+  palette shapes (the doc's array and the Shewmaker load's structured object).
 
 All four were applied to the remote project on Sept 7 2026 and
 `brightlocal-sync` redeployed. Clients that existed before Foundation did have
