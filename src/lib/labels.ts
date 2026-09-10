@@ -91,3 +91,17 @@ export const documentCategories: DocumentCategory[] = [
   "report",
   "other",
 ];
+
+export type TaxonomyStatus = Database["public"]["Enums"]["taxonomy_status"];
+
+export const taxonomyStatusStyles: Record<TaxonomyStatus, string> = {
+  proposed: "bg-amber-100 text-amber-800 border-amber-200",
+  approved: "bg-green-100 text-green-800 border-green-200",
+  retired: "bg-zinc-100 text-zinc-500 border-zinc-200 line-through",
+};
+
+export const taxonomyStatusLabels: Record<TaxonomyStatus, string> = {
+  proposed: "Proposed",
+  approved: "Approved",
+  retired: "Retired",
+};
