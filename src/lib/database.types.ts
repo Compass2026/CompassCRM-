@@ -2194,6 +2194,7 @@ export type Database = {
           default_owner: Database["public"]["Enums"]["owner_type"]
           department: Database["public"]["Enums"]["department"] | null
           id: string
+          key: string | null
           pipeline_id: string | null
           playbook_step: string | null
           sort_order: number
@@ -2205,6 +2206,7 @@ export type Database = {
           default_owner?: Database["public"]["Enums"]["owner_type"]
           department?: Database["public"]["Enums"]["department"] | null
           id?: string
+          key?: string | null
           pipeline_id?: string | null
           playbook_step?: string | null
           sort_order?: number
@@ -2216,6 +2218,7 @@ export type Database = {
           default_owner?: Database["public"]["Enums"]["owner_type"]
           department?: Database["public"]["Enums"]["department"] | null
           id?: string
+          key?: string | null
           pipeline_id?: string | null
           playbook_step?: string | null
           sort_order?: number

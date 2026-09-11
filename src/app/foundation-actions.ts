@@ -351,3 +351,61 @@ export async function removeMoneyKeywordAction(clientId: string, id: string) {
   revalidate(clientId);
   revalidatePath(`/clients/${clientId}/keywords`);
 }
+
+// ── Provisioning (Edge Function) ───────────────────────────────────────────
+// Creates the client's Drive folder structure and site repo, or reports which
+// credentials are missing. Idempotent — safe to press twice, and safe to press
+// after a partial run.
+export type ProvisionState = { ok: boolean; message: string } | null;
+
+type ProvisionStep = { status: string; detail: string };
+
+export async function provisionClientAction(
+  clientId: string,
+  _prev: ProvisionState,
+  _form: FormData
+): Promise<ProvisionState> {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { ok: false, message: "Not signed in." };
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/client-provision`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ client_id: clientId }),
+      }
+    );
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not reach the provisioning function.",
+    };
+  }
+
+  const payload = (await res.json().catch(() => null)) as
+    | { drive?: ProvisionStep; github?: ProvisionStep; error?: string }
+    | null;
+  if (!payload) {
+    return { ok: false, message: `Provisioning failed (${res.status}).` };
+  }
+  if (payload.error) return { ok: false, message: payload.error };
+
+  const parts = [
+    payload.drive ? `Drive: ${payload.drive.detail}` : null,
+    payload.github ? `GitHub: ${payload.github.detail}` : null,
+  ].filter(Boolean);
+
+  revalidatePath(`/clients/${clientId}/foundation`);
+  revalidatePath(`/clients/${clientId}`);
+  return { ok: res.ok, message: parts.join(" ") || "Nothing to do." };
+}

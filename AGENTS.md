@@ -30,7 +30,11 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 - **Secrets** live in Supabase Vault, never in the repo, and are read by Edge
   Functions through the service-role-only `get_secret()` function:
   `BRIGHTLOCAL_API_KEY`, `GSC_CLIENT_ID` / `GSC_CLIENT_SECRET` /
-  `GSC_REFRESH_TOKEN`, `SYNC_CRON_SECRET`, `SUPABASE_ANON_KEY`.
+  `GSC_REFRESH_TOKEN`, `SYNC_CRON_SECRET`, `SUPABASE_ANON_KEY`. Provisioning
+  (`client-provision`) additionally wants `GDRIVE_REFRESH_TOKEN`,
+  `GDRIVE_ROOT_FOLDER_ID`, `GITHUB_TOKEN` and optionally `GDRIVE_CLIENT_ID` /
+  `GDRIVE_CLIENT_SECRET` and `GITHUB_ORG` — **none of these are set yet**; see
+  "Provisioning" below.
 
 ## Phases
 
@@ -204,11 +208,49 @@ happens once per pipeline instead: `handle_pipeline_review` raises a single
 not a gate, so convergence (client → `active`, Reporting enrolled) and the
 monthly cycle are unaffected.
 
-**Still manual / not built** (reconciliation.md build-order steps 4, 8, 9):
-Drive folder creation and `clients.drive_folders`, GitHub repo creation, the
+**Still manual / not built** (reconciliation.md build-order steps 8, 9): the
 intake form (the New client dialog captures name / industry / website / service
 area only — `vertical` and `business_type` are typed on the Overview tab), the
 autonomy filter on Tasks, and the brief generator.
+
+## Provisioning (Sept 11 2026)
+
+Build-order step 4. `supabase/functions/client-provision` creates the client's
+Drive folder structure and its site's GitHub repo; migration 0015 fires it from
+the `clients_provision` trigger on insert, and the Foundation tab carries a
+"Create Drive folders + repo" button as the retry.
+
+- **Drive:** ensures `<GDRIVE_ROOT_FOLDER_ID> / <Client name>` and the six
+  children, merges the ids into `clients.drive_folders` (never dropping a
+  hand-recorded one) and fills `drive_root_url` if empty.
+- **GitHub:** ensures `<GITHUB_ORG>/<slug>` (private, auto-init) and records it
+  on the client's `sites` row, creating an Astro row if there isn't one.
+- **Idempotent by lookup:** it searches Drive and asks GitHub before creating
+  either, so re-running is a no-op and a half-finished run finishes itself.
+- **Task keys:** 0015 adds `task_templates.key`, copied onto tasks by
+  `create_stage_tasks`. The function closes `drive_folders` and `github_repo`
+  by key rather than by title, so rewording a checklist item can't break it.
+- **Degrades, never blocks.** A step whose secrets are missing reports
+  `skipped` with the exact secret names and the run returns 200; a step whose
+  credentials are wrong reports `failed` with the upstream error and the run
+  returns 502. Either way no task is closed, so the checklist still shows the
+  work as outstanding.
+
+**Credentials are not set yet**, so today both steps skip and the two checklist
+items stay open — do them by hand (or ask Claude, which has the Drive and
+GitHub connectors). To turn it on, add to Vault:
+
+| Secret | What |
+| --- | --- |
+| `GDRIVE_REFRESH_TOKEN` | Compass Workspace refresh token carrying `https://www.googleapis.com/auth/drive`. The GSC token is `webmasters`-scoped and will **not** work. |
+| `GDRIVE_ROOT_FOLDER_ID` | Folder id of "Compass Clients" in My Drive. |
+| `GITHUB_TOKEN` | PAT with repo scope (org: contents + administration). |
+| `GDRIVE_CLIENT_ID` / `GDRIVE_CLIENT_SECRET` | Only if the Google OAuth app differs from the GSC one; otherwise it falls back to `GSC_CLIENT_ID` / `GSC_CLIENT_SECRET`. |
+| `GITHUB_ORG` | Defaults to `Compass2026`. |
+
+Verified on Sept 11 2026 with no secrets (both steps `skipped`, 200) and with
+deliberately bad ones (both `failed` with the upstream error, 502, no tasks
+closed).
 
 ## Known state / open items (as of Aug 31 2026)
 

@@ -49,6 +49,7 @@ import {
   typographyNotes,
 } from "@/lib/brand-board";
 import { cn } from "@/lib/utils";
+import { ProvisionButton } from "@/components/provision-button";
 
 const selectClass =
   "h-8 rounded-md border border-input bg-transparent px-2 text-xs";
@@ -204,6 +205,19 @@ export default async function FoundationPage({
           )}
         </div>
       </div>
+
+      {/* ── Provisioning: Drive folders + site repo ───────────────────── */}
+      {folders.length < 6 && (
+        <div className="border rounded-md bg-card px-3 py-2 space-y-1">
+          <ProvisionButton clientId={clientId} />
+          <p className="text-xs text-muted-foreground">
+            Creates Compass Clients / {client?.name ?? "this client"} with its
+            01–05 + Media subfolders and the site repo, then closes those two
+            checklist items. Runs by itself when a client is created; this is
+            the retry.
+          </p>
+        </div>
+      )}
 
       {/* ── Stages ────────────────────────────────────────────────────── */}
       {stages.length > 0 && (
