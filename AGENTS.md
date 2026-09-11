@@ -166,12 +166,9 @@ client. Migration `0009_brand_board.sql`.
   by `gate_pipeline_enrollment` and activated by `handle_foundation_completion`.
   `enforce_stage_gates` blocks gated stages, and Foundation stages 2–3 until the
   taxonomy stage is complete.
-- `handle_pipeline_completion` flips a client to `active` and enrolls Reporting as
-  soon as no non-recurring enrollment is incomplete — so a client enrolled in
-  nothing but Foundation converges when Foundation completes. Enroll Website or
-  SEO first, or complete Foundation with the convergence trigger disabled (as the
-  0011 backfill did). Proposed fix: convergence should require at least one
-  non-Foundation pipeline.
+- `handle_pipeline_completion` flips a client to `active` and enrolls Reporting
+  once every non-recurring enrollment is complete **and** at least one
+  department pipeline is enrolled (0016) — Foundation alone no longer converges.
 - `clients.drive_folders` is `{"root": id, "01 Onboarding": id, …, "Media": id}` —
   Drive folder ids keyed by folder name. See docs/reconciliation.md "Drive layout".
 - Client data loads use deterministic uuid5 ids (`uuid_generate_v5(uuid_ns_dns(),
@@ -189,12 +186,15 @@ What happens on its own when a client is created, and what a person still does.
 1. An empty brand row, and a "Build brand board" task on Foundation › Brand Build.
 2. Enrollment in **Foundation**, which cannot be removed.
 3. Foundation's three stages, each with its playbook checklist — 22 tasks in
-   total (6 taxonomy / 9 brand / 7 keywords).
+   total (9 brand / 6 taxonomy / 7 keywords).
+4. Within the hour, the **Foundation worker** picks it up (below).
 
 **Sequencing gates (kept — they are data dependencies, not sign-offs):**
 
-- Foundation › Onboarding & Service Taxonomy runs before Brand Build and
-  Keyword Research; those two then run in parallel.
+- Foundation is strictly sequential since 0016: **Brand Build → Onboarding &
+  Service Taxonomy → Keyword Research**. Brand first was Tom's call (the board
+  reads the website, not the service list); keywords last because every
+  keyword links to a service.
 - SEO and Website enrollments sit at `pending` until Foundation completes, then
   activate themselves and create their tasks (`handle_foundation_completion`).
 - Postgres refuses a stage that starts early with `check_violation`.
@@ -212,6 +212,43 @@ monthly cycle are unaffected.
 intake form (the New client dialog captures name / industry / website / service
 area only — `vertical` and `business_type` are typed on the Overview tab), the
 autonomy filter on Tasks, and the brief generator.
+
+## Foundation worker (Sept 11 2026)
+
+The thing that actually does the `CLAUDE`-owned work. Nothing in the app calls
+an LLM; instead a Claude Code **Routine** ("Compass Foundation worker") spawns
+a fresh session in this environment every hour, and that session runs
+`.claude/skills/foundation-worker/SKILL.md`. The skill is the playbook —
+Brand Build, Service Taxonomy, Keyword Research, then Website › Build to 70% —
+and the CRM is its only channel: it reads open stages from Supabase, works
+them through the DataForSEO / Google Drive / GitHub connectors, writes results
+back, closes checklist tasks, and records what it did in
+`client_stages.evidence`. Tom reads the Foundation tab; he never has to open
+a chat.
+
+- **Work = stage status**, never open tasks (six clients carry open tasks on
+  backfilled-complete stages; the worker ignores them).
+- **One stage per client per run, three clients per run.** A new client's
+  Foundation therefore takes ~3 hours end to end; the website bones land on the
+  run after Foundation completes.
+- **Lock:** an `in_progress` stage whose `started_at` is < 3 h old and whose
+  evidence contains `worker:` belongs to a running session.
+- **Blocked, never stuck:** missing website, unreachable repo, failed build →
+  stage `blocked`, `next_action` says what is needed, and a `WAITING` task is
+  opened for Tom.
+- **Never:** deletes, billable BrightLocal runs, migrations, Shewmaker's data,
+  paused / offboarded clients, questions.
+- **Approvals:** none mid-flight (0014). The worker sets `services` and
+  `page_groups` to `approved` because downstream steps read that status, and
+  says so in the evidence; Tom's review is the `Review Foundation` task.
+- Run by hand: `/foundation-worker <client name>` works one client, no cap.
+- 0016 also fixed convergence: a client enrolled only in Foundation no longer
+  flips to `active` / Reporting when Foundation completes. The worker enrolls
+  Website (parked `pending`) before finishing Keyword Research if nothing else
+  is enrolled.
+
+Pause or edit the Routine from the Routines page on claude.ai; the skill is
+versioned here and picked up on the next fire.
 
 ## Provisioning (Sept 11 2026)
 
