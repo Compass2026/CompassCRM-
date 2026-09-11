@@ -1,0 +1,309 @@
+---
+name: foundation-worker
+description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research) or a Website "Build to 70%" stage, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Fired hourly by the "Compass Foundation worker" Routine; run by hand as /foundation-worker <client name> to work one client.
+---
+
+# Foundation worker
+
+You are running **unattended**. There is no human in this session. Never ask a
+question; when something is missing, record it in the CRM (see *Blocked*) and
+move on. Everything you learn goes into the database — that is how Tom sees
+your work. The CRM is the only channel.
+
+Read `AGENTS.md` first. It carries the schema, the enum values, the Drive
+layout and the trigger behaviour this skill relies on. The Supabase project is
+`iokcopiyzajigvhwexhe`; every write is `mcp__Supabase__execute_sql`.
+
+## Ground rules
+
+- **Stage status decides what is work, never open tasks.** Six clients carry
+  open checklist tasks on stages the Sept 7 backfill marked `complete`. Leave
+  them alone.
+- **Never delete rows.** Never touch a client whose status is `paused` or
+  `offboarded`. Never rewrite Shewmaker Brothers Masonry
+  (`a88f5ce2-30ac-508b-b217-cf22d277b278`) — it is the blueprint record.
+- **Never run anything billable on BrightLocal** (report runs, citation
+  campaigns). Keyword data comes from DataForSEO.
+- **Never** apply migrations, deploy functions or touch Supabase project
+  settings.
+- **Approvals are not your job.** Tom reviews a whole pipeline when it
+  completes (`Review Foundation` task). You draft, you mark `approved` where a
+  status enum needs it for downstream steps, and you say so in the evidence.
+- **Bounded runs.** One stage per client per run, at most three clients per
+  run, oldest `client_stages.started_at` first. If invoked with a client name,
+  work that client only and ignore the cap.
+
+## 1. Find work
+
+```sql
+with fnd as (
+  select cp.id as cp_id, cp.client_id, c.name, c.website_url, c.status as client_status
+  from client_pipelines cp
+  join pipelines p on p.id = cp.pipeline_id and p.key = 'foundation'
+  join clients c on c.id = cp.client_id
+  where cp.status = 'active' and c.status in ('launching','active')
+)
+select f.name, f.client_id, f.website_url, cs.id as client_stage_id, s.name as stage,
+       s.sort_order, cs.status, cs.started_at, cs.evidence
+from fnd f
+join client_stages cs on cs.client_pipeline_id = f.cp_id
+join stages s on s.id = cs.stage_id
+where cs.status not in ('complete','skipped')
+  and not exists (               -- an earlier stage is still open: not yet
+    select 1 from client_stages cs2 join stages s2 on s2.id = cs2.stage_id
+    where cs2.client_pipeline_id = f.cp_id and s2.sort_order < s.sort_order
+      and cs2.status not in ('complete','skipped'))
+order by cs.started_at nulls first, f.name;
+```
+
+Then the same for Website › **Build to 70%** on clients whose Foundation is
+`complete` and whose Website enrollment is `active`:
+
+```sql
+select c.name, c.id as client_id, cs.id as client_stage_id, cs.status, cs.started_at
+from client_pipelines cp
+join pipelines p on p.id = cp.pipeline_id and p.key = 'website'
+join clients c on c.id = cp.client_id
+join client_stages cs on cs.client_pipeline_id = cp.id
+join stages s on s.id = cs.stage_id and s.name = 'Build to 70%'
+where cp.status = 'active' and cs.status not in ('complete','skipped')
+  and c.status in ('launching','active');
+```
+
+**Lock.** A stage that is `in_progress`, whose `started_at` is within the last
+3 hours and whose evidence contains `worker:` belongs to another run — skip it.
+Anything else you claim:
+
+```sql
+update client_stages set status = 'in_progress',
+  evidence = coalesce(evidence || E'\n', '') || 'worker: claimed ' || now()::text
+where id = '<client_stage_id>';
+```
+
+If that update raises `check_violation`, the gate refused you. Skip the client;
+write nothing.
+
+Nothing found → say "No Foundation work" and stop. That is a normal outcome.
+
+## 2. Blocked
+
+When a stage cannot be finished — no website and nothing findable, a
+connector down, a repo you cannot reach — do not mark it complete and do not
+loop. Set:
+
+```sql
+update client_stages set status = 'blocked',
+  next_action = '<one sentence: what is needed and from whom>',
+  evidence = coalesce(evidence || E'\n', '') || 'worker: blocked — <why>'
+where id = '<client_stage_id>';
+```
+
+and open one task for Tom on that stage: `insert into tasks (client_id,
+client_stage_id, title, owner, status, notes) values (…, 'WAITING', 'open', …)`
+describing exactly what unblocks it. A later run treats `blocked` like open
+work only if `next_action` has since been cleared.
+
+## 3. Finish a stage
+
+Close every task on the stage that you actually did (`status = 'done',
+completed_at = now()`). Tasks owned by `TOM` or `WAITING` that you did not do
+stay open — that is the point of them. Then:
+
+```sql
+update client_stages set status = 'complete',
+  evidence = coalesce(evidence || E'\n', '') || 'worker: ' || now()::date || ' — <3–6 lines: what you built, counts, where it landed, what you could not verify>'
+where id = '<client_stage_id>';
+```
+
+Completing the last Foundation stage fires `handle_foundation_completion`
+(activates pending SEO / Website and creates their tasks) and
+`handle_pipeline_review` (raises `Review Foundation` for Tom). You do not do
+those by hand.
+
+## 4. Drive
+
+Folder ids live on `clients.drive_folders` as `{"root": id, "01 Onboarding":
+id, "02 Brand": id, "03 Keywords": id, "04 Website": id, "05 Reports": id,
+"Media": id}`. If it is null, the provisioning function had no credentials:
+find "Compass Clients" in Drive (`mcp__Google_Drive__search_files`), create
+`<Client name>` under it and the six children (`create_file` with
+`contentMimeType: application/vnd.google-apps.folder`), and write the ids back.
+Then close the client's `drive_folders` task.
+
+A document goes to Drive as `create_file` with `textContent` (Markdown is
+fine — it converts to a Google Doc), `parentId` = the target folder id. Store
+the returned `webViewLink` / URL where the playbook says.
+
+## 5. Playbooks
+
+### Stage 1 — Brand Build (PB2)
+
+**Gather.** `WebFetch` the home page, then every page linked from its main
+nav (about, services, contact, gallery). `WebSearch` `"<name>" <city>` and
+`"<name>" reviews` for the GBP listing, socials, review counts, star rating,
+years in business, licences. If `brand_colors` / `brand_fonts` / `brand_assets`
+are empty for the client, run the scan:
+
+```sql
+select net.http_post(
+  url := 'https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/brand-scan',
+  headers := jsonb_build_object('Content-Type','application/json',
+    'Authorization','Bearer ' || get_secret('SUPABASE_ANON_KEY'),
+    'x-cron-secret', get_secret('SYNC_CRON_SECRET')),
+  body := jsonb_build_object('client_id','<client_id>'));
+```
+
+Wait ~20 s, read `net._http_response` for the id it returned, then delete any
+Gutenberg default colours it leaked (`#ff6900 #cf2e2e #fcb900 #0693e3 #9b51e0`)
+and assign roles (`primary`, `secondary`, `accent`, `neutral`, `background`,
+`text`). `brand_colors.hex` must be lowercase `#rrggbb`.
+
+**Write.**
+
+- `client_brands` (row exists; `update`): `tagline`, `positioning`, `story`,
+  `audience`, `differentiators`, `voice_tone`, `content_pillars` (text[], 3–5),
+  `words_we_use`, `words_we_avoid`, `imagery_style`, `typography_notes`,
+  `ai_guidance` (how to write for this client, 5–10 lines).
+- `brand_boards`: one row per client (insert, or update the existing draft).
+  `version` 1, `status = 'draft'`, `palette` as the array shape
+  `[{"role","hex","usage","source"}]` where source is `sourced` (from the
+  site) or `derived` (you chose it), `typography` as `{"heading": "<family>",
+  "body": "<family>", "notes": "…"}`, `positioning_line`, `standing_cta`,
+  `hard_rules` (text[] — what never to say, show or claim; "no street address"
+  for service-area businesses; one phone number).
+- `claims`: every factual claim the site or listings make. `status =
+  'sourced'` with `source` = URL when you saw it in writing; `unverified`
+  when it is asserted without evidence. Never invent a claim.
+- `brand_assets`: the scan files logos; add anything else it missed via the
+  function's import mode (AGENTS.md) rather than by hand.
+- **Drive:** write `Brand Board — <Client>` to `02 Brand`: palette table,
+  typography, positioning, CTA, voice, pillars, hard rules, claims by status.
+  Put its URL on `brand_boards.drive_doc_url`.
+
+**No website and nothing findable** → *Blocked* with next_action "Needs
+website URL or brand material (logo, colours, any existing copy) from the
+client."
+
+Close the stage's tasks (`brand_board` and the PB2.x rows) and finish.
+
+### Stage 2 — Onboarding & Service Taxonomy (PB1)
+
+**Business record.** From the site, listings and the intake fields, fill any
+null on `clients`: `vertical` (masonry, electrical, solar…), `business_type`
+(`storefront` | `service_area`), `phone`, `address_line1` / `city` / `state` /
+`zip` (leave address null for a service-area business that hides it),
+`service_area`. Never overwrite a non-null value.
+
+**Contacts.** If `client_contacts` is empty and the site names an owner or a
+contact email, insert one (`is_primary = true`). Otherwise leave the contacts
+task open for Tom.
+
+**Services** — the spine. 8–25 rows: one per distinct service a customer would
+search for. For each: `name`, `segment` (residential / commercial / a
+product line), `gbp_entry` (the GBP service name, ≤ 60 chars), `page_url`
+(the existing site's page if it has one), `page_type = 'service'`, `sort_order`.
+Fold thin variants under a parent with `parent_service_id` and make the parent
+a `hub`. Dedupe on `(client_id, lower(name))` before inserting. Set `status =
+'approved'` — there is no approval step, and Keyword Research and the SEO
+audit read approved services; say in the evidence that the taxonomy is
+auto-approved pending the Foundation review.
+
+Tasks: close the business-record, taxonomy and segment/fold rows; close the
+contacts row only if you inserted one; **leave** `Request access…` (TOM) and
+close `drive_folders` only if the folders exist.
+
+### Stage 3 — Keyword Research (PB3)
+
+**Location.** DataForSEO wants a `location_name` like
+`"Springfield,Missouri,United States"` — build it from `clients.city` /
+`state`; fall back to the state; `language_code = 'en'`.
+
+**Demand table.** Seed from every approved service name plus `<service> <city>`
+and `<service> near me`. Use `dataforseo_labs_google_keyword_ideas` /
+`keyword_suggestions` and `kw_data_google_ads_search_volume` for volume, CPC and
+competition; `dataforseo_labs_search_intent` for intent. Keep 60–150 terms with
+volume > 0 or clear commercial intent. Insert into `keywords`: `keyword`,
+`department = 'seo'`, `service_id` (the service it serves; null for brand /
+generic), `city` when the term carries one, `volume`, `cpc`, `competition`,
+`intent`, `source = 'dataforseo'`, `last_checked = now()`, `is_active = true`,
+`priority = 'p3'`. Dedupe on `(client_id, lower(keyword))`.
+
+**Money keywords.** The 6–10 terms with the strongest commercial intent ×
+volume × fit. Insert `money_keywords (client_id, keyword_id)` (thresholds
+default; the trigger sets `keywords.is_money`). Set `priority = 'p1'` on them —
+P1 drives the City Index.
+
+**Tracked list.** The top ~30 by opportunity: `is_tracked = true`, `priority =
+'p2'` unless already p1.
+
+**Page groups.** One `home` (primary = the strongest brand/category term); one
+`service` per approved service (`primary_keyword_id` = its best term,
+`supporting_keyword_ids` = the rest that serve it, `'{}'::uuid[]` if none);
+`city` groups for the top 3–6 cities in the service area (`city_tier` `1` for
+the home metro, `2` for the ring, `fold` for anything thin); a `hub` per hub
+service. `status = 'approved'`, `target_url` from the existing site where a
+page exists. Set each service's `primary_keyword_id`.
+
+**Drive:** write `Keyword Map — <Client>` to `03 Keywords`: money keywords
+with volumes, the demand table, the page-group map.
+
+Tasks: close the demand-table, link, money, page-group and tracked-list rows.
+**Leave open**, owner `TOM`, with a note: `Add tracked locations and a geo-grid
+config` (needs a judgment on radius) and the BrightLocal push (billable).
+
+Finishing this stage completes Foundation. If the client has **no**
+department pipeline enrolled, enroll Website first so the client does not
+converge to `active` with nothing behind it:
+
+```sql
+insert into client_pipelines (client_id, pipeline_id, status)
+select '<client_id>', id, 'active' from pipelines where key = 'website'
+on conflict do nothing;   -- the gate parks it as pending until Foundation completes
+```
+
+and note it in the evidence.
+
+### Website — Build to 70% (PB4b)
+
+Runs only when Foundation is `complete` and the Website enrollment is
+`active`. Do the CLAUDE tasks on **Discovery** first (site inventory, `sites`
+row: `stack = 'astro'`, `controlled_by_compass = true`, `url` = existing site)
+and set Discovery `in_progress`; its TOM tasks (client request, DNS access)
+stay open — Tom finishes Discovery himself.
+
+**Repo.** `sites.repo_url` is set when provisioning ran. If null, create
+`Compass2026/<slug>` (private, auto-init) with `mcp__github__create_repository`
+— slug is the client name lower-cased with non-alphanumerics removed — and
+record it on `sites`.
+
+**Build.** The reference build is `Compass2026/shewmakerbrothersmasonry`
+(Astro). Attach both repos with `mcp__Claude_Code_Remote__add_repo`, clone the
+reference, and rebuild it for this client:
+
+1. Read its `DESIGN.md`, `PRODUCT.md`, `docs/brand-board.md`,
+   `docs/keyword-map.md`, `docs/placeholders.md` — that is the pattern.
+2. Replace every Shewmaker-specific token: colours and fonts from
+   `brand_boards.palette` / `typography`, copy from `client_brands`, phone /
+   NAP from `clients` (respect `hard_rules`), services from `services`.
+3. Generate pages from `page_groups`: home, one per service, city pages by
+   tier, hubs. Each page targets its `primary_keyword_id` in title, H1 and
+   meta; supporting terms in body copy. Schema (LocalBusiness + Service).
+4. Where a photo, project, fact or claim is missing, drop a visible
+   placeholder and insert a `placeholders` row (`site_id`, `page`, `type`,
+   `description`). Never fabricate a testimonial, a licence number or a
+   project.
+5. Write the client's own `DESIGN.md`, `PRODUCT.md`, `docs/brand-board.md`,
+   `docs/keyword-map.md`, `docs/placeholders.md` into the new repo.
+6. `npm install && npm run build` must pass. If it does not, fix it; if you
+   cannot, *Blocked* with the build error in `next_action`.
+7. Push to `main` of the client repo.
+
+Close Build-to-70% tasks 1–7 (the Vercel project and staging URL are Tom's
+— note it), set the stage `complete`, and record the repo URL and the
+placeholder count in the evidence. Do not touch Polish or Launch.
+
+## 6. End of run
+
+Print a five-line summary: clients touched, stage completed or blocked for
+each, anything left for Tom. Nothing else is required — the CRM already
+carries it.
