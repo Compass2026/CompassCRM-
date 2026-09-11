@@ -163,3 +163,37 @@ export const brandLogoKinds: BrandAssetKind[] = [
   "logo_icon",
   "wordmark",
 ];
+export type TaxonomyStatus = Database["public"]["Enums"]["taxonomy_status"];
+
+export const taxonomyStatusStyles: Record<TaxonomyStatus, string> = {
+  proposed: "bg-amber-100 text-amber-800 border-amber-200",
+  approved: "bg-green-100 text-green-800 border-green-200",
+  retired: "bg-zinc-100 text-zinc-500 border-zinc-200 line-through",
+};
+
+export const taxonomyStatusLabels: Record<TaxonomyStatus, string> = {
+  proposed: "Proposed",
+  approved: "Approved",
+  retired: "Retired",
+};
+
+export type ClaimStatus = Database["public"]["Enums"]["claim_status"];
+
+export const claimStatusStyles: Record<ClaimStatus, string> = {
+  sourced: "bg-blue-100 text-blue-800 border-blue-200",
+  unverified: "bg-amber-100 text-amber-800 border-amber-200",
+  confirmed: "bg-green-100 text-green-800 border-green-200",
+};
+
+export const claimStatusLabels: Record<ClaimStatus, string> = {
+  sourced: "Sourced",
+  unverified: "Unverified",
+  confirmed: "Confirmed",
+};
+
+export type BrandBoardStatus = Database["public"]["Enums"]["brand_board_status"];
+
+export const brandBoardStatusStyles: Record<BrandBoardStatus, string> = {
+  draft: "bg-amber-100 text-amber-800 border-amber-200",
+  approved: "bg-green-100 text-green-800 border-green-200",
+};

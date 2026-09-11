@@ -89,6 +89,14 @@ City Index fix; the Services / Brand board / Keywords / Tasks / brief work
   gated stages cannot start early; Foundation stages 2–3 wait for the taxonomy.
 - **0013** City Index in SQL, P1 only; `brightlocal-sync` calls
   `recompute_location_indexes` instead of computing it in TypeScript.
+- **Services tab** (`/clients/[id]/services`, step 5): the taxonomy grouped by
+  segment with folded children, edit / approve / retire / reorder, page groups
+  read-only. **Foundation tab** (`/clients/[id]/foundation`): the three
+  Foundation stages with evidence and next action, Drive folder links, the
+  brand board (palette, typography, positioning, CTA, hard rules, approve /
+  reopen), claims with confirm, money keywords with thresholds and
+  confirmation, and the keyword map. `src/lib/brand-board.ts` renders both
+  palette shapes (the doc's array and the Shewmaker load's structured object).
 
 All four were applied to the remote project on Sept 7 2026 and
 `brightlocal-sync` redeployed. Clients that existed before Foundation did have
@@ -139,6 +147,31 @@ client. Migration `0009_brand_board.sql`.
   the `documents` bucket as a `brand` document. Filing a copy in
   Compass Clients / <Client> on Drive is done by Claude via the Drive
   connector — the app itself has no Google credentials.
+
+## Schema notes learned from the Shewmaker load (Sept 10 2026)
+
+- `brand_colors.hex` has a check constraint: lowercase `#rrggbb` only.
+- `page_groups.supporting_keyword_ids` is NOT NULL; use `'{}'::uuid[]` when empty.
+- Inserting a client fires `enroll_client_in_foundation` (Foundation enrollment + 3
+  stages) and, from the unmerged brand-board branch, `handle_client_created`
+  (blank `client_brands` row + a `brand_board` task; `tasks.key` exists remotely only).
+- Enrolling in a pipeline whose stages `requires_foundation` is parked as `pending`
+  by `gate_pipeline_enrollment` and activated by `handle_foundation_completion`.
+  `enforce_stage_gates` blocks gated stages, and Foundation stages 2–3 until the
+  taxonomy stage is complete.
+- `handle_pipeline_completion` flips a client to `active` and enrolls Reporting as
+  soon as no non-recurring enrollment is incomplete — so a client enrolled in
+  nothing but Foundation converges when Foundation completes. Enroll Website or
+  SEO first, or complete Foundation with the convergence trigger disabled (as the
+  0011 backfill did). Proposed fix: convergence should require at least one
+  non-Foundation pipeline.
+- `clients.drive_folders` is `{"root": id, "01 Onboarding": id, …, "Media": id}` —
+  Drive folder ids keyed by folder name. See docs/reconciliation.md "Drive layout".
+- Client data loads use deterministic uuid5 ids (`uuid_generate_v5(uuid_ns_dns(),
+  '<client>:<table>:<key>')`) so re-running a load is idempotent; loads are data
+  scripts, not migrations. Shewmaker (`a88f5ce2-30ac-508b-b217-cf22d277b278`) is the
+  blueprint record; nothing about it is deleted or rewritten without Tom.
+- RLS on every table is the single "team full access" policy for authenticated users.
 
 ## Known state / open items (as of Aug 31 2026)
 
