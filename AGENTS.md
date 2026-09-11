@@ -34,7 +34,7 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 
 ## Phases
 
-1. **Foundation — done.** Clients list, Overview / Plan / Documents /
+1. **Foundation — done.** Clients list, Overview / Plan / Brand / Documents /
    Pipelines tabs, Dashboard, Tasks by owner, Settings.
 2. **Trackers — done.** Keywords, locations (with a "cities within N miles"
    suggester backed by a bundled GeoNames dataset, `src/data/us-cities.json`),
@@ -96,6 +96,49 @@ it marked complete (0011), so the gate only bites new clients. 0008 (Stripe) and
 from their own unmerged branches; the brand-board branch's enrollment hook
 attaches its task to the old SEO "Onboarding" stage, which no longer exists,
 so it needs re-pointing at Foundation › Brand Build when that branch lands.
+## Brand board (spec §6.2b)
+
+Every client has a brand board on the **Brand** tab — the team's visual
+reference and the structured "brain" AI reads before writing anything for the
+client. Migration `0009_brand_board.sql`.
+
+- **Data:** `client_brands` (1:1 with clients — tagline, positioning, story,
+  audience, differentiators, voice & tone, content pillars, words we use /
+  avoid, imagery style, typography notes, AI guidance, approval stamp),
+  `brand_colors`, `brand_fonts`, `brand_assets`. Files live in the private
+  `brand-assets` bucket; the browser uploads straight to Storage
+  (`src/components/brand-asset-uploader.tsx`) and a server action records the
+  row, so uploads aren't bound by the server-action body limit.
+- **AI access:** `select get_brand_profile('<client uuid>')` returns the whole
+  brand as one JSON document (client basics, identity fields, colors, fonts,
+  assets with bucket + storage path). Any Claude session with the Supabase
+  connector should call this before generating content for a client; sign
+  `storage_path`s against `brand-assets` to fetch the images.
+- **Process hook:** creating a client inserts the empty brand row and a
+  "Build brand board" task (owner CLAUDE+APPROVAL, `tasks.key = 'brand_board'`).
+  Enrolling in SEO attaches that task to the Onboarding stage. Claude drafts
+  the board (website scan + intake), Tom approves on the tab, which closes the
+  task.
+- **Website scan** (`scanWebsiteAction` in `src/app/brand-actions.ts`) pulls
+  colors, fonts, logo, favicon and og:image from `clients.website_url` as a
+  starting point — heuristic, always review the result. The same scan runs
+  server-side as the `brand-scan` Edge Function (service role; authorized by
+  a team JWT or `x-cron-secret`), so Claude can seed boards without a browser
+  session: `select net.http_post('.../functions/v1/brand-scan', headers with
+  get_secret('SUPABASE_ANON_KEY') + get_secret('SYNC_CRON_SECRET'),
+  body '{"client_id": "..."}')` and read the result from `net._http_response`.
+  WordPress sites leak the Gutenberg default palette (#ff6900, #cf2e2e,
+  #fcb900, #0693e3, #9b51e0) — delete those and assign roles by hand.
+  For sites the scan can't read (JavaScript-rendered, logos only on inner
+  pages) the same function has an **import mode**: body
+  `{"client_id": "...", "import": [{"url", "kind", "label", "notes",
+  "is_primary"}], "remove": ["<asset id>"]}` files specific images (by URL
+  or `data_base64` + `mime_type`) into the bucket and `brand_assets`.
+- **Outputs:** `/clients/[id]/brand-board` is a print-ready page (Save as
+  PDF); "Publish snapshot to Documents" writes a self-contained HTML board into
+  the `documents` bucket as a `brand` document. Filing a copy in
+  Compass Clients / <Client> on Drive is done by Claude via the Drive
+  connector — the app itself has no Google credentials.
 
 ## Known state / open items (as of Aug 31 2026)
 
@@ -109,6 +152,12 @@ so it needs re-pointing at Foundation › Brand Build when that branch lands.
   data for it at all (likely created recently — GSC does not backfill).
   Pensacola Equipment Rentals has no Search Console property; one needs to be
   created and verified.
+- **Brand boards are drafted, not approved** (Sep 1 2026) — website scan +
+  intake done for the five clients with websites (palette roles assigned, logos
+  from the site, identity/voice/AI-guidance fields written from site copy).
+  Pensacola has a placeholder only (no website, no material). Each client's
+  "Build brand board" task stays open until Tom approves on the Brand tab.
+  Draft boards are filed in Drive under Compass Clients / <Client>.
 - **Client seed data is partial** — several clients still need enrolled
   pipelines, plan details, and contacts filled in. Pensacola also has no
   `website_url`.

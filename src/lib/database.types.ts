@@ -14,70 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      alerts: {
-        Row: {
-          acknowledged: boolean
-          acknowledged_at: string | null
-          client_id: string
-          current_rank: number | null
-          id: string
-          keyword_id: string
-          location_id: string | null
-          previous_rank: number | null
-          result_type: Database["public"]["Enums"]["rank_result_type"] | null
-          source: string | null
-          triggered_on: string
-        }
-        Insert: {
-          acknowledged?: boolean
-          acknowledged_at?: string | null
-          client_id: string
-          current_rank?: number | null
-          id?: string
-          keyword_id: string
-          location_id?: string | null
-          previous_rank?: number | null
-          result_type?: Database["public"]["Enums"]["rank_result_type"] | null
-          source?: string | null
-          triggered_on?: string
-        }
-        Update: {
-          acknowledged?: boolean
-          acknowledged_at?: string | null
-          client_id?: string
-          current_rank?: number | null
-          id?: string
-          keyword_id?: string
-          location_id?: string | null
-          previous_rank?: number | null
-          result_type?: Database["public"]["Enums"]["rank_result_type"] | null
-          source?: string | null
-          triggered_on?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "alerts_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "alerts_keyword_id_fkey"
-            columns: ["keyword_id"]
-            isOneToOne: false
-            referencedRelation: "keywords"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "alerts_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       app_settings: {
         Row: {
           key: string
@@ -96,55 +32,67 @@ export type Database = {
         }
         Relationships: []
       }
-      brand_boards: {
+      brand_assets: {
         Row: {
-          approved_by: string | null
-          approved_on: string | null
           client_id: string
           created_at: string
-          drive_doc_url: string | null
-          hard_rules: string[]
+          file_name: string | null
+          height: number | null
           id: string
-          palette: Json
-          positioning_line: string | null
-          standing_cta: string | null
-          status: Database["public"]["Enums"]["brand_board_status"]
-          typography: Json
-          version: number
+          is_primary: boolean
+          kind: Database["public"]["Enums"]["brand_asset_kind"]
+          label: string
+          mime_type: string | null
+          notes: string | null
+          size_bytes: number | null
+          sort_order: number
+          source: Database["public"]["Enums"]["brand_asset_source"]
+          storage_path: string | null
+          uploaded_by: string | null
+          url: string | null
+          width: number | null
         }
         Insert: {
-          approved_by?: string | null
-          approved_on?: string | null
           client_id: string
           created_at?: string
-          drive_doc_url?: string | null
-          hard_rules?: string[]
+          file_name?: string | null
+          height?: number | null
           id?: string
-          palette?: Json
-          positioning_line?: string | null
-          standing_cta?: string | null
-          status?: Database["public"]["Enums"]["brand_board_status"]
-          typography?: Json
-          version?: number
+          is_primary?: boolean
+          kind?: Database["public"]["Enums"]["brand_asset_kind"]
+          label: string
+          mime_type?: string | null
+          notes?: string | null
+          size_bytes?: number | null
+          sort_order?: number
+          source?: Database["public"]["Enums"]["brand_asset_source"]
+          storage_path?: string | null
+          uploaded_by?: string | null
+          url?: string | null
+          width?: number | null
         }
         Update: {
-          approved_by?: string | null
-          approved_on?: string | null
           client_id?: string
           created_at?: string
-          drive_doc_url?: string | null
-          hard_rules?: string[]
+          file_name?: string | null
+          height?: number | null
           id?: string
-          palette?: Json
-          positioning_line?: string | null
-          standing_cta?: string | null
-          status?: Database["public"]["Enums"]["brand_board_status"]
-          typography?: Json
-          version?: number
+          is_primary?: boolean
+          kind?: Database["public"]["Enums"]["brand_asset_kind"]
+          label?: string
+          mime_type?: string | null
+          notes?: string | null
+          size_bytes?: number | null
+          sort_order?: number
+          source?: Database["public"]["Enums"]["brand_asset_source"]
+          storage_path?: string | null
+          uploaded_by?: string | null
+          url?: string | null
+          width?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "brand_boards_client_id_fkey"
+            foreignKeyName: "brand_assets_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -152,55 +100,40 @@ export type Database = {
           },
         ]
       }
-      change_log: {
+      brand_colors: {
         Row: {
-          after: Json | null
-          before: Json | null
-          change_type: string
           client_id: string
           created_at: string
-          evidence: string | null
+          hex: string
           id: string
-          object_id: string | null
-          object_type: string
-          reasoning: string | null
-          reviewed_by: string | null
-          reviewed_on: string | null
-          status: Database["public"]["Enums"]["change_status"]
+          name: string
+          role: Database["public"]["Enums"]["brand_color_role"]
+          sort_order: number
+          usage: string | null
         }
         Insert: {
-          after?: Json | null
-          before?: Json | null
-          change_type: string
           client_id: string
           created_at?: string
-          evidence?: string | null
+          hex: string
           id?: string
-          object_id?: string | null
-          object_type: string
-          reasoning?: string | null
-          reviewed_by?: string | null
-          reviewed_on?: string | null
-          status?: Database["public"]["Enums"]["change_status"]
+          name: string
+          role?: Database["public"]["Enums"]["brand_color_role"]
+          sort_order?: number
+          usage?: string | null
         }
         Update: {
-          after?: Json | null
-          before?: Json | null
-          change_type?: string
           client_id?: string
           created_at?: string
-          evidence?: string | null
+          hex?: string
           id?: string
-          object_id?: string | null
-          object_type?: string
-          reasoning?: string | null
-          reviewed_by?: string | null
-          reviewed_on?: string | null
-          status?: Database["public"]["Enums"]["change_status"]
+          name?: string
+          role?: Database["public"]["Enums"]["brand_color_role"]
+          sort_order?: number
+          usage?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "change_log_client_id_fkey"
+            foreignKeyName: "brand_colors_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -208,40 +141,46 @@ export type Database = {
           },
         ]
       }
-      claims: {
+      brand_fonts: {
         Row: {
-          claim: string
           client_id: string
-          confirmed_by: string | null
-          confirmed_on: string | null
           created_at: string
+          family: string
           id: string
+          notes: string | null
+          role: Database["public"]["Enums"]["brand_font_role"]
+          sort_order: number
           source: string | null
-          status: Database["public"]["Enums"]["claim_status"]
+          url: string | null
+          weights: string | null
         }
         Insert: {
-          claim: string
           client_id: string
-          confirmed_by?: string | null
-          confirmed_on?: string | null
           created_at?: string
+          family: string
           id?: string
+          notes?: string | null
+          role?: Database["public"]["Enums"]["brand_font_role"]
+          sort_order?: number
           source?: string | null
-          status?: Database["public"]["Enums"]["claim_status"]
+          url?: string | null
+          weights?: string | null
         }
         Update: {
-          claim?: string
           client_id?: string
-          confirmed_by?: string | null
-          confirmed_on?: string | null
           created_at?: string
+          family?: string
           id?: string
+          notes?: string | null
+          role?: Database["public"]["Enums"]["brand_font_role"]
+          sort_order?: number
           source?: string | null
-          status?: Database["public"]["Enums"]["claim_status"]
+          url?: string | null
+          weights?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "claims_client_id_fkey"
+            foreignKeyName: "brand_fonts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -279,6 +218,74 @@ export type Database = {
             foreignKeyName: "client_access_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_brands: {
+        Row: {
+          ai_guidance: string | null
+          approved_at: string | null
+          approved_by: string | null
+          audience: string | null
+          client_id: string
+          content_pillars: string[]
+          created_at: string
+          differentiators: string | null
+          imagery_style: string | null
+          positioning: string | null
+          story: string | null
+          tagline: string | null
+          typography_notes: string | null
+          updated_at: string
+          voice_tone: string | null
+          words_we_avoid: string[]
+          words_we_use: string[]
+        }
+        Insert: {
+          ai_guidance?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: string | null
+          client_id: string
+          content_pillars?: string[]
+          created_at?: string
+          differentiators?: string | null
+          imagery_style?: string | null
+          positioning?: string | null
+          story?: string | null
+          tagline?: string | null
+          typography_notes?: string | null
+          updated_at?: string
+          voice_tone?: string | null
+          words_we_avoid?: string[]
+          words_we_use?: string[]
+        }
+        Update: {
+          ai_guidance?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: string | null
+          client_id?: string
+          content_pillars?: string[]
+          created_at?: string
+          differentiators?: string | null
+          imagery_style?: string | null
+          positioning?: string | null
+          story?: string | null
+          tagline?: string | null
+          typography_notes?: string | null
+          updated_at?: string
+          voice_tone?: string | null
+          words_we_avoid?: string[]
+          words_we_use?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_brands_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -364,47 +371,6 @@ export type Database = {
           },
         ]
       }
-      client_requests: {
-        Row: {
-          client_id: string
-          created_at: string
-          drafted_by_claude_at: string | null
-          id: string
-          items: Json
-          responses: Json | null
-          sent_by_tom_at: string | null
-          status: Database["public"]["Enums"]["client_request_status"]
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          drafted_by_claude_at?: string | null
-          id?: string
-          items?: Json
-          responses?: Json | null
-          sent_by_tom_at?: string | null
-          status?: Database["public"]["Enums"]["client_request_status"]
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          drafted_by_claude_at?: string | null
-          id?: string
-          items?: Json
-          responses?: Json | null
-          sent_by_tom_at?: string | null
-          status?: Database["public"]["Enums"]["client_request_status"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_requests_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       client_stages: {
         Row: {
           client_pipeline_id: string
@@ -465,11 +431,9 @@ export type Database = {
       clients: {
         Row: {
           address_line1: string | null
-          business_type: Database["public"]["Enums"]["business_type"] | null
           city: string | null
           created_at: string
           dba: string | null
-          drive_folders: Json | null
           drive_root_url: string | null
           gsc_property: string | null
           id: string
@@ -485,17 +449,14 @@ export type Database = {
           state: string | null
           status: Database["public"]["Enums"]["client_status"]
           updated_at: string
-          vertical: string | null
           website_url: string | null
           zip: string | null
         }
         Insert: {
           address_line1?: string | null
-          business_type?: Database["public"]["Enums"]["business_type"] | null
           city?: string | null
           created_at?: string
           dba?: string | null
-          drive_folders?: Json | null
           drive_root_url?: string | null
           gsc_property?: string | null
           id?: string
@@ -511,17 +472,14 @@ export type Database = {
           state?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
-          vertical?: string | null
           website_url?: string | null
           zip?: string | null
         }
         Update: {
           address_line1?: string | null
-          business_type?: Database["public"]["Enums"]["business_type"] | null
           city?: string | null
           created_at?: string
           dba?: string | null
-          drive_folders?: Json | null
           drive_root_url?: string | null
           gsc_property?: string | null
           id?: string
@@ -537,7 +495,6 @@ export type Database = {
           state?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
-          vertical?: string | null
           website_url?: string | null
           zip?: string | null
         }
@@ -596,57 +553,6 @@ export type Database = {
             columns: ["keyword_id"]
             isOneToOne: false
             referencedRelation: "keywords"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      decisions: {
-        Row: {
-          client_id: string | null
-          decided_by: string | null
-          decided_on: string
-          decision: string
-          id: string
-          match_count: number
-          playbook_step: string | null
-          rule_text: string | null
-          task_id: string | null
-        }
-        Insert: {
-          client_id?: string | null
-          decided_by?: string | null
-          decided_on?: string
-          decision: string
-          id?: string
-          match_count?: number
-          playbook_step?: string | null
-          rule_text?: string | null
-          task_id?: string | null
-        }
-        Update: {
-          client_id?: string | null
-          decided_by?: string | null
-          decided_on?: string
-          decision?: string
-          id?: string
-          match_count?: number
-          playbook_step?: string | null
-          rule_text?: string | null
-          task_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "decisions_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "decisions_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -921,102 +827,36 @@ export type Database = {
           },
         ]
       }
-      industry_pulse: {
-        Row: {
-          affected_client_ids: string[]
-          competitor_moves: Json
-          created_at: string
-          id: string
-          news_items: Json
-          period: string
-          rising_queries: Json
-          serp_changes: Json
-          vertical: string
-        }
-        Insert: {
-          affected_client_ids?: string[]
-          competitor_moves?: Json
-          created_at?: string
-          id?: string
-          news_items?: Json
-          period: string
-          rising_queries?: Json
-          serp_changes?: Json
-          vertical: string
-        }
-        Update: {
-          affected_client_ids?: string[]
-          competitor_moves?: Json
-          created_at?: string
-          id?: string
-          news_items?: Json
-          period?: string
-          rising_queries?: Json
-          serp_changes?: Json
-          vertical?: string
-        }
-        Relationships: []
-      }
       keywords: {
         Row: {
-          city: string | null
           client_id: string
-          competition: number | null
-          cpc: number | null
           created_at: string
           department: Database["public"]["Enums"]["department"]
           id: string
-          intent: string | null
           is_active: boolean
-          is_money: boolean
-          is_tracked: boolean
           keyword: string
-          last_checked: string | null
           priority: Database["public"]["Enums"]["keyword_priority"]
-          service_id: string | null
-          source: string | null
           target_url: string | null
-          volume: number | null
         }
         Insert: {
-          city?: string | null
           client_id: string
-          competition?: number | null
-          cpc?: number | null
           created_at?: string
           department?: Database["public"]["Enums"]["department"]
           id?: string
-          intent?: string | null
           is_active?: boolean
-          is_money?: boolean
-          is_tracked?: boolean
           keyword: string
-          last_checked?: string | null
           priority?: Database["public"]["Enums"]["keyword_priority"]
-          service_id?: string | null
-          source?: string | null
           target_url?: string | null
-          volume?: number | null
         }
         Update: {
-          city?: string | null
           client_id?: string
-          competition?: number | null
-          cpc?: number | null
           created_at?: string
           department?: Database["public"]["Enums"]["department"]
           id?: string
-          intent?: string | null
           is_active?: boolean
-          is_money?: boolean
-          is_tracked?: boolean
           keyword?: string
-          last_checked?: string | null
           priority?: Database["public"]["Enums"]["keyword_priority"]
-          service_id?: string | null
-          source?: string | null
           target_url?: string | null
-          volume?: number | null
         }
         Relationships: [
           {
@@ -1024,13 +864,6 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "keywords_service_id_fkey"
-            columns: ["service_id"]
-            isOneToOne: false
-            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
@@ -1129,54 +962,6 @@ export type Database = {
           },
         ]
       }
-      money_keywords: {
-        Row: {
-          alert_threshold_map: number
-          alert_threshold_organic: number
-          client_id: string
-          confirmed_by: string | null
-          confirmed_on: string | null
-          created_at: string
-          id: string
-          keyword_id: string
-        }
-        Insert: {
-          alert_threshold_map?: number
-          alert_threshold_organic?: number
-          client_id: string
-          confirmed_by?: string | null
-          confirmed_on?: string | null
-          created_at?: string
-          id?: string
-          keyword_id: string
-        }
-        Update: {
-          alert_threshold_map?: number
-          alert_threshold_organic?: number
-          client_id?: string
-          confirmed_by?: string | null
-          confirmed_on?: string | null
-          created_at?: string
-          id?: string
-          keyword_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "money_keywords_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "money_keywords_keyword_id_fkey"
-            columns: ["keyword_id"]
-            isOneToOne: true
-            referencedRelation: "keywords"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       monthly_cycles: {
         Row: {
           client_id: string
@@ -1214,63 +999,6 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      page_groups: {
-        Row: {
-          city_tier: Database["public"]["Enums"]["city_tier"] | null
-          client_id: string
-          created_at: string
-          id: string
-          name: string
-          page_type: Database["public"]["Enums"]["page_group_type"]
-          primary_keyword_id: string | null
-          serp_notes: string | null
-          status: Database["public"]["Enums"]["taxonomy_status"]
-          supporting_keyword_ids: string[]
-          target_url: string | null
-        }
-        Insert: {
-          city_tier?: Database["public"]["Enums"]["city_tier"] | null
-          client_id: string
-          created_at?: string
-          id?: string
-          name: string
-          page_type?: Database["public"]["Enums"]["page_group_type"]
-          primary_keyword_id?: string | null
-          serp_notes?: string | null
-          status?: Database["public"]["Enums"]["taxonomy_status"]
-          supporting_keyword_ids?: string[]
-          target_url?: string | null
-        }
-        Update: {
-          city_tier?: Database["public"]["Enums"]["city_tier"] | null
-          client_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          page_type?: Database["public"]["Enums"]["page_group_type"]
-          primary_keyword_id?: string | null
-          serp_notes?: string | null
-          status?: Database["public"]["Enums"]["taxonomy_status"]
-          supporting_keyword_ids?: string[]
-          target_url?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "page_groups_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "page_groups_primary_keyword_id_fkey"
-            columns: ["primary_keyword_id"]
-            isOneToOne: false
-            referencedRelation: "keywords"
             referencedColumns: ["id"]
           },
         ]
@@ -1364,67 +1092,6 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
-      }
-      placeholders: {
-        Row: {
-          client_id: string
-          client_request_id: string | null
-          created_at: string
-          description: string | null
-          id: string
-          page: string | null
-          resolved: boolean
-          resolved_at: string | null
-          site_id: string | null
-          type: Database["public"]["Enums"]["placeholder_type"]
-        }
-        Insert: {
-          client_id: string
-          client_request_id?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          page?: string | null
-          resolved?: boolean
-          resolved_at?: string | null
-          site_id?: string | null
-          type: Database["public"]["Enums"]["placeholder_type"]
-        }
-        Update: {
-          client_id?: string
-          client_request_id?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          page?: string | null
-          resolved?: boolean
-          resolved_at?: string | null
-          site_id?: string | null
-          type?: Database["public"]["Enums"]["placeholder_type"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "placeholders_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "placeholders_client_request_id_fkey"
-            columns: ["client_request_id"]
-            isOneToOne: false
-            referencedRelation: "client_requests"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "placeholders_site_id_fkey"
-            columns: ["site_id"]
-            isOneToOne: false
-            referencedRelation: "sites"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       plans: {
         Row: {
@@ -1578,123 +1245,6 @@ export type Database = {
           },
         ]
       }
-      services: {
-        Row: {
-          client_id: string
-          created_at: string
-          gbp_entry: string | null
-          id: string
-          name: string
-          page_type: Database["public"]["Enums"]["service_page_type"]
-          page_url: string | null
-          parent_service_id: string | null
-          primary_keyword_id: string | null
-          segment: string | null
-          sort_order: number
-          status: Database["public"]["Enums"]["taxonomy_status"]
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          gbp_entry?: string | null
-          id?: string
-          name: string
-          page_type?: Database["public"]["Enums"]["service_page_type"]
-          page_url?: string | null
-          parent_service_id?: string | null
-          primary_keyword_id?: string | null
-          segment?: string | null
-          sort_order?: number
-          status?: Database["public"]["Enums"]["taxonomy_status"]
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          gbp_entry?: string | null
-          id?: string
-          name?: string
-          page_type?: Database["public"]["Enums"]["service_page_type"]
-          page_url?: string | null
-          parent_service_id?: string | null
-          primary_keyword_id?: string | null
-          segment?: string | null
-          sort_order?: number
-          status?: Database["public"]["Enums"]["taxonomy_status"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "services_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "services_parent_service_id_fkey"
-            columns: ["parent_service_id"]
-            isOneToOne: false
-            referencedRelation: "services"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "services_primary_keyword_id_fkey"
-            columns: ["primary_keyword_id"]
-            isOneToOne: false
-            referencedRelation: "keywords"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sites: {
-        Row: {
-          client_id: string
-          controlled_by_compass: boolean
-          created_at: string
-          domain_constant: string | null
-          id: string
-          launched_at: string | null
-          repo_url: string | null
-          stack: Database["public"]["Enums"]["site_stack"]
-          staging_url: string | null
-          url: string | null
-          vercel_project: string | null
-        }
-        Insert: {
-          client_id: string
-          controlled_by_compass?: boolean
-          created_at?: string
-          domain_constant?: string | null
-          id?: string
-          launched_at?: string | null
-          repo_url?: string | null
-          stack?: Database["public"]["Enums"]["site_stack"]
-          staging_url?: string | null
-          url?: string | null
-          vercel_project?: string | null
-        }
-        Update: {
-          client_id?: string
-          controlled_by_compass?: boolean
-          created_at?: string
-          domain_constant?: string | null
-          id?: string
-          launched_at?: string | null
-          repo_url?: string | null
-          stack?: Database["public"]["Enums"]["site_stack"]
-          staging_url?: string | null
-          url?: string | null
-          vercel_project?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sites_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       social_accounts: {
         Row: {
           access_token: string | null
@@ -1804,39 +1354,30 @@ export type Database = {
       }
       stages: {
         Row: {
-          autonomy_level: Database["public"]["Enums"]["autonomy_level"] | null
           default_owner: Database["public"]["Enums"]["owner_type"]
           description: string | null
           id: string
           is_optional: boolean
           name: string
           pipeline_id: string
-          playbook_ref: string | null
-          requires_foundation: boolean
           sort_order: number
         }
         Insert: {
-          autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           default_owner?: Database["public"]["Enums"]["owner_type"]
           description?: string | null
           id?: string
           is_optional?: boolean
           name: string
           pipeline_id: string
-          playbook_ref?: string | null
-          requires_foundation?: boolean
           sort_order?: number
         }
         Update: {
-          autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           default_owner?: Database["public"]["Enums"]["owner_type"]
           description?: string | null
           id?: string
           is_optional?: boolean
           name?: string
           pipeline_id?: string
-          playbook_ref?: string | null
-          requires_foundation?: boolean
           sort_order?: number
         }
         Relationships: [
@@ -1890,6 +1431,24 @@ export type Database = {
           },
         ]
       }
+      stripe_events: {
+        Row: {
+          id: string
+          received_at: string
+          type: string
+        }
+        Insert: {
+          id: string
+          received_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          received_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           amount: number | null
@@ -1900,6 +1459,7 @@ export type Database = {
           current_period_start: string | null
           id: string
           interval: string
+          latest_invoice_url: string | null
           paid_status: Database["public"]["Enums"]["paid_status_type"]
           status: string | null
           stripe_price_id: string | null
@@ -1914,6 +1474,7 @@ export type Database = {
           current_period_start?: string | null
           id?: string
           interval?: string
+          latest_invoice_url?: string | null
           paid_status?: Database["public"]["Enums"]["paid_status_type"]
           status?: string | null
           stripe_price_id?: string | null
@@ -1928,6 +1489,7 @@ export type Database = {
           current_period_start?: string | null
           id?: string
           interval?: string
+          latest_invoice_url?: string | null
           paid_status?: Database["public"]["Enums"]["paid_status_type"]
           status?: string | null
           stripe_price_id?: string | null
@@ -1945,34 +1507,28 @@ export type Database = {
       }
       task_templates: {
         Row: {
-          autonomy_level: Database["public"]["Enums"]["autonomy_level"] | null
           default_owner: Database["public"]["Enums"]["owner_type"]
           department: Database["public"]["Enums"]["department"] | null
           id: string
           pipeline_id: string | null
-          playbook_step: string | null
           sort_order: number
           stage_id: string | null
           title: string
         }
         Insert: {
-          autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           default_owner?: Database["public"]["Enums"]["owner_type"]
           department?: Database["public"]["Enums"]["department"] | null
           id?: string
           pipeline_id?: string | null
-          playbook_step?: string | null
           sort_order?: number
           stage_id?: string | null
           title: string
         }
         Update: {
-          autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           default_owner?: Database["public"]["Enums"]["owner_type"]
           department?: Database["public"]["Enums"]["department"] | null
           id?: string
           pipeline_id?: string | null
-          playbook_step?: string | null
           sort_order?: number
           stage_id?: string | null
           title?: string
@@ -1996,56 +1552,44 @@ export type Database = {
       }
       tasks: {
         Row: {
-          autonomy_level: Database["public"]["Enums"]["autonomy_level"] | null
           client_id: string
           client_stage_id: string | null
           completed_at: string | null
           created_at: string
-          default_if_approved: string | null
           due_date: string | null
-          flagged_for_review: boolean
           id: string
+          key: string | null
           monthly_cycle_id: string | null
           notes: string | null
           owner: Database["public"]["Enums"]["owner_type"]
-          playbook_step: string | null
-          recommendation: string | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
         }
         Insert: {
-          autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           client_id: string
           client_stage_id?: string | null
           completed_at?: string | null
           created_at?: string
-          default_if_approved?: string | null
           due_date?: string | null
-          flagged_for_review?: boolean
           id?: string
+          key?: string | null
           monthly_cycle_id?: string | null
           notes?: string | null
           owner?: Database["public"]["Enums"]["owner_type"]
-          playbook_step?: string | null
-          recommendation?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
         }
         Update: {
-          autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           client_id?: string
           client_stage_id?: string | null
           completed_at?: string | null
           created_at?: string
-          default_if_approved?: string | null
           due_date?: string | null
-          flagged_for_review?: boolean
           id?: string
+          key?: string | null
           monthly_cycle_id?: string | null
           notes?: string | null
           owner?: Database["public"]["Enums"]["owner_type"]
-          playbook_step?: string | null
-          recommendation?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
         }
@@ -2102,18 +1646,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      compute_location_index: {
-        Args: { p_location_id: string; p_period: string }
-        Returns: undefined
-      }
       create_monthly_cycles: { Args: { p_period?: string }; Returns: number }
-      create_stage_tasks: { Args: { p_client_pipeline_id: string }; Returns: number }
-      foundation_complete: { Args: { p_client_id: string }; Returns: boolean }
+      get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
-      recompute_location_indexes: {
-        Args: { p_client_id?: string; p_period?: string }
-        Returns: number
-      }
+      mark_past_due_subscriptions: { Args: never; Returns: undefined }
     }
     Enums: {
       access_status: "not_needed" | "requested" | "granted"
@@ -2131,13 +1667,29 @@ export type Database = {
         | "tiktok"
         | "crm"
         | "other"
-      autonomy_level: "run" | "run_flag" | "hold"
-      brand_board_status: "draft" | "approved"
-      business_type: "storefront" | "service_area"
-      change_status: "proposed" | "approved" | "vetoed"
-      city_tier: "1" | "2" | "fold"
-      claim_status: "sourced" | "unverified" | "confirmed"
-      client_request_status: "draft" | "sent" | "answered" | "closed"
+      brand_asset_kind:
+        | "logo_primary"
+        | "logo_alt"
+        | "logo_icon"
+        | "wordmark"
+        | "photo"
+        | "website_screenshot"
+        | "social_post"
+        | "ad"
+        | "print"
+        | "pattern"
+        | "video"
+        | "other"
+      brand_asset_source: "upload" | "link" | "website_scan"
+      brand_color_role:
+        | "primary"
+        | "secondary"
+        | "accent"
+        | "neutral"
+        | "background"
+        | "text"
+        | "other"
+      brand_font_role: "heading" | "body" | "accent" | "other"
       client_status: "launching" | "active" | "paused" | "offboarded"
       content_status: "idea" | "brief" | "draft" | "review" | "published"
       cycle_status: "open" | "complete"
@@ -2151,29 +1703,24 @@ export type Database = {
         | "report"
         | "other"
       document_kind: "drive_link" | "upload"
-      enrollment_status: "pending" | "active" | "complete" | "paused"
+      enrollment_status: "active" | "complete" | "paused"
       keyword_priority: "p1" | "p2" | "p3"
       owner_type: "TOM" | "CLAUDE" | "CLAUDE_APPROVAL" | "DELEGATED" | "WAITING"
-      page_group_type: "home" | "service" | "city" | "hub" | "other"
       paid_status_type: "paid" | "processing" | "open" | "past_due"
       payment_method: "card" | "stripe_ach" | "external_ach" | "check"
       payment_method_type: "card" | "us_bank_account" | "external_ach"
       payment_source: "stripe" | "manual"
       pipeline_key:
-        | "foundation"
         | "seo"
         | "website"
         | "social"
         | "crm"
         | "paid_ads"
         | "reporting"
-      placeholder_type: "image" | "claim" | "fact" | "project"
       rank_result_type: "organic" | "map_pack"
       rank_source: "brightlocal_report" | "brightlocal_live" | "csv" | "manual"
       run_status: "pending" | "running" | "complete" | "failed"
       run_trigger: "cron" | "manual"
-      service_page_type: "service" | "hub"
-      site_stack: "astro" | "nextjs" | "other"
       social_account_status: "connected" | "expired" | "manual_only"
       social_platform: "facebook" | "instagram" | "linkedin" | "x" | "tiktok"
       social_post_status:
@@ -2190,7 +1737,6 @@ export type Database = {
         | "skipped"
         | "complete"
       task_status: "open" | "in_progress" | "blocked" | "done"
-      taxonomy_status: "proposed" | "approved" | "retired"
       team_role: "admin" | "member"
     }
     CompositeTypes: {
@@ -2207,12 +1753,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2236,11 +1782,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2261,11 +1807,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2286,11 +1832,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2303,11 +1849,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2335,13 +1881,31 @@ export const Constants = {
         "crm",
         "other",
       ],
-      autonomy_level: ["run", "run_flag", "hold"],
-      brand_board_status: ["draft", "approved"],
-      business_type: ["storefront", "service_area"],
-      change_status: ["proposed", "approved", "vetoed"],
-      city_tier: ["1", "2", "fold"],
-      claim_status: ["sourced", "unverified", "confirmed"],
-      client_request_status: ["draft", "sent", "answered", "closed"],
+      brand_asset_kind: [
+        "logo_primary",
+        "logo_alt",
+        "logo_icon",
+        "wordmark",
+        "photo",
+        "website_screenshot",
+        "social_post",
+        "ad",
+        "print",
+        "pattern",
+        "video",
+        "other",
+      ],
+      brand_asset_source: ["upload", "link", "website_scan"],
+      brand_color_role: [
+        "primary",
+        "secondary",
+        "accent",
+        "neutral",
+        "background",
+        "text",
+        "other",
+      ],
+      brand_font_role: ["heading", "body", "accent", "other"],
       client_status: ["launching", "active", "paused", "offboarded"],
       content_status: ["idea", "brief", "draft", "review", "published"],
       cycle_status: ["open", "complete"],
@@ -2356,16 +1920,14 @@ export const Constants = {
         "other",
       ],
       document_kind: ["drive_link", "upload"],
-      enrollment_status: ["pending", "active", "complete", "paused"],
+      enrollment_status: ["active", "complete", "paused"],
       keyword_priority: ["p1", "p2", "p3"],
       owner_type: ["TOM", "CLAUDE", "CLAUDE_APPROVAL", "DELEGATED", "WAITING"],
-      page_group_type: ["home", "service", "city", "hub", "other"],
       paid_status_type: ["paid", "processing", "open", "past_due"],
       payment_method: ["card", "stripe_ach", "external_ach", "check"],
       payment_method_type: ["card", "us_bank_account", "external_ach"],
       payment_source: ["stripe", "manual"],
       pipeline_key: [
-        "foundation",
         "seo",
         "website",
         "social",
@@ -2373,13 +1935,10 @@ export const Constants = {
         "paid_ads",
         "reporting",
       ],
-      placeholder_type: ["image", "claim", "fact", "project"],
       rank_result_type: ["organic", "map_pack"],
       rank_source: ["brightlocal_report", "brightlocal_live", "csv", "manual"],
       run_status: ["pending", "running", "complete", "failed"],
       run_trigger: ["cron", "manual"],
-      service_page_type: ["service", "hub"],
-      site_stack: ["astro", "nextjs", "other"],
       social_account_status: ["connected", "expired", "manual_only"],
       social_platform: ["facebook", "instagram", "linkedin", "x", "tiktok"],
       social_post_status: [
@@ -2398,7 +1957,6 @@ export const Constants = {
         "complete",
       ],
       task_status: ["open", "in_progress", "blocked", "done"],
-      taxonomy_status: ["proposed", "approved", "retired"],
       team_role: ["admin", "member"],
     },
   },
