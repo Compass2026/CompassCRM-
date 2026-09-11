@@ -1,12 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
+import { BlockedBanner } from "@/components/blocked-banner";
 import { PipelineBoard } from "@/components/pipeline-board";
 
 export default async function PipelinesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ clientId: string }>;
+  searchParams: Promise<{ blocked?: string; hint?: string }>;
 }) {
   const { clientId } = await params;
+  const { blocked, hint } = await searchParams;
   const supabase = await createClient();
   const { data: enrollments } = await supabase
     .from("client_pipelines")
@@ -27,5 +31,10 @@ export default async function PipelinesPage({
     (a, b) => (a.pipelines?.sort_order ?? 0) - (b.pipelines?.sort_order ?? 0)
   );
 
-  return <PipelineBoard clientId={clientId} enrollments={sorted} />;
+  return (
+    <div className="space-y-4">
+      <BlockedBanner message={blocked} hint={hint} />
+      <PipelineBoard clientId={clientId} enrollments={sorted} />
+    </div>
+  );
 }

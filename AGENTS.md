@@ -100,10 +100,13 @@ City Index fix; the Services / Brand board / Keywords / Tasks / brief work
 
 All four were applied to the remote project on Sept 7 2026 and
 `brightlocal-sync` redeployed. Clients that existed before Foundation did have
-it marked complete (0011), so the gate only bites new clients. 0008 (Stripe) and 0009 (brand board) are applied remotely
-from their own unmerged branches; the brand-board branch's enrollment hook
-attaches its task to the old SEO "Onboarding" stage, which no longer exists,
-so it needs re-pointing at Foundation › Brand Build when that branch lands.
+it marked complete (0011), so the gate only bites new clients.
+- **0014** finishes build-order step 2: every launch stage carries its playbook
+  checklist as task templates, mid-process approvals are gone, and completing a
+  pipeline raises one review task. See "Onboarding flow" below.
+
+0008 (Stripe) is applied remotely from its own unmerged branch
+(`claude/compass-phase-3-stripe-gr28lo`) and is still the open Phase 3 work.
 ## Brand board (spec §6.2b)
 
 Every client has a brand board on the **Brand** tab — the team's visual
@@ -123,10 +126,10 @@ client. Migration `0009_brand_board.sql`.
   connector should call this before generating content for a client; sign
   `storage_path`s against `brand-assets` to fetch the images.
 - **Process hook:** creating a client inserts the empty brand row and a
-  "Build brand board" task (owner CLAUDE+APPROVAL, `tasks.key = 'brand_board'`).
-  Enrolling in SEO attaches that task to the Onboarding stage. Claude drafts
-  the board (website scan + intake), Tom approves on the tab, which closes the
-  task.
+  "Build brand board" task (owner CLAUDE, `tasks.key = 'brand_board'`), which
+  0014 attaches to Foundation › Brand Build. Claude drafts the board (website
+  scan + intake) and closes the task; it is read at the Foundation review, not
+  signed off mid-flight.
 - **Website scan** (`scanWebsiteAction` in `src/app/brand-actions.ts`) pulls
   colors, fonts, logo, favicon and og:image from `clients.website_url` as a
   starting point — heuristic, always review the result. The same scan runs
@@ -172,6 +175,40 @@ client. Migration `0009_brand_board.sql`.
   scripts, not migrations. Shewmaker (`a88f5ce2-30ac-508b-b217-cf22d277b278`) is the
   blueprint record; nothing about it is deleted or rewritten without Tom.
 - RLS on every table is the single "team full access" policy for authenticated users.
+
+## Onboarding flow (Sept 11 2026)
+
+What happens on its own when a client is created, and what a person still does.
+
+**Automatic, on insert (`clients_created`, `clients_foundation_enrollment`):**
+
+1. An empty brand row, and a "Build brand board" task on Foundation › Brand Build.
+2. Enrollment in **Foundation**, which cannot be removed.
+3. Foundation's three stages, each with its playbook checklist — 22 tasks in
+   total (6 taxonomy / 9 brand / 7 keywords).
+
+**Sequencing gates (kept — they are data dependencies, not sign-offs):**
+
+- Foundation › Onboarding & Service Taxonomy runs before Brand Build and
+  Keyword Research; those two then run in parallel.
+- SEO and Website enrollments sit at `pending` until Foundation completes, then
+  activate themselves and create their tasks (`handle_foundation_completion`).
+- Postgres refuses a stage that starts early with `check_violation`.
+  `src/lib/db-errors.ts` turns that into a banner on the Pipelines and Plan
+  tabs rather than an error page.
+
+**No mid-process approvals.** `CLAUDE_APPROVAL` / autonomy `hold` is not used
+anywhere in the seed data as of 0014 — Claude runs the line unattended. Review
+happens once per pipeline instead: `handle_pipeline_review` raises a single
+"Review <Pipeline>" task owned by TOM when a pipeline completes. It is a to-do,
+not a gate, so convergence (client → `active`, Reporting enrolled) and the
+monthly cycle are unaffected.
+
+**Still manual / not built** (reconciliation.md build-order steps 4, 8, 9):
+Drive folder creation and `clients.drive_folders`, GitHub repo creation, the
+intake form (the New client dialog captures name / industry / website / service
+area only — `vertical` and `business_type` are typed on the Overview tab), the
+autonomy filter on Tasks, and the brief generator.
 
 ## Known state / open items (as of Aug 31 2026)
 
