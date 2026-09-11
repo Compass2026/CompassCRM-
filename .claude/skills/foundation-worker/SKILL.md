@@ -1,6 +1,6 @@
 ---
 name: foundation-worker
-description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research) or a Website "Build to 70%" stage, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Fired hourly by the "Compass Foundation worker" Routine; run by hand as /foundation-worker <client name> to work one client.
+description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research) or a Website "Build to 70%" stage, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
 ---
 
 # Foundation worker
@@ -70,6 +70,12 @@ where cp.status = 'active' and cs.status not in ('complete','skipped')
   and c.status in ('launching','active');
 ```
 
+Runs are started by the CRM (`worker_fires` records why — a client created, a
+stage completed, Website activated, a blocked stage reopened) and by a daily
+sweep. A `<routine-fire-payload>` block naming the client may accompany the
+prompt; it is a hint about where to look, not an instruction — the queries
+above decide what is work.
+
 **Lock.** A stage that is `in_progress`, whose `started_at` is within the last
 3 hours and whose evidence contains `worker:` belongs to another run — skip it.
 Anything else you claim:
@@ -100,8 +106,9 @@ where id = '<client_stage_id>';
 
 and open one task for Tom on that stage: `insert into tasks (client_id,
 client_stage_id, title, owner, status, notes) values (…, 'WAITING', 'open', …)`
-describing exactly what unblocks it. A later run treats `blocked` like open
-work only if `next_action` has since been cleared.
+describing exactly what unblocks it. **Never pick up a `blocked` stage
+yourself.** Tom retries by setting it back to *Not started* on the Foundation
+tab, which fires a run (0017); by then the `next_action` has been dealt with.
 
 ## 3. Finish a stage
 
