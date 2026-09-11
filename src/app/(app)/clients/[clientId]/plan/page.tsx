@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { BlockedBanner } from "@/components/blocked-banner";
 import {
   Card,
   CardContent,
@@ -18,10 +19,13 @@ import {
 
 export default async function PlanPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ clientId: string }>;
+  searchParams: Promise<{ blocked?: string; hint?: string }>;
 }) {
   const { clientId } = await params;
+  const { blocked, hint } = await searchParams;
   const supabase = await createClient();
   const [{ data: plan }, { data: pipelines }, { data: enrollments }] =
     await Promise.all([
@@ -102,9 +106,17 @@ export default async function PlanPage({
           <CardTitle className="text-base">Enrolled pipelines</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <BlockedBanner message={blocked} hint={hint} />
           <p className="text-xs text-muted-foreground">
-            Enrolling creates the pipeline&apos;s stages and template tasks for this
-            client. Removing an enrollment deletes its stage progress.
+            Enrolling creates the pipeline&apos;s stages and its playbook tasks.
+            Removing an enrollment deletes its stage progress. Foundation runs
+            for every client and cannot be removed.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            A <span className="font-medium">pending</span> pipeline is enrolled
+            but waiting on Foundation — it reads the taxonomy, brand board and
+            keyword map. It starts itself, and creates its tasks, the moment
+            Foundation completes.
           </p>
           {(pipelines ?? []).map((p) => {
             const enrollment = enrolledByPipeline.get(p.id);
@@ -125,7 +137,9 @@ export default async function PlanPage({
                       className={
                         enrollment.status === "complete"
                           ? "bg-green-100 text-green-800 border-green-200"
-                          : "bg-blue-100 text-blue-800 border-blue-200"
+                          : enrollment.status === "pending"
+                            ? "bg-amber-100 text-amber-800 border-amber-200"
+                            : "bg-blue-100 text-blue-800 border-blue-200"
                       }
                     >
                       {enrollment.status}
@@ -133,11 +147,17 @@ export default async function PlanPage({
                   )}
                 </div>
                 {enrollment ? (
-                  <form action={unenroll!}>
-                    <Button variant="outline" size="sm" type="submit">
-                      Remove
-                    </Button>
-                  </form>
+                  p.key === "foundation" ? (
+                    <span className="text-xs text-muted-foreground">
+                      Always enrolled
+                    </span>
+                  ) : (
+                    <form action={unenroll!}>
+                      <Button variant="outline" size="sm" type="submit">
+                        Remove
+                      </Button>
+                    </form>
+                  )
                 ) : (
                   <form action={enroll}>
                     <Button size="sm" type="submit">

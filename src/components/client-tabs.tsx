@@ -7,8 +7,11 @@ import { cn } from "@/lib/utils";
 const tabs = [
   { label: "Overview", segment: "" },
   { label: "Plan", segment: "plan" },
+  { label: "Brand", segment: "brand" },
   { label: "Documents", segment: "documents" },
   { label: "Pipelines", segment: "pipelines" },
+  { label: "Foundation", segment: "foundation" },
+  { label: "Services", segment: "services" },
   { label: "Keywords", segment: "keywords" },
   { label: "Content", segment: "content" },
   { label: "Social", segment: "social" },

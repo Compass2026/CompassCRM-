@@ -110,6 +110,35 @@ Route: `/clients/[clientId]` with tabs.
 - Plan-specific parameters: GBP posts/month, blog posts/month, social posts/month, ad budget managed
 - Plan notes (free text)
 
+### 6.2b Brand
+The client's brand board — the visual reference for the team and the
+structured "brain" AI reads before generating any content for the client.
+- Board view (top of tab, also at `/clients/[clientId]/brand-board` as a
+  print-ready page): logo on white / primary / dark, color palette swatches,
+  typography samples (Google fonts render live), positioning & voice,
+  content pillars, words we use / avoid, imagery style, AI guidance, logo
+  variations, reference gallery.
+- Identity fields (`client_brands`): tagline, positioning, story, audience,
+  differentiators, voice & tone, content pillars, words we use / avoid,
+  imagery style, typography notes, AI guidance.
+- Colors (`brand_colors`): name, hex, role (primary / secondary / accent /
+  neutral / background / text / other), usage.
+- Fonts (`brand_fonts`): family, role (heading / body / accent / other),
+  source, URL, weights, notes.
+- Assets (`brand_assets`): logos (primary / alternate / icon / wordmark),
+  photos, website screenshots, social posts, ads, print, patterns, video,
+  links. Files upload straight from the browser to the private
+  `brand-assets` bucket (multi-file drag & drop); links point at external
+  material (Instagram post, Canva design, Drive file).
+- **Scan website**: pulls colors, fonts, logo, favicon and share image from
+  `clients.website_url` and adds them tagged "found on website" for review.
+- **Approve** stamps `approved_at` / `approved_by` and closes the client's
+  "Build brand board" task; **Reopen** reverses both.
+- **Publish snapshot to Documents** renders a self-contained HTML brand board
+  (images inlined) into the `documents` bucket as a `brand` document.
+- `get_brand_profile(client_id)` returns the whole brand as one JSON document
+  for AI consumers (Claude via the Supabase MCP, Edge Functions).
+
 ### 6.3 Documents
 Two sections in one view:
 - **Drive links** — client root folder plus pinned links (proposal, brand guide, audit report, report folder). Fields: label, URL, category.
@@ -248,6 +277,27 @@ documents
   (contract/proposal/brand/audit/report/other), url (drive links),
   storage_path (uploads), file_name, mime_type, uploaded_by, created_at, notes
 
+client_brands                     -- one per client, created with the client
+  client_id (pk), tagline, positioning, story, audience, differentiators,
+  voice_tone, content_pillars text[], words_we_use text[],
+  words_we_avoid text[], imagery_style, typography_notes, ai_guidance,
+  approved_at, approved_by, created_at, updated_at
+
+brand_colors
+  id, client_id, name, hex (#rrggbb), role (primary/secondary/accent/
+  neutral/background/text/other), usage, sort_order
+
+brand_fonts
+  id, client_id, family, role (heading/body/accent/other), source, url,
+  weights, notes, sort_order
+
+brand_assets                      -- brand-assets bucket (private) or external url
+  id, client_id, kind (logo_primary/logo_alt/logo_icon/wordmark/photo/
+  website_screenshot/social_post/ad/print/pattern/video/other),
+  label, source (upload/link/website_scan), storage_path, url, file_name,
+  mime_type, size_bytes, width, height, is_primary, notes, sort_order,
+  uploaded_by, created_at
+
 keywords
   id, client_id, keyword, target_url, priority (p1/p2/p3),
   department (seo/website/social/paid_ads), is_active, created_at
@@ -334,7 +384,9 @@ team_members
 
 | Trigger | Action |
 |---|---|
-| Client enrolled in pipeline | Create stages + tasks from templates |
+| Client created | Create empty `client_brands` row + "Build brand board" task (owner CLAUDE+APPROVAL, `tasks.key = brand_board`) |
+| Client enrolled in pipeline | Create stages + tasks from templates; attach the open brand-board task to the Onboarding stage when the pipeline has one (SEO) |
+| Brand board approved | Stamp `approved_at` / `approved_by`, close the brand-board task |
 | Stage marked complete | Set `next_action` prompt; if final stage, mark pipeline complete |
 | All launch pipelines complete | Status → active; enroll in Reporting |
 | 1st of month | Create monthly cycle + recurring tasks for each active client |

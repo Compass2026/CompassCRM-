@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { blockedQuery, blockedReason } from "@/lib/db-errors";
 import type { Database } from "@/lib/database.types";
 
 type Enums = Database["public"]["Enums"];
@@ -154,7 +155,13 @@ export async function unenrollPipelineAction(
     .from("client_pipelines")
     .delete()
     .eq("id", clientPipelineId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    const blocked = blockedReason(error);
+    if (blocked) {
+      redirect(`/clients/${clientId}/plan?${blockedQuery(blocked)}`);
+    }
+    throw new Error(error.message);
+  }
   revalidatePath(`/clients/${clientId}`);
 }
 
@@ -243,7 +250,13 @@ export async function updateStageAction(clientId: string, form: FormData) {
       notes: str(form, "notes"),
     })
     .eq("id", stageId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    const blocked = blockedReason(error);
+    if (blocked) {
+      redirect(`/clients/${clientId}/pipelines?${blockedQuery(blocked)}`);
+    }
+    throw new Error(error.message);
+  }
   revalidatePath(`/clients/${clientId}/pipelines`);
   revalidatePath(`/clients/${clientId}`);
 }

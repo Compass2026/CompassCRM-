@@ -96,6 +96,74 @@ export type Database = {
         }
         Relationships: []
       }
+      brand_assets: {
+        Row: {
+          client_id: string
+          created_at: string
+          file_name: string | null
+          height: number | null
+          id: string
+          is_primary: boolean
+          kind: Database["public"]["Enums"]["brand_asset_kind"]
+          label: string
+          mime_type: string | null
+          notes: string | null
+          size_bytes: number | null
+          sort_order: number
+          source: Database["public"]["Enums"]["brand_asset_source"]
+          storage_path: string | null
+          uploaded_by: string | null
+          url: string | null
+          width: number | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          file_name?: string | null
+          height?: number | null
+          id?: string
+          is_primary?: boolean
+          kind?: Database["public"]["Enums"]["brand_asset_kind"]
+          label: string
+          mime_type?: string | null
+          notes?: string | null
+          size_bytes?: number | null
+          sort_order?: number
+          source?: Database["public"]["Enums"]["brand_asset_source"]
+          storage_path?: string | null
+          uploaded_by?: string | null
+          url?: string | null
+          width?: number | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          file_name?: string | null
+          height?: number | null
+          id?: string
+          is_primary?: boolean
+          kind?: Database["public"]["Enums"]["brand_asset_kind"]
+          label?: string
+          mime_type?: string | null
+          notes?: string | null
+          size_bytes?: number | null
+          sort_order?: number
+          source?: Database["public"]["Enums"]["brand_asset_source"]
+          storage_path?: string | null
+          uploaded_by?: string | null
+          url?: string | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_boards: {
         Row: {
           approved_by: string | null
@@ -145,6 +213,94 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "brand_boards_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_colors: {
+        Row: {
+          client_id: string
+          created_at: string
+          hex: string
+          id: string
+          name: string
+          role: Database["public"]["Enums"]["brand_color_role"]
+          sort_order: number
+          usage: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          hex: string
+          id?: string
+          name: string
+          role?: Database["public"]["Enums"]["brand_color_role"]
+          sort_order?: number
+          usage?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          hex?: string
+          id?: string
+          name?: string
+          role?: Database["public"]["Enums"]["brand_color_role"]
+          sort_order?: number
+          usage?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_colors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_fonts: {
+        Row: {
+          client_id: string
+          created_at: string
+          family: string
+          id: string
+          notes: string | null
+          role: Database["public"]["Enums"]["brand_font_role"]
+          sort_order: number
+          source: string | null
+          url: string | null
+          weights: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          family: string
+          id?: string
+          notes?: string | null
+          role?: Database["public"]["Enums"]["brand_font_role"]
+          sort_order?: number
+          source?: string | null
+          url?: string | null
+          weights?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          family?: string
+          id?: string
+          notes?: string | null
+          role?: Database["public"]["Enums"]["brand_font_role"]
+          sort_order?: number
+          source?: string | null
+          url?: string | null
+          weights?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_fonts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -279,6 +435,74 @@ export type Database = {
             foreignKeyName: "client_access_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_brands: {
+        Row: {
+          ai_guidance: string | null
+          approved_at: string | null
+          approved_by: string | null
+          audience: string | null
+          client_id: string
+          content_pillars: string[]
+          created_at: string
+          differentiators: string | null
+          imagery_style: string | null
+          positioning: string | null
+          story: string | null
+          tagline: string | null
+          typography_notes: string | null
+          updated_at: string
+          voice_tone: string | null
+          words_we_avoid: string[]
+          words_we_use: string[]
+        }
+        Insert: {
+          ai_guidance?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: string | null
+          client_id: string
+          content_pillars?: string[]
+          created_at?: string
+          differentiators?: string | null
+          imagery_style?: string | null
+          positioning?: string | null
+          story?: string | null
+          tagline?: string | null
+          typography_notes?: string | null
+          updated_at?: string
+          voice_tone?: string | null
+          words_we_avoid?: string[]
+          words_we_use?: string[]
+        }
+        Update: {
+          ai_guidance?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: string | null
+          client_id?: string
+          content_pillars?: string[]
+          created_at?: string
+          differentiators?: string | null
+          imagery_style?: string | null
+          positioning?: string | null
+          story?: string | null
+          tagline?: string | null
+          typography_notes?: string | null
+          updated_at?: string
+          voice_tone?: string | null
+          words_we_avoid?: string[]
+          words_we_use?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_brands_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -1890,6 +2114,24 @@ export type Database = {
           },
         ]
       }
+      stripe_events: {
+        Row: {
+          id: string
+          received_at: string
+          type: string
+        }
+        Insert: {
+          id: string
+          received_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          received_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           amount: number | null
@@ -1900,6 +2142,7 @@ export type Database = {
           current_period_start: string | null
           id: string
           interval: string
+          latest_invoice_url: string | null
           paid_status: Database["public"]["Enums"]["paid_status_type"]
           status: string | null
           stripe_price_id: string | null
@@ -1914,6 +2157,7 @@ export type Database = {
           current_period_start?: string | null
           id?: string
           interval?: string
+          latest_invoice_url?: string | null
           paid_status?: Database["public"]["Enums"]["paid_status_type"]
           status?: string | null
           stripe_price_id?: string | null
@@ -1928,6 +2172,7 @@ export type Database = {
           current_period_start?: string | null
           id?: string
           interval?: string
+          latest_invoice_url?: string | null
           paid_status?: Database["public"]["Enums"]["paid_status_type"]
           status?: string | null
           stripe_price_id?: string | null
@@ -1949,6 +2194,7 @@ export type Database = {
           default_owner: Database["public"]["Enums"]["owner_type"]
           department: Database["public"]["Enums"]["department"] | null
           id: string
+          key: string | null
           pipeline_id: string | null
           playbook_step: string | null
           sort_order: number
@@ -1960,6 +2206,7 @@ export type Database = {
           default_owner?: Database["public"]["Enums"]["owner_type"]
           department?: Database["public"]["Enums"]["department"] | null
           id?: string
+          key?: string | null
           pipeline_id?: string | null
           playbook_step?: string | null
           sort_order?: number
@@ -1971,6 +2218,7 @@ export type Database = {
           default_owner?: Database["public"]["Enums"]["owner_type"]
           department?: Database["public"]["Enums"]["department"] | null
           id?: string
+          key?: string | null
           pipeline_id?: string | null
           playbook_step?: string | null
           sort_order?: number
@@ -2005,6 +2253,7 @@ export type Database = {
           due_date: string | null
           flagged_for_review: boolean
           id: string
+          key: string | null
           monthly_cycle_id: string | null
           notes: string | null
           owner: Database["public"]["Enums"]["owner_type"]
@@ -2023,6 +2272,7 @@ export type Database = {
           due_date?: string | null
           flagged_for_review?: boolean
           id?: string
+          key?: string | null
           monthly_cycle_id?: string | null
           notes?: string | null
           owner?: Database["public"]["Enums"]["owner_type"]
@@ -2041,6 +2291,7 @@ export type Database = {
           due_date?: string | null
           flagged_for_review?: boolean
           id?: string
+          key?: string | null
           monthly_cycle_id?: string | null
           notes?: string | null
           owner?: Database["public"]["Enums"]["owner_type"]
@@ -2107,9 +2358,14 @@ export type Database = {
         Returns: undefined
       }
       create_monthly_cycles: { Args: { p_period?: string }; Returns: number }
-      create_stage_tasks: { Args: { p_client_pipeline_id: string }; Returns: number }
+      create_stage_tasks: {
+        Args: { p_client_pipeline_id: string }
+        Returns: number
+      }
       foundation_complete: { Args: { p_client_id: string }; Returns: boolean }
+      get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
+      mark_past_due_subscriptions: { Args: never; Returns: undefined }
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }
         Returns: number
@@ -2132,7 +2388,30 @@ export type Database = {
         | "crm"
         | "other"
       autonomy_level: "run" | "run_flag" | "hold"
+      brand_asset_kind:
+        | "logo_primary"
+        | "logo_alt"
+        | "logo_icon"
+        | "wordmark"
+        | "photo"
+        | "website_screenshot"
+        | "social_post"
+        | "ad"
+        | "print"
+        | "pattern"
+        | "video"
+        | "other"
+      brand_asset_source: "upload" | "link" | "website_scan"
       brand_board_status: "draft" | "approved"
+      brand_color_role:
+        | "primary"
+        | "secondary"
+        | "accent"
+        | "neutral"
+        | "background"
+        | "text"
+        | "other"
+      brand_font_role: "heading" | "body" | "accent" | "other"
       business_type: "storefront" | "service_area"
       change_status: "proposed" | "approved" | "vetoed"
       city_tier: "1" | "2" | "fold"
@@ -2336,7 +2615,32 @@ export const Constants = {
         "other",
       ],
       autonomy_level: ["run", "run_flag", "hold"],
+      brand_asset_kind: [
+        "logo_primary",
+        "logo_alt",
+        "logo_icon",
+        "wordmark",
+        "photo",
+        "website_screenshot",
+        "social_post",
+        "ad",
+        "print",
+        "pattern",
+        "video",
+        "other",
+      ],
+      brand_asset_source: ["upload", "link", "website_scan"],
       brand_board_status: ["draft", "approved"],
+      brand_color_role: [
+        "primary",
+        "secondary",
+        "accent",
+        "neutral",
+        "background",
+        "text",
+        "other",
+      ],
+      brand_font_role: ["heading", "body", "accent", "other"],
       business_type: ["storefront", "service_area"],
       change_status: ["proposed", "approved", "vetoed"],
       city_tier: ["1", "2", "fold"],
