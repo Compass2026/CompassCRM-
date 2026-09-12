@@ -227,7 +227,8 @@ a fresh session in this environment, and that session runs
 when a client is created, a Foundation stage completes, Website activates, or
 any Foundation / Website stage is set to `not_started` (a retry or a backfill); every fire is logged to
 `worker_fires` with its reason and pg_net request id, debounced to one per
-client per two minutes. The Routine's schedule is a **daily** sweep for
+client **per reason** per two minutes (0019 — a bulk reopen collapses, a stage
+completion never gets swallowed by the fire that started the run). The Routine's schedule is a **daily** sweep for
 anything the events missed. URL and bearer token live in Vault as
 `ROUTINE_FIRE_URL` / `ROUTINE_FIRE_TOKEN`; without them nothing fires and
 nothing breaks. The skill is the playbook —
