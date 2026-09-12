@@ -1,0 +1,27 @@
+---
+import Base from "../../layouts/Base.astro";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import Answer from "../../components/Answer.astro";
+import Faq from "../../components/Faq.astro";
+import ServiceCard from "../../components/ServiceCard.astro";
+import { site } from "../../config/site";
+import { breadcrumbs, faqPage, cityService } from "../../lib/schema";
+
+export function getStaticPaths() {
+  return site.cities.map((c) => ({ params: { slug: c.slug }, props: { c } }));
+}
+const { c } = Astro.props;
+const path = `/areas/${c.slug}/`;
+const crumbs = [{ name: "Home", path: "/" }, { name: "Service area", path: "/areas/" }, { name: c.name, path }];
+const offered = site.services.filter((s) => !c.services || c.services.includes(s.slug));
+---
+<Base title={`${site.business.name} in ${c.name} | ${c.primaryKeyword}`} description={c.description} schema={[cityService(c, path), faqPage(c.faqs), breadcrumbs(crumbs)]}>
+  <Breadcrumbs items={crumbs} />
+  <h1>{site.business.name} in {c.name}</h1>
+  <p class="lead">{c.description}</p>
+  <Answer question={c.question} answer={c.answer} />
+  {c.body.map((p) => <p>{p}</p>)}
+  <h2>What we do in {c.name}</h2>
+  <div class="grid">{offered.map((s) => <ServiceCard service={s} />)}</div>
+  <Faq faqs={c.faqs} />
+</Base>

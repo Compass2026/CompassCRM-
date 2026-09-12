@@ -1,0 +1,15 @@
+---
+import Base from "../../layouts/Base.astro";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import ServiceCard from "../../components/ServiceCard.astro";
+import { site } from "../../config/site";
+import { breadcrumbs } from "../../lib/schema";
+const crumbs = [{ name: "Home", path: "/" }, { name: "Services", path: "/services/" }];
+const description = `Every service ${site.business.name} offers in ${site.business.serviceArea.slice(0, 3).join(", ")}: ${site.services.map((s) => s.name.toLowerCase()).join(", ")}.`.slice(0, 158);
+---
+<Base title={`Services | ${site.business.name}`} description={description} schema={[breadcrumbs(crumbs)]}>
+  <Breadcrumbs items={crumbs} />
+  <h1>Services</h1>
+  <p class="lead">{site.brand.positioning}</p>
+  <div class="grid">{site.services.map((s) => <ServiceCard service={s} />)}</div>
+</Base>

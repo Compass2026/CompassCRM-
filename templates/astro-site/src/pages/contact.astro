@@ -1,0 +1,17 @@
+---
+import Base from "../layouts/Base.astro";
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+import { site } from "../config/site";
+import { breadcrumbs } from "../lib/schema";
+const b = site.business;
+const crumbs = [{ name: "Home", path: "/" }, { name: "Contact", path: "/contact/" }];
+const description = `Call ${b.name} at ${b.phone} for an estimate. Serving ${b.serviceArea.slice(0, 3).join(", ")} and nearby.`;
+---
+<Base title={`Contact ${b.name} | ${b.phone}`} description={description} schema={[breadcrumbs(crumbs)]}>
+  <Breadcrumbs items={crumbs} />
+  <h1>Contact {b.name}</h1>
+  <p class="lead">The fastest way to reach us is the phone: <a class="phone" href={`tel:${b.phone.replace(/\D/g, "")}`}>{b.phone}</a>.</p>
+  {b.email && <p>Email: <a href={`mailto:${b.email}`}>{b.email}</a></p>}
+  {b.hours && <p>Hours: {b.hours.join(" · ")}</p>}
+  <p>We serve {b.serviceArea.join(", ")}.</p>
+</Base>

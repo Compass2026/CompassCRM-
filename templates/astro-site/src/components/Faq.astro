@@ -1,0 +1,16 @@
+---
+import type { Faq } from "../config/types";
+interface Props { faqs: Faq[]; title?: string }
+const { faqs, title = "Questions people ask" } = Astro.props;
+---
+{faqs.length > 0 && (
+  <section class="faq">
+    <h2>{title}</h2>
+    {faqs.map((f) => (
+      <details>
+        <summary><h3>{f.q}</h3></summary>
+        <p>{f.a}</p>
+      </details>
+    ))}
+  </section>
+)}

@@ -1,0 +1,8 @@
+---
+import Base from "../layouts/Base.astro";
+import { site } from "../config/site";
+---
+<Base title={`Page not found | ${site.business.name}`} description={`That page is not here. Call ${site.business.name} at ${site.business.phone} or start from the home page.`}>
+  <h1>Page not found</h1>
+  <p>That page is not here. <a href="/">Start from the home page</a> or call {site.business.phone}.</p>
+</Base>

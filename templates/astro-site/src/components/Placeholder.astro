@@ -1,0 +1,8 @@
+---
+// A visible, countable stand-in. The gate counts "[PLACEHOLDER …]" markers
+// and never fails on them; the placeholders table in the CRM carries the same
+// entry so Tom can see what is still needed.
+interface Props { type: "image" | "claim" | "fact" | "project"; description: string }
+const { type, description } = Astro.props;
+---
+<div class="placeholder" data-placeholder={type}>[PLACEHOLDER: {type} — {description}]</div>

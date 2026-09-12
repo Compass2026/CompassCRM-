@@ -1,0 +1,16 @@
+{
+  "name": "compass-astro-site",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "gate": "node ../../scripts/site-quality-gate.mjs dist"
+  },
+  "dependencies": {
+    "astro": "^7.3.2",
+    "@astrojs/sitemap": "^3.7.4"
+  }
+}

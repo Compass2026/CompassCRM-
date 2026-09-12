@@ -1,0 +1,18 @@
+---
+import Base from "../../layouts/Base.astro";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import { site } from "../../config/site";
+import { breadcrumbs } from "../../lib/schema";
+const crumbs = [{ name: "Home", path: "/" }, { name: "Service area", path: "/areas/" }];
+const description = `${site.business.name} serves ${site.business.serviceArea.join(", ")}. Pick your town for what we do there and how soon we can come.`.slice(0, 158);
+---
+<Base title={`Service area | ${site.business.name}`} description={description} schema={[breadcrumbs(crumbs)]}>
+  <Breadcrumbs items={crumbs} />
+  <h1>Where we work</h1>
+  <p class="lead">{site.business.serviceArea.join(", ")}.</p>
+  <div class="grid">
+    {site.cities.map((c) => (
+      <article class="card"><h3><a href={`/areas/${c.slug}/`}>{c.name}</a></h3><p>{c.answer.split(". ")[0]}.</p></article>
+    ))}
+  </div>
+</Base>

@@ -1,0 +1,53 @@
+/* Tokens are injected by Base.astro from site.brand; these are the base styles. */
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: light; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: clamp(1rem, 0.97rem + 0.2vw, 1.0625rem);
+  line-height: 1.6;
+}
+h1, h2, h3 { font-family: var(--font-display), Georgia, serif; line-height: 1.1; margin: 0 0 0.5em; }
+h1 { font-size: clamp(2.25rem, 1.5rem + 3vw, 4rem); }
+h2 { font-size: clamp(1.75rem, 1.3rem + 1.8vw, 2.5rem); margin-top: 1.5em; }
+h3 { font-size: 1.25rem; margin-top: 1.25em; }
+p { margin: 0 0 1em; }
+a { color: var(--primary); }
+img { max-width: 100%; height: auto; display: block; }
+.wrap { max-width: 68rem; margin: 0 auto; padding-inline: clamp(1rem, 4vw, 2.5rem); }
+.site-header { background: var(--surface); border-bottom: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+.site-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.875rem; flex-wrap: wrap; }
+.brand { font-family: var(--font-display); font-weight: 700; text-decoration: none; color: var(--text); font-size: 1.125rem; }
+.nav { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.nav a { text-decoration: none; color: var(--text); font-weight: 600; }
+.phone { font-weight: 700; text-decoration: none; color: var(--primary); }
+main { padding-block: clamp(2rem, 5vw, 4rem); }
+.hero { display: grid; gap: 1.5rem; padding-block: clamp(1rem, 3vw, 2rem); }
+.lead { font-size: clamp(1.125rem, 1.05rem + 0.4vw, 1.3125rem); color: var(--muted); max-width: 46rem; }
+.btn { display: inline-block; background: var(--primary); color: #fff; padding: 0.875rem 1.5rem; border-radius: 4px; text-decoration: none; font-weight: 700; }
+.btn:hover { background: var(--primary-hover); }
+.grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
+.card { background: var(--surface); border-radius: 4px; padding: 1.25rem; border: 1px solid color-mix(in srgb, var(--text) 8%, transparent); }
+.card h3 { margin-top: 0; }
+.breadcrumbs { font-size: 0.875rem; color: var(--muted); margin-bottom: 1rem; }
+.breadcrumbs ol { list-style: none; display: flex; gap: 0.5rem; padding: 0; margin: 0; flex-wrap: wrap; }
+.breadcrumbs li + li::before { content: "›"; margin-right: 0.5rem; }
+.answer { background: var(--surface); border-left: 4px solid var(--accent); padding: 1.25rem 1.5rem; border-radius: 4px; margin-block: 1.5rem; }
+.answer h2 { margin-top: 0; font-size: 1.5rem; }
+.facts { background: var(--surface); border-radius: 4px; padding: 1.25rem 1.5rem; margin-block: 1.5rem; }
+.facts dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 1.25rem; margin: 0; }
+.facts dt { font-weight: 700; }
+.facts dd { margin: 0; }
+.facts small { color: var(--muted); }
+.faq details { border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); padding-block: 0.75rem; }
+.faq summary { cursor: pointer; font-weight: 700; font-family: var(--font-display); font-size: 1.125rem; }
+.faq summary h3 { display: inline; font-size: inherit; margin: 0; }
+.placeholder { border: 2px dashed var(--accent); color: var(--muted); padding: 2rem 1.25rem; text-align: center; border-radius: 4px; margin-block: 1rem; font-size: 0.9375rem; }
+.cta { background: var(--primary); color: #fff; padding: clamp(2rem, 5vw, 3rem) 0; margin-top: 3rem; }
+.cta h2 { margin-top: 0; }
+.cta .btn { background: var(--accent); }
+.cta a.phone { color: #fff; }
+.site-footer { background: var(--surface); border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); padding-block: 2rem; font-size: 0.9375rem; color: var(--muted); }
+.site-footer .wrap { display: grid; gap: 1rem; }
