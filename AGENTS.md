@@ -276,13 +276,31 @@ sitemap. `scripts/site-quality-gate.mjs` checks all of it against `dist/`
 (SEO / AEO / GEO scores, hard failures, placeholders counted never failed) and
 the worker cannot mark Build to 70% complete until it prints `PASS`; the
 report lands on `sites.quality`. The starter passes its own gate at
-100 / 100 / 100. Client repos are reached over HTTPS with `GITHUB_TOKEN` from
-Vault (the routine's GitHub connector covers only this repo); without it the
-stage blocks with a WAITING task naming the secret.
+100 / 100 / 100.
 
-**The Routine's environment needs Full network access.** The worker fetches
-client websites and listings directly, and reaches api.github.com; the
-Default environment's allowlist blocks both.
+**The worker never touches GitHub; the CRM pushes for it.** A cloud session
+reaches github.com only through a credential-protecting proxy that permits
+the repo attached to the Routine and nothing else — a PAT in a URL is refused
+before GitHub sees it, whatever the network setting. So the worker builds in
+`/tmp/site` and POSTs the files to the `site-push` Edge Function, which runs
+in Supabase (no proxy), creates the repo if needed with `GITHUB_TOKEN`, and
+commits through GitHub's Git Data API. Two rules it enforces:
+
+- `Compass2026` is a **user account, not an org** (Vercel's repo metadata
+  says so): repos are created with `POST /user/repos`. `/orgs/…/repos`
+  returns 404 for it, which is what every earlier "create repo" attempt hit.
+- A repo whose `main` already carries a commit not authored by "Compass CRM"
+  (Pensacola has Tom's hand-built Next.js site there) is never overwritten:
+  the build goes to branch **`compass-astro`** and the response says so. Tom
+  blends from there.
+
+`sites.last_pushed_at` / `last_commit_url` (0021) record each push. Without
+`GITHUB_TOKEN` the function returns 500 and the stage blocks with a WAITING
+task naming the secret.
+
+**The Routine's environment needs Full network access** so the worker can
+fetch client websites and listings directly (the Default allowlist blocks
+them). Full access does *not* open GitHub — see above.
 
 Pause or edit the Routine at claude.ai/code/routines; each run opens as a
 normal session there. The skill is versioned here and picked up on the next

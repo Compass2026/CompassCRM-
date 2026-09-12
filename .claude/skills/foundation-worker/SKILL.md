@@ -293,25 +293,14 @@ row: `stack = 'astro'`, `controlled_by_compass = true`, `url` = existing site)
 and set Discovery `in_progress`; its TOM tasks (client request, DNS access)
 stay open — Tom finishes Discovery himself.
 
-**GitHub.** Your session's GitHub connector reaches only the CRM repo; client
-repos are handled over HTTPS with the token in Vault:
-
-```sql
-select get_secret('GITHUB_TOKEN');
-```
-
-Null → *Blocked* with next_action "Add GITHUB_TOKEN to Vault (PAT with repo
-scope on the Compass2026 org)". Keep the token in a shell variable (`GH=…`);
-never echo it, never write it to a file, and scrub it from the remote URL
-before you finish (step 9).
-
-**Repo.** `slug` = client name lower-cased, non-alphanumerics removed. If
-`sites.repo_url` is null: `GET https://api.github.com/repos/Compass2026/<slug>`
-with `Authorization: Bearer $GH` → 404 means create it with
-`POST https://api.github.com/orgs/Compass2026/repos` body
-`{"name":"<slug>","private":true}`. Record `repo_url` on the `sites` row
-(create the row with `stack = 'astro'`, `controlled_by_compass = true` if
-there is none).
+**GitHub — you cannot reach it, and you do not need to.** Every github.com
+request from a cloud session goes through a proxy that allows only the repo
+attached to the Routine; a PAT never gets past it. Do not try `git clone`,
+`git push`, `curl api.github.com` or the GitHub MCP tools against a client
+repo — they fail before GitHub sees them. The CRM pushes for you: the
+`site-push` Edge Function creates the repo if needed and commits your files
+with the token from Vault. Step 8 below. If `sites.repo_url` is null that is
+fine; `site-push` fills it.
 
 **Build.** The starter is in this repo: `templates/astro-site/`. It already
 carries the SEO / AEO / GEO structure — canonical, one H1, JSON-LD
@@ -319,9 +308,9 @@ carries the SEO / AEO / GEO structure — canonical, one H1, JSON-LD
 sourced facts block, `llms.txt`, `robots.txt`, a sitemap — so your job is
 the *content*, not the plumbing. Read its `README.md` first.
 
-1. `git clone https://x-access-token:$GH@github.com/Compass2026/<slug>.git
-   /tmp/site` (an empty repo clones fine). Copy `templates/astro-site/` into
-   it — everything except `node_modules/` and `dist/`.
+1. `mkdir /tmp/site` and copy `templates/astro-site/` into it — everything
+   except `node_modules/` and `dist/`. You work in `/tmp/site`; nothing is
+   cloned.
 2. Fill `src/config/site.ts` from the CRM. The mapping:
    - `url` — the production domain if known (`sites.url` when we control it),
      else `https://<slug>.vercel.app`.
@@ -356,9 +345,29 @@ the *content*, not the plumbing. Read its `README.md` first.
 7. Run it once more with `--json` and store the report:
    `update sites set quality = '<json>'::jsonb, quality_checked_at = now()
    where client_id = '<client_id>'`.
-8. Insert the `placeholders` rows. Commit everything and push to `main`.
-9. `git remote set-url origin https://github.com/Compass2026/<slug>.git` —
-   the token leaves the clone.
+8. Insert the `placeholders` rows. Then **push through the CRM**: build a
+   JSON payload of every file under `/tmp/site` except `node_modules/`,
+   `dist/`, `.astro/` and `.git/` — text files as `{"path","content"}`,
+   binaries (images) as `{"path","content":<base64>,"encoding":"base64"}` —
+   and POST it:
+
+   ```bash
+   ANON=$(…)   # select get_secret('SUPABASE_ANON_KEY')
+   CRON=$(…)   # select get_secret('SYNC_CRON_SECRET')
+   curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
+     -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+     -H "Content-Type: application/json" --data @payload.json
+   ```
+
+   with `payload.json` = `{"client_id": "<client_id>", "message": "Build to
+   70% from Compass CRM", "files": [...]}`. Do **not** pass `branch`: the
+   function picks it. A 200 returns `repo_url`, `branch`, `branch_url` and
+   `commit_url` and updates the `sites` row. **If `branch` comes back as
+   `compass-astro`, the repo's `main` already carries a site that is not
+   ours** (Pensacola has a hand-built Next.js site there) — the build sits on
+   the side branch for Tom to blend, and you say so in the evidence. Anything
+   other than 200 is the GitHub error verbatim. Do not print the secrets.
+9. Put `branch_url` and `commit_url` from the response in the evidence.
 
 Close Build-to-70% tasks 1–7 (the Vercel project and staging URL are Tom's
 — note it), set the stage `complete`, and put the repo URL, the three gate
