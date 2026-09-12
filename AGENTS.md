@@ -187,7 +187,10 @@ What happens on its own when a client is created, and what a person still does.
 2. Enrollment in **Foundation**, which cannot be removed.
 3. Foundation's three stages, each with its playbook checklist — 22 tasks in
    total (9 brand / 6 taxonomy / 7 keywords).
-4. The insert fires the **Foundation worker** (below); Brand Build starts
+4. Enrollment in **Website**, parked `pending` behind Foundation (0018 —
+   every new client gets a site; drop the `clients_zz_website_enrollment`
+   trigger to change that policy).
+5. The insert fires the **Foundation worker** (below); Brand Build starts
    within a couple of minutes.
 
 **Sequencing gates (kept — they are data dependencies, not sign-offs):**
@@ -220,9 +223,9 @@ The thing that actually does the `CLAUDE`-owned work. Nothing in the app calls
 an LLM; instead a Claude Code **Routine** ("Compass Foundation worker") spawns
 a fresh session in this environment, and that session runs
 `.claude/skills/foundation-worker/SKILL.md`. **Postgres starts the runs**
-(0017): `fire_foundation_worker()` POSTs to the Routine's API trigger when a
-client is created, a Foundation stage completes, Website activates, or a
-blocked stage is set back to `not_started`; every fire is logged to
+(0017, 0018): `fire_foundation_worker()` POSTs to the Routine's API trigger
+when a client is created, a Foundation stage completes, Website activates, or
+any Foundation / Website stage is set to `not_started` (a retry or a backfill); every fire is logged to
 `worker_fires` with its reason and pg_net request id, debounced to one per
 client per two minutes. The Routine's schedule is a **daily** sweep for
 anything the events missed. URL and bearer token live in Vault as
@@ -237,9 +240,12 @@ a chat.
 
 - **Work = stage status**, never open tasks (six clients carry open tasks on
   backfilled-complete stages; the worker ignores them).
-- **One stage per client per run, three clients per run.** Each completed
-  stage fires the next run, so a new client's Foundation chains through in
-  roughly an hour and the website bones start the moment Foundation completes.
+- **One stage per client per run.** A run the CRM fired for a client works
+  that client only, so reopening five clients starts five sessions; the daily
+  sweep works up to three. Claims are conditional updates, so concurrent
+  sessions never double-work a stage. Each completed stage fires the next run:
+  a new client's Foundation chains through in roughly an hour and the website
+  bones start the moment Foundation completes.
 - **Lock:** an `in_progress` stage whose `started_at` is < 3 h old and whose
   evidence contains `worker:` belongs to a running session.
 - **Blocked, never stuck:** missing website, unreachable repo, failed build →
@@ -253,9 +259,11 @@ a chat.
   says so in the evidence; Tom's review is the `Review Foundation` task.
 - Run by hand: `/foundation-worker <client name>` works one client, no cap.
 - 0016 also fixed convergence: a client enrolled only in Foundation no longer
-  flips to `active` / Reporting when Foundation completes. The worker enrolls
-  Website (parked `pending`) before finishing Keyword Research if nothing else
-  is enrolled.
+  flips to `active` / Reporting when Foundation completes. The worker never
+  enrolls pipelines; new clients get Website from 0018, older ones from Tom.
+- **No website ≠ blocked.** The worker scrubs the GBP, socials and directory
+  listings and builds the board from those; it blocks only when there is no
+  public footprint at all.
 
 Pause or edit the Routine at claude.ai/code/routines; each run opens as a
 normal session there. The skill is versioned here and picked up on the next
