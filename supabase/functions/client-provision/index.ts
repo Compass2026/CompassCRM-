@@ -256,16 +256,25 @@ Deno.serve(async (req) => {
         github.status = "existing";
         github.detail = `${ghOrg}/${slug} already exists.`;
       } else if (head.status === 404) {
-        const create = await fetch(`https://api.github.com/orgs/${ghOrg}/repos`, {
-          method: "POST",
-          headers: { ...ghHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: slug,
-            private: true,
-            auto_init: true,
-            description: `${client.name} — Compass Marketing Advisors`,
-          }),
-        });
+        // Compass2026 is a user account: repos under it are created with
+        // /user/repos. Only a real organization takes /orgs/{org}/repos.
+        const me = await fetch("https://api.github.com/user", { headers: ghHeaders });
+        if (!me.ok) throw new Error(`GitHub whoami failed (${me.status})`);
+        const login: string = (await me.json()).login;
+        const isSelf = login.toLowerCase() === ghOrg.toLowerCase();
+        const create = await fetch(
+          isSelf ? "https://api.github.com/user/repos" : `https://api.github.com/orgs/${ghOrg}/repos`,
+          {
+            method: "POST",
+            headers: { ...ghHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: slug,
+              private: true,
+              auto_init: true,
+              description: `${client.name} — Compass Marketing Advisors`,
+            }),
+          }
+        );
         if (!create.ok) {
           throw new Error(
             `Repo create failed (${create.status}): ${(await create.text()).slice(0, 200)}`
