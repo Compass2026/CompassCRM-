@@ -1,0 +1,21 @@
+---
+// GEO: the sourced facts about this business, in one machine-readable block.
+// Renders only entries with a source; an entry without one is a build error,
+// because an unsourced "fact" is exactly what must never reach the copy.
+import type { Fact } from "../config/types";
+interface Props { facts: Fact[]; title?: string }
+const { facts, title = "The facts" } = Astro.props;
+const bad = facts.filter((f) => !f.source);
+if (bad.length) throw new Error(`Facts without a source: ${bad.map((f) => f.label).join(", ")}`);
+---
+<section class="facts" data-facts>
+  <h2>{title}</h2>
+  <dl>
+    {facts.map((f) => (
+      <>
+        <dt>{f.label}</dt>
+        <dd>{f.value} <small>(<a href={f.source} rel="nofollow">source</a>)</small></dd>
+      </>
+    ))}
+  </dl>
+</section>

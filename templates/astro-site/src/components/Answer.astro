@@ -1,0 +1,10 @@
+---
+// The AEO block: the question a searcher asks, answered directly in one
+// paragraph of 40–60 words, before anything else on the page.
+interface Props { question: string; answer: string }
+const { question, answer } = Astro.props;
+---
+<section class="answer">
+  <h2>{question}</h2>
+  <p>{answer}</p>
+</section>

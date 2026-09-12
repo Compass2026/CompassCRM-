@@ -1,0 +1,76 @@
+---
+import "../styles/global.css";
+import { site } from "../config/site";
+import { localBusiness } from "../lib/schema";
+
+interface Props {
+  title: string;
+  description: string;
+  /** JSON-LD nodes for this page; LocalBusiness is added on the home page */
+  schema?: Record<string, unknown>[];
+  ogImage?: string;
+}
+const { title, description, schema = [], ogImage } = Astro.props;
+const canonical = new URL(Astro.url.pathname, site.url).toString();
+const isHome = Astro.url.pathname === "/";
+const nodes = isHome ? [localBusiness(), ...schema] : schema;
+const b = site.business;
+const c = site.brand.colors;
+const fontHref =
+  "https://fonts.googleapis.com/css2?family=" +
+  [site.brand.fonts.display, site.brand.fonts.body]
+    .map((f) => encodeURIComponent(f).replace(/%20/g, "+") + ":wght@400;600;700")
+    .join("&family=") +
+  "&display=swap";
+const tokens = `:root{--ground:${c.ground};--surface:${c.surface};--text:${c.text};--muted:${c.muted};--primary:${c.primary};--primary-hover:${c.primaryHover};--accent:${c.accent};--font-display:"${site.brand.fonts.display}";--font-body:"${site.brand.fonts.body}";}`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={b.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    {ogImage && <meta property="og:image" content={new URL(ogImage, site.url).toString()} />}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href={fontHref} />
+    <style set:html={tokens}></style>
+    {nodes.map((n) => <script type="application/ld+json" set:html={JSON.stringify(n)} />)}
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="/">{b.name}</a>
+        <nav class="nav" aria-label="Primary">
+          <a href="/services/">Services</a>
+          <a href="/areas/">Service area</a>
+          <a href="/about/">About</a>
+          <a href="/contact/">Contact</a>
+        </nav>
+        <a class="phone" href={`tel:${b.phone.replace(/\D/g, "")}`}>{b.phone}</a>
+      </div>
+    </header>
+    <main class="wrap">
+      <slot />
+    </main>
+    <section class="cta">
+      <div class="wrap">
+        <h2>{site.brand.cta.label}</h2>
+        <p>Call <a class="phone" href={`tel:${b.phone.replace(/\D/g, "")}`}>{b.phone}</a> or <a class="btn" href={site.brand.cta.href}>{site.brand.cta.label}</a></p>
+      </div>
+    </section>
+    <footer class="site-footer">
+      <div class="wrap">
+        <div><strong>{b.name}</strong> · {b.address ? `${b.address.city}, ${b.address.region}` : b.serviceArea[0]} · {b.phone}</div>
+        <div>Serving {b.serviceArea.join(", ")}.</div>
+      </div>
+    </footer>
+  </body>
+</html>

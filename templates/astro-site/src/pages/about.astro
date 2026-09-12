@@ -1,0 +1,18 @@
+---
+import Base from "../layouts/Base.astro";
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+import Facts from "../components/Facts.astro";
+import Placeholder from "../components/Placeholder.astro";
+import { site } from "../config/site";
+import { breadcrumbs } from "../lib/schema";
+const crumbs = [{ name: "Home", path: "/" }, { name: "About", path: "/about/" }];
+const ph = site.placeholders.filter((p) => p.page === "/about/");
+const description = `${site.about.body[0] ?? site.brand.positioning}`.slice(0, 158);
+---
+<Base title={`${site.about.title} | ${site.business.name}`} description={description} schema={[breadcrumbs(crumbs)]}>
+  <Breadcrumbs items={crumbs} />
+  <h1>{site.about.title}</h1>
+  {site.about.body.map((p) => <p>{p}</p>)}
+  {ph.map((p) => <Placeholder type={p.type} description={p.description} />)}
+  <Facts facts={site.facts} />
+</Base>

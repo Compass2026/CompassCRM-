@@ -293,36 +293,77 @@ row: `stack = 'astro'`, `controlled_by_compass = true`, `url` = existing site)
 and set Discovery `in_progress`; its TOM tasks (client request, DNS access)
 stay open — Tom finishes Discovery himself.
 
-**Repo.** `sites.repo_url` is set when provisioning ran. If null, create
-`Compass2026/<slug>` (private, auto-init) with `mcp__github__create_repository`
-— slug is the client name lower-cased with non-alphanumerics removed — and
-record it on `sites`.
+**GitHub.** Your session's GitHub connector reaches only the CRM repo; client
+repos are handled over HTTPS with the token in Vault:
 
-**Build.** The reference build is `Compass2026/shewmakerbrothersmasonry`
-(Astro). Attach both repos with `mcp__Claude_Code_Remote__add_repo`, clone the
-reference, and rebuild it for this client:
+```sql
+select get_secret('GITHUB_TOKEN');
+```
 
-1. Read its `DESIGN.md`, `PRODUCT.md`, `docs/brand-board.md`,
-   `docs/keyword-map.md`, `docs/placeholders.md` — that is the pattern.
-2. Replace every Shewmaker-specific token: colours and fonts from
-   `brand_boards.palette` / `typography`, copy from `client_brands`, phone /
-   NAP from `clients` (respect `hard_rules`), services from `services`.
-3. Generate pages from `page_groups`: home, one per service, city pages by
-   tier, hubs. Each page targets its `primary_keyword_id` in title, H1 and
-   meta; supporting terms in body copy. Schema (LocalBusiness + Service).
-4. Where a photo, project, fact or claim is missing, drop a visible
-   placeholder and insert a `placeholders` row (`site_id`, `page`, `type`,
-   `description`). Never fabricate a testimonial, a licence number or a
-   project.
-5. Write the client's own `DESIGN.md`, `PRODUCT.md`, `docs/brand-board.md`,
-   `docs/keyword-map.md`, `docs/placeholders.md` into the new repo.
-6. `npm install && npm run build` must pass. If it does not, fix it; if you
-   cannot, *Blocked* with the build error in `next_action`.
-7. Push to `main` of the client repo.
+Null → *Blocked* with next_action "Add GITHUB_TOKEN to Vault (PAT with repo
+scope on the Compass2026 org)". Keep the token in a shell variable (`GH=…`);
+never echo it, never write it to a file, and scrub it from the remote URL
+before you finish (step 9).
+
+**Repo.** `slug` = client name lower-cased, non-alphanumerics removed. If
+`sites.repo_url` is null: `GET https://api.github.com/repos/Compass2026/<slug>`
+with `Authorization: Bearer $GH` → 404 means create it with
+`POST https://api.github.com/orgs/Compass2026/repos` body
+`{"name":"<slug>","private":true}`. Record `repo_url` on the `sites` row
+(create the row with `stack = 'astro'`, `controlled_by_compass = true` if
+there is none).
+
+**Build.** The starter is in this repo: `templates/astro-site/`. It already
+carries the SEO / AEO / GEO structure — canonical, one H1, JSON-LD
+(LocalBusiness, Service, FAQPage, BreadcrumbList), an answer-first block, a
+sourced facts block, `llms.txt`, `robots.txt`, a sitemap — so your job is
+the *content*, not the plumbing. Read its `README.md` first.
+
+1. `git clone https://x-access-token:$GH@github.com/Compass2026/<slug>.git
+   /tmp/site` (an empty repo clones fine). Copy `templates/astro-site/` into
+   it — everything except `node_modules/` and `dist/`.
+2. Fill `src/config/site.ts` from the CRM. The mapping:
+   - `url` — the production domain if known (`sites.url` when we control it),
+     else `https://<slug>.vercel.app`.
+   - `business` — `clients` (name, phone, city / state, `service_area` split
+     into towns), `schemaType` chosen from schema.org for the vertical
+     (`RoofingContractor`, `Electrician`, `HomeAndConstructionBusiness`…),
+     `sameAs` from the GBP / socials found in Brand Build. **No street
+     address unless the client is a storefront.**
+   - `brand` — `brand_boards.palette` → the seven colour roles, `typography`
+     → `fonts`, `client_brands.tagline` / `positioning`, `hard_rules` copied
+     verbatim, `cta` from the standing CTA.
+   - `facts` — `claims` where `status = 'sourced'` **only**, with the source
+     URL. An unverified claim never reaches the site.
+   - `services[]` — every approved service; `primaryKeyword` from its page
+     group's primary keyword; `question` is what a searcher asks; `answer` is
+     40–60 words and directly answers it; ≥ 3 `faqs`, each answer 25–90
+     words; `description` 70–160 chars.
+   - `cities[]` — page groups of type `city` with their tier; same shape.
+   - `homeFaqs` ≥ 3, `about` from `client_brands.story`, `placeholders[]` —
+     one per missing photo / fact / project, mirrored as `placeholders` rows.
+3. Titles 30–65 chars, one primary keyword per page, in the title, H1 and
+   meta. Supporting keywords in body copy. Never fabricate a testimonial, a
+   licence number, years in business, or a project.
+4. Write `DESIGN.md`, `PRODUCT.md` and `docs/{brand-board,keyword-map,
+   placeholders}.md` from the same data — short; the CRM is the source.
+5. `npm install && npm run build`. A build error is yours to fix.
+6. **Gate.** From the CRM checkout:
+   `node scripts/site-quality-gate.mjs /tmp/site/dist --phone "<phone>"
+   --name "<business name>"`. It must print `PASS`. Fix what it lists and
+   rebuild — up to three rounds. Still failing → *Blocked* with the failure
+   list in `next_action`. Placeholders are counted, never failed.
+7. Run it once more with `--json` and store the report:
+   `update sites set quality = '<json>'::jsonb, quality_checked_at = now()
+   where client_id = '<client_id>'`.
+8. Insert the `placeholders` rows. Commit everything and push to `main`.
+9. `git remote set-url origin https://github.com/Compass2026/<slug>.git` —
+   the token leaves the clone.
 
 Close Build-to-70% tasks 1–7 (the Vercel project and staging URL are Tom's
-— note it), set the stage `complete`, and record the repo URL and the
-placeholder count in the evidence. Do not touch Polish or Launch.
+— note it), set the stage `complete`, and put the repo URL, the three gate
+scores and the placeholder count in the evidence. Do not touch Polish or
+Launch.
 
 ## 6. End of run
 

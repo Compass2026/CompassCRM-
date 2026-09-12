@@ -1,0 +1,32 @@
+---
+import Base from "../layouts/Base.astro";
+import ServiceCard from "../components/ServiceCard.astro";
+import Facts from "../components/Facts.astro";
+import Faq from "../components/Faq.astro";
+import Placeholder from "../components/Placeholder.astro";
+import { site } from "../config/site";
+import { faqPage } from "../lib/schema";
+const b = site.business;
+const title = `${b.name} — ${site.brand.tagline}`;
+const description = site.brand.positioning;
+const hero = site.placeholders.find((p) => p.page === "/" && p.type === "image");
+---
+<Base title={title} description={description} schema={site.homeFaqs.length ? [faqPage(site.homeFaqs)] : []}>
+  <section class="hero">
+    <h1>{b.name}</h1>
+    <p class="lead">{site.brand.positioning}</p>
+    <p><a class="btn" href={site.brand.cta.href}>{site.brand.cta.label}</a></p>
+    {hero && <Placeholder type="image" description={hero.description} />}
+  </section>
+
+  <h2>What we do</h2>
+  <div class="grid">
+    {site.services.map((s) => <ServiceCard service={s} />)}
+  </div>
+
+  <h2>Where we work</h2>
+  <p>{b.serviceArea.join(", ")}. <a href="/areas/">See every area we serve.</a></p>
+
+  <Facts facts={site.facts} />
+  <Faq faqs={site.homeFaqs} />
+</Base>

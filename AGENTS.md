@@ -266,6 +266,24 @@ a chat.
   listings and builds the board from those; it blocks only when there is no
   public footprint at all.
 
+**Website bones** are built from `templates/astro-site/` — the Compass Astro
+starter the Shewmaker README promised — copied into the client's repo and
+filled from `src/config/site.ts`. The quality bar is in the layout, not the
+prompt: every page gets a canonical, one H1, JSON-LD and breadcrumbs; every
+service and city page gets an answer-first block, a FAQ with FAQPage schema
+and a sourced facts block; the site gets `llms.txt`, `robots.txt` and a
+sitemap. `scripts/site-quality-gate.mjs` checks all of it against `dist/`
+(SEO / AEO / GEO scores, hard failures, placeholders counted never failed) and
+the worker cannot mark Build to 70% complete until it prints `PASS`; the
+report lands on `sites.quality`. The starter passes its own gate at
+100 / 100 / 100. Client repos are reached over HTTPS with `GITHUB_TOKEN` from
+Vault (the routine's GitHub connector covers only this repo); without it the
+stage blocks with a WAITING task naming the secret.
+
+**The Routine's environment needs Full network access.** The worker fetches
+client websites and listings directly, and reaches api.github.com; the
+Default environment's allowlist blocks both.
+
 Pause or edit the Routine at claude.ai/code/routines; each run opens as a
 normal session there. The skill is versioned here and picked up on the next
 fire. `worker_fires` answers "why did a run start"; the run's transcript
@@ -302,7 +320,7 @@ GitHub connectors). To turn it on, add to Vault:
 | --- | --- |
 | `GDRIVE_REFRESH_TOKEN` | Compass Workspace refresh token carrying `https://www.googleapis.com/auth/drive`. The GSC token is `webmasters`-scoped and will **not** work. |
 | `GDRIVE_ROOT_FOLDER_ID` | Folder id of "Compass Clients" in My Drive. |
-| `GITHUB_TOKEN` | PAT with repo scope (org: contents + administration). |
+| `GITHUB_TOKEN` | PAT with repo scope (org: contents + administration). **Also required by the Foundation worker** to create and push client site repos. |
 | `GDRIVE_CLIENT_ID` / `GDRIVE_CLIENT_SECRET` | Only if the Google OAuth app differs from the GSC one; otherwise it falls back to `GSC_CLIENT_ID` / `GSC_CLIENT_SECRET`. |
 | `GITHUB_ORG` | Defaults to `Compass2026`. |
 

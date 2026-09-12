@@ -1,0 +1,31 @@
+---
+import Base from "../../layouts/Base.astro";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import Answer from "../../components/Answer.astro";
+import Faq from "../../components/Faq.astro";
+import Facts from "../../components/Facts.astro";
+import Placeholder from "../../components/Placeholder.astro";
+import { site } from "../../config/site";
+import { breadcrumbs, faqPage, service as serviceSchema } from "../../lib/schema";
+
+export function getStaticPaths() {
+  return site.services.map((s) => ({ params: { slug: s.slug }, props: { s } }));
+}
+const { s } = Astro.props;
+const path = `/services/${s.slug}/`;
+const crumbs = [{ name: "Home", path: "/" }, { name: "Services", path: "/services/" }, { name: s.name, path }];
+const title = `${s.name} in ${site.business.address?.city ?? site.business.serviceArea[0]} | ${site.business.name}`;
+const ph = site.placeholders.filter((p) => p.page === path);
+---
+<Base title={title} description={s.description} schema={[serviceSchema(s, path), faqPage(s.faqs), breadcrumbs(crumbs)]} ogImage={s.image?.src}>
+  <Breadcrumbs items={crumbs} />
+  <h1>{s.name}</h1>
+  <p class="lead">{s.description}</p>
+  <Answer question={s.question} answer={s.answer} />
+  {s.image ? <img src={s.image.src} alt={s.image.alt} loading="lazy" /> : <Placeholder type="image" description={`${s.name} photograph — this client's own work`} />}
+  {s.body.map((p) => <p>{p}</p>)}
+  {ph.map((p) => <Placeholder type={p.type} description={p.description} />)}
+  <Facts facts={s.facts?.length ? s.facts : site.facts} />
+  <Faq faqs={s.faqs} />
+  <p>Serving {site.business.serviceArea.join(", ")}. <a href="/areas/">Service area</a>.</p>
+</Base>
