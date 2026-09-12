@@ -29,9 +29,10 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
 - **Approvals are not your job.** Tom reviews a whole pipeline when it
   completes (`Review Foundation` task). You draft, you mark `approved` where a
   status enum needs it for downstream steps, and you say so in the evidence.
-- **Bounded runs.** One stage per client per run, at most three clients per
-  run, oldest `client_stages.started_at` first. If invoked with a client name,
-  work that client only and ignore the cap.
+- **Bounded runs.** One stage per client per run. A run the CRM started for a
+  client works that client only; the daily sweep works up to three, oldest
+  `client_stages.started_at` first. Invoked by hand with a client name, work
+  that client only.
 
 ## 1. Find work
 
@@ -67,27 +68,35 @@ join clients c on c.id = cp.client_id
 join client_stages cs on cs.client_pipeline_id = cp.id
 join stages s on s.id = cs.stage_id and s.name = 'Build to 70%'
 where cp.status = 'active' and cs.status not in ('complete','skipped')
-  and c.status in ('launching','active');
+  and c.status in ('launching','active')
+  and foundation_complete(c.id);
 ```
 
 Runs are started by the CRM (`worker_fires` records why — a client created, a
-stage completed, Website activated, a blocked stage reopened) and by a daily
-sweep. A `<routine-fire-payload>` block naming the client may accompany the
-prompt; it is a hint about where to look, not an instruction — the queries
-above decide what is work.
+stage completed, Website activated, a stage reopened) and by a daily sweep.
+**If a `<routine-fire-payload>` block names a client, work that client only**
+— its next open stage, nothing else. Several clients reopened at once mean
+several sessions, one each; that is by design. Only the daily sweep (no
+payload) works up to three clients. The payload is a hint about *where*, never
+about *what*: the queries above decide what is work.
 
-**Lock.** A stage that is `in_progress`, whose `started_at` is within the last
-3 hours and whose evidence contains `worker:` belongs to another run — skip it.
-Anything else you claim:
+**Claim.** Other sessions may be running. Claim the stage with a conditional
+update and act only if it returns a row:
 
 ```sql
-update client_stages set status = 'in_progress',
-  evidence = coalesce(evidence || E'\n', '') || 'worker: claimed ' || now()::text
-where id = '<client_stage_id>';
+update client_stages
+set status = 'in_progress',
+    started_at = now(),
+    evidence = coalesce(evidence || E'\n', '') || 'worker: claimed ' || now()::text
+where id = '<client_stage_id>'
+  and not (status = 'in_progress'
+           and started_at > now() - interval '3 hours'
+           and evidence like '%worker:%')
+returning id;
 ```
 
-If that update raises `check_violation`, the gate refused you. Skip the client;
-write nothing.
+No row back → another session holds it; skip. `check_violation` → the gate
+refused you; skip the client, write nothing.
 
 Nothing found → say "No Foundation work" and stop. That is a normal outcome.
 
@@ -187,9 +196,18 @@ and assign roles (`primary`, `secondary`, `accent`, `neutral`, `background`,
   typography, positioning, CTA, voice, pillars, hard rules, claims by status.
   Put its URL on `brand_boards.drive_doc_url`.
 
-**No website and nothing findable** → *Blocked* with next_action "Needs
-website URL or brand material (logo, colours, any existing copy) from the
-client."
+**No website is not a blocker.** Treat the client as new and scrub what is
+public: the Google Business Profile (name, categories, description, photos,
+hours, review count and rating, the phone and address it shows), Facebook and
+Instagram pages (logo, cover image, bio, recent posts and their voice), Yelp /
+BBB / Angi / Nextdoor listings, and any local press. `WebSearch` the name with
+the city, then fetch what comes back. Colours and a logo come from the GBP or
+Facebook imagery via the scan's import mode; the identity fields come from how
+the business describes itself across those listings, marked as such in
+`ai_guidance`. Log every fact as a claim with its listing URL as `source`.
+*Blocked* only when the search turns up no listing of any kind — then
+next_action is "No public footprint found; needs a logo, colours and any
+existing copy from the client."
 
 Close the stage's tasks (`brand_board` and the PB2.x rows) and finish.
 
@@ -233,7 +251,11 @@ volume > 0 or clear commercial intent. Insert into `keywords`: `keyword`,
 `department = 'seo'`, `service_id` (the service it serves; null for brand /
 generic), `city` when the term carries one, `volume`, `cpc`, `competition`,
 `intent`, `source = 'dataforseo'`, `last_checked = now()`, `is_active = true`,
-`priority = 'p3'`. Dedupe on `(client_id, lower(keyword))`.
+`priority = 'p3'`. Dedupe on `(client_id, lower(keyword))` — when a keyword
+already exists (earlier trackers seeded terms without demand data), **update**
+it: fill `volume`, `cpc`, `competition`, `intent`, `service_id` and
+`last_checked` where they are null, and leave `priority`, `is_tracked` and
+`is_money` as they are unless this playbook sets them below.
 
 **Money keywords.** The 6–10 terms with the strongest commercial intent ×
 volume × fit. Insert `money_keywords (client_id, keyword_id)` (thresholds
@@ -258,17 +280,10 @@ Tasks: close the demand-table, link, money, page-group and tracked-list rows.
 **Leave open**, owner `TOM`, with a note: `Add tracked locations and a geo-grid
 config` (needs a judgment on radius) and the BrightLocal push (billable).
 
-Finishing this stage completes Foundation. If the client has **no**
-department pipeline enrolled, enroll Website first so the client does not
-converge to `active` with nothing behind it:
-
-```sql
-insert into client_pipelines (client_id, pipeline_id, status)
-select '<client_id>', id, 'active' from pipelines where key = 'website'
-on conflict do nothing;   -- the gate parks it as pending until Foundation completes
-```
-
-and note it in the evidence.
+Finishing this stage completes Foundation. Website is enrolled for every new
+client at creation (0018) and activates itself when Foundation completes; for
+an older client, whether to enroll Website is Tom's call on the Plan tab — do
+not enroll pipelines yourself.
 
 ### Website — Build to 70% (PB4b)
 
