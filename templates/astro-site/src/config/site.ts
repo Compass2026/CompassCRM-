@@ -114,6 +114,7 @@ export const site: SiteConfig = {
       "We self-perform every roof with our own crews, which is how the estimate, the schedule and the finished work stay consistent.",
     ],
   },
+  analytics: { ga4MeasurementId: null },
   placeholders: [
     { page: "/", type: "image", description: "Hero photograph: finished roof, this client's own work" },
     { page: "/about/", type: "image", description: "Crew or owner photograph" },

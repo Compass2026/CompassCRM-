@@ -394,11 +394,46 @@ one free).
   tasks on Website › Polish & client review; on a client-controlled site the
   fix list is the deliverable for Tom to blend. The PB4a.5 task is closed
   flagged for review with a one-line recommendation.
-- **Stops after stage 1.** GBP Setup, Local Citations, Backlink Foundation
-  and Tracking Setup are still manual, so the SEO pipeline stays open and no
-  `Review SEO` task is raised by the audit alone.
-- Existing clients are enrolled by hand (a data step, not the migration);
-  Logic Solar's audit was completed in August and is left as is.
+- Existing clients were enrolled by hand on Sept 13 (a data step, not the
+  migration); Logic Solar's audit was completed in August and is left as is.
+
+## SEO stages 2–5 (Sept 13 2026)
+
+Migration 0025 makes the rest of the SEO pipeline worker stages, run in
+order and chained by fires (each SEO stage completing fires the next).
+The worker has no Business Profile login, no directory accounts, nothing
+to send mail from, and BrightLocal report creation is billable, so every
+checklist is split honestly: CLAUDE steps are research, drafting and CRM
+data, done and filed in Drive `04 Website` as a `deliverables` row; TOM
+steps are the logins and the money, left open with the worker's notes
+pointing at what it prepared. A stage is complete when the worker's steps
+are; Tom's tasks stay on his list.
+
+- **GBP Setup & Optimisation:** `GBP Spec — <Client>` (categories from the
+  top competitors' listings, description, services, service area,
+  attributes, hours to confirm, booking link, Q&A seeds, shot list, what is
+  wrong today) plus four posts for the first month (`gbp_posts_drafted`,
+  flagged). Tom applies it (`gbp_apply`, `gbp_photos`).
+- **Local Citations:** `Citation Sheet — <Client>` (canonical NAP block,
+  aggregators + general + vertical directories, status per directory from a
+  search sweep: listed / mismatch with the exact fix / missing). Tom submits
+  or runs Citation Builder (`citation_submit`, billable).
+- **Backlink Foundation:** `Backlink Prospects — <Client>` (link gap from
+  competitor intersections, local opportunities, 25–40 prospects with why
+  and how, disavow candidates, three outreach templates in the brand
+  voice, flagged); the referring-domain baseline goes on `sites.audit`.
+  Tom sends (`outreach_send`).
+- **Tracking Setup:** the home `locations` row, a ≥ 20 tracked list, a 7×7
+  `grid_configs` on the money keywords; `gsc_verify` closes itself when the
+  property has data and becomes Tom's with steps when there is no property;
+  `ga4`, `brightlocal_lrt`, `brightlocal_lsg` are Tom's with the exact
+  inputs (`Tracked Keywords — <Client>` in `03 Keywords`); `first_sync`
+  runs the two read-only syncs and closes only if snapshots land.
+  Completing it completes SEO → `Review SEO`, and with Website complete the
+  client converges.
+
+The six enrolled clients' open tasks were rewritten in place by 0025 (same
+rows, new titles / keys / owners); the first fire for each was sent by hand.
 
 ## Reporting worker (Sept 13 2026)
 
@@ -510,9 +545,11 @@ closed).
   `Compass2026/zz-sitepush-smoke` test repo (the token cannot).
 - **Reporting has not started.** Every client is still `launching` and none
   is enrolled in Reporting, so no monthly cycle exists; convergence waits on
-  the launch pipelines (SEO stages 2–5 are manual). To start monthly
+  the launch pipelines (SEO runs through on its own now; Website › Polish
+  and Launch are Tom's). To start monthly
   reports for a client now, set it `active` and enroll Reporting on the Plan
   tab — the 1st-of-month beats and the worker take it from there.
-- **Not built:** SEO stages 2–5 (GBP, Citations, Backlinks, Tracking) as
-  worker stages; Website › Polish and Launch as worker stages; decision
+- **Not built:** Website › Polish and Launch as worker stages; decision
   recording on approve / veto and autonomy promotion; the client portal.
+  Applying GBP changes, directory submissions, outreach sending, GA4 and
+  the billable BrightLocal reports are Tom's tasks by design.

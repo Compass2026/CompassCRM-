@@ -75,4 +75,6 @@ export type SiteConfig = {
   homeFaqs: Faq[];
   about: { title: string; body: string[] };
   placeholders: Placeholder[];
+  /** GA4 measurement id (G-XXXX). Null until Tracking Setup; the layout emits gtag only when set. */
+  analytics?: { ga4MeasurementId: string | null };
 };
