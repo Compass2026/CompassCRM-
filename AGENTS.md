@@ -275,11 +275,13 @@ client **per reason** per two minutes (0019 — a bulk reopen collapses, a stage
 completion never gets swallowed by the fire that started the run). The
 Routine API rate-limits fires (429 with a retry-after of a few minutes once
 about ten sessions start inside half an hour); `retry_failed_fires()` runs
-every 15 minutes (0027) and re-fires anything from the last day that got a
-429, a 5xx or no answer, two per tick, only once the newest answer for that
-client and reason is ten minutes old (0028 — inside the window a retry just
-burns an attempt), up to eight attempts, unless a later fire for the same
-client and reason already succeeded. `worker_fires.retry_of`
+every 15 minutes (0027) and re-fires anything from the last six hours that
+got a 429 or a 5xx — or no answer while under 20 minutes old (0030: pg_net
+prunes `net._http_response`, so an older missing answer means pruned, not
+failed) — two per tick, only once the newest answer for that client and
+reason is ten minutes old (0028 — inside the window a retry just burns an
+attempt), up to eight attempts, unless a later fire for the same client and
+reason already succeeded. `worker_fires.retry_of`
 / `attempt` record the chain. The Routine's schedule is a **daily** sweep for
 anything the events missed. URL and bearer token live in Vault as
 `ROUTINE_FIRE_URL` / `ROUTINE_FIRE_TOKEN`; without them nothing fires and
