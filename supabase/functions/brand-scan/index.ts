@@ -239,6 +239,9 @@ function imageSize(bytes: Uint8Array, type: string): { width: number; height: nu
 
 // ── photos ───────────────────────────────────────────────────────────────
 const PHOTO_PAGE_HINT = /gallery|portfolio|project|our-work|work|before|after|photos?|about|team|services?|showcase|case-stud|testimonial|reviews?/i;
+// Folders that hold marks, not photography (Logic Solar keeps partner
+// logos under /images/logos/).
+const NOT_PHOTO_PATH = /\/(logos?|icons?|partners?|badges?|brands?|clients?-logos?|sponsors?|awards?|avatars?)\//i;
 // Tested against alt / class / id and the file name only, never the host.
 const NOT_PHOTO_HINT = /logo|icon|favicon|sprite|badge|avatar|gravatar|emoji|placeholder|pixel|tracking|spinner|loading|arrow|button|payment|cards?\b|visa|mastercard|paypal|facebook|instagram|yelp|\bbbb\b|angi|houzz|nextdoor|linkedin|twitter|youtube|tiktok|thumbtack|homeadvisor|award|seal|certif|\bstars?\b|rating|\bmaps?\b|\bqr\b|flag|divider|separator|pattern|texture|\bbg[-_]|background[-_]|blank|spacer|1x1|captcha|wp-emoji/i;
 
@@ -284,6 +287,7 @@ function photoCandidates(html: string, page: string, priority: number, out: Map<
     if (!/\.(jpe?g|png|webp|avif)(\?|&|$)/i.test(resolved) && !/\/(wp-content|uploads|images?|media|photos?|gallery|assets)\//i.test(resolved)) return;
     if (/\.(svg|gif|ico)(\?|&|$)/i.test(resolved)) return;
     if (NOT_PHOTO_HINT.test(`${hint} ${resolved.split("/").pop() ?? ""}`)) return;
+    if (NOT_PHOTO_PATH.test(new URL(resolved).pathname)) return;
     const url = fullSizeUrl(resolved);
     const key = url.toLowerCase();
     const clean = label.replace(/\s+/g, " ").trim();
@@ -378,7 +382,7 @@ async function scanPhotos(
     }
     // Drop the obvious non-photos the same way <img> candidates are screened.
     for (const [k, c] of cands) {
-      if (NOT_PHOTO_HINT.test(c.url.split("/").pop() ?? "")) cands.delete(k);
+      if (NOT_PHOTO_HINT.test(c.url.split("/").pop() ?? "") || NOT_PHOTO_PATH.test(new URL(c.url).pathname)) cands.delete(k);
     }
   }
 
