@@ -15,6 +15,7 @@ const canonical = new URL(Astro.url.pathname, site.url).toString();
 const isHome = Astro.url.pathname === "/";
 const nodes = isHome ? [localBusiness(), ...schema] : schema;
 const b = site.business;
+const ga4 = site.analytics?.ga4MeasurementId ?? null;
 const c = site.brand.colors;
 const fontHref =
   "https://fonts.googleapis.com/css2?family=" +
@@ -43,6 +44,8 @@ const tokens = `:root{--ground:${c.ground};--surface:${c.surface};--text:${c.tex
     <link rel="stylesheet" href={fontHref} />
     <style set:html={tokens}></style>
     {nodes.map((n) => <script type="application/ld+json" set:html={JSON.stringify(n)} />)}
+    {ga4 && <script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${ga4}`}></script>}
+    {ga4 && <script is:inline set:html={`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${ga4}');`} />}
   </head>
   <body>
     <header class="site-header">

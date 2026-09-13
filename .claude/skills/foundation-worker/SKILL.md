@@ -1,6 +1,6 @@
 ---
 name: foundation-worker
-description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research), a Website "Build to 70%" stage, an SEO "Audit & Adjust" stage or an open monthly Reporting cycle, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
+description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research), a Website "Build to 70%" stage, an open SEO stage (Audit & Adjust, GBP Setup, Local Citations, Backlink Foundation, Tracking Setup) or an open monthly Reporting cycle, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
 ---
 
 # Foundation worker
@@ -34,7 +34,7 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   `client_stages.started_at` first. Invoked by hand with a client name, work
   that client only.
 - **Order within a client:** the open Foundation stage, then Website › Build
-  to 70%, then SEO › Audit & Adjust, then the open monthly Reporting cycle.
+  to 70%, then the next open SEO stage, then the open monthly Reporting cycle.
   When Foundation completes, Website and SEO activate together and fire two
   runs; each session claims the first stage in that order that is not
   already claimed, so the two runs work the two stages side by side instead
@@ -78,23 +78,30 @@ where cp.status = 'active' and cs.status not in ('complete','skipped')
   and foundation_complete(c.id);
 ```
 
-And SEO › **Audit & Adjust** under the same conditions (SEO enrollment
-`active`, Foundation `complete`):
+And the **next open SEO stage** under the same conditions (SEO enrollment
+`active`, Foundation `complete`). SEO runs in order — Audit & Adjust, GBP
+Setup & Optimisation, Local Citations, Backlink Foundation, Tracking Setup —
+and only the first stage with nothing open before it is work:
 
 ```sql
-select c.name, c.id as client_id, cs.id as client_stage_id, cs.status, cs.started_at
+select c.name, c.id as client_id, cs.id as client_stage_id, s.name as stage, s.sort_order, cs.status, cs.started_at
 from client_pipelines cp
 join pipelines p on p.id = cp.pipeline_id and p.key = 'seo'
 join clients c on c.id = cp.client_id
 join client_stages cs on cs.client_pipeline_id = cp.id
-join stages s on s.id = cs.stage_id and s.name = 'Audit & Adjust'
+join stages s on s.id = cs.stage_id
 where cp.status = 'active' and cs.status not in ('complete','skipped')
   and c.status in ('launching','active')
-  and foundation_complete(c.id);
+  and foundation_complete(c.id)
+  and not exists (
+    select 1 from client_stages cs2 join stages s2 on s2.id = cs2.stage_id
+    where cs2.client_pipeline_id = cp.id and s2.sort_order < s.sort_order
+      and cs2.status not in ('complete','skipped'))
+order by c.name;
 ```
 
-The later SEO stages (GBP, Local Citations, Backlink Foundation, Tracking
-Setup) are not yours yet. Leave them alone.
+Each SEO stage completing fires the next, so a client's SEO chain runs
+through on its own once the audit lands.
 
 And the **monthly Reporting cycle**: an open cycle whose report task is not
 done. The cycle is the unit of work, and its `monthly_report` task is what
@@ -576,6 +583,194 @@ served / missing, findings by severity, the report URL. Do not touch GBP
 Setup or anything after it; the SEO pipeline stays open, so no `Review SEO`
 task is raised yet — Tom reads the audit from the Foundation tab and the
 Drive doc.
+
+### SEO — GBP Setup & Optimisation
+
+You have no Business Profile login. This stage produces the **spec** Tom
+applies, drafted from the taxonomy and the brand, checked against the
+listing as it is today; applying it is Tom's task. Read: approved
+`services` (name, segment, description), `client_brands` (positioning,
+story, voice, words we use / avoid), `brand_boards` (cta, hard_rules),
+`claims` with `status = 'sourced'`, `page_groups` of type `city` with
+`city_tier`, `sites.audit->'gbp'` from the audit, and the FAQs you wrote
+into the site (`sites.url` or staging) if any.
+
+**Categories.** `business_data_business_listings_search` with `categories`
+= [the vertical's head term], `location_coordinate` = home city
+`"<lat>,<lng>,30"`, `limit = 20`, ordered by `rating.votes_count,desc`:
+the primary categories of the top 10 competitors and their additional
+categories. Primary = the category that fits the taxonomy and is most
+common among them; secondaries = up to 5 others the approved services
+justify. One call.
+
+**Spec.** `GBP Spec — <Client>` to Drive `04 Website`, in this order:
+
+1. Business name exactly as the CRM has it — no keywords added (a hard
+   rule; Google suspends for it).
+2. Primary + secondary categories, with the competitor count behind each.
+3. Description ≤ 750 characters from the positioning line and story: what
+   they do, where, since when (sourced claims only), the standing CTA.
+4. Services: one per approved service, name ≤ 60 characters, description
+   ≤ 300, in the brand voice.
+5. Service area: the tier 1 and 2 cities from the page groups, plus the
+   counties in `clients.service_area`; for a storefront the address stays
+   visible, for a service-area business it is hidden.
+6. Attributes to switch on (from the vertical: licensed, free estimates,
+   veteran-owned … only when a sourced claim backs it).
+7. Hours as the listing shows them today, marked "confirm".
+8. Booking / quote link = the site's CTA URL.
+9. Q&A seeds: 5 questions a customer asks, answered in ≤ 60 words.
+10. Photo shot list: 10 shots (exterior, team, 3 jobs, 3 process, 2
+    before/after) — placeholders are fine; Tom shoots.
+11. **What is wrong today:** each field where the live listing (audit `gbp`
+    + the listing search) differs from the spec.
+
+**Posts.** Four posts for the first month, in the brand voice, each ≤ 1,500
+characters with a CTA: a "what we do" post, a service spotlight, a city
+spotlight, an offer or seasonal post. Same doc, last section.
+
+Record the doc as `deliverables (client_id, client_stage_id, label, url,
+type)` = `('GBP Spec', …, 'drive')`. Close `gbp_spec`; close
+`gbp_posts_drafted` with `flagged_for_review = true` and a one-line
+`recommendation`. Put the doc link and the "what is wrong today" count in
+the `notes` of `gbp_apply` and `gbp_photos` (Tom's). Stage `complete`;
+evidence: categories chosen, services count, mismatches found, doc URL.
+
+### SEO — Local Citations
+
+**List.** Build the directory list for this client: the three aggregators
+(Data Axle, Foursquare, Neustar Localeze), the general set (Bing Places,
+Apple Business Connect, Yelp, Facebook, BBB, Nextdoor, Yellow Pages,
+MapQuest, Manta, Superpages, Hotfrog, the local chamber of commerce), and
+10–15 for the vertical and state (`WebSearch` `"<vertical>" directory
+listing`, `best <vertical> directories`, plus what you know: Angi,
+HomeAdvisor, Houzz, Thumbtack, Porch, BuildZoom for trades; EnergySage,
+SolarReviews for solar; and so on). Tier each: 1 = aggregator or general
+top-5, 2 = general, 3 = vertical / local.
+
+**Sweep.** For each directory, `WebSearch` `site:<directory domain>
+"<client name>"` (and the DBA), ≤ 30 searches; `WebFetch` a hit to read
+the name, address, phone and website as listed. Canonical NAP is the CRM
+(`clients.name`, `address_line1` / `city` / `state` / `zip` — omit the
+street for a service-area business — `phone`, `website_url`). Status per
+directory: `listed` (NAP matches), `mismatch` (say which field and the
+exact value to change), `missing`, `unknown` (the directory cannot be
+searched from outside). Fold in the audit's NAP mismatches.
+
+**Sheet.** `Citation Sheet — <Client>` to Drive `04 Website`: the canonical
+NAP block at the top (copy-paste ready, plus a 250-character and a
+750-character description and the category list from the GBP spec), then
+one table: directory, tier, status, listing URL, fix / submit note, login
+needed. `deliverables` = `('Citation Sheet', …, 'drive')`. Close
+`citation_list`, `nap_sweep`, `citation_sheet`. `citation_submit` is Tom's:
+its `notes` get the sheet link, the counts (`n missing, n mismatched`), and
+the line "BrightLocal Citation Builder can submit the aggregators and the
+tier-1 set for a fee — Tom's call". Stage `complete`; evidence: listed /
+mismatch / missing counts, doc URL.
+
+### SEO — Backlink Foundation
+
+**Prospects.** Bare host = `sites.url` or `clients.website_url`.
+`backlinks_competitors` (`target` = host, `limit = 10`,
+`exclude_large_domains = true`) gives the domains sharing the client's link
+profile; add the top 3 organic domains for the top 3 money keywords from
+the audit's positions (`serp_organic_live_advanced` at the client's city,
+`depth = 10`, only if the audit did not store them; ≤ 3 calls). Keep the
+5 most local / most relevant as competitors. `backlinks_domain_intersection`
+(`targets` = those competitor hosts, `exclude_targets` = [client host],
+`limit = 60`, `order_by = ["1.rank,desc"]`) is the **link gap**: domains
+linking to competitors and not to the client. Drop platforms (social,
+big directories already in the citation sheet) and anything with a spam
+score above 30. Classify what is left: `directory`, `local news`,
+`association / chamber`, `supplier / partner`, `blog / resource`,
+`sponsorship`. Then local opportunities by `WebSearch` (≤ 8):
+`<city> chamber of commerce`, `<county> business association`,
+`<vertical> association <state>`, `<city> youth sports sponsorship`,
+`<city> nonprofit sponsors`, `<city> news business feature`. Aim for 25–40
+prospects with a why and a how for each.
+
+**Disavow candidates.** `backlinks_referring_domains` (`target` = client
+host, `limit = 100`, `order_by = ["backlink_spam_score,desc"]`): domains
+with spam score ≥ 60 or an obvious PBN / foreign-language / gambling
+pattern. List them; do not act — a disavow is Tom's decision (the audit
+may already have raised a task for it).
+
+**Templates.** Three outreach emails in the brand voice (`client_brands`
+voice, words we use / avoid): local sponsorship or partnership, supplier /
+partner "we work with you" link, local press / resource pitch. ≤ 150 words
+each, a subject line, one ask, from Tom's name, no fabricated facts.
+
+**Doc.** `Backlink Prospects — <Client>` to Drive `04 Website`: prospects
+table (domain, type, rank, why, how / contact, template number), the
+disavow list with reasons, the three templates. `deliverables` =
+`('Backlink Prospects', …, 'drive')`. **Baseline:** `backlinks_summary`
+(one call) — referring domains and backlinks today, into the evidence,
+and `update sites set audit = audit || jsonb_build_object('backlinks_baseline',
+jsonb_build_object('referring_domains', n, 'backlinks', n, 'on', now()::date))`
+so the monthly cycle counts from here. Close `backlink_prospects`,
+`backlink_baseline`; close `outreach_drafts` flagged with a
+`recommendation`; `outreach_send` (Tom) gets the doc link and the prospect
+count in `notes`. Stage `complete`.
+
+### SEO — Tracking Setup (GSC, BrightLocal)
+
+Nothing billable is created here. The CRM rows and the inputs are made
+ready; the two BrightLocal reports and the Google verifications are Tom's.
+
+**Locations, tracked list, grid** (`tracking_locations`). Ensure one
+`locations` row for the home city: `name` = client name, `city`, `state`,
+`lat` / `lng` (the client's `locations` row if any, else
+`src/data/us-cities.json`), `is_physical_location` = `business_type =
+'storefront'`, `gbp_place_id` from the audit's listing if it carried one,
+`is_active = true`. Never delete or rename an existing location. Ensure
+the tracked list has ≥ 20 keywords (`keywords.is_tracked`; Keyword Research
+set it — top up from the highest-volume active keywords if short). Ensure
+one `grid_configs` row for the home location if none exists: `center_lat`
+/ `center_lng` = the location, `grid_size = 7`, `spacing_miles` = 1 for a
+storefront, 2 for a service-area business, `keyword_ids` = the money
+keywords (≤ 10), `is_active = true`. Existing grids are left as they are.
+
+**Search Console** (`gsc_verify`). `clients.gsc_property` set and
+`gsc_snapshots` has rows for the client → close it. Property set but no
+rows → close it with a note ("property exists; Google has no data yet — the
+monthly sync fills it"). Property null → set `owner = 'TOM'` and `notes`
+with the steps: in Search Console (as the Compass Workspace account) add
+a Domain property `sc-domain:<host>`, add the TXT record at the registrar,
+verify, then on the Overview tab set the property; `gsc-sync` matches it
+on the next run. Leave it open.
+
+**GA4** (`ga4`) is Tom's; give it `notes`: create the property, install the
+tag on the site (the Astro layout has a slot in `src/config/site.ts` →
+`analytics`), define the phone-click and form-submit conversions.
+
+**BrightLocal** (`brightlocal_lrt`, `brightlocal_lsg`) are Tom's and
+billable; give each `notes` with the exact inputs: the location (name,
+city, GBP place id), the tracked list count and a Drive doc
+`Tracked Keywords — <Client>` in `03 Keywords` (one keyword per line,
+with city), the grid (center, size, spacing, the money keywords), and
+"paste the report id on the Keywords tab (LRT) / the grid config (LSG)".
+
+**First sync** (`first_sync`). Run the two read-only syncs for this
+client and see what lands:
+
+```bash
+for fn in brightlocal-sync gsc-sync; do
+  curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/$fn \
+    -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+    -H "Content-Type: application/json" --data "{\"client_id\": \"<client_id>\"}"
+done
+```
+
+Both answer 202 and finish in the background; wait two minutes, then count
+`rank_snapshots` (via the client's keywords) and `gsc_snapshots` for the
+client recorded in the last ten minutes. Rows landed → close `first_sync`
+with the counts. Nothing landed (no BrightLocal reports yet, no GSC
+property) → leave it open with a note saying which source is missing; it
+closes on a later run once Tom's tasks are done. Stage `complete` either
+way; evidence: location, tracked count, grid summary, GSC state, what the
+first sync returned. This completes the SEO pipeline: the CRM raises
+`Review SEO` for Tom and, once Website is complete too, converges the
+client to `active` and enrolls Reporting.
 
 ### Reporting — Industry Pulse (PB6) and Monthly Refresh & Report (PB5)
 
