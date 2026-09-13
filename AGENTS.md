@@ -245,7 +245,10 @@ monthly cycle are unaffected.
 name, industry, `vertical` (slugged), `business_type`, phone, home city /
 state, service area, website, and an "the client keeps this website" flag
 that records a client-controlled `sites` row (`stack = 'other'`,
-`controlled_by_compass = false`) before any worker runs. The Overview tab
+`controlled_by_compass = false`) before any worker runs **and drops the
+Website enrollment** the insert trigger made, so no proposal site is built
+(BHG Safety Partners, Sept 13: the worker built one before Tom could say
+no). Enrolling Website on the Plan tab is the way back. The Overview tab
 edits vertical and business type too.
 
 **Tasks and the Brief** (build-order steps 8–9, Sept 13 2026): the Tasks
