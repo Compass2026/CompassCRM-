@@ -976,7 +976,15 @@ returning id, (xmax = 0) as inserted;
 `inserted = true` → fill it in: `kw_data_google_trends_explore` with the
 vertical's 3–5 head terms (`time_range = 'past_90_days'`, `location_name =
 'United States'`, `item_types = ['google_trends_queries_list']`, one
-keyword per call) for rising queries; `serp_organic_live_advanced` on the
+keyword per call) for rising queries — Trends only takes a country, so
+**filter the list**: drop any query naming a city, county or state outside
+the client's state, and any brand that does not operate there (the Lucas
+dry run returned "roofing contractors cleveland" and "roof replacement
+nj"; neither belongs in a Missouri pulse). Keep what a Missouri roofer
+would care about: product and material terms, cost and financing terms,
+storm and season terms, "near me" phrasings. Fewer than five left → add
+the top related queries from `dataforseo_labs_google_related_keywords`
+for the head term at the client's city (one call); `serp_organic_live_advanced` on the
 vertical's two head terms at the client's city for SERP feature changes (an
 AI overview, a new local pack shape) and the domains newly in the top 5
 (`competitor_moves`); `WebSearch` `"<vertical>" news <month year>` and
