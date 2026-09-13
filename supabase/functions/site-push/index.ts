@@ -163,6 +163,9 @@ Deno.serve(async (req) => {
     let parentSha: string | null = null;
     let baseTree: string | null = null;
 
+    // 409 from the ref lookup means the repository has no commits at all —
+    // distinct from 404, which is a missing branch in a repo that has some.
+    let repoEmpty = createdRepo;
     const readHead = async (b: string) => {
       const ref = await gh(`/repos/${owner}/${name}/git/ref/heads/${b}`);
       if (ref.ok) {
@@ -172,23 +175,53 @@ Deno.serve(async (req) => {
         const c = await commit.json();
         return { sha, tree: c.tree.sha as string, authorName: c.author?.name as string | undefined };
       }
-      if (ref.status === 404 || ref.status === 409) return null; // no branch / empty repo
+      if (ref.status === 409) { repoEmpty = true; return null; }
+      if (ref.status === 404) return null;
       throw fail("read ref", ref, await ref.text());
     };
 
     let headInfo = await readHead(branch);
     if (!requested && headInfo && headInfo.authorName !== "Compass CRM") {
       branch = "compass-astro";
-      headInfo = await readHead(branch);
+      headInfo = await readHead(branch); // null → an orphan branch with only our tree
     }
     if (headInfo) {
       parentSha = headInfo.sha;
       baseTree = headInfo.tree;
     }
 
+    // ── Empty repository: seed the first commit through the Contents API ──
+    // The Git Data API refuses to create blobs until a repo has a commit
+    // ("Git Repository is empty"); the Contents API does not mind. Write the
+    // first file that way, then continue with the rest below.
+    let pending = files;
+    let bootstrapCommit: { sha: string; url: string } | null = null;
+    if (repoEmpty) {
+      const first = files[0];
+      const b64 = first.encoding === "base64"
+        ? first.content
+        : btoa(Array.from(new TextEncoder().encode(first.content), (b) => String.fromCharCode(b)).join(""));
+      const put = await gh(`/repos/${owner}/${name}/contents/${first.path}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          message,
+          content: b64,
+          branch,
+          committer: { name: "Compass CRM", email: "crm@compassmarketing.ai" },
+        }),
+      });
+      if (!put.ok) throw fail(`bootstrap ${first.path}`, put, await put.text());
+      const p = await put.json();
+      parentSha = p.commit.sha;
+      baseTree = p.commit.tree.sha;
+      bootstrapCommit = { sha: p.commit.sha, url: p.commit.html_url };
+      pending = files.slice(1);
+    }
+
     // ── Blobs → tree → commit → ref ─────────────────────────────────────
+    let commit: { sha: string } | null = null;
     const tree: Record<string, unknown>[] = [];
-    for (const f of files) {
+    for (const f of pending) {
       const blob = await gh(`/repos/${owner}/${name}/git/blobs`, {
         method: "POST",
         body: JSON.stringify({ content: f.content, encoding: f.encoding ?? "utf-8" }),
@@ -200,35 +233,41 @@ Deno.serve(async (req) => {
       if (baseTree) tree.push({ path: p, mode: "100644", type: "blob", sha: null });
     }
 
-    const treeRes = await gh(`/repos/${owner}/${name}/git/trees`, {
-      method: "POST",
-      body: JSON.stringify(baseTree ? { base_tree: baseTree, tree } : { tree }),
-    });
-    if (!treeRes.ok) throw fail("tree", treeRes, await treeRes.text());
-    const treeSha = (await treeRes.json()).sha;
+    if (tree.length > 0) {
+      const treeRes = await gh(`/repos/${owner}/${name}/git/trees`, {
+        method: "POST",
+        body: JSON.stringify(baseTree ? { base_tree: baseTree, tree } : { tree }),
+      });
+      if (!treeRes.ok) throw fail("tree", treeRes, await treeRes.text());
+      const treeSha = (await treeRes.json()).sha;
 
-    const commitRes = await gh(`/repos/${owner}/${name}/git/commits`, {
-      method: "POST",
-      body: JSON.stringify({
-        message,
-        tree: treeSha,
-        parents: parentSha ? [parentSha] : [],
-        author: { name: "Compass CRM", email: "crm@compassmarketing.ai" },
-      }),
-    });
-    if (!commitRes.ok) throw fail("commit", commitRes, await commitRes.text());
-    const commit = await commitRes.json();
+      const commitRes = await gh(`/repos/${owner}/${name}/git/commits`, {
+        method: "POST",
+        body: JSON.stringify({
+          message,
+          tree: treeSha,
+          parents: parentSha ? [parentSha] : [],
+          author: { name: "Compass CRM", email: "crm@compassmarketing.ai" },
+        }),
+      });
+      if (!commitRes.ok) throw fail("commit", commitRes, await commitRes.text());
+      commit = await commitRes.json();
 
-    const refRes = parentSha
-      ? await gh(`/repos/${owner}/${name}/git/refs/heads/${branch}`, {
-          method: "PATCH",
-          body: JSON.stringify({ sha: commit.sha, force: false }),
-        })
-      : await gh(`/repos/${owner}/${name}/git/refs`, {
-          method: "POST",
-          body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
-        });
-    if (!refRes.ok) throw fail("update ref", refRes, await refRes.text());
+      const refRes = parentSha
+        ? await gh(`/repos/${owner}/${name}/git/refs/heads/${branch}`, {
+            method: "PATCH",
+            body: JSON.stringify({ sha: commit!.sha, force: false }),
+          })
+        : await gh(`/repos/${owner}/${name}/git/refs`, {
+            method: "POST",
+            body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit!.sha }),
+          });
+      if (!refRes.ok) throw fail("update ref", refRes, await refRes.text());
+    } else if (bootstrapCommit) {
+      commit = { sha: bootstrapCommit.sha };
+    } else {
+      throw new Error("nothing to commit");
+    }
 
     // ── Record it ───────────────────────────────────────────────────────
     const commitUrl = `${repoUrl}/commit/${commit.sha}`;
