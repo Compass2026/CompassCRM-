@@ -73,12 +73,14 @@ export default async function BriefPage() {
       .neq("status", "done")
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(50),
-    // Pipeline reviews the worker raised, and reports waiting to be sent.
+    // Decisions the worker raised (disavow, blend, and the like) and reports
+    // waiting to be sent. Pipeline completions are finished, flagged
+    // summaries and show under "done, review if you want".
     supabase
       .from("tasks")
       .select("id, title, key, notes, created_at, client_id, clients(name)")
       .neq("status", "done")
-      .or("title.like.Review %,key.eq.report_send")
+      .or("and(title.like.Review %,key.is.null),key.eq.report_send")
       .order("created_at", { ascending: false })
       .limit(50),
     // Done, review if you want: run+flag work closed in the last week.
@@ -208,11 +210,11 @@ export default async function BriefPage() {
         {/* ── Review or send ───────────────────────────────────────── */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Review or send</CardTitle>
+            <CardTitle className="text-base">Decide or send</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {(reviews ?? []).length === 0 && (
-              <p className="text-muted-foreground">No pipeline reviews or reports waiting.</p>
+              <p className="text-muted-foreground">No decisions or reports waiting.</p>
             )}
             {(reviews ?? []).map((t) => (
               <div key={t.id} className="space-y-0.5">

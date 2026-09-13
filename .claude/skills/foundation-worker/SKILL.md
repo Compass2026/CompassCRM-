@@ -29,6 +29,13 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
 - **Approvals are not your job.** Tom reviews a whole pipeline when it
   completes (`Review Foundation` task). You draft, you mark `approved` where a
   status enum needs it for downstream steps, and you say so in the evidence.
+- **Google is reached through the CRM.** Business Profile, GA4 and Gmail
+  drafts go through the `google-ops` Edge Function (`{client_id, op, …}`,
+  same auth headers as `site-push`). It answers `status` `done`, `skipped`
+  (a secret is missing — it names it) or `failed` (Google's message,
+  usually "no access to this client's profile"). `skipped` or `failed` →
+  the step becomes Tom's task with the detail in `notes`; never invent a
+  workaround.
 - **Bounded runs.** One stage per client per run. A run the CRM started for a
   client works that client only; the daily sweep works up to three, oldest
   `client_stages.started_at` first. Invoked by hand with a client name, work
@@ -345,8 +352,8 @@ page exists. Set each service's `primary_keyword_id`.
 with volumes, the demand table, the page-group map.
 
 Tasks: close the demand-table, link, money, page-group and tracked-list rows.
-**Leave open**, owner `TOM`, with a note: `Add tracked locations and a geo-grid
-config` (needs a judgment on radius) and the BrightLocal push (billable).
+Locations, the grid and the BrightLocal push belong to SEO › Tracking Setup
+now; nothing on this stage is left for Tom.
 
 Finishing this stage completes Foundation. Website is enrolled for every new
 client at creation (0018) and activates itself when Foundation completes; for
@@ -811,9 +818,36 @@ spotlight, an offer or seasonal post. Same doc, last section.
 Record the doc as `deliverables (client_id, client_stage_id, label, url,
 type)` = `('GBP Spec', …, 'drive')`. Close `gbp_spec`; close
 `gbp_posts_drafted` with `flagged_for_review = true` and a one-line
-`recommendation`. Put the doc link and the "what is wrong today" count in
-the `notes` of `gbp_apply` and `gbp_photos` (Tom's). Stage `complete`;
-evidence: categories chosen, services count, mismatches found, doc URL.
+`recommendation`.
+
+**Apply it** (`gbp_apply`). Store the spec as JSON and let the CRM write
+it to the profile:
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/google-ops \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" --data @spec.json
+```
+
+with `spec.json` = `{"client_id": "…", "op": "gbp_apply", "spec": {
+"primary_category": "<display name>", "secondary_categories": [...],
+"description": "<≤750 chars>", "services": [{"name", "description"}],
+"website": "<url>", "hours": [{"day": "monday", "open": "08:00", "close":
+"17:00"}], "hours_confirmed": false}}`. `hours_confirmed` stays `false`
+unless the listing already showed hours you copied verbatim — the
+function only writes hours when it is `true`. Then `{"op": "gbp_qa",
+"qa": [{"q", "a"}]}` with the five Q&A seeds, and `{"op": "gbp_posts",
+"posts": [{"summary", "cta_url"}]}` with the four posts. The function
+never touches the business name. `done` on `gbp_apply` → close the task
+`flagged_for_review = true`, `recommendation` = what was applied and
+what it could not resolve (`unresolved`), and note the Q&A / posts
+results in the evidence. `skipped` or `failed` (no access to the
+profile yet, no token) → set `gbp_apply.owner = 'TOM'` with the detail
+and the doc link in `notes`; the `google_access` task on Foundation is
+the fix. `gbp_photos` is always Tom's (someone has to shoot them): put
+the shot list link in its `notes`. Stage `complete`; evidence:
+categories chosen, services count, mismatches found, what was applied,
+doc URL.
 
 ### SEO — Local Citations
 
@@ -882,14 +916,19 @@ each, a subject line, one ask, from Tom's name, no fabricated facts.
 **Doc.** `Backlink Prospects — <Client>` to Drive `04 Website`: prospects
 table (domain, type, rank, why, how / contact, template number), the
 disavow list with reasons, the three templates. `deliverables` =
-`('Backlink Prospects', …, 'drive')`. **Baseline:** `backlinks_summary`
+`('Backlink Prospects', …, 'drive')`. **Drafts:** for every prospect with
+a contact email you actually found (never a guessed address), `google-ops`
+`{"op": "gmail_draft", "to", "subject", "text"}` with the matching
+template filled in — Tom's name, the client's name, the specific reason
+for this prospect; at most ten. Count what was drafted; a `skipped` /
+`failed` answer means the drafts are in the doc only. **Baseline:** `backlinks_summary`
 (one call) — referring domains and backlinks today, into the evidence,
 and `update sites set audit = audit || jsonb_build_object('backlinks_baseline',
 jsonb_build_object('referring_domains', n, 'backlinks', n, 'on', now()::date))`
 so the monthly cycle counts from here. Close `backlink_prospects`,
 `backlink_baseline`; close `outreach_drafts` flagged with a
-`recommendation`; `outreach_send` (Tom) gets the doc link and the prospect
-count in `notes`. Stage `complete`.
+`recommendation`; `outreach_send` (Tom) gets the doc link, the prospect
+count and "n drafts waiting in Gmail" in `notes`. Stage `complete`.
 
 ### SEO — Tracking Setup (GSC, BrightLocal)
 
@@ -918,9 +957,16 @@ a Domain property `sc-domain:<host>`, add the TXT record at the registrar,
 verify, then on the Overview tab set the property; `gsc-sync` matches it
 on the next run. Leave it open.
 
-**GA4** (`ga4`) is Tom's; give it `notes`: create the property, install the
-tag on the site (the Astro layout has a slot in `src/config/site.ts` →
-`analytics`), define the phone-click and form-submit conversions.
+**GA4** (`ga4`). `google-ops` `{"op": "ga4_provision", "site_url":
+"<https://host or the staging URL>"}` creates the property under the
+Compass Analytics account, a web stream, and the `phone_click` /
+`form_submit` key events, and stores `sites.ga4_measurement_id`. `done` →
+read the site back (`site-push` `{read: true}`), set
+`analytics.ga4MeasurementId` in `src/config/site.ts` to the measurement
+id, push that one file (the layout emits the tag and fires both events
+on its own), close `ga4` with the property and id in `notes`. `skipped`
+(`GA4_ACCOUNT_ID` or the token missing) or `failed` → `owner = 'TOM'`,
+detail in `notes`, leave open.
 
 **BrightLocal** (`brightlocal_lrt`, `brightlocal_lsg`) are Tom's and
 billable; give each `notes` with the exact inputs: the location (name,
@@ -1056,7 +1102,13 @@ url, type)` = `('…', '…', 'Monthly Report <yyyy-mm>', '<url>', 'report')`.
 `content_published` / `social_published` only if the CRM shows the plan's
 count met, else leave them open with a note saying `n of plan`. `gbp_posts`,
 `backlinks_new`, `paid_ads_review`, `report_send` are Tom's; leave them.
-Put the report URL and the headline deltas in the `report_send` task's
+Draft the send: the client's primary contact (`client_contacts` where
+`is_primary`, else any contact with an email) gets a `google-ops`
+`{"op": "gmail_draft"}` — subject `<Client> — <Month YYYY> marketing
+report`, a short plain-text note in Tom's voice (three wins, one line
+on next month, the report link), nothing sent. No contact email → no
+draft; say so. Put the report URL, the headline deltas and "draft in
+Gmail" (or "no contact email on file") in the `report_send` task's
 `notes` so Tom has them where he works. Do **not** set the cycle
 `complete` — Tom closes it once the report is sent. Set the claimed task's
 `notes` to what you did (replace the claim line).

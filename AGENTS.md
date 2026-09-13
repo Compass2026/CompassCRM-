@@ -474,6 +474,42 @@ worker (`tasks_zz_fire_worker`). Discovery stays Tom's and never blocks.
   Launch completes Website → `Review Website`, and with SEO complete the
   client converges.
 
+## Approvals retooled (Sept 13 2026)
+
+Tom's walk-through of the line found two real gates — client review before
+Launch, and the DNS records — and eighty-odd chores that were his only
+because the worker had no login. Migration 0029 and the `google-ops` Edge
+Function change that:
+
+- **Pipeline reviews are reads, not tasks.** `handle_pipeline_review` files
+  a finished, flagged summary (owner CLAUDE, `summary_<pipeline>`) that shows
+  on the Brief under "done, review if you want" and on the Tasks flagged
+  view. Nothing waits on it.
+- **`google-ops`** (`{client_id, op}`; team JWT or cron secret) is the CRM's
+  hands on Google with one refresh token, `GOOGLE_OPS_REFRESH_TOKEN`
+  (scopes `business.manage`, `analytics.edit`, `gmail.compose`, minted for
+  the GSC OAuth app), plus `GA4_ACCOUNT_ID`. Ops: `gbp_locate`, `gbp_apply`
+  (categories, description, services, website, confirmed hours — never the
+  name — from `clients.gbp_spec`), `gbp_posts`, `gbp_qa`, `ga4_provision`
+  (property + web stream + `phone_click` / `form_submit` key events →
+  `sites.ga4_measurement_id`; the Astro layout fires both events when the
+  id is set), `gmail_draft` (drafts only; nothing is ever sent). Every op
+  answers `done` / `skipped` (names the missing secret) / `failed`
+  (Google's message); the worker turns the last two into Tom's task with
+  the detail. **Neither secret is set yet**: verified Sept 13 that with the
+  GSC token alone every op fails with Google's "insufficient authentication
+  scopes", so the tasks fall back to Tom exactly as before.
+- **Per client, Tom does one grant:** the Foundation task `google_access` —
+  make the Compass Workspace account a manager on the Business Profile, an
+  owner on Search Console, an editor on GA4.
+- **Outreach and the monthly report are Gmail drafts** the worker writes;
+  `outreach_send` and `report_send` stay Tom's — he presses send.
+- **Still Tom's by design:** client review, DNS records, photos, and
+  anything billable on BrightLocal (see `docs/follow-ups.md`).
+- Leftover tasks from before the worker (keyword-map exports, geo-grid
+  configs, DNS access, default branch, SEO enrollment decision) were closed
+  and their templates removed.
+
 ## Reporting worker (Sept 13 2026)
 
 Migration 0024 makes the monthly Reporting cycle worker-run (Playbooks 5 and
@@ -589,7 +625,6 @@ closed).
   reports for a client now, set it `active` and enroll Reporting on the Plan
   tab — the 1st-of-month beats and the worker take it from there.
 - **Not built:** decision recording on approve / veto and autonomy
-  promotion; the client portal. Applying GBP changes, directory
-  submissions, outreach sending, GA4, the billable BrightLocal reports,
-  sending the staging link and adding DNS records are Tom's tasks by
-  design.
+  promotion; the client portal. Tom's by design: client review, DNS
+  records, photos, pressing send on drafted mail, and the billable
+  BrightLocal work. The open list is `docs/follow-ups.md`.
