@@ -25,6 +25,15 @@
 // built on the branch's current tree). An empty repository gets a root commit.
 //
 // Response: { repo_url, commit_url, branch, files, deleted, created_repo }.
+//
+// Two more modes, both with { client_id } and no files:
+//   { read: true }        — the pushed branch's tree with text files inline
+//                           (so the worker, which cannot clone, can edit and
+//                           push back only what changed)
+//   { domain: "host" }    — add the production domain (and its www / apex
+//                           twin as a redirect) to the Vercel project and
+//                           report verification state + the DNS records Tom
+//                           must add; { status: verified | pending, dns }
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -65,7 +74,9 @@ Deno.serve(async (req) => {
   // deploy: true with no files re-deploys the current head on Vercel without
   // committing anything — the retry path, and how Tom redeploys by hand.
   const deployOnly: boolean = body?.deploy === true && !(Array.isArray(body.files) && body.files.length);
-  if (!body?.client_id || (!deployOnly && (!Array.isArray(body.files) || !body.files.length))) {
+  const readOnly: boolean = body?.read === true;
+  const domainOnly: boolean = typeof body?.domain === "string" && body.domain.trim() !== "";
+  if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && (!Array.isArray(body.files) || !body.files.length))) {
     return Response.json(
       { error: "client_id and a non-empty files[] are required (or deploy: true)" },
       { status: 400 }
@@ -196,6 +207,114 @@ Deno.serve(async (req) => {
     if (headInfo) {
       parentSha = headInfo.sha;
       baseTree = headInfo.tree;
+    }
+
+    // ── Read mode: the pushed tree, text files inline ───────────────────
+    if (readOnly) {
+      if (!headInfo) {
+        return Response.json({ repo_url: repoUrl, branch, files: [], note: "branch has no commits" });
+      }
+      const treeRes = await gh(`/repos/${owner}/${name}/git/trees/${headInfo.tree}?recursive=1`);
+      if (!treeRes.ok) throw fail("read tree", treeRes, await treeRes.text());
+      const entries = ((await treeRes.json()).tree as { path: string; type: string; sha: string; size?: number }[])
+        .filter((e) => e.type === "blob");
+      const textExt = /\.(ts|tsx|js|mjs|cjs|astro|css|scss|md|mdx|json|txt|xml|html|svg|yml|yaml|toml)$/i;
+      const skip = /^(node_modules|dist|\.astro)\//;
+      const out: Record<string, unknown>[] = [];
+      for (const e of entries) {
+        if (skip.test(e.path)) continue;
+        const isText = textExt.test(e.path) && (e.size ?? 0) <= 200_000;
+        if (!isText) {
+          out.push({ path: e.path, size: e.size ?? null });
+          continue;
+        }
+        const blob = await gh(`/repos/${owner}/${name}/git/blobs/${e.sha}`);
+        if (!blob.ok) throw fail(`read ${e.path}`, blob, await blob.text());
+        const b = await blob.json();
+        const content = b.encoding === "base64"
+          ? new TextDecoder().decode(Uint8Array.from(atob(String(b.content).replace(/\n/g, "")), (c) => c.charCodeAt(0)))
+          : String(b.content);
+        out.push({ path: e.path, size: e.size ?? null, content });
+      }
+      return Response.json({ repo_url: repoUrl, branch, head: headInfo.sha, files: out });
+    }
+
+    // ── Vercel client, shared by the domain mode and the deploy step ────
+    const vercelCtx = async () => {
+      const vToken = await secret("VERCEL_TOKEN");
+      if (!vToken) return null;
+      const teamId = (await secret("VERCEL_TEAM_ID")) ?? "team_JxUWGz1PjUP4jOAqXQqy3YFN";
+      const project = branch === "main" ? name : `${name}-astro`;
+      const vc = (path: string, init: RequestInit = {}) =>
+        fetch(`https://api.vercel.com${path}${path.includes("?") ? "&" : "?"}teamId=${teamId}`, {
+          ...init,
+          headers: {
+            Authorization: `Bearer ${vToken}`,
+            ...(init.body ? { "Content-Type": "application/json" } : {}),
+          },
+        });
+      return { vc, project };
+    };
+
+    // ── Domain mode: production domain on the project + DNS to add ──────
+    if (domainOnly) {
+      const ctx = await vercelCtx();
+      if (!ctx) return Response.json({ error: "VERCEL_TOKEN not in Vault" }, { status: 500 });
+      const { vc, project } = ctx;
+      const host = String(body.domain).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      const apex = host.replace(/^www\./, "");
+      const primary = host;
+      const twin = host.startsWith("www.") ? apex : `www.${apex}`;
+      const existing = await vc(`/v9/projects/${project}`);
+      if (!existing.ok) {
+        return Response.json(
+          { error: `Vercel project ${project} not found — push the site first` },
+          { status: 404 }
+        );
+      }
+      const results: Record<string, unknown>[] = [];
+      for (const d of [primary, twin]) {
+        const add = await vc(`/v10/projects/${project}/domains`, {
+          method: "POST",
+          body: JSON.stringify(d === primary ? { name: d } : { name: d, redirect: primary, redirectStatusCode: 308 }),
+        });
+        if (!add.ok && add.status !== 409) throw fail(`add domain ${d}`, add, await add.text());
+        const info = await vc(`/v9/projects/${project}/domains/${d}`);
+        if (!info.ok) throw fail(`domain ${d}`, info, await info.text());
+        const i = await info.json();
+        const cfgRes = await vc(`/v6/domains/${d}/config`);
+        const cfg = cfgRes.ok ? await cfgRes.json() : {};
+        results.push({
+          domain: d,
+          verified: i.verified === true,
+          misconfigured: typeof cfg.misconfigured === "boolean" ? cfg.misconfigured : null,
+          verification: i.verification ?? [],
+        });
+      }
+      const dns = results.flatMap((r) => {
+        const d = r.domain as string;
+        const recs: Record<string, unknown>[] = [];
+        recs.push(
+          d === apex
+            ? { type: "A", name: "@", value: "76.76.21.21", for: d }
+            : { type: "CNAME", name: d.slice(0, -(apex.length + 1)), value: "cname.vercel-dns.com", for: d }
+        );
+        for (const v of r.verification as { type: string; domain: string; value: string; reason?: string }[]) {
+          recs.push({ type: v.type, name: v.domain, value: v.value, reason: v.reason ?? null, for: d });
+        }
+        return recs;
+      });
+      const live = results.every((r) => r.verified === true && r.misconfigured === false);
+      await supabase.from("sites").update({ domain_constant: apex }).eq("client_id", client.id);
+      return Response.json({
+        repo_url: repoUrl,
+        branch,
+        project,
+        domain: primary,
+        status: live ? "verified" : "pending",
+        domains: results,
+        dns,
+      });
     }
 
     // ── Vercel: a project linked to the repo, and a production deployment ──

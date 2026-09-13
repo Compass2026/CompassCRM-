@@ -1,6 +1,6 @@
 ---
 name: foundation-worker
-description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research), a Website "Build to 70%" stage, an open SEO stage (Audit & Adjust, GBP Setup, Local Citations, Backlink Foundation, Tracking Setup) or an open monthly Reporting cycle, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
+description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research), an open Website stage (Build to 70%, Polish & client review, Launch), an open SEO stage (Audit & Adjust, GBP Setup, Local Citations, Backlink Foundation, Tracking Setup) or an open monthly Reporting cycle, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
 ---
 
 # Foundation worker
@@ -33,8 +33,9 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   client works that client only; the daily sweep works up to three, oldest
   `client_stages.started_at` first. Invoked by hand with a client name, work
   that client only.
-- **Order within a client:** the open Foundation stage, then Website › Build
-  to 70%, then the next open SEO stage, then the open monthly Reporting cycle.
+- **Order within a client:** the open Foundation stage, then the next open
+  Website stage (Build to 70% → Polish → Launch), then the next open SEO
+  stage, then the open monthly Reporting cycle.
   When Foundation completes, Website and SEO activate together and fire two
   runs; each session claims the first stage in that order that is not
   already claimed, so the two runs work the two stages side by side instead
@@ -63,20 +64,32 @@ where cs.status not in ('complete','skipped')
 order by cs.started_at nulls first, f.name;
 ```
 
-Then the same for Website › **Build to 70%** on clients whose Foundation is
-`complete` and whose Website enrollment is `active`:
+Then the **next open Website stage** on clients whose Foundation is
+`complete` and whose Website enrollment is `active`. Website runs Build to
+70% → Polish & client review → Launch; Discovery (stage 1) is Tom's and
+never blocks — its CLAUDE items are done during Build:
 
 ```sql
-select c.name, c.id as client_id, cs.id as client_stage_id, cs.status, cs.started_at
+select c.name, c.id as client_id, cs.id as client_stage_id, s.name as stage, s.sort_order, cs.status, cs.started_at
 from client_pipelines cp
 join pipelines p on p.id = cp.pipeline_id and p.key = 'website'
 join clients c on c.id = cp.client_id
 join client_stages cs on cs.client_pipeline_id = cp.id
-join stages s on s.id = cs.stage_id and s.name = 'Build to 70%'
+join stages s on s.id = cs.stage_id and s.sort_order >= 2
 where cp.status = 'active' and cs.status not in ('complete','skipped')
   and c.status in ('launching','active')
-  and foundation_complete(c.id);
+  and foundation_complete(c.id)
+  and not exists (
+    select 1 from client_stages cs2 join stages s2 on s2.id = cs2.stage_id
+    where cs2.client_pipeline_id = cp.id and s2.sort_order >= 2 and s2.sort_order < s.sort_order
+      and cs2.status not in ('complete','skipped'))
+order by c.name;
 ```
+
+**Launch has a gate you check before claiming:** the Polish stage's
+`client_review` task (Tom's) must be `done`. If it is not, do not claim
+Launch — say "Launch waits on client review" and move on. Tom closing that
+task fires you.
 
 And the **next open SEO stage** under the same conditions (SEO enrollment
 `active`, Foundation `complete`). SEO runs in order — Audit & Adjust, GBP
@@ -435,6 +448,172 @@ Close Build-to-70% tasks 1–7 (the Vercel / staging item only if `vercel`
 came back `created` or `deployed`), set the stage `complete`, and put the
 repo URL, the staging URL, the three gate scores and the placeholder count in
 the evidence. Do not touch Polish or Launch.
+
+### Website — Polish & client review
+
+The bones are live on staging; this stage makes them presentable and
+ready to launch. You cannot clone the repo; **read it back through the
+CRM** and push back only what you changed.
+
+**1. Read the site.**
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" --data '{"client_id": "<client_id>", "read": true}' > /tmp/site-read.json
+```
+
+`files[]` carries every text file with `content` (binaries are listed with
+`size` only). Write them to `/tmp/site/<path>`; `npm install` there. That
+is your working copy. Note `branch`: `compass-astro` means `main` carries
+a site that is not ours — you still polish the side branch, and Launch
+will block until Tom blends.
+
+**2. The punch list** is three things, in this order:
+
+- **Audit findings** — the open tasks on this stage with `key is null`
+  (the SEO audit filed them; each `notes` carries the URL and the
+  `after`). Apply each one to `src/config/site.ts` or the page it names —
+  titles, metas, H1s, FAQ answers, missing city / service pages (add the
+  page group's entry to `services[]` / `cities[]`), internal links,
+  schema fields. Close each task you applied with `notes` = `applied:
+  <what>`; leave one you cannot apply open with `notes` = `needs: <what>`.
+- **Material** — the client's Drive `Media` folder
+  (`clients.drive_folders->>'Media'`; `mcp__Google_Drive__search_files`
+  with `'<id>' in parents`, images only) and `client_requests.responses`.
+  For each image ≤ 4 MB: download (`download_file_content`), save as
+  `public/images/<slug>.<ext>` (slug from the file name; keep JPEG / PNG /
+  WebP as they are), and wire it: hero → `about.image` or the home hero
+  slot, a service photo → that service's `image`, a city photo → that
+  city's, anything else → the gallery if the site has one. Every `<img>`
+  gets a real `alt`. Then mark the matching `placeholders` row
+  `resolved = true, resolved_at = now()`. No material → nothing changes;
+  say so.
+- **Placeholders still open** — leave the `<Placeholder>` blocks (the
+  gate counts them, never fails them) and leave their rows unresolved;
+  they are the client request. Do not invent a photo, a testimonial, a
+  licence or a project.
+
+**3. Redirect map** (`redirect_map`), only when the client has an old site
+we are replacing (`sites.controlled_by_compass = true` and `sites.url` is
+not the staging URL): `WebFetch` the old site's `/sitemap.xml` (follow an
+index; fall back to the audit's inventory), map every old path to the new
+route by slug and title (`/roofing-services` → `/services/roofing/`,
+`/about-us` → `/about/`, blog posts → the closest service or `/`), and
+write `vercel.json` at the repo root:
+
+```json
+{ "redirects": [ { "source": "/old-path", "destination": "/services/roofing/", "permanent": true } ] }
+```
+
+One line per old URL; `/` and paths that already exist need none. Keep
+the map in `docs/redirects.md` too, with a reason per line. No old site →
+close the task with "no old URL set".
+
+**4. Build, gate, push.** `npm run build`, then the gate from the CRM
+checkout (`node scripts/site-quality-gate.mjs /tmp/site/dist --phone …
+--name … --json`) — it must still print `PASS`; store the report on
+`sites.quality` as at Build. Push **only the files you changed or added**
+(the same payload shape as Build; `site-push` leaves the rest as it is),
+`message` = `Polish: <n> findings applied, <n> images placed`. Images go
+as `encoding: "base64"`.
+
+**5. Lighthouse** (`lighthouse_pass`). Two minutes after the push,
+`mcp__Data_for_SEO__on_page_lighthouse` on the staging home page and one
+service page, `enable_javascript = true` (mobile is the default): record
+performance, accessibility, best-practices and SEO. Store them:
+`update sites set quality = quality || jsonb_build_object('lighthouse',
+'<json>'::jsonb)`. Performance < 90 → the usual causes are oversized
+images (resize to ≤ 1600 px wide, quality 80, with `sharp` from the
+site's `node_modules` if present, else `python3 -c "from PIL import
+Image…"`) and render-blocking fonts; fix, rebuild, push again, once.
+SEO < 100 → fix what it names. Close the task when the home page is
+≥ 90 / ≥ 90 / ≥ 90 / 100; otherwise leave it open with the four numbers
+in `notes` and move on — a client photo can drag performance and that is
+Tom's call.
+
+**Close.** `punch_list` closes `flagged_for_review = true`,
+`recommendation` = `n findings applied, n images placed, n placeholders
+still open, n deferred (needs material)`. `redirect_map` and
+`lighthouse_pass` as above. `client_review` is Tom's: `notes` = the
+staging URL, what changed, what is still a placeholder. Stage `complete`
+when your own tasks are done — client review is a to-do, not a gate on
+this stage; it gates **Launch**. Feedback comes back as new tasks Tom adds
+to this stage before setting it to *Not started*, which fires you again;
+a reopened Polish repeats steps 1–5 on the new tasks.
+
+### Website — Launch
+
+Runs only when Polish is `complete` **and** its `client_review` task is
+`done` (see *Find work*). The site is on `sites.staging_url`; the
+production host is `sites.domain_constant`, else the host of
+`clients.website_url`, else *Blocked*: "No production domain recorded —
+set it on the Overview tab (website URL)".
+
+**Side branch → blocked.** `sites.branch = 'compass-astro'` means the
+domain's current project serves a site that is not ours from the same
+repo. Set the stage `blocked`, `next_action` = "Blend compass-astro into
+main (or point the Vercel project at compass-astro), then set Launch to
+Not started", open the WAITING task, stop.
+
+**1. Domain** (`domain_added`):
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" --data '{"client_id": "<client_id>", "domain": "<host>"}'
+```
+
+It adds the host and its www / apex twin (as a 308 to the primary) to the
+Vercel project and answers `status` (`verified` | `pending`) plus `dns[]`
+— the exact records: an A record `@ → 76.76.21.21` for the apex, a CNAME
+`www → cname.vercel-dns.com`, and any TXT Vercel asks for. Close
+`domain_added`. Write the records into the `dns_records` task's `notes`
+(Tom's), one per line, with "at the registrar for <apex>" and the note
+that the old host stops serving the moment these change. If `status` is
+already `verified` (Tom did it earlier), go straight on.
+
+**2. Verified** (`dns_verified`). `status = pending` → leave the task open,
+leave the stage `in_progress`, put "waiting on DNS records" in the
+evidence, **stop**. Tom closing `dns_records` fires you; the daily sweep
+also finds an `in_progress` Launch once the 3-hour lock has passed and
+re-checks. `status = verified` → `curl -sSI https://<host>/` must be 200
+and the page must carry our canonical (`<link rel="canonical"
+href="https://<host>/"`) — that is the new site, not the old one served
+from a cache. Close `dns_verified`. Then, if the site's config `url` is
+still the vercel.app address, set `url` in `src/config/site.ts` to
+`https://<host>` and push that one file (Build sets it when the domain
+was known; Polish may have fixed it already).
+
+**3. Redirects** (`redirects_verified`). For each `source` in
+`vercel.json` (read it back with `{"read": true}`): `curl -sSI
+https://<host><source>` → 301 / 308 with a `location` on the same host,
+and that location → 200. Every miss goes in `notes`; all good → close.
+No `vercel.json` → close with "no old URL set".
+
+**4. Sitemap** (`sitemap_submitted`):
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/gsc-sync \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" \
+  --data '{"client_id": "<client_id>", "submit_sitemap": "https://<host>/sitemap-index.xml"}'
+```
+
+200 → close. 404 (no Search Console property) → leave open with
+`notes` "needs the Search Console property — Tracking Setup › gsc_verify".
+
+**5. Launched** (`launched`). `update sites set url = 'https://<host>/',
+launched_at = current_date where client_id = …`; `update clients set
+launched_at = current_date where id = … and launched_at is null`. Write
+`Site Plan — <Client>` to Drive `04 Website`: the page list with each
+page's primary keyword, the redirect map, placeholders still open, the
+tracking state (Search Console, GA4, BrightLocal from the Tracking Setup
+tasks), the staging and production URLs, the Lighthouse numbers.
+`deliverables` = `('Site Plan', …, 'drive')`. Close `launched`. Stage
+`complete` → the Website pipeline completes, the CRM raises `Review
+Website`, and with SEO complete the client converges to `active` and
+Reporting begins on the 1st.
 
 ### SEO — Audit & Adjust (PB4a)
 

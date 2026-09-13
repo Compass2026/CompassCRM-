@@ -94,6 +94,45 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const onlyClientId: string | null = body.client_id ?? null;
 
+  // Launch: submit a sitemap for one client's property. Synchronous — the
+  // caller wants the answer, not a 202.
+  if (typeof body.submit_sitemap === "string" && onlyClientId) {
+    const { data: c } = await supabase
+      .from("clients")
+      .select("gsc_property, website_url")
+      .eq("id", onlyClientId)
+      .single();
+    let property: string | null = c?.gsc_property ?? null;
+    if (!property) {
+      const apex = c?.website_url ? apexDomain(c.website_url) : null;
+      const match = apex
+        ? sites.find((s) => s.siteUrl === `sc-domain:${apex}`) ??
+          sites.find((s) => s.siteUrl.includes(apex))
+        : undefined;
+      property = match?.siteUrl ?? null;
+      if (property) {
+        await supabase.from("clients").update({ gsc_property: property }).eq("id", onlyClientId);
+      }
+    }
+    if (!property) {
+      return Response.json(
+        { error: "no Search Console property for this client — verify one first (Tracking Setup)" },
+        { status: 404 }
+      );
+    }
+    const put = await fetch(
+      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/sitemaps/${encodeURIComponent(body.submit_sitemap)}`,
+      { method: "PUT", headers: gauth }
+    );
+    if (!put.ok) {
+      return Response.json(
+        { error: `sitemap submit failed (${put.status}): ${(await put.text()).slice(0, 300)}` },
+        { status: 502 }
+      );
+    }
+    return Response.json({ property, sitemap: body.submit_sitemap, status: "submitted" });
+  }
+
   let clientQuery = supabase
     .from("clients")
     .select("id, name, website_url, gsc_property")
