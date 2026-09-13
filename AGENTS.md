@@ -470,7 +470,7 @@ Verified on Sept 11 2026 with no secrets (both steps `skipped`, 200) and with
 deliberately bad ones (both `failed` with the upstream error, 502, no tasks
 closed).
 
-## Known state / open items (as of Aug 31 2026)
+## Known state / open items (as of Sept 13 2026)
 
 - **Stripe secrets are not in Vault yet.** Billing code is deployed but inert
   until `STRIPE_SECRET_KEY` is added to Supabase Vault, a webhook endpoint
@@ -479,23 +479,40 @@ closed).
   `payment_intent.processing`, `customer.subscription.updated`,
   `customer.subscription.deleted`), and its signing secret is stored as
   `STRIPE_WEBHOOK_SECRET`. No Stripe objects have been created.
-
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly
   sync. Get a production key before that runs out.
-- **Keyword priorities are unset.** The City Index averages P1 keywords only
-  (`compute_location_index`, migration 0013), so every location's index is
-  blank until priorities are set in the Keywords tab.
-- **GSC coverage is partial.** Logic Solar, Lucas Construction, Ginger Huff and
-  Show Me Design sync. Show Me Electrical's property exists but Google has no
-  data for it at all (likely created recently — GSC does not backfill).
-  Pensacola Equipment Rentals has no Search Console property; one needs to be
-  created and verified.
-- **Brand boards are drafted, not approved** (Sep 1 2026) — website scan +
-  intake done for the five clients with websites (palette roles assigned, logos
-  from the site, identity/voice/AI-guidance fields written from site copy).
-  Pensacola has a placeholder only (no website, no material). Each client's
-  "Build brand board" task stays open until Tom approves on the Brand tab.
-  Draft boards are filed in Drive under Compass Clients / <Client>.
-- **Client seed data is partial** — several clients still need enrolled
-  pipelines, plan details, and contacts filled in. Pensacola also has no
-  `website_url`.
+- **Keyword priorities are set.** Keyword Research gave every client 6–10 P1
+  money keywords and a tracked list of 35–65; the City Index fills on the
+  next BrightLocal sync (1st of the month) or a `recompute_location_indexes`
+  call.
+- **GSC coverage is partial.** Ginger Huff, Logic Solar, Lucas Construction
+  and Show Me Design sync. Show Me Electrical's property exists but Google
+  has no data for it. Pensacola Equipment Rentals has no Search Console
+  property; one needs to be created and verified (Tracking Setup, SEO
+  stage 5, is still manual).
+- **Foundation is complete for all seven clients** (worker-built brand
+  boards, taxonomies and keyword maps; Shewmaker's from the Sept 10 load).
+  Six *Review Foundation* tasks are open for Tom — that review is the only
+  sign-off in the model. SEO › Audit & Adjust is complete for the six
+  non-blueprint clients (reports in Drive 04 Website, findings in
+  `change_log`, `sites.audit`); the audit's gate scores on a client-built
+  site are relative — the gate expects the Compass starter's structure
+  (facts block, FAQPage, `llms.txt`), so a WordPress site scores low on SEO
+  / AEO by construction. Read the findings, not the number.
+- **Sites.** Ginger Huff, Lucas Construction and Pensacola have Astro bones
+  live on Vercel (`gingerhuffinteriors.vercel.app`, `lucasconstruction.vercel.app`,
+  `pensacolaequipmentrentals-astro.vercel.app`; Pensacola's is on the
+  `compass-astro` side branch because `main` carries Tom's Next.js site).
+  Their Website › Polish & client review stages carry the audit punch lists
+  (Ginger 23, Pensacola 18, Lucas 5 tasks) and the Discovery TOM tasks
+  (client request, DNS access) are open. Logic Solar and Show Me Design keep
+  their sites and are not enrolled in Website. Tom deletes the
+  `Compass2026/zz-sitepush-smoke` test repo (the token cannot).
+- **Reporting has not started.** Every client is still `launching` and none
+  is enrolled in Reporting, so no monthly cycle exists; convergence waits on
+  the launch pipelines (SEO stages 2–5 are manual). To start monthly
+  reports for a client now, set it `active` and enroll Reporting on the Plan
+  tab — the 1st-of-month beats and the worker take it from there.
+- **Not built:** SEO stages 2–5 (GBP, Citations, Backlinks, Tracking) as
+  worker stages; Website › Polish and Launch as worker stages; decision
+  recording on approve / veto and autonomy promotion; the client portal.
