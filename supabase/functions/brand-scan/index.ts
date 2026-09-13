@@ -90,16 +90,30 @@ async function fetchText(url: string, maxBytes: number, accept: string) {
   return new TextDecoder().decode(bytes);
 }
 
+// The declared content-type lies often enough (BHG serves a JPEG as
+// image/png) that the bytes decide when they carry a known signature.
+function sniffImageType(b: Uint8Array): string | null {
+  if (b.length < 12) return null;
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return "image/gif";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "image/avif";
+  return null; // SVG has no magic; the declared type decides.
+}
+
 async function fetchImage(url: string) {
   const res = await fetchWithTimeout(url, "image/*,*/*;q=0.8");
   if (!res) return null;
-  const type = (res.headers.get("content-type") ?? "").split(";")[0].trim();
-  if (!type.startsWith("image/")) return null;
+  const declared = (res.headers.get("content-type") ?? "").split(";")[0].trim();
   const len = Number(res.headers.get("content-length") ?? 0);
   if (len > IMAGE_MAX) return null;
   const buf = await res.arrayBuffer();
   if (buf.byteLength === 0 || buf.byteLength > IMAGE_MAX) return null;
-  return { bytes: new Uint8Array(buf), type };
+  const bytes = new Uint8Array(buf);
+  const type = sniffImageType(bytes) ?? declared;
+  if (!type.startsWith("image/")) return null;
+  return { bytes, type };
 }
 
 // ── html helpers ─────────────────────────────────────────────────────────
@@ -334,6 +348,40 @@ async function scanPhotos(
   );
   for (const f of fetched) if (f.html) photoCandidates(f.html, f.u, f.pr, cands);
 
+  // Single-page apps (Vite / React / Next client bundles) ship a shell with
+  // one or two <img> tags; the photo paths live in the JS and CSS bundles.
+  // When the HTML gave us almost nothing, read the same-host bundles and
+  // pull every image URL out of them.
+  if (cands.size < 3) {
+    const bundleUrls: string[] = [];
+    for (const sc of tags(homeHtml, "script")) {
+      const u = resolveUrl(sc.src, site);
+      if (u && u.startsWith(origin) && bundleUrls.length < 4) bundleUrls.push(u);
+    }
+    for (const l of tags(homeHtml, "link")) {
+      if (!/\bstylesheet\b/i.test(l.rel ?? "")) continue;
+      const u = resolveUrl(l.href, site);
+      if (u && u.startsWith(origin) && bundleUrls.length < 6) bundleUrls.push(u);
+    }
+    const bundles = await Promise.all(bundleUrls.map((u) => fetchText(u, 3 * 1024 * 1024, "*/*")));
+    for (const [i, text] of bundles.entries()) {
+      if (!text) continue;
+      for (const m of text.matchAll(/(?:https?:\/\/[^\s"'`()<>\\]+|\/[A-Za-z0-9_\-./%]+)\.(?:jpe?g|png|webp|avif)(?:\?[^\s"'`()<>\\]*)?/gi)) {
+        const raw = m[0];
+        // Same host only: a bundle also references CDN logos, map tiles and vendor art.
+        if (/^(https?:)?\/\//i.test(raw) && !raw.startsWith(origin)) continue;
+        cands.set(
+          fullSizeUrl(resolveUrl(raw, site) ?? raw).toLowerCase(),
+          { url: fullSizeUrl(resolveUrl(raw, site) ?? raw), original: resolveUrl(raw, site) ?? raw, label: "", page: bundleUrls[i], priority: 1 }
+        );
+      }
+    }
+    // Drop the obvious non-photos the same way <img> candidates are screened.
+    for (const [k, c] of cands) {
+      if (NOT_PHOTO_HINT.test(c.url.split("/").pop() ?? "")) cands.delete(k);
+    }
+  }
+
   const ordered = [...cands.values()]
     .filter((c) => !haveUrl.has(c.url.toLowerCase()))
     .sort((a, b) => b.priority - a.priority)
@@ -366,10 +414,12 @@ async function scanPhotos(
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, m.bytes, { contentType: m.type });
     if (upErr) { errors.push(`${m.url}: ${upErr.message}`); continue; }
     const pagePath = new URL(m.page).pathname.replace(/\/$/, "") || "/";
+    const fromBundle = /\.(js|css)$/i.test(pagePath);
+    const fileStem = (m.url.split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "").replace(/-[a-z0-9]{6,}$/i, "").replace(/[-_]+/g, " ").trim();
     const { error } = await supabase.from("brand_assets").insert({
       client_id: clientId,
       kind: "photo",
-      label: m.label || `Photo from ${pagePath === "/" ? "the home page" : pagePath}`,
+      label: m.label || (fromBundle && fileStem ? fileStem.charAt(0).toUpperCase() + fileStem.slice(1) : `Photo from ${pagePath === "/" ? "the home page" : pagePath}`),
       source: "website_scan",
       storage_path: path,
       url: m.url,
