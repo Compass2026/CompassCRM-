@@ -75,8 +75,20 @@ export default async function OverviewPage({
               <Input id="dba" name="dba" defaultValue={client.dba ?? ""} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="industry">Industry / vertical</Label>
+              <Label htmlFor="industry">Industry</Label>
               <Input id="industry" name="industry" defaultValue={client.industry ?? ""} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="vertical">Vertical (slug)</Label>
+              <Input id="vertical" name="vertical" defaultValue={client.vertical ?? ""} placeholder="roofing" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="business_type">Business type</Label>
+              <select id="business_type" name="business_type" defaultValue={client.business_type ?? ""} className={`${selectClass} w-full`}>
+                <option value="">unset</option>
+                <option value="service_area">service area</option>
+                <option value="storefront">storefront</option>
+              </select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="website_url">Website</Label>

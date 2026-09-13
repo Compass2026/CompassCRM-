@@ -23,21 +23,64 @@ function num(form: FormData, key: string): number | null {
 }
 
 // ── Clients ────────────────────────────────────────────────────────────────
+// The vertical is a slug (`interior_design`, `roofing`): the worker keys the
+// schema.org type, the citation list and the industry pulse off it.
+function verticalSlug(form: FormData): string | null {
+  const v = str(form, "vertical");
+  if (!v) return null;
+  const slug = v
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || null;
+}
+
+function businessType(form: FormData): Enums["business_type"] | null {
+  const v = str(form, "business_type");
+  return v === "storefront" || v === "service_area" ? v : null;
+}
+
+// The intake. Everything the Foundation worker reads on its first run is
+// captured here so a new client never stalls on a blank field: the vertical
+// and business type drive the brand board and schema, city / state drive
+// DataForSEO locations and the GBP lookup, phone drives NAP checks. An
+// existing site the client keeps is recorded as a client-controlled `sites`
+// row up front, so the audit files a fix list for Tom to blend rather than a
+// punch list, and the Website build lands on a side branch of nothing.
 export async function createClientAction(form: FormData) {
   const supabase = await createClient();
+  const websiteUrl = str(form, "website_url");
   const { data, error } = await supabase
     .from("clients")
     .insert({
       name: str(form, "name") ?? "Unnamed client",
       dba: str(form, "dba"),
       industry: str(form, "industry"),
-      website_url: str(form, "website_url"),
+      vertical: verticalSlug(form),
+      business_type: businessType(form),
+      website_url: websiteUrl,
       phone: str(form, "phone"),
+      city: str(form, "city"),
+      state: str(form, "state"),
       service_area: str(form, "service_area"),
     })
     .select("id")
     .single();
   if (error) throw new Error(error.message);
+
+  if (form.get("existing_site") === "on" && websiteUrl) {
+    const { error: siteError } = await supabase.from("sites").insert({
+      client_id: data.id,
+      url: websiteUrl,
+      stack: "other",
+      controlled_by_compass: false,
+    });
+    if (siteError) throw new Error(siteError.message);
+  }
+
   revalidatePath("/clients");
   redirect(`/clients/${data.id}`);
 }
@@ -50,6 +93,8 @@ export async function updateClientAction(clientId: string, form: FormData) {
       name: str(form, "name") ?? undefined,
       dba: str(form, "dba"),
       industry: str(form, "industry"),
+      vertical: verticalSlug(form),
+      business_type: businessType(form),
       website_url: str(form, "website_url"),
       phone: str(form, "phone"),
       address_line1: str(form, "address_line1"),
