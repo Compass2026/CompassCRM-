@@ -298,6 +298,19 @@ commits through GitHub's Git Data API. Two rules it enforces:
 `GITHUB_TOKEN` the function returns 500 and the stage blocks with a WAITING
 task naming the secret.
 
+**Vercel, same function, last and best-effort.** With `VERCEL_TOKEN` in
+Vault (`VERCEL_TEAM_ID` optional; defaults to the compassmarketin team),
+`site-push` ensures a Vercel project linked to the repo (framework Astro;
+named `<slug>`, or `<slug>-astro` for a `compass-astro` side branch so it
+never collides with an existing site's project), starts a production
+deployment of the branch it pushed, and records `sites.vercel_project` /
+`staging_url` (`https://<project>.vercel.app`). A Vercel failure never
+undoes a successful push — the response's `vercel.status` is `created`,
+`deployed`, `skipped` (no token) or `failed` (with the API error). Body
+`{client_id, deploy: true}` with no files redeploys the current head without
+a commit — the retry, and Tom's manual redeploy. The Vercel GitHub App must
+be able to see the client repos (Compass2026 account → all repositories).
+
 **The Routine's environment needs Full network access** so the worker can
 fetch client websites and listings directly (the Default allowlist blocks
 them). Full access does *not* open GitHub — see above.
