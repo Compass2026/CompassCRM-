@@ -85,6 +85,16 @@ export default async function ReportsPage({
           map_index?: number;
           note?: string;
         } | null;
+        const summary = cycle.summary as {
+          wins?: string[];
+          next_month?: string[];
+          gsc?: { clicks?: number; impressions?: number; prev?: { clicks?: number; impressions?: number } };
+          ranks?: { tracked?: number; up?: number; down?: number; top3?: number; top10?: number };
+          backlinks?: { referring_domains?: number; prev?: number };
+          gbp?: { rating?: number; reviews?: number; prev_reviews?: number };
+        } | null;
+        const delta = (now?: number, prev?: number) =>
+          now == null || prev == null ? "" : ` (${now - prev >= 0 ? "+" : ""}${now - prev})`;
         return (
           <Card key={cycle.id}>
             <CardHeader className="pb-2">
@@ -118,6 +128,50 @@ export default async function ReportsPage({
                   index {rank.map_index ?? "—"}
                   {rank.note ? ` · ${rank.note}` : ""}
                 </p>
+              )}
+              {summary && (
+                <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+                  <p className="text-muted-foreground">
+                    {summary.ranks && (
+                      <>
+                        Ranks: {summary.ranks.up ?? 0} up · {summary.ranks.down ?? 0} down · top 3 {summary.ranks.top3 ?? 0} · top 10 {summary.ranks.top10 ?? 0}
+                        {" · "}
+                      </>
+                    )}
+                    {summary.gsc && (
+                      <>
+                        Search Console: {summary.gsc.clicks ?? "—"} clicks{delta(summary.gsc.clicks, summary.gsc.prev?.clicks)} · {summary.gsc.impressions ?? "—"} impressions{delta(summary.gsc.impressions, summary.gsc.prev?.impressions)}
+                        {" · "}
+                      </>
+                    )}
+                    {summary.backlinks && (
+                      <>
+                        {summary.backlinks.referring_domains ?? "—"} referring domains{delta(summary.backlinks.referring_domains, summary.backlinks.prev)}
+                        {" · "}
+                      </>
+                    )}
+                    {summary.gbp && (
+                      <>
+                        GBP {summary.gbp.rating ?? "—"}★ {summary.gbp.reviews ?? "—"} reviews{delta(summary.gbp.reviews, summary.gbp.prev_reviews)}
+                      </>
+                    )}
+                  </p>
+                  {summary.wins && summary.wins.length > 0 && (
+                    <ul className="list-disc pl-4">
+                      {summary.wins.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {summary.next_month && summary.next_month.length > 0 && (
+                    <p className="text-muted-foreground">Next: {summary.next_month.join(" · ")}</p>
+                  )}
+                  {cycle.report_url && (
+                    <a href={cycle.report_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                      Monthly report (Drive)
+                    </a>
+                  )}
+                </div>
               )}
 
               <ul className="space-y-1">

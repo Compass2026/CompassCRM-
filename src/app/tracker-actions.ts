@@ -161,7 +161,7 @@ export async function startCycleAction(clientId: string) {
   const [{ data: templates }, { data: enrollments }] = await Promise.all([
     supabase
       .from("task_templates")
-      .select("title, default_owner, department, sort_order, pipelines!inner(is_recurring)")
+      .select("title, default_owner, department, sort_order, playbook_step, autonomy_level, key, pipelines!inner(is_recurring)")
       .eq("pipelines.is_recurring", true)
       .order("sort_order"),
     supabase
@@ -179,6 +179,9 @@ export async function startCycleAction(clientId: string) {
       monthly_cycle_id: cycle.id,
       title: t.title,
       owner: t.default_owner,
+      playbook_step: t.playbook_step,
+      autonomy_level: t.autonomy_level,
+      key: t.key,
     }));
   if (tasks.length > 0) {
     const { error } = await supabase.from("tasks").insert(tasks);

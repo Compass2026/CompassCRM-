@@ -363,6 +363,37 @@ one free).
 - Existing clients are enrolled by hand (a data step, not the migration);
   Logic Solar's audit was completed in August and is left as is.
 
+## Reporting worker (Sept 13 2026)
+
+Migration 0024 makes the monthly Reporting cycle worker-run (Playbooks 5 and
+6). The month has three beats on the 1st, all pg_cron: 06:00 UTC
+`create_monthly_cycles()` opens a cycle and its keyed tasks per active
+client enrolled in Reporting; 07:00 / 07:30 the BrightLocal and GSC syncs;
+09:00 `fire_monthly_reporting()` fires the worker once per open cycle. A
+cycle started by hand on the Reports tab fires at once (insert trigger; the
+cron batch is marked with `compass.cycle_batch` so it does not double-fire).
+
+- **PB6 first:** one `industry_pulse` row per vertical per period (unique
+  index; the insert is the claim), rising queries, SERP changes, competitor
+  moves and news for that vertical, `affected_client_ids` accumulated.
+- **PB5:** ranks, City Index, grid, Search Console, alerts, activity against
+  the plan, backlinks and GBP, this period vs the prior one, all from the
+  CRM plus two DataForSEO calls; `monthly_cycles.summary` carries the
+  figures, `rank_summary` the Reports-tab shape, `report_url` the Drive doc
+  (`Monthly Report — <Client> — <Month YYYY>` in `05 Reports`, also a
+  `deliverables` row). Missing sources are lines in the report, never a
+  block.
+- **Nothing is sent.** The worker closes `monthly_report`, `pulse` and the
+  activity tasks the CRM can prove, writes the link and headline deltas into
+  the new TOM task `report_send`, and leaves the cycle `open`. Tom sends the
+  report and closes the cycle.
+- The worker claims the cycle's `monthly_report` task (cycles carry no
+  `started_at`); the daily sweep picks up cycles the 09:00 fire missed.
+- Cycles exist only for `active` clients enrolled in Reporting, which is
+  what convergence does when every launch pipeline completes. To start
+  monthly reporting for a client before that, set the client `active` and
+  enroll Reporting on the Plan tab.
+
 ## Provisioning (Sept 11 2026)
 
 Build-order step 4. `supabase/functions/client-provision` creates the client's

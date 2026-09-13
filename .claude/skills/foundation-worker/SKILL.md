@@ -1,6 +1,6 @@
 ---
 name: foundation-worker
-description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research), a Website "Build to 70%" stage or an SEO "Audit & Adjust" stage, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
+description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research), a Website "Build to 70%" stage, an SEO "Audit & Adjust" stage or an open monthly Reporting cycle, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
 ---
 
 # Foundation worker
@@ -34,10 +34,11 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   `client_stages.started_at` first. Invoked by hand with a client name, work
   that client only.
 - **Order within a client:** the open Foundation stage, then Website › Build
-  to 70%, then SEO › Audit & Adjust. When Foundation completes, Website and
-  SEO activate together and fire two runs; each session claims the first
-  stage in that order that is not already claimed, so the two runs work the
-  two stages side by side instead of colliding.
+  to 70%, then SEO › Audit & Adjust, then the open monthly Reporting cycle.
+  When Foundation completes, Website and SEO activate together and fire two
+  runs; each session claims the first stage in that order that is not
+  already claimed, so the two runs work the two stages side by side instead
+  of colliding.
 
 ## 1. Find work
 
@@ -94,6 +95,30 @@ where cp.status = 'active' and cs.status not in ('complete','skipped')
 
 The later SEO stages (GBP, Local Citations, Backlink Foundation, Tracking
 Setup) are not yours yet. Leave them alone.
+
+And the **monthly Reporting cycle**: an open cycle whose report task is not
+done. The cycle is the unit of work, and its `monthly_report` task is what
+you claim (cycles carry no `started_at`):
+
+```sql
+select c.name, c.id as client_id, c.vertical, mc.id as cycle_id, mc.period, t.id as report_task_id, t.status, t.notes
+from monthly_cycles mc
+join clients c on c.id = mc.client_id
+join tasks t on t.monthly_cycle_id = mc.id and t.key = 'monthly_report'
+where mc.status = 'open' and t.status <> 'done'
+  and c.status in ('launching','active')
+order by mc.period, c.name;
+```
+
+```sql
+update tasks
+set status = 'in_progress',
+    notes = coalesce(notes || E'\n', '') || 'worker: claimed ' || now()::text
+where id = '<report_task_id>'
+  and not (status = 'in_progress'
+           and coalesce(substring(notes from 'worker: claimed ([0-9:. +-]+)')::timestamptz, 'epoch') > now() - interval '3 hours')
+returning id;
+```
 
 Runs are started by the CRM (`worker_fires` records why — a client created, a
 stage completed, Website activated, a stage reopened) and by a daily sweep.
@@ -551,6 +576,108 @@ served / missing, findings by severity, the report URL. Do not touch GBP
 Setup or anything after it; the SEO pipeline stays open, so no `Review SEO`
 task is raised yet — Tom reads the audit from the Foundation tab and the
 Drive doc.
+
+### Reporting — Industry Pulse (PB6) and Monthly Refresh & Report (PB5)
+
+Runs for an open `monthly_cycles` row (the CRM opens one per active client
+on the 1st and fires you at 09:00 UTC, after the BrightLocal and GSC syncs;
+a cycle started by hand on the Reports tab fires at once). `period` is the
+first of the month being reported on — the cycle opened on Oct 1 reports
+September. Everything below is **read from the CRM and DataForSEO** and
+**written to the CRM and Drive**; nothing is sent to the client. Sending is
+Tom's `report_send` task.
+
+**Pulse first (PB6).** One `industry_pulse` row per `clients.vertical` per
+period; it is unique on `(vertical, period)`, so insert it before doing
+anything else and treat a unique violation as "another session did it,
+read theirs":
+
+```sql
+insert into industry_pulse (vertical, period, rising_queries, serp_changes, competitor_moves, news_items, affected_client_ids)
+values ('<vertical>', '<period>', '[]', '[]', '[]', '[]', array['<client_id>']::uuid[])
+on conflict (vertical, period) do update set affected_client_ids = array(select distinct unnest(industry_pulse.affected_client_ids || excluded.affected_client_ids))
+returning id, (xmax = 0) as inserted;
+```
+
+`inserted = true` → fill it in: `kw_data_google_trends_explore` with the
+vertical's 3–5 head terms (`time_range = 'past_90_days'`, `location_name =
+'United States'`, `item_types = ['google_trends_queries_list']`, one
+keyword per call) for rising queries; `serp_organic_live_advanced` on the
+vertical's two head terms at the client's city for SERP feature changes (an
+AI overview, a new local pack shape) and the domains newly in the top 5
+(`competitor_moves`); `WebSearch` `"<vertical>" news <month year>` and
+`content_analysis_search` (`keyword` = the vertical's head term,
+`page_type = ['news']`, `limit = 10`) for `news_items` — each `{title, url,
+date, why_it_matters}`. Update the row. `inserted = false` → use the row as
+it is. Budget: ≤ 5 trends calls, ≤ 2 SERP calls, 1 content-analysis call
+per vertical per period.
+
+**Refresh (PB5).** Compare the report period with the one before it,
+everything from the CRM first:
+
+- **Ranks:** `rank_snapshots` joined to `keywords` (`is_tracked`) and
+  `locations`, latest `recorded_at` in the period vs latest in the prior
+  period, per `result_type`: keywords up / down / unchanged, top-3 and
+  top-10 counts, the five biggest movers each way. `location_index` rows for
+  the two periods give the City Index per location.
+- **Grid:** `grid_snapshots` per `grid_configs` — `avg_map_rank` and
+  `share_of_voice`, this period vs prior.
+- **Search Console:** `gsc_snapshots` — clicks, impressions, CTR, average
+  position summed / averaged over the period vs prior; top 10 queries and
+  pages by clicks; queries that gained the most impressions.
+- **Alerts:** `alerts` triggered in the period, acknowledged or not.
+- **Activity:** `content_posts` published in the period, `social_posts`
+  published in the period, GBP posts (count the `gbp_posts` task's notes if
+  Tom recorded a number, else 0), against `plans.gbp_posts_per_month` /
+  `blog_posts_per_month` / `social_posts_per_month`.
+- **Off-page:** `backlinks_timeseries_summary` (bare host, `date_from` = the
+  first of the prior period, `group_range = 'month'`): referring domains and
+  backlinks, this month vs last. One call.
+- **GBP:** `business_data_business_listings_search` as in the audit — rating
+  and review count now; the prior figure comes from the previous cycle's
+  `summary.gbp`, if any.
+
+A source with no data for the period is a line in the report ("No rank
+snapshots this period — BrightLocal reports not set up"), never a blocker.
+A client with nothing at all (no snapshots, no GSC, no activity) still gets
+a report; it says so.
+
+**Write.** `monthly_cycles.summary`:
+
+```json
+{"period": "<yyyy-mm>", "ranks": {"tracked": n, "up": n, "down": n, "flat": n, "top3": n, "top10": n, "prev_top3": n, "prev_top10": n, "movers_up": [{"keyword","city","from","to"}], "movers_down": [...]},
+ "city_index": [{"location","organic","map","prev_organic","prev_map"}],
+ "grid": [{"location","keyword","avg_map_rank","prev","share_of_voice"}],
+ "gsc": {"clicks": n, "impressions": n, "ctr": n, "position": n, "prev": {...}, "top_queries": [...], "top_pages": [...]},
+ "activity": {"blog": n, "blog_plan": n, "social": n, "social_plan": n, "gbp_posts": n, "gbp_plan": n},
+ "backlinks": {"referring_domains": n, "prev": n, "backlinks": n},
+ "gbp": {"rating": n, "reviews": n, "prev_reviews": n},
+ "alerts": n,
+ "wins": ["<3 one-liners>"], "next_month": ["<3 one-liners>"],
+ "pulse_id": "<industry_pulse id>"}
+```
+
+and `monthly_cycles.rank_summary` = `{"organic_index": <avg City Index
+organic>, "map_index": <avg map>, "note": "<one line>"}` (the Reports tab
+reads that shape). Then the report: `Monthly Report — <Client> — <Month
+YYYY>` to Drive `05 Reports`, in this order: three wins, the numbers
+(ranks, City Index, Search Console, GBP, backlinks) each with the
+month-over-month delta, activity against plan, what the industry did
+(from the pulse, two or three items that matter to *this* client), next
+month's three moves. Plain language, no jargon, no internal ids; the
+client's name, never "the client". Store the link on the cycle
+(`report_url`) and as `deliverables (client_id, monthly_cycle_id, label,
+url, type)` = `('…', '…', 'Monthly Report <yyyy-mm>', '<url>', 'report')`.
+
+**Close.** Tasks on the cycle by key: `monthly_report` and `pulse` (done);
+`rank_snapshot` only if a snapshot landed in the period;
+`content_published` / `social_published` only if the CRM shows the plan's
+count met, else leave them open with a note saying `n of plan`. `gbp_posts`,
+`backlinks_new`, `paid_ads_review`, `report_send` are Tom's; leave them.
+Put the report URL and the headline deltas in the `report_send` task's
+`notes` so Tom has them where he works. Do **not** set the cycle
+`complete` — Tom closes it once the report is sent. Set the claimed task's
+`notes` to what you did (replace the claim line).
 
 ## 6. End of run
 

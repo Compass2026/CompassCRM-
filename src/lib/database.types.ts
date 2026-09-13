@@ -1409,6 +1409,7 @@ export type Database = {
           notes: string | null
           period: string
           rank_summary: Json | null
+          summary: Json | null
           report_url: string | null
           status: Database["public"]["Enums"]["cycle_status"]
         }
@@ -1419,6 +1420,7 @@ export type Database = {
           notes?: string | null
           period: string
           rank_summary?: Json | null
+          summary?: Json | null
           report_url?: string | null
           status?: Database["public"]["Enums"]["cycle_status"]
         }
@@ -1429,6 +1431,7 @@ export type Database = {
           notes?: string | null
           period?: string
           rank_summary?: Json | null
+          summary?: Json | null
           report_url?: string | null
           status?: Database["public"]["Enums"]["cycle_status"]
         }
