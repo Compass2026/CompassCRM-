@@ -213,10 +213,15 @@ happens once per pipeline instead: `handle_pipeline_review` raises a single
 not a gate, so convergence (client → `active`, Reporting enrolled) and the
 monthly cycle are unaffected.
 
-**Still manual / not built** (reconciliation.md build-order steps 8, 9): the
-intake form (the New client dialog captures name / industry / website / service
-area only — `vertical` and `business_type` are typed on the Overview tab), the
-autonomy filter on Tasks, and the brief generator.
+**Intake** (build-order step 8, Sept 13 2026): the New client dialog captures
+name, industry, `vertical` (slugged), `business_type`, phone, home city /
+state, service area, website, and an "the client keeps this website" flag
+that records a client-controlled `sites` row (`stack = 'other'`,
+`controlled_by_compass = false`) before any worker runs. The Overview tab
+edits vertical and business type too.
+
+**Still manual / not built** (build-order step 9): the autonomy filter on
+Tasks and the brief generator.
 
 ## Foundation worker (Sept 11 2026)
 
