@@ -367,12 +367,19 @@ the *content*, not the plumbing. Read its `README.md` first.
    ours** (Pensacola has a hand-built Next.js site there) — the build sits on
    the side branch for Tom to blend, and you say so in the evidence. Anything
    other than 200 is the GitHub error verbatim. Do not print the secrets.
-9. Put `branch_url` and `commit_url` from the response in the evidence.
+9. Put `branch_url` and `commit_url` from the response in the evidence. The
+   response also carries `vercel`: when `VERCEL_TOKEN` is in Vault it has
+   created or reused a Vercel project and started a production deployment,
+   and `sites.vercel_project` / `staging_url` are filled — put `staging_url`
+   in the evidence. `vercel.status = "skipped"` means the token is not set
+   (say so, leave the Vercel checklist task open for Tom); `"failed"` means
+   the push succeeded but the deployment did not — quote `vercel.detail` and
+   leave that task open.
 
-Close Build-to-70% tasks 1–7 (the Vercel project and staging URL are Tom's
-— note it), set the stage `complete`, and put the repo URL, the three gate
-scores and the placeholder count in the evidence. Do not touch Polish or
-Launch.
+Close Build-to-70% tasks 1–7 (the Vercel / staging item only if `vercel`
+came back `created` or `deployed`), set the stage `complete`, and put the
+repo URL, the staging URL, the three gate scores and the placeholder count in
+the evidence. Do not touch Polish or Launch.
 
 ## 6. End of run
 

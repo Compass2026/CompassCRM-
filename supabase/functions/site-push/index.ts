@@ -62,13 +62,16 @@ Deno.serve(async (req) => {
   }
 
   const body = await req.json().catch(() => null);
-  if (!body?.client_id || !Array.isArray(body.files) || !body.files.length) {
+  // deploy: true with no files re-deploys the current head on Vercel without
+  // committing anything — the retry path, and how Tom redeploys by hand.
+  const deployOnly: boolean = body?.deploy === true && !(Array.isArray(body.files) && body.files.length);
+  if (!body?.client_id || (!deployOnly && (!Array.isArray(body.files) || !body.files.length))) {
     return Response.json(
-      { error: "client_id and a non-empty files[] are required" },
+      { error: "client_id and a non-empty files[] are required (or deploy: true)" },
       { status: 400 }
     );
   }
-  const files = body.files as FileIn[];
+  const files = (body.files ?? []) as FileIn[];
   const deletes = (body.delete ?? []) as string[];
   const message: string = body.message ?? "Update site from Compass CRM";
   for (const f of files) {
@@ -123,9 +126,12 @@ Deno.serve(async (req) => {
     // created with POST /user/repos. Only a real org takes /orgs/{org}/repos.
     let createdRepo = false;
     let repoUrl: string;
+    let repoId: number | null = null; // GitHub's numeric id; Vercel deploys by it
     const head = await gh(`/repos/${owner}/${name}`);
     if (head.ok) {
-      repoUrl = (await head.json()).html_url;
+      const r = await head.json();
+      repoUrl = r.html_url;
+      repoId = r.id;
     } else if (head.status === 404) {
       const me = await gh(`/user`);
       if (!me.ok) throw fail("whoami", me, await me.text());
@@ -148,7 +154,9 @@ Deno.serve(async (req) => {
           text
         );
       }
-      repoUrl = (await create.json()).html_url;
+      const r = await create.json();
+      repoUrl = r.html_url;
+      repoId = r.id;
       createdRepo = true;
     } else {
       throw fail("repo lookup", head, await head.text());
@@ -188,6 +196,78 @@ Deno.serve(async (req) => {
     if (headInfo) {
       parentSha = headInfo.sha;
       baseTree = headInfo.tree;
+    }
+
+    // ── Vercel: a project linked to the repo, and a production deployment ──
+    // Best-effort and last: a Vercel failure never undoes a successful push.
+    // VERCEL_TOKEN in Vault turns it on; VERCEL_TEAM_ID overrides the team.
+    // The side branch gets its own project so it never collides with an
+    // existing site's project on the same repo.
+    const vercelStep = async (): Promise<Record<string, unknown>> => {
+      const vToken = await secret("VERCEL_TOKEN");
+      if (!vToken) return { status: "skipped", detail: "VERCEL_TOKEN not in Vault" };
+      const teamId = (await secret("VERCEL_TEAM_ID")) ?? "team_JxUWGz1PjUP4jOAqXQqy3YFN";
+      const project = branch === "main" ? name : `${name}-astro`;
+      const vc = (path: string, init: RequestInit = {}) =>
+        fetch(`https://api.vercel.com${path}${path.includes("?") ? "&" : "?"}teamId=${teamId}`, {
+          ...init,
+          headers: {
+            Authorization: `Bearer ${vToken}`,
+            ...(init.body ? { "Content-Type": "application/json" } : {}),
+          },
+        });
+      try {
+        let created = false;
+        const existing = await vc(`/v9/projects/${project}`);
+        if (existing.status === 404) {
+          const mk = await vc(`/v10/projects`, {
+            method: "POST",
+            body: JSON.stringify({
+              name: project,
+              framework: "astro",
+              gitRepository: { type: "github", repo: `${owner}/${name}` },
+            }),
+          });
+          if (!mk.ok) throw fail("vercel project create", mk, await mk.text());
+          created = true;
+        } else if (!existing.ok) {
+          throw fail("vercel project lookup", existing, await existing.text());
+        }
+        if (!repoId) throw new Error("no GitHub repo id for the deployment");
+        const dep = await vc(`/v13/deployments`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: project,
+            project,
+            target: "production",
+            gitSource: { type: "github", repoId, ref: branch },
+          }),
+        });
+        if (!dep.ok) throw fail("vercel deployment", dep, await dep.text());
+        const d = await dep.json();
+        const stagingUrl = `https://${project}.vercel.app`;
+        return {
+          status: created ? "created" : "deployed",
+          project,
+          staging_url: stagingUrl,
+          deployment_url: d.url ? `https://${d.url}` : null,
+          inspector_url: d.inspectorUrl ?? null,
+        };
+      } catch (e) {
+        return { status: "failed", detail: e instanceof Error ? e.message : String(e) };
+      }
+    };
+
+    if (deployOnly) {
+      const vercel = await vercelStep();
+      if (vercel.status === "created" || vercel.status === "deployed") {
+        await supabase
+          .from("sites")
+          .update({ vercel_project: vercel.project, staging_url: vercel.staging_url })
+          .eq("client_id", client.id);
+      }
+      return Response.json({ repo_url: repoUrl, branch, deploy_only: true, vercel },
+        { status: vercel.status === "failed" ? 502 : 200 });
     }
 
     // ── Empty repository: seed the first commit through the Contents API ──
@@ -299,6 +379,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    const vercel = await vercelStep();
+    if (vercel.status === "created" || vercel.status === "deployed") {
+      await supabase
+        .from("sites")
+        .update({ vercel_project: vercel.project, staging_url: vercel.staging_url })
+        .eq("client_id", client.id);
+    }
+
     return Response.json({
       repo_url: repoUrl,
       branch,
@@ -307,6 +395,7 @@ Deno.serve(async (req) => {
       files: files.length,
       deleted: baseTree ? deletes.length : 0,
       created_repo: createdRepo,
+      vercel,
       note:
         branch === "compass-astro"
           ? "main already carries a site that is not ours; the build is on compass-astro for Tom to blend."
