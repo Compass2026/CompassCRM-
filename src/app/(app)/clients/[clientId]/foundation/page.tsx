@@ -81,6 +81,7 @@ export default async function FoundationPage({
     { count: pageGroupCount },
     { data: site },
     { data: workerPipelines },
+    { data: brandAssets },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -152,7 +153,27 @@ export default async function FoundationPage({
       )
       .eq("client_id", clientId)
       .in("pipelines.key", ["website", "seo"]),
+    supabase
+      .from("brand_assets")
+      .select("id, kind, label, storage_path, url, mime_type, width, height, is_primary, sort_order")
+      .eq("client_id", clientId)
+      .in("kind", ["logo_primary", "logo_alt", "wordmark", "photo"])
+      .order("is_primary", { ascending: false })
+      .order("sort_order")
+      .order("created_at"),
   ]);
+
+  // Logo + photo strip: sign the private bucket paths once for the page.
+  const assetPaths = (brandAssets ?? []).map((a) => a.storage_path).filter((p): p is string => !!p);
+  const signedAssets = new Map<string, string>();
+  if (assetPaths.length) {
+    const { data: signed } = await supabase.storage.from("brand-assets").createSignedUrls(assetPaths, 60 * 60);
+    for (const row of signed ?? []) if (row.path && row.signedUrl) signedAssets.set(row.path, row.signedUrl);
+  }
+  const assetSrc = (a: { storage_path: string | null; url: string | null }) =>
+    a.storage_path ? (signedAssets.get(a.storage_path) ?? null) : a.url;
+  const logo = (brandAssets ?? []).find((a) => a.kind === "logo_primary") ?? (brandAssets ?? []).find((a) => a.kind === "wordmark" || a.kind === "logo_alt") ?? null;
+  const photos = (brandAssets ?? []).filter((a) => a.kind === "photo").slice(0, 8);
 
   const workerStage = (pipeline: "website" | "seo", stageName: string) => {
     const cp = (workerPipelines ?? []).find((p) => p.pipelines?.key === pipeline);
@@ -597,6 +618,35 @@ export default async function FoundationPage({
           </CardHeader>
           {board && (
             <CardContent className="grid gap-6 lg:grid-cols-2 text-sm">
+              {/* Logo + photos — what the scan and the worker actually pulled. */}
+              <div className="lg:col-span-2 flex gap-3 items-stretch overflow-x-auto pb-1">
+                <div className="shrink-0 w-40 h-28 rounded-lg border bg-white flex items-center justify-center p-3">
+                  {logo && assetSrc(logo) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={assetSrc(logo)!} alt={logo.label} className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground text-center">No logo yet</span>
+                  )}
+                </div>
+                {photos.map((p) => {
+                  const src = assetSrc(p);
+                  return src ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={p.id} src={src} alt={p.label} title={p.label} className="shrink-0 h-28 w-40 rounded-lg border object-cover" />
+                  ) : null;
+                })}
+                {photos.length === 0 && (
+                  <div className="shrink-0 h-28 px-4 rounded-lg border border-dashed flex items-center text-xs text-muted-foreground">
+                    No photos pulled yet — Brand Build files 6–12 from the site or the client&apos;s listings.
+                  </div>
+                )}
+                <Link
+                  href={`/clients/${clientId}/brand`}
+                  className="shrink-0 h-28 px-3 rounded-lg border flex items-center text-xs text-primary hover:underline"
+                >
+                  All assets →
+                </Link>
+              </div>
               <div className="space-y-4">
                 <div>
                   <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
