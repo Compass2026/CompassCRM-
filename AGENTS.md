@@ -435,6 +435,37 @@ are; Tom's tasks stay on his list.
 The six enrolled clients' open tasks were rewritten in place by 0025 (same
 rows, new titles / keys / owners); the first fire for each was sent by hand.
 
+## Website Polish and Launch (Sept 13 2026)
+
+Migration 0026 makes Website › **Polish & client review** and **Launch**
+worker stages, chained by fires (Build → Polish → Launch) with two of Tom's
+tasks as gates: `client_review` must be done before Launch is claimed, and
+`dns_records` before the domain can verify; closing either task fires the
+worker (`tasks_zz_fire_worker`). Discovery stays Tom's and never blocks.
+
+- **Polish.** The worker reads the pushed site back through `site-push`
+  `{read: true}` (the tree with text files inline — it still cannot clone),
+  works the punch list (the audit's findings as tasks on the stage, material
+  from the client's Drive `Media` folder placed and its `placeholders`
+  resolved, open placeholders left visible), writes the redirect map from
+  the old site's sitemap into `vercel.json`, rebuilds, gates, pushes only
+  the changed files, then runs Lighthouse on staging and stores the four
+  scores under `sites.quality.lighthouse`. `client_review` gets the staging
+  URL and what changed. Feedback: Tom adds tasks to Polish and sets it to
+  *Not started*, which fires a run.
+- **Launch.** `site-push` `{domain: "<host>"}` adds the domain and its
+  www / apex twin (308 to the primary) to the Vercel project and returns
+  the exact DNS records (A `@ → 76.76.21.21`, CNAME `www →
+  cname.vercel-dns.com`, TXT if asked) plus `status: verified | pending`;
+  the worker hands the records to Tom (`dns_records`), waits, verifies the
+  host serves the new site, checks every redirect, submits the sitemap
+  through `gsc-sync` `{submit_sitemap}` (the Search Console token the sync
+  already holds), records `sites.url` / `launched_at` /
+  `clients.launched_at` and files `Site Plan — <Client>`. A build on the
+  `compass-astro` side branch blocks Launch until Tom blends. Completing
+  Launch completes Website → `Review Website`, and with SEO complete the
+  client converges.
+
 ## Reporting worker (Sept 13 2026)
 
 Migration 0024 makes the monthly Reporting cycle worker-run (Playbooks 5 and
@@ -545,11 +576,12 @@ closed).
   `Compass2026/zz-sitepush-smoke` test repo (the token cannot).
 - **Reporting has not started.** Every client is still `launching` and none
   is enrolled in Reporting, so no monthly cycle exists; convergence waits on
-  the launch pipelines (SEO runs through on its own now; Website › Polish
-  and Launch are Tom's). To start monthly
+  the launch pipelines (SEO and Website run through on their own now; Tom's
+  gates are client review and the DNS records). To start monthly
   reports for a client now, set it `active` and enroll Reporting on the Plan
   tab — the 1st-of-month beats and the worker take it from there.
-- **Not built:** Website › Polish and Launch as worker stages; decision
-  recording on approve / veto and autonomy promotion; the client portal.
-  Applying GBP changes, directory submissions, outreach sending, GA4 and
-  the billable BrightLocal reports are Tom's tasks by design.
+- **Not built:** decision recording on approve / veto and autonomy
+  promotion; the client portal. Applying GBP changes, directory
+  submissions, outreach sending, GA4, the billable BrightLocal reports,
+  sending the staging link and adding DNS records are Tom's tasks by
+  design.
