@@ -1882,6 +1882,13 @@ export type Database = {
           staging_url: string | null
           url: string | null
           vercel_project: string | null
+          quality: Json | null
+          quality_checked_at: string | null
+          last_pushed_at: string | null
+          last_commit_url: string | null
+          branch: string | null
+          audit: Json | null
+          audit_checked_at: string | null
         }
         Insert: {
           client_id: string
@@ -1895,6 +1902,13 @@ export type Database = {
           staging_url?: string | null
           url?: string | null
           vercel_project?: string | null
+          quality?: Json | null
+          quality_checked_at?: string | null
+          last_pushed_at?: string | null
+          last_commit_url?: string | null
+          branch?: string | null
+          audit?: Json | null
+          audit_checked_at?: string | null
         }
         Update: {
           client_id?: string
@@ -1908,6 +1922,13 @@ export type Database = {
           staging_url?: string | null
           url?: string | null
           vercel_project?: string | null
+          quality?: Json | null
+          quality_checked_at?: string | null
+          last_pushed_at?: string | null
+          last_commit_url?: string | null
+          branch?: string | null
+          audit?: Json | null
+          audit_checked_at?: string | null
         }
         Relationships: [
           {

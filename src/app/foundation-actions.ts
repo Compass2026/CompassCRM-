@@ -409,3 +409,67 @@ export async function provisionClientAction(
   revalidatePath(`/clients/${clientId}`);
   return { ok: res.ok, message: parts.join(" ") || "Nothing to do." };
 }
+
+// ── Redeploy (Edge Function) ───────────────────────────────────────────────
+// site-push with { deploy: true } and no files: ensure the Vercel project and
+// start a production deployment of the branch it last pushed. No commit.
+export type RedeployState = { ok: boolean; message: string } | null;
+
+type VercelStep = {
+  status: "created" | "deployed" | "skipped" | "failed";
+  project?: string;
+  staging_url?: string;
+  detail?: string;
+};
+
+export async function redeploySiteAction(
+  clientId: string,
+  _prev: RedeployState,
+  _form: FormData
+): Promise<RedeployState> {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { ok: false, message: "Not signed in." };
+
+  let res: Response;
+  try {
+    res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/site-push`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ client_id: clientId, deploy: true }),
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not reach site-push.",
+    };
+  }
+
+  const payload = (await res.json().catch(() => null)) as
+    | { vercel?: VercelStep; branch?: string; error?: string }
+    | null;
+  if (!payload) return { ok: false, message: `Redeploy failed (${res.status}).` };
+  if (payload.error) return { ok: false, message: payload.error };
+
+  revalidatePath(`/clients/${clientId}/foundation`);
+  const v = payload.vercel;
+  if (!v) return { ok: res.ok, message: "No Vercel result returned." };
+  switch (v.status) {
+    case "created":
+    case "deployed":
+      return {
+        ok: true,
+        message: `Deployment started for ${payload.branch ?? "the pushed branch"} → ${v.staging_url ?? v.project ?? "Vercel"}. It is live in about a minute.`,
+      };
+    case "skipped":
+      return { ok: false, message: "VERCEL_TOKEN is not in Vault, so nothing was deployed." };
+    default:
+      return { ok: false, message: `Vercel: ${v.detail ?? "deployment failed."}` };
+  }
+}
