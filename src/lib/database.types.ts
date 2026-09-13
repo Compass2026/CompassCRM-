@@ -2433,6 +2433,8 @@ export type Database = {
       foundation_complete: { Args: { p_client_id: string }; Returns: boolean }
       get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
+      secret_present: { Args: { secret_name: string }; Returns: boolean }
+      set_secret: { Args: { secret_name: string; secret_value: string }; Returns: undefined }
       mark_past_due_subscriptions: { Args: never; Returns: undefined }
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }

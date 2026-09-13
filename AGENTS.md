@@ -501,9 +501,30 @@ Function change that:
   id is set), `gmail_draft` (drafts only; nothing is ever sent). Every op
   answers `done` / `skipped` (names the missing secret) / `failed`
   (Google's message); the worker turns the last two into Tom's task with
-  the detail. **Neither secret is set yet**: verified Sept 13 that with the
+  the detail. **Neither secret is set yet** (the Connect Google button mints
+  both; Tom has not pressed it): verified Sept 13 that with the
   GSC token alone every op fails with Google's "insufficient authentication
   scopes", so the tasks fall back to Tom exactly as before.
+- **Connect Google button** (Settings › Google hands, Sept 13 2026): the
+  `google-connect` Edge Function (deployed `verify_jwt = false`; Google's
+  redirect carries no JWT, so an HMAC-signed ten-minute `state` is the auth
+  on the callback, and every other mode checks a team JWT) runs the OAuth
+  consent flow for the Compass Workspace account and stores the refresh
+  token straight into Vault as `GOOGLE_OPS_REFRESH_TOKEN` through
+  `set_secret()` (0032, service-role only); the account email and granted
+  scopes land on `app_settings.google_ops`. The same card lists the
+  Analytics accounts the token can see and stores the chosen one as
+  `GA4_ACCOUNT_ID`, and **Check access** matches every client against the
+  Business Profile locations the account manages (phone, name, website),
+  the Search Console property list (GSC token) and `clients.ga4_property`,
+  stored on `app_settings.google_access`. `secret_present(name)` (0032,
+  authenticated) gives the page yes / no status and never a value. The
+  OAuth app (`GSC_CLIENT_ID`) must list
+  `https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/google-connect`
+  as an authorized redirect URI, and the Google Cloud project needs the
+  Business Profile APIs (Account Management, Business Information, Q&A,
+  and the v4 API for posts — Business Profile API access is requested
+  once per project), the Analytics Admin API and the Gmail API enabled.
 - **Per client, Tom does one grant:** the Foundation task `google_access` —
   make the Compass Workspace account a manager on the Business Profile, an
   owner on Search Console, an editor on GA4.
