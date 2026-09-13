@@ -696,6 +696,9 @@ export type Database = {
           drive_folders: Json | null
           drive_root_url: string | null
           gsc_property: string | null
+          gbp_location: string | null
+          gbp_spec: Json | null
+          ga4_property: string | null
           id: string
           industry: string | null
           kickoff_at: string | null
@@ -722,6 +725,9 @@ export type Database = {
           drive_folders?: Json | null
           drive_root_url?: string | null
           gsc_property?: string | null
+          gbp_location?: string | null
+          gbp_spec?: Json | null
+          ga4_property?: string | null
           id?: string
           industry?: string | null
           kickoff_at?: string | null
@@ -748,6 +754,9 @@ export type Database = {
           drive_folders?: Json | null
           drive_root_url?: string | null
           gsc_property?: string | null
+          gbp_location?: string | null
+          gbp_spec?: Json | null
+          ga4_property?: string | null
           id?: string
           industry?: string | null
           kickoff_at?: string | null
@@ -1892,6 +1901,7 @@ export type Database = {
           branch: string | null
           audit: Json | null
           audit_checked_at: string | null
+          ga4_measurement_id: string | null
         }
         Insert: {
           client_id: string
@@ -1912,6 +1922,7 @@ export type Database = {
           branch?: string | null
           audit?: Json | null
           audit_checked_at?: string | null
+          ga4_measurement_id?: string | null
         }
         Update: {
           client_id?: string
@@ -1932,6 +1943,7 @@ export type Database = {
           branch?: string | null
           audit?: Json | null
           audit_checked_at?: string | null
+          ga4_measurement_id?: string | null
         }
         Relationships: [
           {
