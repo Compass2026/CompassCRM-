@@ -265,19 +265,41 @@ and assign roles (`primary`, `secondary`, `accent`, `neutral`, `background`,
 - `claims`: every factual claim the site or listings make. `status =
   'sourced'` with `source` = URL when you saw it in writing; `unverified`
   when it is asserted without evidence. Never invent a claim.
-- `brand_assets`: the scan files logos; add anything else it missed via the
-  function's import mode (AGENTS.md) rather than by hand.
-- **Drive:** write `Brand Board — <Client>` to `02 Brand`: palette table,
-  typography, positioning, CTA, voice, pillars, hard rules, claims by status.
-  Put its URL on `brand_boards.drive_doc_url`.
+- `brand_assets` — **required, not optional.** The stage is not complete
+  until the client has one `logo_primary` and at least **six** `photo`
+  assets, or the evidence says exactly why not. The scan files the logo,
+  the icon and the share image, and its photo pass walks the home page and
+  the gallery / portfolio / projects / about / services pages for real
+  photography (≥ 300 px, measured, alt text as label; body
+  `{"client_id": "...", "photos": true}` re-runs just that pass). Read back
+  `select kind, label, width, height, url from brand_assets where client_id
+  = ...` and judge it: delete nothing, but re-label a photo whose alt was a
+  file name, mark the real mark `is_primary` if the scan picked a
+  decorative image as the logo, and fill the gap with the import mode
+  (AGENTS.md) from the pages the scan cannot read (JavaScript galleries,
+  Business Profile photos, Facebook and Instagram posts — fetch the page,
+  find the `<img>` or `og:image` URLs, import by URL with `kind: "photo"`
+  and a descriptive label). Under six photos after that: add a line to the
+  client's `client_requests` asking for 8–12 job photos and say so in the
+  evidence. Write `imagery_style` from the photos you actually have (what
+  they show, light, framing, what is missing), not from the copy.
+- **Drive:** write `Brand Board — <Client>` to `02 Brand`: the logo and a
+  photo grid at the top (`create_file` with `contentMimeType: text/html`
+  and `<img src="…" width="300">` tags — or Markdown `![label](url)` —
+  using each asset's `brand_assets.url`, the public source URL, which Drive
+  embeds on conversion; the bucket is private), then the palette table, typography,
+  positioning, CTA, voice, pillars, hard rules, claims by status. Put its
+  URL on `brand_boards.drive_doc_url`.
 
 **No website is not a blocker.** Treat the client as new and scrub what is
 public: the Google Business Profile (name, categories, description, photos,
 hours, review count and rating, the phone and address it shows), Facebook and
 Instagram pages (logo, cover image, bio, recent posts and their voice), Yelp /
 BBB / Angi / Nextdoor listings, and any local press. `WebSearch` the name with
-the city, then fetch what comes back. Colours and a logo come from the GBP or
-Facebook imagery via the scan's import mode; the identity fields come from how
+the city, then fetch what comes back. Colours, the logo **and the photos** come from the GBP or
+Facebook imagery via the scan's import mode (same six-photo bar as above; the
+Business Profile's photo tab and the Facebook page's photo albums are the
+usual sources); the identity fields come from how
 the business describes itself across those listings, marked as such in
 `ai_guidance`. Log every fact as a claim with its listing URL as `source`.
 *Blocked* only when the search turns up no listing of any kind — then

@@ -8,6 +8,16 @@
 // Body: { client_id } for one client, or { all: true } for every client with
 // a website. Responds synchronously with a per-client summary.
 //
+// Photos — the scan also walks the home page and the gallery / portfolio /
+// projects / about / services pages linked from it, collects the real
+// photography (img + srcset + lazy-load attributes + inline background
+// images + lightbox links; WordPress thumbnail suffixes are stripped so the
+// full-size file is fetched), measures every file, drops icons, sprites,
+// logos and anything under 300 px, and files the best 12 as `photo` assets
+// with the alt text as label. Body { client_id, photos: true } runs only
+// that pass (for boards that already have colours and logos); the default
+// scan runs it whenever the client has fewer than 4 photos.
+//
 // Import mode — body { client_id, import: [...] , remove?: [...] } — skips the
 // scan and files specific assets instead, for sites the heuristic scan can't
 // read (JavaScript-rendered pages, logos that only exist on inner pages).
@@ -173,6 +183,211 @@ function googleFamilies(html: string): { family: string; url: string }[] {
   return out;
 }
 
+// ── image dimensions (from the bytes; no decoder) ────────────────────────
+function imageSize(bytes: Uint8Array, type: string): { width: number; height: number } | null {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  try {
+    if (type === "image/png" && bytes.length > 24) {
+      return { width: dv.getUint32(16), height: dv.getUint32(20) };
+    }
+    if (type === "image/gif" && bytes.length > 10) {
+      return { width: dv.getUint16(6, true), height: dv.getUint16(8, true) };
+    }
+    if (type === "image/webp" && bytes.length > 30) {
+      const chunk = String.fromCharCode(...bytes.slice(12, 16));
+      if (chunk === "VP8 ") return { width: dv.getUint16(26, true) & 0x3fff, height: dv.getUint16(28, true) & 0x3fff };
+      if (chunk === "VP8L") {
+        const b = bytes.slice(21, 25);
+        return { width: 1 + (((b[1] & 0x3f) << 8) | b[0]), height: 1 + (((b[3] & 0x0f) << 10) | (b[2] << 2) | ((b[1] & 0xc0) >> 6)) };
+      }
+      if (chunk === "VP8X") {
+        return { width: 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16)), height: 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16)) };
+      }
+    }
+    if (type === "image/jpeg") {
+      let i = 2;
+      while (i + 9 < bytes.length) {
+        if (bytes[i] !== 0xff) { i++; continue; }
+        const marker = bytes[i + 1];
+        if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+        const len = dv.getUint16(i + 2);
+        if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+          return { height: dv.getUint16(i + 5), width: dv.getUint16(i + 7) };
+        }
+        i += 2 + len;
+      }
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+// ── photos ───────────────────────────────────────────────────────────────
+const PHOTO_PAGE_HINT = /gallery|portfolio|project|our-work|work|before|after|photos?|about|team|services?|showcase|case-stud|testimonial|reviews?/i;
+// Tested against alt / class / id and the file name only, never the host.
+const NOT_PHOTO_HINT = /logo|icon|favicon|sprite|badge|avatar|gravatar|emoji|placeholder|pixel|tracking|spinner|loading|arrow|button|payment|cards?\b|visa|mastercard|paypal|facebook|instagram|yelp|\bbbb\b|angi|houzz|nextdoor|linkedin|twitter|youtube|tiktok|thumbtack|homeadvisor|award|seal|certif|\bstars?\b|rating|\bmaps?\b|\bqr\b|flag|divider|separator|pattern|texture|\bbg[-_]|background[-_]|blank|spacer|1x1|captcha|wp-emoji/i;
+
+// WordPress and most CDNs name resized copies `<name>-800x600.<ext>`; the
+// original sits at `<name>.<ext>`.
+function fullSizeUrl(u: string): string {
+  return u.replace(/-\d{2,4}x\d{2,4}(?=\.(?:jpe?g|png|webp|avif)(?:\?|$))/i, "")
+          .replace(/(\?|&)(w|h|width|height|resize|fit)=\d+[^&]*/gi, "$1")
+          .replace(/[?&]+$/, "");
+}
+
+function largestFromSrcset(srcset: string | undefined, base: string): string | null {
+  if (!srcset) return null;
+  let best: { url: string; w: number } | null = null;
+  for (const part of srcset.split(",")) {
+    const [u, d] = part.trim().split(/\s+/);
+    const url = resolveUrl(u, base);
+    if (!url) continue;
+    const w = d?.endsWith("w") ? Number(d.slice(0, -1)) : d?.endsWith("x") ? Number(d.slice(0, -1)) * 1000 : 0;
+    if (!best || w > best.w) best = { url, w };
+  }
+  return best?.url ?? null;
+}
+
+type PhotoCandidate = { url: string; original: string; label: string; page: string; priority: number };
+
+function photoCandidates(html: string, page: string, priority: number, out: Map<string, PhotoCandidate>) {
+  const add = (raw: string | undefined, label: string, hint: string) => {
+    let resolved = resolveUrl(raw?.replace(/&amp;/g, "&").replace(/&#0?38;/g, "&"), page);
+    if (!resolved) return;
+    // Image proxies (Next.js /_next/image?url=…, Gatsby, Cloudinary fetch, …):
+    // the source file is the full-size original, so use that.
+    try {
+      const u = new URL(resolved);
+      const inner = u.searchParams.get("url") ?? u.searchParams.get("src") ?? u.searchParams.get("image") ?? u.searchParams.get("img");
+      if (inner && /\.(jpe?g|png|webp|avif)(\?|&|$)/i.test(inner)) {
+        const r2 = resolveUrl(inner, page);
+        if (r2) resolved = r2;
+      }
+    } catch {
+      return;
+    }
+    if (!/\.(jpe?g|png|webp|avif)(\?|&|$)/i.test(resolved) && !/\/(wp-content|uploads|images?|media|photos?|gallery|assets)\//i.test(resolved)) return;
+    if (/\.(svg|gif|ico)(\?|&|$)/i.test(resolved)) return;
+    if (NOT_PHOTO_HINT.test(`${hint} ${resolved.split("/").pop() ?? ""}`)) return;
+    const url = fullSizeUrl(resolved);
+    const key = url.toLowerCase();
+    const clean = label.replace(/\s+/g, " ").trim();
+    const existing = out.get(key);
+    if (!existing) out.set(key, { url, original: resolved, label: clean, page, priority });
+    else if (!existing.label && clean) existing.label = clean;
+  };
+  for (const img of tags(html, "img")) {
+    const hint = `${img.alt ?? ""} ${img.class ?? ""} ${img.id ?? ""}`;
+    const w = Number(img.width ?? 0), h = Number(img.height ?? 0);
+    if ((w && w < 300) || (h && h < 300)) continue;
+    const label = (img.alt ?? img.title ?? "").replace(/\.(jpe?g|png|webp)$/i, "");
+    const isFileName = /^[\w-]+$/.test(label) && /[-_]\d|\d{3,}/.test(label);
+    const lbl = isFileName ? "" : label;
+    add(largestFromSrcset(img.srcset ?? img["data-srcset"], page) ?? img.src ?? img["data-src"] ?? img["data-lazy-src"] ?? img["data-original"], lbl, hint);
+  }
+  for (const src of tags(html, "source")) {
+    const best = largestFromSrcset(src.srcset ?? src["data-srcset"], page);
+    if (best) add(best, "", src.class ?? "");
+  }
+  for (const m of html.matchAll(/background(?:-image)?\s*:\s*url\((['"]?)([^'")]+)\1\)/gi)) add(m[2], "", "");
+  for (const m of html.matchAll(/data-(?:bg|background|src-large|full|large|zoom-image|image)\s*=\s*"([^"]+\.(?:jpe?g|png|webp)[^"]*)"/gi)) add(m[1], "", "");
+  for (const a of tags(html, "a")) {
+    if (a.href && /\.(jpe?g|png|webp)(\?|&|$)/i.test(a.href)) add(a.href, a.title ?? a["data-caption"] ?? a["aria-label"] ?? "", a.class ?? "");
+  }
+}
+
+async function scanPhotos(
+  supabase: SupabaseClient,
+  client: { id: string; name: string },
+  site: string,
+  homeHtml: string,
+  limit = 12
+) {
+  const clientId = client.id;
+  const { data: existing } = await supabase
+    .from("brand_assets").select("url, kind").eq("client_id", clientId);
+  const haveUrl = new Set((existing ?? []).map((a: { url: string | null }) => a.url ? fullSizeUrl(a.url).toLowerCase() : null).filter(Boolean));
+  const havePhotos = (existing ?? []).filter((a: { kind: string }) => a.kind === "photo").length;
+  const want = Math.max(0, limit - havePhotos);
+  if (want === 0) return { photos: 0, pages: 0, skipped: "already has photos", errors: [] as string[] };
+
+  // Pages: home plus same-host pages linked from it whose path or text hints at photography.
+  const origin = new URL(site).origin;
+  const pages = new Map<string, number>([[site, 1]]);
+  for (const m of homeHtml.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+    const attrs = parseAttrs(m[1]);
+    const href = resolveUrl(attrs.href, site);
+    if (!href || !href.startsWith(origin)) continue;
+    const u = new URL(href); u.hash = ""; u.search = "";
+    const text = m[2].replace(/<[^>]+>/g, " ");
+    if (!PHOTO_PAGE_HINT.test(`${u.pathname} ${text}`)) continue;
+    if (/\.(pdf|jpe?g|png|webp|zip)$/i.test(u.pathname)) continue;
+    const pr = /gallery|portfolio|project|our-work|work|before|after|photos?|showcase/i.test(u.pathname) ? 3 : 2;
+    if (!pages.has(u.toString()) && pages.size < 8) pages.set(u.toString(), pr);
+  }
+
+  const cands = new Map<string, PhotoCandidate>();
+  photoCandidates(homeHtml, site, 1, cands);
+  const fetched = await Promise.all(
+    [...pages.entries()].filter(([u]) => u !== site).map(async ([u, pr]) => ({ u, pr, html: await fetchText(u, HTML_MAX, "text/html,*/*;q=0.8") }))
+  );
+  for (const f of fetched) if (f.html) photoCandidates(f.html, f.u, f.pr, cands);
+
+  const ordered = [...cands.values()]
+    .filter((c) => !haveUrl.has(c.url.toLowerCase()))
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 40);
+
+  type Measured = PhotoCandidate & { bytes: Uint8Array; type: string; width: number; height: number };
+  const measured: Measured[] = [];
+  const errors: string[] = [];
+  for (const c of ordered) {
+    if (measured.length >= want * 2) break;
+    // The full-size guess first; the resized copy the page actually used if that 404s.
+    let img = await fetchImage(c.url);
+    if (!img && c.original !== c.url) img = await fetchImage(c.original);
+    if (!img || img.type === "image/svg+xml" || img.type === "image/gif") continue;
+    if (img.bytes.byteLength < 12_000) continue;
+    const dim = imageSize(img.bytes, img.type);
+    if (!dim) continue;
+    const { width, height } = dim;
+    if (Math.min(width, height) < 300 || Math.max(width, height) < 500) continue;
+    const ratio = Math.max(width, height) / Math.min(width, height);
+    if (ratio > 3.2) continue;
+    measured.push({ ...c, bytes: img.bytes, type: img.type, width, height });
+  }
+  measured.sort((a, b) => (b.priority * 1e6 + b.width * b.height) - (a.priority * 1e6 + a.width * a.height));
+
+  let count = 0;
+  for (const [i, m] of measured.slice(0, want).entries()) {
+    const ext = (m.type.split("/")[1] ?? "jpg").replace("jpeg", "jpg");
+    const path = `${clientId}/scan/photo-${Date.now()}-${i}.${ext}`;
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, m.bytes, { contentType: m.type });
+    if (upErr) { errors.push(`${m.url}: ${upErr.message}`); continue; }
+    const pagePath = new URL(m.page).pathname.replace(/\/$/, "") || "/";
+    const { error } = await supabase.from("brand_assets").insert({
+      client_id: clientId,
+      kind: "photo",
+      label: m.label || `Photo from ${pagePath === "/" ? "the home page" : pagePath}`,
+      source: "website_scan",
+      storage_path: path,
+      url: m.url,
+      file_name: path.split("/").pop() ?? null,
+      mime_type: m.type,
+      size_bytes: m.bytes.byteLength,
+      width: m.width,
+      height: m.height,
+      sort_order: 100 + havePhotos + i,
+      notes: `Pulled from ${m.page}`,
+      uploaded_by: "brand-scan",
+    });
+    if (error) errors.push(`${m.url}: ${error.message}`);
+    else count += 1;
+  }
+  return { photos: count, pages: pages.size, candidates: cands.size, measured: measured.length, errors };
+}
+
 // ── the scan ─────────────────────────────────────────────────────────────
 async function scanClient(
   supabase: SupabaseClient,
@@ -324,6 +539,7 @@ async function scanClient(
       assetErrors.push(`${cand.url}: ${upErr.message}`);
       continue;
     }
+    const dim = imageSize(img.bytes, img.type);
     const { error } = await supabase.from("brand_assets").insert({
       client_id: clientId,
       kind: cand.kind,
@@ -334,12 +550,17 @@ async function scanClient(
       file_name: path.split("/").pop() ?? null,
       mime_type: img.type,
       size_bytes: img.bytes.byteLength,
+      width: dim?.width ?? null,
+      height: dim?.height ?? null,
       notes: `Pulled from ${site}`,
       uploaded_by: "brand-scan",
     });
     if (error) assetErrors.push(`${cand.url}: ${error.message}`);
     else assetCount += 1;
   }
+
+  const havePhotoCount = (existingAssets ?? []).filter((a: { kind: string }) => a.kind === "photo").length;
+  const photos = havePhotoCount < 4 ? await scanPhotos(supabase, client, site, html) : { photos: 0, skipped: "already has photos" };
 
   return {
     client: client.name,
@@ -349,8 +570,22 @@ async function scanClient(
     fonts: fontRows.map((f) => f.family),
     assets: assetCount,
     candidates: candidates.map((c) => c.url),
+    photos,
     errors: assetErrors,
   };
+}
+
+async function photosOnly(
+  supabase: SupabaseClient,
+  client: { id: string; name: string; website_url: string | null },
+  limit: number
+) {
+  const site = client.website_url ? resolveUrl(client.website_url, "https://example.com") : null;
+  if (!site) return { client: client.name, ok: false, message: "no website_url" };
+  const html = await fetchText(site, HTML_MAX, "text/html,*/*;q=0.8");
+  if (!html) return { client: client.name, ok: false, message: `could not fetch ${site}` };
+  const photos = await scanPhotos(supabase, client, site, html, limit);
+  return { client: client.name, ok: true, site, ...photos };
 }
 
 type ImportItem = {
@@ -469,6 +704,8 @@ Deno.serve(async (req) => {
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   const results = [];
-  for (const c of clients ?? []) results.push(await scanClient(supabase, c));
+  for (const c of clients ?? []) {
+    results.push(body.photos ? await photosOnly(supabase, c, Number(body.limit) || 12) : await scanClient(supabase, c));
+  }
   return Response.json({ results });
 });

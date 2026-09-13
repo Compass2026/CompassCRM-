@@ -172,6 +172,20 @@ client. Migration `0009_brand_board.sql`.
   body '{"client_id": "..."}')` and read the result from `net._http_response`.
   WordPress sites leak the Gutenberg default palette (#ff6900, #cf2e2e,
   #fcb900, #0693e3, #9b51e0) — delete those and assign roles by hand.
+  **Photos** (Sept 13 2026): the same scan walks the home page plus the
+  gallery / portfolio / projects / about / services pages linked from it,
+  collects real photography (`img` + `srcset` + lazy-load attributes +
+  inline background images + lightbox links; WordPress `-WxH` thumbnail
+  suffixes stripped and Next.js `/_next/image?url=` proxies unwrapped so
+  the full-size file is fetched), measures every file from its bytes,
+  drops icons / sprites / logos / anything under 300 px or wider than
+  3.2:1, and files the best 12 as `photo` assets with the alt text as
+  label and `width` / `height` set. Body `{"client_id": "...", "photos":
+  true}` runs only that pass; the default scan runs it when the client has
+  fewer than four photos. Brand Build now requires one `logo_primary` and
+  six photos (or a client request and a line of evidence saying why not),
+  and the Foundation tab's brand board card shows the logo and a photo
+  strip so the pull is visible where Tom reads.
   For sites the scan can't read (JavaScript-rendered, logos only on inner
   pages) the same function has an **import mode**: body
   `{"client_id": "...", "import": [{"url", "kind", "label", "notes",
