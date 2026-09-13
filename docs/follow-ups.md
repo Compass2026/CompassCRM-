@@ -35,3 +35,8 @@ unblocks and what it costs.
 10. **Client portal** (Phase 5): read-only report, site and task views per
     client.
 11. **Auth mail via Resend** so magic links stop rate-limiting.
+12. **Brand board snapshot from the worker.** The Brand Build checklist item
+    "Publish the board snapshot to Documents" needs Storage write access the
+    worker session does not have, so it stays open on every new client. Add
+    a `brand-snapshot` mode to an Edge Function (the app's publish action
+    already renders the HTML) and let the worker call it.
