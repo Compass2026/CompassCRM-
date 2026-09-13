@@ -97,8 +97,9 @@ export default async function ClientsPage() {
                 <span>
                   The client keeps this website.
                   <span className="block text-xs text-muted-foreground">
-                    Compass does not control it: the audit becomes a fix list to blend, and the Astro
-                    build stays a proposal. Leave unchecked when there is no site or we will replace it.
+                    Compass does not control it: the SEO audit becomes a fix list to blend, and the
+                    Website pipeline is skipped. Leave unchecked when there is no site or we will
+                    replace it.
                   </span>
                 </span>
               </label>

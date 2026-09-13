@@ -79,6 +79,25 @@ export async function createClientAction(form: FormData) {
       controlled_by_compass: false,
     });
     if (siteError) throw new Error(siteError.message);
+
+    // The client keeps their site, so there is nothing for the Website
+    // pipeline to build: drop the enrollment the insert trigger just made
+    // (Tom, Sept 13 2026 — BHG Safety Partners got a proposal build it did
+    // not want). The SEO audit still covers the site. Enrolling Website
+    // later on the Plan tab is the way back if that changes.
+    const { data: websitePipeline } = await supabase
+      .from("pipelines")
+      .select("id")
+      .eq("key", "website")
+      .maybeSingle();
+    if (websitePipeline) {
+      const { error: dropError } = await supabase
+        .from("client_pipelines")
+        .delete()
+        .eq("client_id", data.id)
+        .eq("pipeline_id", websitePipeline.id);
+      if (dropError) throw new Error(dropError.message);
+    }
   }
 
   revalidatePath("/clients");
