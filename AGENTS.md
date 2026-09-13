@@ -187,9 +187,10 @@ What happens on its own when a client is created, and what a person still does.
 2. Enrollment in **Foundation**, which cannot be removed.
 3. Foundation's three stages, each with its playbook checklist — 22 tasks in
    total (9 brand / 6 taxonomy / 7 keywords).
-4. Enrollment in **Website**, parked `pending` behind Foundation (0018 —
-   every new client gets a site; drop the `clients_zz_website_enrollment`
-   trigger to change that policy).
+4. Enrollment in **Website** (0018) and **SEO** (0022), both parked
+   `pending` behind Foundation — every new client gets a site and an SEO
+   audit; drop the `clients_zz_website_enrollment` /
+   `clients_zz_seo_enrollment` trigger to change that policy.
 5. The insert fires the **Foundation worker** (below); Brand Build starts
    within a couple of minutes.
 
@@ -224,16 +225,17 @@ an LLM; instead a Claude Code **Routine** ("Compass Foundation worker") spawns
 a fresh session in this environment, and that session runs
 `.claude/skills/foundation-worker/SKILL.md`. **Postgres starts the runs**
 (0017, 0018): `fire_foundation_worker()` POSTs to the Routine's API trigger
-when a client is created, a Foundation stage completes, Website activates, or
-any Foundation / Website stage is set to `not_started` (a retry or a backfill); every fire is logged to
+when a client is created, a Foundation stage completes, Website or SEO
+activates, or any Foundation / Website / SEO stage is set to `not_started`
+(a retry or a backfill); every fire is logged to
 `worker_fires` with its reason and pg_net request id, debounced to one per
 client **per reason** per two minutes (0019 — a bulk reopen collapses, a stage
 completion never gets swallowed by the fire that started the run). The Routine's schedule is a **daily** sweep for
 anything the events missed. URL and bearer token live in Vault as
 `ROUTINE_FIRE_URL` / `ROUTINE_FIRE_TOKEN`; without them nothing fires and
 nothing breaks. The skill is the playbook —
-Brand Build, Service Taxonomy, Keyword Research, then Website › Build to 70% —
-and the CRM is its only channel: it reads open stages from Supabase, works
+Brand Build, Service Taxonomy, Keyword Research, then Website › Build to 70%
+and SEO › Audit & Adjust side by side — and the CRM is its only channel: it reads open stages from Supabase, works
 them through the DataForSEO / Google Drive / GitHub connectors, writes results
 back, closes checklist tasks, and records what it did in
 `client_stages.evidence`. Tom reads the Foundation tab; he never has to open
@@ -319,6 +321,38 @@ Pause or edit the Routine at claude.ai/code/routines; each run opens as a
 normal session there. The skill is versioned here and picked up on the next
 fire. `worker_fires` answers "why did a run start"; the run's transcript
 answers "what did it do"; `client_stages.evidence` is the durable record.
+
+## SEO audit stage (Sept 13 2026)
+
+Migration 0022 makes SEO › **Audit & Adjust** (Playbook 4a) a worker stage.
+New clients are enrolled in SEO at creation, parked behind Foundation like
+Website; when Foundation completes both activate and fire, and the two runs
+work Build to 70% and the audit side by side (the skill orders a client's
+open stages Foundation → Website → SEO and each session claims the first
+one free).
+
+- **Read-only on the site.** The audit inventories the live site (`sites.url`,
+  else `clients.website_url`, else the staging bones) through DataForSEO
+  on-page + Lighthouse, mirrors it and runs `scripts/site-quality-gate.mjs`
+  on the mirror so the client's current site gets the same SEO / AEO / GEO
+  scores as the build, maps every approved page group to the page that
+  serves it, pulls money-keyword positions, the backlink profile and the
+  GBP / NAP state.
+- **Outputs:** one `change_log` row per finding (`status = 'proposed'`,
+  severity in `after`), `SEO Audit — <Client>` in Drive `04 Website` recorded
+  as a `deliverables` row, the report on `sites.audit` /
+  `audit_checked_at`, and the stage evidence.
+- **Adjust is CRM-side only.** Fixes that live in the CRM (page-group
+  targets, keyword cities, sourced claims) are applied and their rows marked
+  `approved`. On a Compass-controlled site the high / medium findings become
+  tasks on Website › Polish & client review; on a client-controlled site the
+  fix list is the deliverable for Tom to blend. The PB4a.5 task is closed
+  flagged for review with a one-line recommendation.
+- **Stops after stage 1.** GBP Setup, Local Citations, Backlink Foundation
+  and Tracking Setup are still manual, so the SEO pipeline stays open and no
+  `Review SEO` task is raised by the audit alone.
+- Existing clients are enrolled by hand (a data step, not the migration);
+  Logic Solar's audit was completed in August and is left as is.
 
 ## Provisioning (Sept 11 2026)
 
