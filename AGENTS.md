@@ -73,6 +73,26 @@ and finishing in the background via `EdgeRuntime.waitUntil`:
 Both are idempotent: natural-key unique indexes on `rank_snapshots`,
 `grid_snapshots`, and `gsc_snapshots` make re-ingestion a no-op.
 
+- **`rank-sync`** (Sept 13 2026, migration 0033) — the rank source since
+  Tom chose weekly checks on 50 keywords per client through DataForSEO
+  instead of BrightLocal's billable Local Rank Tracker. Every Monday 06:00
+  UTC (pg_cron `rank-sync-weekly`) it runs each active / launching
+  client's tracked keywords through DataForSEO's live Google SERP endpoint
+  at the keyword's `city` (else the client's home city), desktop, depth
+  100, 100 tasks per call, and writes organic + map-pack positions to
+  `rank_snapshots` with `source = 'dataforseo'` (the client's site host or
+  business name identifies "us"), stamps `keywords.last_checked`, records a
+  `rank_runs` row per client with the DataForSEO cost in `error`, and
+  recomputes the City Index. A keyword city with no `locations` row gets
+  one (`<Client> — <City>`, not physical). Body `{client_id}` runs one
+  client. **Needs `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` in Vault** (the
+  API login and password from app.dataforseo.com/api-access); until then it
+  answers `skipped` and nothing breaks. About 400 checks a week ≈ $4 a
+  month. `normalize_tracked_keywords(client_id, 50)` keeps `is_tracked` on
+  exactly the top 50 (money, then priority, then volume) — run on every
+  client on Sept 13; nothing is deleted. BrightLocal's monthly sync still
+  runs and still reads the grids; its rank rows simply sit alongside.
+
 ## Playbook model (Sept 7 2026)
 
 `docs/reconciliation.md` reconciles the department pipelines with the delivery
@@ -632,9 +652,13 @@ closed).
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly
   sync. Get a production key before that runs out.
 - **Keyword priorities are set.** Keyword Research gave every client 6–10 P1
-  money keywords and a tracked list of 35–65; the City Index fills on the
-  next BrightLocal sync (1st of the month) or a `recompute_location_indexes`
-  call.
+  money keywords; the tracked list is 50 per client (Show Me Electrical 48
+  — it only has 48 keywords; a Keyword Research re-run tops it up) and
+  ranks come weekly from `rank-sync` once `DATAFORSEO_LOGIN` /
+  `DATAFORSEO_PASSWORD` are in Vault. Three service-area clients (Lucas,
+  Show Me Electrical, Ginger Huff) have no city-tagged keywords, so their
+  checks all run at the home city until Keyword Research is re-run with
+  the 50-keyword shape.
 - **GSC coverage is partial.** Ginger Huff, Logic Solar, Lucas Construction
   and Show Me Design sync. Show Me Electrical's property exists but Google
   has no data for it. Pensacola Equipment Rentals has no Search Console

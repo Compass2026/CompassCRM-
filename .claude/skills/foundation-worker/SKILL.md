@@ -359,8 +359,16 @@ volume × fit. Insert `money_keywords (client_id, keyword_id)` (thresholds
 default; the trigger sets `keywords.is_money`). Set `priority = 'p1'` on them —
 P1 drives the City Index.
 
-**Tracked list.** The top ~30 by opportunity: `is_tracked = true`, `priority =
-'p2'` unless already p1.
+**Tracked list — exactly 50 per client** (Tom, Sept 13 2026), checked
+weekly by the `rank-sync` Edge Function through DataForSEO (BrightLocal's
+rank tracker is no longer the source; the grids still are). Shape it:
+the money keywords (P1), then ~25 `<service> <city>` terms across the
+real service area (each with `city` set — that is the city the rank is
+checked in — and `service_id` linked), then long-tail and question terms
+to 50. Set `is_tracked = true`, `priority = 'p2'` unless already p1, and
+run `select normalize_tracked_keywords('<client_id>', 50)` at the end so
+the flag is on exactly the top 50 (money, then priority, then volume).
+A service-area business with no city-tagged keywords is not done.
 
 **Page groups.** One `home` (primary = the strongest brand/category term); one
 `service` per approved service (`primary_keyword_id` = its best term,
@@ -963,8 +971,13 @@ ready; the two BrightLocal reports and the Google verifications are Tom's.
 `src/data/us-cities.json`), `is_physical_location` = `business_type =
 'storefront'`, `gbp_place_id` from the audit's listing if it carried one,
 `is_active = true`. Never delete or rename an existing location. Ensure
-the tracked list has ≥ 20 keywords (`keywords.is_tracked`; Keyword Research
-set it — top up from the highest-volume active keywords if short). Ensure
+the tracked list is 50 keywords (`keywords.is_tracked`; Keyword Research
+set it — top up from DataForSEO ideas for the approved services and
+cities if short, then `normalize_tracked_keywords`). Ranks arrive every
+Monday from `rank-sync`; fire it once now for this client
+(`net.http_post` to `/functions/v1/rank-sync` with the cron headers and
+body `{"client_id": "..."}`) so the first snapshots exist before
+`first_sync` checks for them. Ensure
 one `grid_configs` row for the home location if none exists: `center_lat`
 / `center_lng` = the location, `grid_size = 7`, `spacing_miles` = 1 for a
 storefront, 2 for a service-area business, `keyword_ids` = the money
