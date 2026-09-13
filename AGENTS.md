@@ -272,7 +272,13 @@ activates, or any Foundation / Website / SEO stage is set to `not_started`
 (a retry or a backfill); every fire is logged to
 `worker_fires` with its reason and pg_net request id, debounced to one per
 client **per reason** per two minutes (0019 — a bulk reopen collapses, a stage
-completion never gets swallowed by the fire that started the run). The Routine's schedule is a **daily** sweep for
+completion never gets swallowed by the fire that started the run). The
+Routine API rate-limits fires (429 with a retry-after of a few minutes once
+about ten sessions start inside half an hour); `retry_failed_fires()` runs
+every 15 minutes (0027) and re-fires anything from the last day that got a
+429, a 5xx or no answer, up to three attempts, five per tick, unless a later
+fire for the same client and reason already succeeded. `worker_fires.retry_of`
+/ `attempt` record the chain. The Routine's schedule is a **daily** sweep for
 anything the events missed. URL and bearer token live in Vault as
 `ROUTINE_FIRE_URL` / `ROUTINE_FIRE_TOKEN`; without them nothing fires and
 nothing breaks. The skill is the playbook —
