@@ -1,6 +1,6 @@
 ---
 name: foundation-worker
-description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research) or a Website "Build to 70%" stage, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
+description: Unattended worker for the Compass CRM. Finds clients with open Foundation work (Brand Build → Service Taxonomy → Keyword Research), a Website "Build to 70%" stage or an SEO "Audit & Adjust" stage, does the next stage through the Supabase, DataForSEO, Google Drive and GitHub connectors, writes the results back into the CRM and closes the checklist. Started by the CRM itself (Postgres fires the "Compass Foundation worker" Routine when a client is created or a stage completes) plus a daily sweep; run by hand as /foundation-worker <client name> to work one client.
 ---
 
 # Foundation worker
@@ -33,6 +33,11 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   client works that client only; the daily sweep works up to three, oldest
   `client_stages.started_at` first. Invoked by hand with a client name, work
   that client only.
+- **Order within a client:** the open Foundation stage, then Website › Build
+  to 70%, then SEO › Audit & Adjust. When Foundation completes, Website and
+  SEO activate together and fire two runs; each session claims the first
+  stage in that order that is not already claimed, so the two runs work the
+  two stages side by side instead of colliding.
 
 ## 1. Find work
 
@@ -72,6 +77,24 @@ where cp.status = 'active' and cs.status not in ('complete','skipped')
   and foundation_complete(c.id);
 ```
 
+And SEO › **Audit & Adjust** under the same conditions (SEO enrollment
+`active`, Foundation `complete`):
+
+```sql
+select c.name, c.id as client_id, cs.id as client_stage_id, cs.status, cs.started_at
+from client_pipelines cp
+join pipelines p on p.id = cp.pipeline_id and p.key = 'seo'
+join clients c on c.id = cp.client_id
+join client_stages cs on cs.client_pipeline_id = cp.id
+join stages s on s.id = cs.stage_id and s.name = 'Audit & Adjust'
+where cp.status = 'active' and cs.status not in ('complete','skipped')
+  and c.status in ('launching','active')
+  and foundation_complete(c.id);
+```
+
+The later SEO stages (GBP, Local Citations, Backlink Foundation, Tracking
+Setup) are not yours yet. Leave them alone.
+
 Runs are started by the CRM (`worker_fires` records why — a client created, a
 stage completed, Website activated, a stage reopened) and by a daily sweep.
 **If a `<routine-fire-payload>` block names a client, work that client only**
@@ -98,7 +121,7 @@ returning id;
 No row back → another session holds it; skip. `check_violation` → the gate
 refused you; skip the client, write nothing.
 
-Nothing found → say "No Foundation work" and stop. That is a normal outcome.
+Nothing found → say "No worker stage open" and stop. That is a normal outcome.
 
 ## 2. Blocked
 
@@ -380,6 +403,154 @@ Close Build-to-70% tasks 1–7 (the Vercel / staging item only if `vercel`
 came back `created` or `deployed`), set the stage `complete`, and put the
 repo URL, the staging URL, the three gate scores and the placeholder count in
 the evidence. Do not touch Polish or Launch.
+
+### SEO — Audit & Adjust (PB4a)
+
+Runs only when Foundation is `complete` and the SEO enrollment is `active`.
+The audit measures the **site the client has today** against the approved
+taxonomy and keyword map, and writes a fix list the rest of the SEO pipeline
+and Tom's blend work start from. It is read-only on the site: nothing here
+edits a page.
+
+**Target.** `sites.url` for the client's site row, else
+`clients.website_url`. A client with neither but a `sites.staging_url` (the
+bones you built) is audited on staging and the evidence says so. None of the
+three → *Blocked*: `next_action` "No live site or staging URL to audit;
+record the site on the Website tab".
+
+**Budget.** DataForSEO is metered. Per client: at most 40 `on_page_instant_pages`
+calls, 2 `on_page_lighthouse` calls, 10 `serp_organic_live_advanced` calls,
+one `dataforseo_labs_google_ranked_keywords`, one `backlinks_summary`, one
+`backlinks_referring_domains`, one `backlinks_anchors`, one
+`business_data_business_listings_search`. Nothing on BrightLocal.
+
+**1. On-page (PB4a.1).** Inventory the site: `WebFetch` `/sitemap.xml`
+(follow a sitemap index) and take every URL on the site's host, up to 40,
+home and service / area pages first; no sitemap → home plus everything
+linked from its nav and footer. For each page call
+`mcp__Data_for_SEO__on_page_instant_pages` and record `url`, `status_code`,
+`title`, `meta description`, `h1` (count and text), `canonical`, `word
+count`, `schema types`, image count without alt, internal link count. Then
+map the **page groups**: for every `page_groups` row (home / service / city /
+hub) with `status = 'approved'`, find the page that serves it (by
+`target_url`, then by slug or title match) and check that its
+`primary_keyword` appears in the title, the H1 and the meta description.
+Record, per group: `served_by` (URL or null), `keyword_in_title`, `_in_h1`,
+`_in_meta`. Fill `page_groups.target_url` where it was null and you found
+the page. A group with no page is a **missing page** finding; two groups
+served by the same page is a **cannibalisation** finding; a page whose title
+or H1 carries none of the client's keywords is an **untargeted page**
+finding. Pull what the domain ranks for with
+`dataforseo_labs_google_ranked_keywords` (`target` = bare host,
+`location_name = 'United States'`, `limit = 100`) and, for each money
+keyword (`keywords.is_money`), the live position from
+`serp_organic_live_advanced` at the client's city location
+(`"<City>,<State>,United States"`, `depth = 20`): position, ranking URL,
+and the three domains above it. These positions go in the report, not in
+`rank_snapshots` (that table is BrightLocal's).
+
+**2. Technical (PB4a.2).** `on_page_lighthouse` on the home page and the
+strongest service page, `enable_javascript = true`: performance,
+accessibility, best-practices and SEO scores, LCP, CLS. Then check by
+`WebFetch` / `curl -sI`: `http://` → `https://` redirect, `www` / apex
+consistency (one 301 to the other), `/robots.txt` present and not blocking
+`/`, a sitemap referenced from it, a real 404 (`/compass-404-probe` returns
+404, not 200), a viewport meta on every page, mixed content on the home
+page. Then **run the quality gate on a mirror of the live site**, so the
+audit scores the client's site the same way the build was scored: from the
+CRM checkout,
+
+```bash
+mkdir -p /tmp/audit/dist
+# for each inventoried URL, path /a/b/ → /tmp/audit/dist/a/b/index.html
+curl -sL --max-time 20 "<url>" -o "/tmp/audit/dist/<path>/index.html"
+curl -sL --max-time 20 "<origin>/llms.txt" -o /tmp/audit/dist/llms.txt
+node scripts/site-quality-gate.mjs /tmp/audit/dist --phone "<phone>" --name "<business name>" --json > /tmp/audit/gate.json
+```
+
+A site that was not built from the Compass starter will fail some checks
+(no facts block, no FAQPage, no `llms.txt`); those are findings, not
+errors. Read `gate.json`: every entry in `failures` and `warnings` is a
+finding with its route.
+
+**3. Off-page (PB4a.3).** `backlinks_summary` (bare host): referring
+domains, backlinks, rank, broken pages, spam score.
+`backlinks_referring_domains` (`limit = 20`, ordered by rank desc) and
+`backlinks_anchors` (`limit = 20`) for the profile's shape: brand vs
+money-anchor share, toxic-looking domains. Citation state:
+`business_data_business_listings_search` with `title` = the client name and
+`location_coordinate` = the home city as `"<lat>,<lng>,25"` (lat / lng from
+the client's `locations` row, else the city's entry in
+`src/data/us-cities.json` — rows are `[city, state, lat, lng, population]`),
+`is_claimed` unset — record the GBP name, primary category, phone, address, rating,
+review count, and whether it is claimed. Compare the NAP with the CRM
+(`clients.phone`, `city`, `state`, `website_url`): each mismatch is a
+finding. `WebSearch` `"<name>" "<phone>"` and `"<name>" <city> reviews` to
+spot the top directory listings (Yelp, BBB, Facebook, Angi, Houzz,
+Nextdoor, industry directories) and note which carry a different phone,
+name or URL. This is a read; the citation build itself is stage 3.
+
+**4. Fix list and report (PB4a.4).** Every finding is one row in
+`change_log`:
+
+```sql
+insert into change_log (client_id, change_type, object_type, object_id, before, after, reasoning, evidence, status)
+values ('<client_id>', '<title|meta|h1|canonical|schema|redirect|robots|sitemap|content|internal_link|missing_page|cannibalisation|speed|nap|backlink>',
+        '<page|page_group|site|listing>', <page_group id or null>,
+        '<jsonb: what is there now>', '<jsonb: what it should be>',
+        '<one sentence: why, citing the keyword map or the gate check>',
+        '<url or listing name>', 'proposed');
+```
+
+`before` / `after` are small objects (`{"title": "..."}`); for a missing
+page `after` carries the page group and its primary keyword. Severity goes
+in `after` as `"severity": "high" | "medium" | "low"` — high: a money
+keyword with no page, a broken redirect chain, `noindex` or a blocked
+robots, a NAP mismatch on the GBP; medium: titles / H1s / metas off the
+keyword map, missing schema, thin pages under 300 words, no sitemap;
+low: everything else the gate warns about.
+
+Write `SEO Audit — <Client>` to Drive `04 Website` (Markdown → Google Doc):
+scores (gate SEO / AEO / GEO and Lighthouse), the page inventory table, the
+page-group map (group → page → keyword in title / H1 / meta), money keyword
+positions, off-page summary, then the fix list grouped by severity with the
+`after` for each. Record it: `insert into deliverables (client_id,
+client_stage_id, label, url, type) values (…, 'SEO Audit', '<webViewLink>',
+'drive')`. Store the report on the site row:
+
+```sql
+update sites set audit = '<json>'::jsonb, audit_checked_at = now() where client_id = '<client_id>';
+```
+
+with `audit` = `{"target": "<url>", "gate": <gate.json>, "lighthouse":
+{"home": {...}, "service": {...}}, "pages": <n inventoried>, "page_groups":
+{"total": n, "served": n, "missing": n}, "findings": {"high": n, "medium":
+n, "low": n}, "backlinks": {"referring_domains": n, "backlinks": n,
+"spam_score": n}, "gbp": {"found": bool, "claimed": bool, "rating": n,
+"reviews": n, "nap_mismatches": n}, "report_url": "<doc url>"}`.
+
+**5. Adjust (PB4a.5, run+flag).** Apply what lives in the CRM: fill
+`page_groups.target_url`, correct a `keywords.city` that the site's page
+proves wrong, add a `claims` row (`status = 'sourced'`) for a licence or
+award the site states with a source. Mark those `change_log` rows
+`approved` with `reviewed_by = 'worker'`, `reviewed_on = now()`. The site
+itself you do not edit: on a site Compass controls (`sites.controlled_by_compass`)
+add each high and medium finding as a task on the Website › **Polish &
+client review** stage (`owner = 'CLAUDE'`, `status = 'open'`, title = the
+fix, `notes` = the URL and the `after`), so it is applied when that stage
+runs; on a site Compass does not control, the fix list is the deliverable
+and Tom blends it into the site himself. Then set the PB4a.5 task
+`flagged_for_review = true`, `recommendation` = one line: how many fixes
+were applied in the CRM, how many went on the punch list, how many wait on
+the live site — and close it.
+
+Close `seo_onpage`, `seo_technical`, `seo_offpage`, `seo_fix_list`,
+`seo_fixes` by key. Set the stage `complete`; evidence carries the target
+URL, the gate scores and Lighthouse scores, pages inventoried, page groups
+served / missing, findings by severity, the report URL. Do not touch GBP
+Setup or anything after it; the SEO pipeline stays open, so no `Review SEO`
+task is raised yet — Tom reads the audit from the Foundation tab and the
+Drive doc.
 
 ## 6. End of run
 
