@@ -45,9 +45,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
    geo-grid configs with a radius helper, rank matrix + City Index, BrightLocal
    sync, GSC sync, Content tracker, Social tracker + calendar, Reports tab,
    monthly cycle automation.
-3. **Billing — next.** Stripe subscriptions ported from the Show Me Electrical
-   CRM. Subscription model only; paid status is webhook-driven. See
-   `docs/spec.md` §6.5b and §9.
+3. **Billing — built, awaiting Stripe keys.** Subscription model only; paid
+   status is webhook-driven (`docs/spec.md` §6.5b and §9). See "Billing
+   architecture" below for what's deployed and the two secrets still missing.
 4. Views & publishing (Board, Tasks, Looker export, Meta publishing).
 5. Client portal (RLS policies + read-only views).
 
@@ -434,6 +434,14 @@ deliberately bad ones (both `failed` with the upstream error, 502, no tasks
 closed).
 
 ## Known state / open items (as of Aug 31 2026)
+
+- **Stripe secrets are not in Vault yet.** Billing code is deployed but inert
+  until `STRIPE_SECRET_KEY` is added to Supabase Vault, a webhook endpoint
+  pointing at `/functions/v1/stripe-webhook` is created in the Stripe
+  dashboard (events: `invoice.paid`, `invoice.payment_failed`,
+  `payment_intent.processing`, `customer.subscription.updated`,
+  `customer.subscription.deleted`), and its signing secret is stored as
+  `STRIPE_WEBHOOK_SECRET`. No Stripe objects have been created.
 
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly
   sync. Get a production key before that runs out.
