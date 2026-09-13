@@ -83,6 +83,22 @@ export const accessStatusStyles: Record<AccessStatus, string> = {
   granted: "bg-green-100 text-green-800 border-green-200",
 };
 
+export type PaidStatus = Database["public"]["Enums"]["paid_status_type"];
+
+export const paidStatusStyles: Record<PaidStatus, string> = {
+  paid: "bg-green-100 text-green-800 border-green-200",
+  processing: "bg-blue-100 text-blue-800 border-blue-200",
+  open: "bg-amber-100 text-amber-800 border-amber-200",
+  past_due: "bg-red-100 text-red-800 border-red-200",
+};
+
+export const paidStatusLabels: Record<PaidStatus, string> = {
+  paid: "Paid",
+  processing: "Processing",
+  open: "Open",
+  past_due: "Past due",
+};
+
 export const documentCategories: DocumentCategory[] = [
   "contract",
   "proposal",

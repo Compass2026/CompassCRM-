@@ -45,9 +45,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
    geo-grid configs with a radius helper, rank matrix + City Index, BrightLocal
    sync, GSC sync, Content tracker, Social tracker + calendar, Reports tab,
    monthly cycle automation.
-3. **Billing — next.** Stripe subscriptions ported from the Show Me Electrical
-   CRM. Subscription model only; paid status is webhook-driven. See
-   `docs/spec.md` §6.5b and §9.
+3. **Billing — built, awaiting Stripe keys.** Subscription model only; paid
+   status is webhook-driven (`docs/spec.md` §6.5b and §9). See "Billing
+   architecture" below for what's deployed and the two secrets still missing.
 4. Views & publishing (Board, Tasks, Looker export, Meta publishing).
 5. Client portal (RLS policies + read-only views).
 
@@ -109,8 +109,36 @@ it marked complete (0011), so the gate only bites new clients.
   checklist as task templates, mid-process approvals are gone, and completing a
   pipeline raises one review task. See "Onboarding flow" below.
 
-0008 (Stripe) is applied remotely from its own unmerged branch
-(`claude/compass-phase-3-stripe-gr28lo`) and is still the open Phase 3 work.
+0008 (Stripe) was applied remotely from its own branch on Aug 31; the branch
+(`claude/compass-phase-3-stripe-gr28lo`) was merged on Sept 13 2026 and the
+code is inert until the Stripe secrets are in Vault (see "Billing
+architecture").
+
+## Billing architecture (Phase 3)
+
+Two more Edge Functions in `supabase/functions/`, deployed to the remote
+project (migration `0008_stripe_billing.sql` applied):
+
+- **`stripe-billing`** — JWT-authorized actions called from
+  `src/app/billing-actions.ts`: `setup` (create Stripe customer + monthly
+  subscription priced from `plans.monthly_fee`, `default_incomplete`, card +
+  `us_bank_account`; the first hosted-invoice link is stored on
+  `subscriptions.latest_invoice_url` for sending to the client),
+  `pause` / `resume` (`pause_collection`).
+- **`stripe-webhook`** — deployed with `verify_jwt = false`; authenticity
+  comes from the Stripe signature (`STRIPE_WEBHOOK_SECRET`). Sole writer of
+  `paid_status`: `invoice.paid` → payment row + `paid`,
+  `invoice.payment_failed` → `past_due`, `payment_intent.processing` →
+  `processing` (ACH settling), `customer.subscription.updated/deleted` →
+  mirror status/price/period (a new period resets `paid_status` to `open`).
+  `stripe_events` dedupes Stripe's retried deliveries.
+
+A daily pg_cron sweep (06:30 UTC, `mark_past_due_subscriptions()`) flips
+subscriptions still `open` 3+ days past `current_period_end` to `past_due`;
+the Dashboard surfaces those under "Payments past due". UI: Billing tab
+(subscription card, payment history, lifetime paid, pause/resume, open in
+Stripe) plus a setup card on the Plan tab.
+
 ## Brand board (spec §6.2b)
 
 Every client has a brand board on the **Brand** tab — the team's visual
@@ -220,8 +248,17 @@ that records a client-controlled `sites` row (`stack = 'other'`,
 `controlled_by_compass = false`) before any worker runs. The Overview tab
 edits vertical and business type too.
 
-**Still manual / not built** (build-order step 9): the autonomy filter on
-Tasks and the brief generator.
+**Tasks and the Brief** (build-order steps 8–9, Sept 13 2026): the Tasks
+page filters by owner, autonomy level (run / run + flag / hold) and a
+"flagged for review" view that includes finished run + flag work with its
+recommendation. `/brief` is the page Tom reads in the morning and at the
+end of the day: needs a decision (held / waiting tasks, blocked stages with
+their next action), mine (TOM tasks, due first), review or send (the
+`Review <Pipeline>` tasks and open `report_send` tasks with the report
+link), done-review-if-you-want (flagged work closed this week), and the
+last 24 hours (stages completed with evidence, worker runs with reasons).
+Decision recording on approve / veto (`decisions`, promotion at three
+matches) is still not built — no hold steps exist in the seed since 0014.
 
 ## Foundation worker (Sept 11 2026)
 
@@ -433,24 +470,49 @@ Verified on Sept 11 2026 with no secrets (both steps `skipped`, 200) and with
 deliberately bad ones (both `failed` with the upstream error, 502, no tasks
 closed).
 
-## Known state / open items (as of Aug 31 2026)
+## Known state / open items (as of Sept 13 2026)
 
+- **Stripe secrets are not in Vault yet.** Billing code is deployed but inert
+  until `STRIPE_SECRET_KEY` is added to Supabase Vault, a webhook endpoint
+  pointing at `/functions/v1/stripe-webhook` is created in the Stripe
+  dashboard (events: `invoice.paid`, `invoice.payment_failed`,
+  `payment_intent.processing`, `customer.subscription.updated`,
+  `customer.subscription.deleted`), and its signing secret is stored as
+  `STRIPE_WEBHOOK_SECRET`. No Stripe objects have been created.
 - **BrightLocal key is a trial** — 1,000 lifetime requests, ~50 per monthly
   sync. Get a production key before that runs out.
-- **Keyword priorities are unset.** The City Index averages P1 keywords only
-  (`compute_location_index`, migration 0013), so every location's index is
-  blank until priorities are set in the Keywords tab.
-- **GSC coverage is partial.** Logic Solar, Lucas Construction, Ginger Huff and
-  Show Me Design sync. Show Me Electrical's property exists but Google has no
-  data for it at all (likely created recently — GSC does not backfill).
-  Pensacola Equipment Rentals has no Search Console property; one needs to be
-  created and verified.
-- **Brand boards are drafted, not approved** (Sep 1 2026) — website scan +
-  intake done for the five clients with websites (palette roles assigned, logos
-  from the site, identity/voice/AI-guidance fields written from site copy).
-  Pensacola has a placeholder only (no website, no material). Each client's
-  "Build brand board" task stays open until Tom approves on the Brand tab.
-  Draft boards are filed in Drive under Compass Clients / <Client>.
-- **Client seed data is partial** — several clients still need enrolled
-  pipelines, plan details, and contacts filled in. Pensacola also has no
-  `website_url`.
+- **Keyword priorities are set.** Keyword Research gave every client 6–10 P1
+  money keywords and a tracked list of 35–65; the City Index fills on the
+  next BrightLocal sync (1st of the month) or a `recompute_location_indexes`
+  call.
+- **GSC coverage is partial.** Ginger Huff, Logic Solar, Lucas Construction
+  and Show Me Design sync. Show Me Electrical's property exists but Google
+  has no data for it. Pensacola Equipment Rentals has no Search Console
+  property; one needs to be created and verified (Tracking Setup, SEO
+  stage 5, is still manual).
+- **Foundation is complete for all seven clients** (worker-built brand
+  boards, taxonomies and keyword maps; Shewmaker's from the Sept 10 load).
+  Six *Review Foundation* tasks are open for Tom — that review is the only
+  sign-off in the model. SEO › Audit & Adjust is complete for the six
+  non-blueprint clients (reports in Drive 04 Website, findings in
+  `change_log`, `sites.audit`); the audit's gate scores on a client-built
+  site are relative — the gate expects the Compass starter's structure
+  (facts block, FAQPage, `llms.txt`), so a WordPress site scores low on SEO
+  / AEO by construction. Read the findings, not the number.
+- **Sites.** Ginger Huff, Lucas Construction and Pensacola have Astro bones
+  live on Vercel (`gingerhuffinteriors.vercel.app`, `lucasconstruction.vercel.app`,
+  `pensacolaequipmentrentals-astro.vercel.app`; Pensacola's is on the
+  `compass-astro` side branch because `main` carries Tom's Next.js site).
+  Their Website › Polish & client review stages carry the audit punch lists
+  (Ginger 23, Pensacola 18, Lucas 5 tasks) and the Discovery TOM tasks
+  (client request, DNS access) are open. Logic Solar and Show Me Design keep
+  their sites and are not enrolled in Website. Tom deletes the
+  `Compass2026/zz-sitepush-smoke` test repo (the token cannot).
+- **Reporting has not started.** Every client is still `launching` and none
+  is enrolled in Reporting, so no monthly cycle exists; convergence waits on
+  the launch pipelines (SEO stages 2–5 are manual). To start monthly
+  reports for a client now, set it `active` and enroll Reporting on the Plan
+  tab — the 1st-of-month beats and the worker take it from there.
+- **Not built:** SEO stages 2–5 (GBP, Citations, Backlinks, Tracking) as
+  worker stages; Website › Polish and Launch as worker stages; decision
+  recording on approve / veto and autonomy promotion; the client portal.
