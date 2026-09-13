@@ -54,6 +54,9 @@ export default async function AppLayout({
             <Link href="/tasks" className="text-cream/70 transition-colors hover:text-white">
               Tasks
             </Link>
+            <Link href="/brief" className="text-cream/70 transition-colors hover:text-white">
+              Brief
+            </Link>
             <Link href="/settings" className="text-cream/70 transition-colors hover:text-white">
               Settings
             </Link>

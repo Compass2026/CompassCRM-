@@ -109,8 +109,36 @@ it marked complete (0011), so the gate only bites new clients.
   checklist as task templates, mid-process approvals are gone, and completing a
   pipeline raises one review task. See "Onboarding flow" below.
 
-0008 (Stripe) is applied remotely from its own unmerged branch
-(`claude/compass-phase-3-stripe-gr28lo`) and is still the open Phase 3 work.
+0008 (Stripe) was applied remotely from its own branch on Aug 31; the branch
+(`claude/compass-phase-3-stripe-gr28lo`) was merged on Sept 13 2026 and the
+code is inert until the Stripe secrets are in Vault (see "Billing
+architecture").
+
+## Billing architecture (Phase 3)
+
+Two more Edge Functions in `supabase/functions/`, deployed to the remote
+project (migration `0008_stripe_billing.sql` applied):
+
+- **`stripe-billing`** — JWT-authorized actions called from
+  `src/app/billing-actions.ts`: `setup` (create Stripe customer + monthly
+  subscription priced from `plans.monthly_fee`, `default_incomplete`, card +
+  `us_bank_account`; the first hosted-invoice link is stored on
+  `subscriptions.latest_invoice_url` for sending to the client),
+  `pause` / `resume` (`pause_collection`).
+- **`stripe-webhook`** — deployed with `verify_jwt = false`; authenticity
+  comes from the Stripe signature (`STRIPE_WEBHOOK_SECRET`). Sole writer of
+  `paid_status`: `invoice.paid` → payment row + `paid`,
+  `invoice.payment_failed` → `past_due`, `payment_intent.processing` →
+  `processing` (ACH settling), `customer.subscription.updated/deleted` →
+  mirror status/price/period (a new period resets `paid_status` to `open`).
+  `stripe_events` dedupes Stripe's retried deliveries.
+
+A daily pg_cron sweep (06:30 UTC, `mark_past_due_subscriptions()`) flips
+subscriptions still `open` 3+ days past `current_period_end` to `past_due`;
+the Dashboard surfaces those under "Payments past due". UI: Billing tab
+(subscription card, payment history, lifetime paid, pause/resume, open in
+Stripe) plus a setup card on the Plan tab.
+
 ## Brand board (spec §6.2b)
 
 Every client has a brand board on the **Brand** tab — the team's visual
@@ -220,8 +248,17 @@ that records a client-controlled `sites` row (`stack = 'other'`,
 `controlled_by_compass = false`) before any worker runs. The Overview tab
 edits vertical and business type too.
 
-**Still manual / not built** (build-order step 9): the autonomy filter on
-Tasks and the brief generator.
+**Tasks and the Brief** (build-order steps 8–9, Sept 13 2026): the Tasks
+page filters by owner, autonomy level (run / run + flag / hold) and a
+"flagged for review" view that includes finished run + flag work with its
+recommendation. `/brief` is the page Tom reads in the morning and at the
+end of the day: needs a decision (held / waiting tasks, blocked stages with
+their next action), mine (TOM tasks, due first), review or send (the
+`Review <Pipeline>` tasks and open `report_send` tasks with the report
+link), done-review-if-you-want (flagged work closed this week), and the
+last 24 hours (stages completed with evidence, worker runs with reasons).
+Decision recording on approve / veto (`decisions`, promotion at three
+matches) is still not built — no hold steps exist in the seed since 0014.
 
 ## Foundation worker (Sept 11 2026)
 

@@ -2372,6 +2372,38 @@ export type Database = {
         }
         Relationships: []
       }
+      worker_fires: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: number
+          reason: string
+          request_id: number | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: number
+          reason: string
+          request_id?: number | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: number
+          reason?: string
+          request_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_fires_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
