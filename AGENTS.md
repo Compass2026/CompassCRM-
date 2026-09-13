@@ -296,7 +296,11 @@ commits through GitHub's Git Data API. Two rules it enforces:
   the build goes to branch **`compass-astro`** and the response says so. Tom
   blends from there.
 
-`sites.last_pushed_at` / `last_commit_url` (0021) record each push. Without
+`sites.last_pushed_at` / `last_commit_url` (0021) and `branch` (0023) record
+each push. The Foundation tab's **Site** card shows all of it — live URL,
+repo + branch, staging URL, last push, the build's gate scores and
+placeholder count, the audit's scores and findings — with a **Redeploy on
+Vercel** button that calls `site-push` with `{deploy: true}`. Without
 `GITHUB_TOKEN` the function returns 500 and the stage blocks with a WAITING
 task naming the secret.
 

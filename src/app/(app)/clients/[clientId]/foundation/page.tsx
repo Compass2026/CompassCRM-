@@ -50,6 +50,8 @@ import {
 } from "@/lib/brand-board";
 import { cn } from "@/lib/utils";
 import { ProvisionButton } from "@/components/provision-button";
+import { RedeployButton } from "@/components/redeploy-button";
+import { parseAudit, parseQuality, scoreTone, shortDate } from "@/lib/site-status";
 
 const selectClass =
   "h-8 rounded-md border border-input bg-transparent px-2 text-xs";
@@ -77,6 +79,8 @@ export default async function FoundationPage({
     { data: moneyKeywords },
     { data: services },
     { count: pageGroupCount },
+    { data: site },
+    { data: workerPipelines },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -131,7 +135,42 @@ export default async function FoundationPage({
       .from("page_groups")
       .select("id", { count: "exact", head: true })
       .eq("client_id", clientId),
+    supabase
+      .from("sites")
+      .select(
+        "id, url, stack, controlled_by_compass, repo_url, branch, vercel_project, staging_url, last_pushed_at, last_commit_url, quality, quality_checked_at, audit, audit_checked_at"
+      )
+      .eq("client_id", clientId)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("client_pipelines")
+      .select(
+        `status, pipelines!inner(key),
+         client_stages(id, status, evidence, next_action, stages(name))`
+      )
+      .eq("client_id", clientId)
+      .in("pipelines.key", ["website", "seo"]),
   ]);
+
+  const workerStage = (pipeline: "website" | "seo", stageName: string) => {
+    const cp = (workerPipelines ?? []).find((p) => p.pipelines?.key === pipeline);
+    const cs = cp?.client_stages.find((c) => c.stages?.name === stageName);
+    return cp && cs ? { enrollment: cp.status, ...cs } : null;
+  };
+  const buildStage = workerStage("website", "Build to 70%");
+  const auditStage = workerStage("seo", "Audit & Adjust");
+  const quality = parseQuality(site?.quality);
+  const audit = parseAudit(site?.audit);
+  const siteHost = (u: string | null | undefined) => {
+    if (!u) return null;
+    try {
+      return new URL(u).host;
+    } catch {
+      return u;
+    }
+  };
 
   const stages = [...(enrollments?.client_stages ?? [])].sort(
     (a, b) => (a.stages?.sort_order ?? 0) - (b.stages?.sort_order ?? 0)
@@ -306,6 +345,200 @@ export default async function FoundationPage({
           ))}
         </div>
       )}
+
+      {/* ── Site: build, deploy, audit ─────────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-base">
+              Site
+              {site && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {site.stack} · {site.controlled_by_compass ? "Compass-controlled" : "client-controlled"}
+                </span>
+              )}
+            </CardTitle>
+            {site?.repo_url && <RedeployButton clientId={clientId} />}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {!site ? (
+            <p className="text-xs text-muted-foreground">
+              No site row yet. The worker records one at Website › Discovery; provisioning adds the repo.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+              <span>
+                <span className="text-muted-foreground">Live: </span>
+                {site.url ? (
+                  <a href={site.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                    {siteHost(site.url)}
+                  </a>
+                ) : (
+                  "none"
+                )}
+              </span>
+              <span>
+                <span className="text-muted-foreground">Repo: </span>
+                {site.repo_url ? (
+                  <a href={site.repo_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                    {site.repo_url.replace(/^https?:\/\/github\.com\//, "")}
+                  </a>
+                ) : (
+                  "not created"
+                )}
+                {site.branch && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "ml-1 text-[10px]",
+                      site.branch !== "main" && "bg-amber-100 text-amber-800 border-amber-200"
+                    )}
+                    title={
+                      site.branch === "main"
+                        ? undefined
+                        : "main already carries a site that is not ours; the build sits on this side branch to blend"
+                    }
+                  >
+                    {site.branch}
+                  </Badge>
+                )}
+              </span>
+              <span>
+                <span className="text-muted-foreground">Staging: </span>
+                {site.staging_url ? (
+                  <a href={site.staging_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                    {siteHost(site.staging_url)}
+                  </a>
+                ) : site.vercel_project ? (
+                  site.vercel_project
+                ) : (
+                  "not deployed"
+                )}
+              </span>
+              <span>
+                <span className="text-muted-foreground">Last push: </span>
+                {site.last_pushed_at ? (
+                  site.last_commit_url ? (
+                    <a href={site.last_commit_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                      {shortDate(site.last_pushed_at)}
+                    </a>
+                  ) : (
+                    shortDate(site.last_pushed_at)
+                  )
+                ) : (
+                  "never"
+                )}
+              </span>
+            </div>
+          )}
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {/* Build to 70% */}
+            <div className="border rounded-md p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">Website › Build to 70% <span className="font-normal text-muted-foreground">PB4b</span></span>
+                {buildStage ? (
+                  <Badge variant="outline" className={cn("text-xs", stageStatusStyles[buildStage.status])}>
+                    {buildStage.enrollment === "pending" ? "Waiting for Foundation" : stageStatusLabels[buildStage.status]}
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">not enrolled</span>
+                )}
+              </div>
+              {quality?.score ? (
+                <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                  {(["seo", "aeo", "geo"] as const).map((k) => (
+                    <Badge key={k} variant="outline" className={cn("tabular-nums", scoreTone(quality.score![k]))}>
+                      {k.toUpperCase()} {quality.score![k]}
+                    </Badge>
+                  ))}
+                  <Badge
+                    variant="outline"
+                    className={quality.pass ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200"}
+                  >
+                    {quality.pass ? "gate PASS" : `gate FAIL · ${quality.failures}`}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {quality.pages != null && `${quality.pages} pages · `}
+                    {quality.placeholders != null && `${quality.placeholders} placeholders · `}
+                    {quality.warnings} warnings
+                    {quality.checkedAt && ` · ${shortDate(quality.checkedAt)}`}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No quality gate report yet.</p>
+              )}
+              {buildStage?.next_action && (
+                <p className="text-xs"><span className="text-muted-foreground">Next: </span>{buildStage.next_action}</p>
+              )}
+              {buildStage?.evidence && (
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Evidence</summary>
+                  <p className="mt-1 text-xs whitespace-pre-wrap">{buildStage.evidence}</p>
+                </details>
+              )}
+            </div>
+
+            {/* Audit & Adjust */}
+            <div className="border rounded-md p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">SEO › Audit & Adjust <span className="font-normal text-muted-foreground">PB4a</span></span>
+                {auditStage ? (
+                  <Badge variant="outline" className={cn("text-xs", stageStatusStyles[auditStage.status])}>
+                    {auditStage.enrollment === "pending" ? "Waiting for Foundation" : stageStatusLabels[auditStage.status]}
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">not enrolled</span>
+                )}
+              </div>
+              {audit ? (
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {audit.gate &&
+                      (["seo", "aeo", "geo"] as const).map((k) => (
+                        <Badge key={k} variant="outline" className={cn("tabular-nums", scoreTone(audit.gate![k]))}>
+                          {k.toUpperCase()} {audit.gate![k]}
+                        </Badge>
+                      ))}
+                    {audit.findings && (
+                      <span className="text-muted-foreground">
+                        findings: <span className="text-red-700">{audit.findings.high} high</span> ·{" "}
+                        <span className="text-amber-700">{audit.findings.medium} medium</span> · {audit.findings.low} low
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground">
+                    {audit.target && <>on {siteHost(audit.target)} · </>}
+                    {audit.pages != null && `${audit.pages} pages · `}
+                    {audit.pageGroups && `${audit.pageGroups.served}/${audit.pageGroups.total} page groups served`}
+                    {audit.pageGroups && audit.pageGroups.missing > 0 && ` (${audit.pageGroups.missing} missing)`}
+                    {audit.backlinks?.referringDomains != null && ` · ${audit.backlinks.referringDomains} referring domains`}
+                    {audit.gbp && (audit.gbp.found ? ` · GBP ${audit.gbp.claimed ? "claimed" : "unclaimed"}${audit.gbp.rating != null ? ` ${audit.gbp.rating}★` : ""}${audit.gbp.reviews != null ? ` (${audit.gbp.reviews})` : ""}${audit.gbp.napMismatches ? ` · ${audit.gbp.napMismatches} NAP mismatches` : ""}` : " · no GBP found")}
+                    {site?.audit_checked_at && ` · ${shortDate(site.audit_checked_at)}`}
+                  </p>
+                  {audit.reportUrl && (
+                    <a href={audit.reportUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                      Audit report (Drive)
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No audit yet.</p>
+              )}
+              {auditStage?.next_action && (
+                <p className="text-xs"><span className="text-muted-foreground">Next: </span>{auditStage.next_action}</p>
+              )}
+              {auditStage?.evidence && (
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Evidence</summary>
+                  <p className="mt-1 text-xs whitespace-pre-wrap">{auditStage.evidence}</p>
+                </details>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {/* ── Brand board ───────────────────────────────────────────── */}

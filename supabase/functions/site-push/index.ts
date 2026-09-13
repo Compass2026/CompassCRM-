@@ -363,6 +363,7 @@ Deno.serve(async (req) => {
         .from("sites")
         .update({
           repo_url: site.repo_url ?? repoUrl,
+          branch,
           last_pushed_at: new Date().toISOString(),
           last_commit_url: commitUrl,
         })
@@ -374,6 +375,7 @@ Deno.serve(async (req) => {
         stack: "astro",
         controlled_by_compass: true,
         repo_url: repoUrl,
+        branch,
         last_pushed_at: new Date().toISOString(),
         last_commit_url: commitUrl,
       });

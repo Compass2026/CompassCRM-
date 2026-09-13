@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Astro starter is a separate project with its own toolchain.
+    "templates/**",
+    "supabase/functions/**",
   ]),
 ]);
 
