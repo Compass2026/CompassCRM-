@@ -7,10 +7,28 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ownerLabels } from "@/lib/labels";
+import {
+  GoogleConnectCard,
+  type GoogleOpsSetting,
+  type Ga4Setting,
+} from "@/components/google-connect-card";
+import type { AccessCheck } from "@/app/settings-actions";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string; reason?: string }>;
+}) {
+  const flash = await searchParams;
   const supabase = await createClient();
-  const [{ data: pipelines }, { data: taskTemplates }, { data: gridDefaults }] =
+  const [
+    { data: pipelines },
+    { data: taskTemplates },
+    { data: gridDefaults },
+    { data: googleSettings },
+    { data: tokenPresent },
+    { data: ga4Present },
+  ] =
     await Promise.all([
       supabase
         .from("pipelines")
@@ -25,7 +43,17 @@ export default async function SettingsPage() {
         .select("value")
         .eq("key", "grid_defaults")
         .maybeSingle(),
+      supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["google_ops", "ga4_account", "google_access"]),
+      supabase.rpc("secret_present", { secret_name: "GOOGLE_OPS_REFRESH_TOKEN" }),
+      supabase.rpc("secret_present", { secret_name: "GA4_ACCOUNT_ID" }),
     ]);
+
+  const settingValue = (key: string) =>
+    (googleSettings ?? []).find((s) => s.key === key)?.value ?? null;
+  const redirectUri = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-connect`;
 
   const recurringTemplates = (taskTemplates ?? []).filter((t) => t.pipeline_id);
   const grid = (gridDefaults?.value ?? []) as {
@@ -42,6 +70,28 @@ export default async function SettingsPage() {
         spec). Template editing lands with the Trackers phase — changes for now
         go through Claude Code.
       </p>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Google hands</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            One Compass Google account does the worker&apos;s Business Profile
+            updates, GA4 setup and Gmail drafts. Without it those steps fall
+            back to your task list.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <GoogleConnectCard
+            tokenPresent={tokenPresent === true}
+            ga4Present={ga4Present === true}
+            ops={settingValue("google_ops") as GoogleOpsSetting}
+            ga4={settingValue("ga4_account") as Ga4Setting}
+            access={settingValue("google_access") as AccessCheck | null}
+            redirectUri={redirectUri}
+            flash={flash}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {(pipelines ?? []).map((p) => (

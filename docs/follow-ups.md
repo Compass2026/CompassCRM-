@@ -11,12 +11,18 @@ unblocks and what it costs.
    With a cap, a function like `google-ops` calls the BrightLocal API and the
    tasks stop landing on Tom. The trial key (1,000 lifetime requests) needs
    replacing first.
-2. **Google ops token.** `GOOGLE_OPS_REFRESH_TOKEN` (business.manage,
-   analytics.edit, gmail.compose) and `GA4_ACCOUNT_ID` into Vault; then one
-   `google_access` grant per client. Until then GBP apply, GA4 and drafts
-   fall back to Tom's tasks. Once the token is in, set each client's
-   GBP Setup and Tracking Setup stages to *Not started* on the Foundation
-   tab so the worker applies the specs it already wrote.
+2. **Google ops token.** Settings › Google hands has the button: **Connect
+   Google** signs in as the Compass Workspace account and stores
+   `GOOGLE_OPS_REFRESH_TOKEN` in Vault; pick the Analytics account for
+   `GA4_ACCOUNT_ID` on the same card; **Check access** shows which clients'
+   Business Profile / Search Console the account can already reach. Before
+   the first press: add the redirect URI the card shows to the OAuth app,
+   enable the Business Profile, Analytics Admin and Gmail APIs on the Google
+   Cloud project (and request Business Profile API access once). Then one
+   `google_access` grant per client that shows *no*. Until then GBP apply,
+   GA4 and drafts fall back to Tom's tasks. Once connected, set each
+   client's GBP Setup and Tracking Setup stages to *Not started* on the
+   Foundation tab so the worker applies the specs it already wrote.
 3. **Stripe secrets** (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — billing
    is built and inert.
 4. **Pensacola**: blend the `compass-astro` branch into `main` (Launch is
