@@ -73,25 +73,34 @@ and finishing in the background via `EdgeRuntime.waitUntil`:
 Both are idempotent: natural-key unique indexes on `rank_snapshots`,
 `grid_snapshots`, and `gsc_snapshots` make re-ingestion a no-op.
 
-- **`rank-sync`** (Sept 13 2026, migration 0033) — the rank source since
-  Tom chose weekly checks on 50 keywords per client through DataForSEO
-  instead of BrightLocal's billable Local Rank Tracker. Every Monday 06:00
-  UTC (pg_cron `rank-sync-weekly`) it runs each active / launching
-  client's tracked keywords through DataForSEO's live Google SERP endpoint
-  at the keyword's `city` (else the client's home city), desktop, depth
-  100, 100 tasks per call, and writes organic + map-pack positions to
-  `rank_snapshots` with `source = 'dataforseo'` (the client's site host or
-  business name identifies "us"), stamps `keywords.last_checked`, records a
-  `rank_runs` row per client with the DataForSEO cost in `error`, and
-  recomputes the City Index. A keyword city with no `locations` row gets
-  one (`<Client> — <City>`, not physical). Body `{client_id}` runs one
-  client. **Needs `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` in Vault** (the
-  API login and password from app.dataforseo.com/api-access); until then it
-  answers `skipped` and nothing breaks. About 400 checks a week ≈ $4 a
-  month. `normalize_tracked_keywords(client_id, 50)` keeps `is_tracked` on
-  exactly the top 50 (money, then priority, then volume) — run on every
-  client on Sept 13; nothing is deleted. BrightLocal's monthly sync still
-  runs and still reads the grids; its rank rows simply sit alongside.
+- **`rank-sync`** (Sept 13 2026, migrations 0033 + 0034) — the rank source
+  since Tom chose weekly checks on 50 keywords per client through DataForSEO
+  instead of BrightLocal's billable Local Rank Tracker. Two modes on the
+  DataForSEO **task queue** (the live endpoint takes one task per call and
+  costs ten times as much): **post** (pg_cron `rank-sync-weekly`, Monday
+  06:00 UTC; body `{client_id}` for one client) sends each active /
+  launching client's tracked keywords to `task_post`, 100 per call, desktop,
+  depth 100, keyword id as the tag, and opens a `rank_runs` row with the
+  posted count in `checks_count`; **collect** (pg_cron `rank-sync-collect`,
+  every 20 minutes, a no-op when nothing is ready) reads `tasks_ready`,
+  fetches each result, writes organic + map-pack positions to
+  `rank_snapshots` with `source = 'dataforseo'` and `recorded_at` = the
+  run's start (the client's site host or business name identifies "us"),
+  stamps `keywords.last_checked`, completes the run once every posted task
+  has answered and recomputes the City Index; a run still open after three
+  hours is marked failed with the shortfall. **Locations:** every
+  `locations` row carries lat/lng, so tasks are checked by
+  `location_coordinate` whenever the keyword's city (or the home city) has
+  a row; a keyword city with no row is checked by name and re-posted at the
+  home coordinates when DataForSEO refuses the name (it does not list every
+  small town — Gravois Mills, Clayton). rank-sync never creates location
+  rows. **Needs `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` in Vault** (set
+  Sept 14); without them post answers `skipped`. Observed cost $0.006 per
+  check → 398 a week ≈ $2.40 a week, about $10 a month.
+  `normalize_tracked_keywords(client_id, 50)` keeps `is_tracked` on exactly
+  the top 50 (money, then priority, then volume) — run on every client on
+  Sept 13; nothing is deleted. BrightLocal's monthly sync still runs and
+  still reads the grids; its rank rows simply sit alongside.
 
 ## Playbook model (Sept 7 2026)
 

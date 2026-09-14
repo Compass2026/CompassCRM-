@@ -23,12 +23,11 @@ unblocks and what it costs.
    GA4 and drafts fall back to Tom's tasks. Once connected, set each
    client's GBP Setup and Tracking Setup stages to *Not started* on the
    Foundation tab so the worker applies the specs it already wrote.
-2b. **DataForSEO API credentials.** `DATAFORSEO_LOGIN` and
-   `DATAFORSEO_PASSWORD` into Vault (app.dataforseo.com → API Access).
-   Until then the weekly `rank-sync` answers `skipped` and ranks stay on
-   the monthly BrightLocal read. Then fire it once by hand and set Lucas,
-   Show Me Electrical and Ginger Huff's Keyword Research stages to *Not
-   started* so the worker city-tags their lists to the 50-keyword shape.
+2b. **Keyword lists to the 50-keyword shape.** DataForSEO credentials are
+   in Vault (Sept 14) and `rank-sync` runs weekly. Lucas, Show Me
+   Electrical and Ginger Huff have no city-tagged keywords, so their checks
+   run at the home city: set their Keyword Research stages to *Not started*
+   so the worker city-tags the lists (and tops Show Me Electrical up to 50).
 3. **Stripe secrets** (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — billing
    is built and inert.
 4. **Pensacola**: blend the `compass-astro` branch into `main` (Launch is
