@@ -147,6 +147,38 @@ where id = '<report_task_id>'
 returning id;
 ```
 
+Two more task-shaped units (Sept 14 2026, `docs/website-updates.md`), claimed
+with the same conditional update as the report task:
+
+- **Website updates** — the cycle's open `site_updates` task (fired on the
+  2nd; one per active client per month):
+
+```sql
+select c.name, c.id as client_id, mc.id as cycle_id, mc.period, t.id as task_id, s.id as site_id, s.content_paths, s.controlled_by_compass, s.repo_url, s.url
+from monthly_cycles mc
+join clients c on c.id = mc.client_id
+join tasks t on t.monthly_cycle_id = mc.id and t.key = 'site_updates'
+left join sites s on s.client_id = c.id
+where mc.status = 'open' and t.status <> 'done' and c.status = 'active'
+order by mc.period, c.name;
+```
+
+- **Weekly blog post** — an open `blog_post` task (created and fired on
+  Wednesdays; one per active client per week):
+
+```sql
+select c.name, c.id as client_id, t.id as task_id, t.due_date, s.content_paths, s.controlled_by_compass, s.repo_url, s.url
+from tasks t
+join clients c on c.id = t.client_id
+left join sites s on s.client_id = c.id
+where t.key = 'blog_post' and t.status <> 'done' and c.status = 'active'
+order by t.due_date, c.name;
+```
+
+Order within a client: Foundation → Website → SEO → Reporting → Website
+updates → Blog post. A payload naming "Website updates" or "Weekly blog
+post" points at those units.
+
 Runs are started by the CRM (`worker_fires` records why — a client created, a
 stage completed, Website activated, a stage reopened) and by a daily sweep.
 **If a `<routine-fire-payload>` block names a client, work that client only**
@@ -1147,6 +1179,145 @@ Gmail" (or "no contact email on file") in the `report_send` task's
 `notes` so Tom has them where he works. Do **not** set the cycle
 `complete` — Tom closes it once the report is sent. Set the claimed task's
 `notes` to what you did (replace the claim line).
+
+### Website Updates (PB7, monthly — the cycle's `site_updates` task)
+
+Tom's rules (Sept 14 2026): **two new pages and two refreshes per client per
+month, published on Compass-run sites without a look** (the Foundation
+tab's *Put it back* button is the safety net), **Google Docs for
+client-run sites**. Nothing invented: a claim without a source is a
+placeholder line, never copy.
+
+**The contract.** `sites.content_paths` says where you may write:
+
+```json
+{"locations": "data/locations.json", "blog": "data/blog-posts.json",
+ "blog_format": "json", "city_route": "/service-areas/{slug}",
+ "blog_route": "/blog/{slug}", "services_dir": "src/app/services"}
+```
+
+`content_paths` null → the site is not on the contract (client-run, or a
+Next.js build Tom has not finished): every page and rewrite becomes a Google
+Doc in `04 Website` (`Site update — <Client> — <Month>`; one section per
+page with URL, title, meta description, H1, body, FAQs, schema JSON) plus a
+`change_log` row (`status = 'proposed'`), and you skip the push steps.
+
+**1. Map first (every month, cheap).** For every tracked keyword with no
+`target_url`, pick the page: the `page_groups` row whose primary or
+supporting keywords include it (its `target_url`), else the city route for
+its `city`, else the service page for its `service_id`, else the home page.
+Write `keywords.target_url`. Fill `page_groups.target_url` from the site
+where the page exists (read the tree: `site-push {read: true}` lists paths;
+`src/app/<route>/page.tsx` or a `data/locations.json` slug is a page). A
+page group with no page is a candidate below.
+
+**2. Pick the month's work** from the evidence, in this order, until the
+caps are met (2 new, 2 refresh):
+
+- *New city page:* a `city` page group (tier 1 first) with no page, or a
+  tracked `city` with ≥ 3 keywords and no entry in `locations`.
+- *New service page:* an approved `service` page group with no page — for a
+  hand-built site this is a **pull request**, not a push (below).
+- *Refresh — striking distance:* a tracked keyword at organic position 4–20
+  in the latest `rank_snapshots` (source `dataforseo`) whose page exists:
+  rewrite title / H1 / intro / FAQ to answer the query directly.
+- *Refresh — Search Console:* `gsc_snapshots` queries with impressions ≥ 50
+  and CTR < 2% for a page you can edit, or question queries with no FAQ.
+- *Placeholders:* an open `placeholders` row whose material now exists in
+  Drive `Media` or `client_requests.responses`.
+
+Skip anything changed in the last 60 days (`change_log` `object_type =
+'site'`). Log what you considered and why in the task notes.
+
+**3. Write entries, not components.** Read only what you need:
+`site-push {client_id, read: true, paths: ["data/locations.json",
+"data/blog-posts.json"]}` (other files come back as paths + sizes). Match
+the existing entries exactly — same keys, same tone of `heroH1` /
+`heroSub` / `geoRelevanceBlock`, 4–6 FAQs, the `schema` string built the
+way the neighbours are (LocalBusiness / the site's type, the city URL,
+address from the site's own entries, never a street address for a
+service-area business). Facts come from `claims` (`sourced`), the brand
+board and the site's existing copy; a city paragraph names real places in
+that city (`us-cities.json` and the GBP / Maps listing are your sources),
+never invented landmarks. Slugs are lowercase-hyphen and unique. Keep the
+JSON valid and the array order stable (append).
+
+**4. Publish.** One push per month per client:
+
+```json
+{"client_id": "...", "branch": "main", "deploy": false,
+ "message": "Website updates <Month YYYY>: +<n> pages, <n> refreshes (Compass CRM)",
+ "files": [{"path": "data/locations.json", "content": "<whole file>"}, ...]}
+```
+
+`branch: "main"` is explicit (the site-push guard that diverts unknown
+authors to a side branch is for full builds, not data entries); `deploy:
+false` because Vercel's Git integration deploys the push. A change to a
+hand-built page (`src/app/services/<slug>/page.tsx`, or a new service
+page) goes to a branch with a pull request instead:
+
+```json
+{"client_id": "...", "branch": "compass/<yyyy-mm>-<slug>", "deploy": false,
+ "message": "...", "files": [...],
+ "pull_request": {"title": "<Client>: <what>", "body": "<why, evidence, the keyword and its rank>"}}
+```
+
+Never touch components, styles, layout files, `package.json` or anything
+outside `content_paths` and `services_dir`.
+
+**5. Verify, then record.** Wait ~90 s, then fetch each new or changed URL
+on `sites.url` (else `staging_url`): expect 200, exactly one H1, the
+canonical, and the JSON-LD block. A page that fails → `site-push {revert:
+true, deploy: false}` at once, then fix and re-push, or leave it out and say
+so. For every change one `change_log` row: `object_type = 'site'`,
+`change_type` in `page_added` / `page_rewrite` / `faq_added` /
+`pull_request`, `before` (old entry or `{}`), `after` `{url, title,
+keyword, commit, pull_request_url}`, `reasoning` (the evidence: rank,
+impressions, missing page), `status = 'approved'` for a published change,
+`'proposed'` for a PR or a Doc. `keywords.target_url` for the keyword the
+page serves. Close `site_updates`: done, `flagged_for_review = true`,
+`recommendation` = "`+2 pages, 2 refreshes on <host>; PR open for <x>`" or
+"`Docs filed for <n> pages (site not on the contract)`" — that is what the
+Brief shows Tom.
+
+Caps are caps: two new, two refreshes, then stop, even if the list is
+longer. What is left waits for next month and goes in the notes.
+
+### Weekly blog post (PB7, weekly — the `blog_post` task)
+
+One post per client per week. **Each post serves one long-tail keyword and
+one service page**, in the brand voice (`get_brand_profile`), sourced facts
+only.
+
+1. **Pick the keyword:** a tracked P2 / P3 keyword with informational or
+   commercial-investigation intent (`keywords.intent`), no post yet
+   (`content_posts.keyword_id`), preferring Search Console queries with
+   impressions and a `gsc_snapshots` position past 10, then volume. Note
+   the service page it supports (`service_id` → the service's page group
+   `target_url`).
+2. **Write it:** 700–1,100 words; title ≤ 60 chars carrying the keyword;
+   `description` ≤ 155 chars; an answer-first opening paragraph; H2s that
+   are the questions people ask; one internal link to the service page and
+   one to the relevant city page; a short FAQ (2–3) at the end; a closing
+   CTA using `brand_boards.standing_cta`. Numbers, years, licences and
+   guarantees only from `claims` (`sourced`) or the site itself; otherwise
+   leave them out. No stock phrases, no "in today's fast-paced world".
+3. **File it.** On the contract: append to `content_paths.blog`
+   (`blog_format: json` → an entry shaped like the neighbours — `slug`,
+   `title`, `description`, `datePublished`, `dateModified`, `blocks[]` of
+   the same block types the file already uses; `markdown` → a new file in
+   `blog_dir` with the same front-matter as its neighbours) and push with
+   `branch: "main", deploy: false`, message `Blog: <title> (Compass CRM)`.
+   Not on the contract: a Google Doc in `04 Website` named `Blog — <Client>
+   — <title>` and a line in the task notes for Tom.
+4. **Record:** verify the URL after ~90 s (200, one H1, canonical); a
+   `content_posts` row (`keyword_id`, `title`, `status = 'published'` or
+   `'draft'` for a Doc, `owner = 'CLAUDE'`, `url`, `published_at`,
+   `word_count`); a `change_log` row (`change_type = 'blog_post'`, `after`
+   `{url, title, keyword, commit}`); close `blog_post` done, flagged, with
+   `recommendation` = the title and URL.
+
+One post, then stop. The next task arrives next Wednesday.
 
 ## 6. End of run
 
