@@ -585,7 +585,9 @@ Deno.serve(async (req) => {
         .from("sites")
         .update({
           repo_url: site.repo_url ?? repoUrl,
-          branch,
+          // A pull-request push lives on a side branch; the site's branch
+          // of record does not move until Tom merges it.
+          ...(pullRequest ? {} : { branch }),
           last_pushed_at: new Date().toISOString(),
           last_commit_url: commitUrl,
         })

@@ -579,6 +579,46 @@ Function change that:
   configs, DNS access, default branch, SEO enrollment decision) were closed
   and their templates removed.
 
+## Website Updates and the weekly blog (Sept 14 2026)
+
+Tom's calls: two new pages and two refreshes per client per month, a blog
+post every week, published on Compass-run sites **without a look** (the
+Foundation tab's **Put it back** button is the safety net), Google Docs for
+client-run sites. Migration 0035; playbooks in the worker skill; the plan
+and the per-site survey in `docs/website-updates.md`.
+
+- **Contract.** `sites.content_paths` (json) says where the stage may
+  write, on the shape of `Compass2026/lucas_construction`: `locations`
+  (`data/locations.json`, city pages), `blog` (`data/blog-posts.json` or a
+  markdown `blog_dir`), `services_dir` (hand-built pages → pull request,
+  never a push). Null = not on the contract → every page and post becomes
+  a Doc in `04 Website` and a `change_log` row. Only Lucas is on it today.
+- **Monthly**: the Reporting cycle carries a `site_updates` task;
+  `fire_website_updates()` (pg_cron, 2nd 09:00 UTC) fires the worker per
+  open cycle. Map tracked keywords to pages first, then pick from ranks
+  (positions 4–20), Search Console, the page plan and open placeholders;
+  write entries, push `branch: "main", deploy: false`, verify each URL
+  after ~90 s (200, one H1, canonical, JSON-LD; a failure reverts at once),
+  one `change_log` row per change with the commit, keyword `target_url`,
+  close the task flagged with a one-line recommendation for the Brief.
+- **Weekly**: `create_weekly_blog_tasks()` (pg_cron, Wednesdays 09:00 UTC)
+  opens a `blog_post` task per active client and fires the worker. One
+  post, one long-tail keyword, one service page, brand voice, sourced facts
+  only; a `content_posts` row records it.
+- **site-push v6**: repo and Vercel project come from the `sites` row
+  (Tom's repos are named by hand — `lucas_construction`,
+  `lucas-construction`); `{read: true, paths: [...]}` returns only those
+  files inline; `branch: "compass/<x>"` creates the branch from `main` and
+  `pull_request: {title, body}` opens the PR (the site's branch of record
+  does not move); `{revert: true}` makes a new commit carrying the previous
+  commit's tree; `deploy: false` skips the manual deployment because the
+  Git integration deploys the push. Next.js repos default to their
+  recorded branch — the "not our author → compass-astro" guard is for full
+  builds only. Verified Sept 14 on Lucas: read + branch + PR (test PR
+  closed, branch deleted); revert is untested on a real repo.
+- **Retired:** the Astro proposal builds (Vercel projects and the
+  `compass-astro` branch deleted; `sites` rows point at Tom's Next.js repos).
+
 ## Reporting worker (Sept 13 2026)
 
 Migration 0024 makes the monthly Reporting cycle worker-run (Playbooks 5 and
