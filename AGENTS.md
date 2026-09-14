@@ -682,15 +682,21 @@ closed).
   site are relative — the gate expects the Compass starter's structure
   (facts block, FAQPage, `llms.txt`), so a WordPress site scores low on SEO
   / AEO by construction. Read the findings, not the number.
-- **Sites.** Ginger Huff, Lucas Construction and Pensacola have Astro bones
-  live on Vercel (`gingerhuffinteriors.vercel.app`, `lucasconstruction.vercel.app`,
-  `pensacolaequipmentrentals-astro.vercel.app`; Pensacola's is on the
-  `compass-astro` side branch because `main` carries Tom's Next.js site).
-  Their Website › Polish & client review stages carry the audit punch lists
-  (Ginger 23, Pensacola 18, Lucas 5 tasks) and the Discovery TOM tasks
-  (client request, DNS access) are open. Logic Solar and Show Me Design keep
-  their sites and are not enrolled in Website. Tom deletes the
-  `Compass2026/zz-sitepush-smoke` test repo (the token cannot).
+- **Sites (Sept 14 2026).** The Astro line is retired: Tom's Next.js builds
+  are the sites of record and the worker no longer builds proposal sites
+  (`docs/website-updates.md` has the per-site survey, the content contract
+  taken from `Compass2026/lucas_construction` — `data/locations.json`,
+  `data/blog-posts.json`, dynamic routes, `sitemap.ts`, per-route
+  canonicals — and the monthly Website Updates stage Tom decided on: two
+  pages + two refreshes a month, a blog post a week, publish without a look
+  with a one-click revert). The three Astro Vercel projects and the
+  `compass-astro` branch are deleted; `sites` rows point at the Next.js
+  repos; the `lucasconstruction` and `gingerhuffinteriors` repos need Tom's
+  admin rights to delete. Website › Build to 70% / Polish for Ginger, Lucas
+  and Pensacola now refer to Tom's builds. Logic Solar, Show Me Design and
+  Show Me Electrical's live sites stay client-controlled until their Next.js
+  rebuilds are full sites. Tom deletes the `Compass2026/zz-sitepush-smoke`
+  test repo (the token cannot).
 - **Reporting has not started.** Every client is still `launching` and none
   is enrolled in Reporting, so no monthly cycle exists; convergence waits on
   the launch pipelines (SEO and Website run through on their own now; Tom's

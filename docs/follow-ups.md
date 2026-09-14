@@ -32,7 +32,15 @@ unblocks and what it costs.
    is built and inert.
 4. **Pensacola**: blend the `compass-astro` branch into `main` (Launch is
    blocked on it) and create the Search Console property.
-5. **Delete `Compass2026/zz-sitepush-smoke`** — the token cannot.
+5. **Delete `Compass2026/zz-sitepush-smoke`, `Compass2026/lucasconstruction`
+   and `Compass2026/gingerhuffinteriors`** — the token cannot (admin rights).
+5b. **Finish the Next.js builds** (Tom): Pensacola (locations + blog data
+   files, canonicals), Show Me Electrical (full site), Ginger Huff, Show Me
+   Design and Logic Solar (rebuild from Vite on the Lucas contract). Each
+   one flips the Website Updates stage on for that client.
+5c. **Build the Website Updates stage** (Claude): map keywords to pages,
+   the monthly picker, the Lucas-contract writer, the BHG blog adapter, the
+   Doc path for client-controlled sites, the revert button. Weekly blog.
 
 ## Worth building next
 
