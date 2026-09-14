@@ -130,37 +130,43 @@ Deno.serve(async (req) => {
       return !!t && ourNames.some((n) => n && (t === n || t.includes(n)));
     };
   };
+  // Locations: the home row plus any row whose city matches a keyword's
+  // city. Rows with coordinates are checked by coordinate (DataForSEO knows
+  // every lat/lng; it does not know every small town by name). A keyword
+  // city with no row is checked by name, and re-checked at the home
+  // coordinates when the name is refused. rank-sync never creates rows;
+  // Tracking Setup and the worker own those.
+  type Loc = { id: string; city: string | null; lat: number | null; lng: number | null };
+  const coordKey = (l: { lat: number | null; lng: number | null }) => (l.lat != null && l.lng != null ? `${l.lat},${l.lng}` : null);
   const locationResolver = async (client: ClientRow) => {
     const { data: locs } = await supabase
       .from("locations")
-      .select("id, city, is_physical_location, sort_order")
+      .select("id, city, lat, lng, is_physical_location, sort_order")
       .eq("client_id", client.id)
       .eq("is_active", true)
       .order("is_physical_location", { ascending: false })
       .order("sort_order");
-    let home = (locs ?? []).find((l) => norm(l.city) === norm(client.city)) ?? (locs ?? [])[0] ?? null;
+    let home: Loc | null = (locs ?? []).find((l) => norm(l.city) === norm(client.city)) ?? (locs ?? [])[0] ?? null;
     if (!home) {
       const { data: created } = await supabase
         .from("locations")
         .insert({ client_id: client.id, name: client.name, city: client.city, state: client.state, is_physical_location: false })
-        .select("id, city, is_physical_location, sort_order")
+        .select("id, city, lat, lng")
         .single();
       home = created;
     }
     if (!home) throw new Error("no home location and could not create one");
-    const byCity = new Map<string, string>();
-    for (const l of locs ?? []) if (l.city) byCity.set(norm(l.city), l.id);
-    return async (city: string | null): Promise<string> => {
-      if (!city || norm(city) === norm(client.city)) return home!.id;
-      const hit = byCity.get(norm(city));
-      if (hit) return hit;
-      const { data: created } = await supabase
-        .from("locations")
-        .insert({ client_id: client.id, name: `${client.name} — ${city}`, city, state: client.state, is_physical_location: false, sort_order: 50 })
-        .select("id")
-        .single();
-      if (created) byCity.set(norm(city), created.id);
-      return created?.id ?? home!.id;
+    const byCity = new Map<string, Loc>();
+    const byCoord = new Map<string, Loc>();
+    for (const l of (locs ?? []) as Loc[]) {
+      if (l.city) byCity.set(norm(l.city), l);
+      const k = coordKey(l);
+      if (k) byCoord.set(k, l);
+    }
+    return {
+      home,
+      forCity: (city: string | null): Loc | null => (!city || norm(city) === norm(client.city) ? home : byCity.get(norm(city)) ?? null),
+      byCoord,
     };
   };
 
@@ -196,31 +202,45 @@ Deno.serve(async (req) => {
       if (open?.length) { posted.push({ client: client.name, keywords: kws.length, tasks: 0, cost: 0, errors: ["a run is already open"] }); continue; }
 
       const stateFull = stateName(client.state) ?? "";
-      const tasks = kws.map((k) => ({
-        keyword: k.keyword,
-        location_name: `${k.city ?? client.city ?? ""},${stateFull},United States`.replace(/^,/, ""),
-        language_code: "en",
-        device: "desktop",
-        os: "windows",
-        depth: 100,
-        tag: k.id,
-      }));
-      const stat = { client: client.name, keywords: kws.length, tasks: 0, cost: 0, errors: [] as string[] };
-      for (let i = 0; i < tasks.length; i += BATCH) {
-        const { ok, status, json } = await dfs("/task_post", { method: "POST", body: JSON.stringify(tasks.slice(i, i + BATCH)) });
-        if (!ok || !json) { stat.errors.push(`task_post ${status}`); continue; }
-        stat.cost += Number(json.cost ?? 0);
-        for (const t of json.tasks ?? []) {
-          if (t.status_code === 20100) stat.tasks += 1;
-          else stat.errors.push(`${t.data?.keyword ?? "?"}: ${t.status_message ?? t.status_code}`);
+      const locs = await locationResolver(client);
+      const homeCoord = coordKey(locs.home);
+      const taskFor = (k: { id: string; keyword: string; city: string | null }, atHome = false) => {
+        const loc = atHome ? locs.home : locs.forCity(k.city);
+        const coord = loc ? coordKey(loc) : null;
+        const base = { keyword: k.keyword, language_code: "en", device: "desktop", os: "windows", depth: 100, tag: k.id };
+        if (coord) return { ...base, location_coordinate: coord };
+        return { ...base, location_name: `${k.city ?? client.city ?? ""},${stateFull},United States`.replace(/^,/, "") };
+      };
+      const stat = { client: client.name, keywords: kws.length, tasks: 0, cost: 0, retried: 0, errors: [] as string[] };
+      const postBatch = async (batch: Record<string, unknown>[]): Promise<string[]> => {
+        const refused: string[] = [];
+        for (let i = 0; i < batch.length; i += BATCH) {
+          const { ok, status, json } = await dfs("/task_post", { method: "POST", body: JSON.stringify(batch.slice(i, i + BATCH)) });
+          if (!ok || !json) { stat.errors.push(`task_post ${status}`); continue; }
+          stat.cost += Number(json.cost ?? 0);
+          for (const t of json.tasks ?? []) {
+            if (t.status_code === 20100) stat.tasks += 1;
+            else if (/location/i.test(t.status_message ?? "") && t.data?.tag) refused.push(String(t.data.tag));
+            else stat.errors.push(`${t.data?.keyword ?? "?"}: ${t.status_message ?? t.status_code}`);
+          }
         }
+        return refused;
+      };
+      const refused = await postBatch(kws.map((k) => taskFor(k)));
+      if (refused.length && homeCoord) {
+        // The city name was not in DataForSEO's list; check those at the home coordinates.
+        stat.retried = refused.length;
+        const again = await postBatch(kws.filter((k) => refused.includes(k.id)).map((k) => taskFor(k, true)));
+        for (const id of again) stat.errors.push(`${kws.find((k) => k.id === id)?.keyword ?? id}: location refused twice`);
+      } else if (refused.length) {
+        for (const id of refused) stat.errors.push(`${kws.find((k) => k.id === id)?.keyword ?? id}: location refused and no home coordinates`);
       }
       await supabase.from("rank_runs").insert({
         client_id: client.id,
         triggered_by: triggeredBy,
         status: stat.tasks ? "running" : "failed",
-        checks_count: 0,
-        error: `dataforseo · posted ${stat.tasks}/${stat.keywords} · $${stat.cost.toFixed(3)}${stat.errors.length ? " · " + stat.errors.slice(0, 8).join("; ") : ""}`,
+        checks_count: stat.tasks,
+        error: `dataforseo · posted ${stat.tasks}/${stat.keywords}${stat.retried ? ` (${stat.retried} at home coordinates)` : ""} · $${stat.cost.toFixed(3)}${stat.errors.length ? " · " + stat.errors.slice(0, 8).join("; ") : ""}`,
       });
       posted.push(stat);
     }
@@ -256,14 +276,14 @@ Deno.serve(async (req) => {
       .in("id", clientIds);
     const { data: runs } = await supabase
       .from("rank_runs")
-      .select("id, client_id, started_at")
+      .select("id, client_id, started_at, checks_count")
       .in("client_id", clientIds)
       .eq("status", "running")
       .order("started_at", { ascending: false });
-    const runFor = new Map<string, { id: string; started_at: string }>();
+    const runFor = new Map<string, { id: string; started_at: string; checks_count: number | null }>();
     for (const r of runs ?? []) if (!runFor.has(r.client_id)) runFor.set(r.client_id, r);
     const isUsFor = new Map<string, (it: Item) => boolean>();
-    const locFor = new Map<string, (city: string | null) => Promise<string>>();
+    const locFor = new Map<string, Awaited<ReturnType<typeof locationResolver>>>();
     for (const c of (clients ?? []) as ClientRow[]) {
       isUsFor.set(c.id, identity(c));
       locFor.set(c.id, await locationResolver(c));
@@ -286,7 +306,9 @@ Deno.serve(async (req) => {
       const org = organic.find(isUs);
       const packHit = pack.find(isUs);
       const run = runFor.get(kw.client_id);
-      const locationId = await locFor.get(kw.client_id)!(kw.city);
+      const locs = locFor.get(kw.client_id)!;
+      const coord: string | undefined = t.data?.location_coordinate;
+      const locationId = (coord && locs.byCoord.get(coord)?.id) ?? locs.forCity(kw.city)?.id ?? locs.home.id;
       const recordedAt = run?.started_at ?? new Date().toISOString();
       rows.push({
         keyword_id: kw.id, location_id: locationId, result_type: "organic",
@@ -319,23 +341,27 @@ Deno.serve(async (req) => {
         .select("keyword_id", { count: "exact", head: true })
         .eq("run_id", run.id)
         .eq("result_type", "organic");
-      const { count: expected } = await supabase
-        .from("keywords")
-        .select("id", { count: "exact", head: true })
-        .eq("client_id", clientId)
-        .eq("is_active", true)
-        .eq("is_tracked", true);
+      // What was posted for this run is what we wait for (a refused city
+      // name never becomes a task); tracked count is the fallback.
+      let expected = run.checks_count ?? 0;
+      if (!expected) {
+        const { count } = await supabase
+          .from("keywords")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", clientId)
+          .eq("is_active", true)
+          .eq("is_tracked", true);
+        expected = count ?? 0;
+      }
       const stale = Date.parse(run.started_at) < Date.now() - RUN_TIMEOUT_MS;
-      if ((answered ?? 0) >= (expected ?? 0) || stale) {
+      if ((answered ?? 0) >= expected || stale) {
         await supabase.from("rank_runs").update({
-          status: (answered ?? 0) >= (expected ?? 0) ? "complete" : "failed",
+          status: (answered ?? 0) >= expected ? "complete" : "failed",
           completed_at: new Date().toISOString(),
           checks_count: answered ?? 0,
-          error: `dataforseo · ${answered ?? 0}/${expected ?? 0} keywords${errors.length ? " · " + errors.slice(0, 6).join("; ") : ""}`,
+          error: `dataforseo · ${answered ?? 0}/${expected} answered${errors.length ? " · " + errors.slice(0, 6).join("; ") : ""}`,
         }).eq("id", run.id);
         await supabase.rpc("recompute_location_indexes", { p_client_id: clientId, p_period: run.started_at.slice(0, 7) + "-01" });
-      } else {
-        await supabase.from("rank_runs").update({ checks_count: answered ?? 0 }).eq("id", run.id);
       }
     }
     console.log(JSON.stringify({ rank_sync_collect: { ready: ready.length, inserted, cost, errors: errors.slice(0, 20) } }));
