@@ -38,9 +38,12 @@ unblocks and what it costs.
    files, canonicals), Show Me Electrical (full site), Ginger Huff, Show Me
    Design and Logic Solar (rebuild from Vite on the Lucas contract). Each
    one flips the Website Updates stage on for that client.
-5c. **Build the Website Updates stage** (Claude): map keywords to pages,
-   the monthly picker, the Lucas-contract writer, the BHG blog adapter, the
-   Doc path for client-controlled sites, the revert button. Weekly blog.
+5c. **Website Updates stage — built Sept 14** (migration 0035, site-push
+   v6, Put it back, playbooks). Still to do: put BHG on the contract
+   (`content_paths` with `blog_format: markdown`, `blog_dir: content/blog`)
+   once its blog entry shape is checked; Pensacola after its data files
+   exist; the first real run is the Oct 2 fire (or set a client's
+   `site_updates` task by hand). Revert mode is untested on a real repo.
 
 ## Worth building next
 

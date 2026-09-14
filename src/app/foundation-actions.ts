@@ -473,3 +473,53 @@ export async function redeploySiteAction(
       return { ok: false, message: `Vercel: ${v.detail ?? "deployment failed."}` };
   }
 }
+
+// "Put it back": one commit on the site's branch that restores the previous
+// commit's tree. Vercel's Git integration deploys it (deploy: false — the
+// Next.js projects are linked to their repos). The change stays in history.
+export async function revertSiteAction(
+  clientId: string,
+  _prev: RedeployState,
+  _form: FormData
+): Promise<RedeployState> {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { ok: false, message: "Not signed in." };
+
+  let res: Response;
+  try {
+    res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/site-push`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ client_id: clientId, revert: true, deploy: false }),
+    });
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Could not reach site-push." };
+  }
+  const payload = (await res.json().catch(() => null)) as
+    | { commit_url?: string; restored?: string; error?: string }
+    | null;
+  if (!payload) return { ok: false, message: `Revert failed (${res.status}).` };
+  if (payload.error) return { ok: false, message: payload.error };
+
+  await supabase.from("change_log").insert({
+    client_id: clientId,
+    object_type: "site",
+    change_type: "revert",
+    before: {},
+    after: { commit: payload.commit_url ?? null, restored: payload.restored ?? null },
+    reasoning: `Put it back pressed by ${await whoami()}.`,
+    status: "approved",
+  });
+  revalidatePath(`/clients/${clientId}/foundation`);
+  return {
+    ok: true,
+    message: `Put back to ${payload.restored?.slice(0, 7) ?? "the previous commit"}. Vercel redeploys it in about a minute.`,
+  };
+}

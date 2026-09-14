@@ -1899,6 +1899,7 @@ export type Database = {
           last_pushed_at: string | null
           last_commit_url: string | null
           branch: string | null
+          content_paths: Json | null
           audit: Json | null
           audit_checked_at: string | null
           ga4_measurement_id: string | null
@@ -1920,6 +1921,7 @@ export type Database = {
           last_pushed_at?: string | null
           last_commit_url?: string | null
           branch?: string | null
+          content_paths?: Json | null
           audit?: Json | null
           audit_checked_at?: string | null
           ga4_measurement_id?: string | null
@@ -1941,6 +1943,7 @@ export type Database = {
           last_pushed_at?: string | null
           last_commit_url?: string | null
           branch?: string | null
+          content_paths?: Json | null
           audit?: Json | null
           audit_checked_at?: string | null
           ga4_measurement_id?: string | null

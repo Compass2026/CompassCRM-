@@ -51,6 +51,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ProvisionButton } from "@/components/provision-button";
 import { RedeployButton } from "@/components/redeploy-button";
+import { RevertButton } from "@/components/revert-button";
 import { parseAudit, parseQuality, scoreTone, shortDate } from "@/lib/site-status";
 
 const selectClass =
@@ -82,6 +83,7 @@ export default async function FoundationPage({
     { data: site },
     { data: workerPipelines },
     { data: brandAssets },
+    { data: siteChanges },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -139,7 +141,7 @@ export default async function FoundationPage({
     supabase
       .from("sites")
       .select(
-        "id, url, stack, controlled_by_compass, repo_url, branch, vercel_project, staging_url, last_pushed_at, last_commit_url, quality, quality_checked_at, audit, audit_checked_at"
+        "id, url, stack, controlled_by_compass, repo_url, branch, vercel_project, staging_url, last_pushed_at, last_commit_url, quality, quality_checked_at, audit, audit_checked_at, content_paths"
       )
       .eq("client_id", clientId)
       .order("created_at")
@@ -161,7 +163,25 @@ export default async function FoundationPage({
       .order("is_primary", { ascending: false })
       .order("sort_order")
       .order("created_at"),
+    supabase
+      .from("change_log")
+      .select("id, change_type, after, reasoning, created_at")
+      .eq("client_id", clientId)
+      .eq("object_type", "site")
+      .in("change_type", ["page_added", "page_rewrite", "faq_added", "blog_post", "revert", "pull_request"])
+      .order("created_at", { ascending: false })
+      .limit(12),
   ]);
+  const changeLabel: Record<string, string> = {
+    page_added: "New page",
+    page_rewrite: "Rewrite",
+    faq_added: "FAQ",
+    blog_post: "Blog post",
+    revert: "Put back",
+    pull_request: "Pull request",
+  };
+  const changeAfter = (a: unknown) => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});
+  const lastChange = siteChanges?.[0];
 
   // Logo + photo strip: sign the private bucket paths once for the page.
   const assetPaths = (brandAssets ?? []).map((a) => a.storage_path).filter((p): p is string => !!p);
@@ -379,7 +399,15 @@ export default async function FoundationPage({
                 </span>
               )}
             </CardTitle>
-            {site?.repo_url && <RedeployButton clientId={clientId} />}
+            <div className="flex items-center gap-2 flex-wrap">
+              {site?.repo_url && site.content_paths && (
+                <RevertButton
+                  clientId={clientId}
+                  lastChange={lastChange ? `${changeLabel[lastChange.change_type] ?? lastChange.change_type} · ${String(changeAfter(lastChange.after).title ?? changeAfter(lastChange.after).url ?? "")}` : null}
+                />
+              )}
+              {site?.repo_url && <RedeployButton clientId={clientId} />}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
@@ -389,6 +417,16 @@ export default async function FoundationPage({
             </p>
           ) : (
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+              <span>
+                <span className="text-muted-foreground">Updates: </span>
+                {site.content_paths ? (
+                  <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px]">on the contract · pages + weekly post publish here</Badge>
+                ) : site.controlled_by_compass ? (
+                  <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 text-[10px]">not on the contract yet · Docs only</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px]">client-run · Docs in 04 Website</Badge>
+                )}
+              </span>
               <span>
                 <span className="text-muted-foreground">Live: </span>
                 {site.url ? (
@@ -451,6 +489,33 @@ export default async function FoundationPage({
                   "never"
                 )}
               </span>
+            </div>
+          )}
+          {site && (siteChanges?.length ?? 0) > 0 && (
+            <div>
+              <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Recent changes</h3>
+              <ul className="text-xs space-y-0.5">
+                {siteChanges!.map((ch) => {
+                  const a = changeAfter(ch.after);
+                  const url = typeof a.url === "string" ? a.url : null;
+                  const commit = typeof a.commit === "string" ? a.commit : null;
+                  const title = typeof a.title === "string" ? a.title : url ?? "";
+                  return (
+                    <li key={ch.id} className="flex gap-2 items-baseline">
+                      <span className="text-muted-foreground shrink-0 tabular-nums">{shortDate(ch.created_at)}</span>
+                      <Badge variant="outline" className="text-[10px] shrink-0">{changeLabel[ch.change_type] ?? ch.change_type}</Badge>
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">{title}</a>
+                      ) : (
+                        <span className="truncate">{title}</span>
+                      )}
+                      {commit && (
+                        <a href={commit} target="_blank" rel="noreferrer" className="text-muted-foreground hover:underline shrink-0">commit</a>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
 

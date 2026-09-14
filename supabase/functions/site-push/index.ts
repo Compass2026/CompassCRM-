@@ -26,14 +26,27 @@
 //
 // Response: { repo_url, commit_url, branch, files, deleted, created_repo }.
 //
-// Two more modes, both with { client_id } and no files:
-//   { read: true }        — the pushed branch's tree with text files inline
+// More modes, all with { client_id } and no files:
+//   { read: true, paths? }  — the branch's tree with text files inline
 //                           (so the worker, which cannot clone, can edit and
-//                           push back only what changed)
+//                           push back only what changed); `paths` limits the
+//                           inline contents to those files
 //   { domain: "host" }    — add the production domain (and its www / apex
 //                           twin as a redirect) to the Vercel project and
 //                           report verification state + the DNS records Tom
 //                           must add; { status: verified | pending, dns }
+//   { revert: true }      — "put it back": a new commit on the branch that
+//                           restores the previous commit's tree (nothing is
+//                           rewritten; the change stays in history)
+//
+// Push options (Sept 14 2026, for Tom's Next.js repos): the repo and the
+// Vercel project come from the client's `sites` row when set, so a push
+// lands in `Compass2026/lucas_construction` and Vercel's own Git
+// integration deploys it — pass `deploy: false` to skip the manual
+// deployment. `branch: "compass/<name>"` creates the branch from `main` if
+// it does not exist, and `pull_request: { title, body }` opens a PR to
+// `main` for it (the path for hand-built pages the stage may not push to
+// directly).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -76,9 +89,14 @@ Deno.serve(async (req) => {
   const deployOnly: boolean = body?.deploy === true && !(Array.isArray(body.files) && body.files.length);
   const readOnly: boolean = body?.read === true;
   const domainOnly: boolean = typeof body?.domain === "string" && body.domain.trim() !== "";
-  if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && (!Array.isArray(body.files) || !body.files.length))) {
+  const revertOnly: boolean = body?.revert === true;
+  const noDeploy: boolean = body?.deploy === false;
+  const readPaths: string[] | null = Array.isArray(body?.paths) ? body.paths.map(String) : null;
+  const pullRequest: { title?: string; body?: string } | null =
+    body?.pull_request && typeof body.pull_request === "object" ? body.pull_request : null;
+  if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && !revertOnly && (!Array.isArray(body.files) || !body.files.length))) {
     return Response.json(
-      { error: "client_id and a non-empty files[] are required (or deploy: true)" },
+      { error: "client_id and a non-empty files[] are required (or deploy / read / domain / revert)" },
       { status: 400 }
     );
   }
@@ -108,7 +126,15 @@ Deno.serve(async (req) => {
     );
   }
   const org = (await secret("GITHUB_ORG")) ?? "Compass2026";
-  const full: string = body.repo ?? `${org}/${repoSlug(client.name)}`;
+  const { data: siteRow } = await supabase
+    .from("sites")
+    .select("id, repo_url, branch, vercel_project, stack")
+    .eq("client_id", client.id)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  const repoFromSite = siteRow?.repo_url?.match(/github\.com\/([^/]+)\/([^/#?]+)/i);
+  const full: string = body.repo ?? (repoFromSite ? `${repoFromSite[1]}/${repoFromSite[2].replace(/\.git$/, "")}` : `${org}/${repoSlug(client.name)}`);
   const [owner, name] = full.split("/");
   if (!owner || !name) {
     return Response.json({ error: `bad repo "${full}"` }, { status: 400 });
@@ -177,7 +203,7 @@ Deno.serve(async (req) => {
     // A repo whose main already carries someone else's work (Pensacola has
     // a hand-built Next.js site on main) is never overwritten: the build
     // goes to `compass-astro` instead, and the caller is told which.
-    const requested: string | null = body.branch ?? null;
+    const requested: string | null = body.branch ?? (siteRow?.stack === "nextjs" ? (siteRow.branch ?? "main") : null);
     let branch = requested ?? "main";
     let parentSha: string | null = null;
     let baseTree: string | null = null;
@@ -204,9 +230,55 @@ Deno.serve(async (req) => {
       branch = "compass-astro";
       headInfo = await readHead(branch); // null → an orphan branch with only our tree
     }
+    // A requested side branch that does not exist yet starts from main.
+    if (!headInfo && requested && requested !== "main" && !repoEmpty) {
+      const mainHead = await readHead("main");
+      if (mainHead) {
+        const mk = await gh(`/repos/${owner}/${name}/git/refs`, {
+          method: "POST",
+          body: JSON.stringify({ ref: `refs/heads/${requested}`, sha: mainHead.sha }),
+        });
+        if (!mk.ok) throw fail(`create branch ${requested}`, mk, await mk.text());
+        headInfo = mainHead;
+      }
+    }
     if (headInfo) {
       parentSha = headInfo.sha;
       baseTree = headInfo.tree;
+    }
+
+    // ── Revert mode: a new commit carrying the previous commit's tree ───
+    if (revertOnly) {
+      if (!headInfo) return Response.json({ error: "branch has no commits" }, { status: 400 });
+      const cur = await gh(`/repos/${owner}/${name}/git/commits/${headInfo.sha}`);
+      if (!cur.ok) throw fail("read head", cur, await cur.text());
+      const c = await cur.json();
+      const parent = c.parents?.[0]?.sha as string | undefined;
+      if (!parent) return Response.json({ error: "the head commit has no parent to go back to" }, { status: 400 });
+      const prev = await gh(`/repos/${owner}/${name}/git/commits/${parent}`);
+      if (!prev.ok) throw fail("read previous commit", prev, await prev.text());
+      const pc = await prev.json();
+      const mk = await gh(`/repos/${owner}/${name}/git/commits`, {
+        method: "POST",
+        body: JSON.stringify({
+          message: body.message ?? `Put it back: revert "${String(c.message).split("\n")[0].slice(0, 60)}" (Compass CRM)`,
+          tree: pc.tree.sha,
+          parents: [headInfo.sha],
+          author: { name: "Compass CRM", email: "crm@compassmarketing.ai" },
+        }),
+      });
+      if (!mk.ok) throw fail("revert commit", mk, await mk.text());
+      const rc = await mk.json();
+      const upd = await gh(`/repos/${owner}/${name}/git/refs/heads/${branch}`, {
+        method: "PATCH",
+        body: JSON.stringify({ sha: rc.sha, force: false }),
+      });
+      if (!upd.ok) throw fail("update ref", upd, await upd.text());
+      const commitUrl = `${repoUrl}/commit/${rc.sha}`;
+      if (siteRow) {
+        await supabase.from("sites").update({ last_pushed_at: new Date().toISOString(), last_commit_url: commitUrl }).eq("id", siteRow.id);
+      }
+      return Response.json({ repo_url: repoUrl, branch, reverted: headInfo.sha, restored: parent, commit_url: commitUrl });
     }
 
     // ── Read mode: the pushed tree, text files inline ───────────────────
@@ -219,10 +291,11 @@ Deno.serve(async (req) => {
       const entries = ((await treeRes.json()).tree as { path: string; type: string; sha: string; size?: number }[])
         .filter((e) => e.type === "blob");
       const textExt = /\.(ts|tsx|js|mjs|cjs|astro|css|scss|md|mdx|json|txt|xml|html|svg|yml|yaml|toml)$/i;
-      const skip = /^(node_modules|dist|\.astro)\//;
+      const skip = /^(node_modules|dist|\.astro|\.next|\.vercel)\//;
       const out: Record<string, unknown>[] = [];
       for (const e of entries) {
         if (skip.test(e.path)) continue;
+        if (readPaths && !readPaths.includes(e.path)) { out.push({ path: e.path, size: e.size ?? null }); continue; }
         const isText = textExt.test(e.path) && (e.size ?? 0) <= 200_000;
         if (!isText) {
           out.push({ path: e.path, size: e.size ?? null });
@@ -239,12 +312,20 @@ Deno.serve(async (req) => {
       return Response.json({ repo_url: repoUrl, branch, head: headInfo.sha, files: out });
     }
 
+    // The Vercel project: the one recorded on the sites row when we are on
+    // its branch (Tom's projects are named by hand), else the repo name, or
+    // `<repo>-astro` for the side branch.
+    const projectName = () =>
+      siteRow?.vercel_project && branch === (siteRow.branch ?? "main")
+        ? siteRow.vercel_project
+        : branch === "main" ? name : `${name}-astro`;
+
     // ── Vercel client, shared by the domain mode and the deploy step ────
     const vercelCtx = async () => {
       const vToken = await secret("VERCEL_TOKEN");
       if (!vToken) return null;
       const teamId = (await secret("VERCEL_TEAM_ID")) ?? "team_JxUWGz1PjUP4jOAqXQqy3YFN";
-      const project = branch === "main" ? name : `${name}-astro`;
+      const project = projectName();
       const vc = (path: string, init: RequestInit = {}) =>
         fetch(`https://api.vercel.com${path}${path.includes("?") ? "&" : "?"}teamId=${teamId}`, {
           ...init,
@@ -323,10 +404,11 @@ Deno.serve(async (req) => {
     // The side branch gets its own project so it never collides with an
     // existing site's project on the same repo.
     const vercelStep = async (): Promise<Record<string, unknown>> => {
+      if (noDeploy) return { status: "skipped", detail: "deploy: false — Vercel's Git integration deploys the push" };
       const vToken = await secret("VERCEL_TOKEN");
       if (!vToken) return { status: "skipped", detail: "VERCEL_TOKEN not in Vault" };
       const teamId = (await secret("VERCEL_TEAM_ID")) ?? "team_JxUWGz1PjUP4jOAqXQqy3YFN";
-      const project = branch === "main" ? name : `${name}-astro`;
+      const project = projectName();
       const vc = (path: string, init: RequestInit = {}) =>
         fetch(`https://api.vercel.com${path}${path.includes("?") ? "&" : "?"}teamId=${teamId}`, {
           ...init,
@@ -343,7 +425,7 @@ Deno.serve(async (req) => {
             method: "POST",
             body: JSON.stringify({
               name: project,
-              framework: "astro",
+              framework: siteRow?.stack === "nextjs" ? "nextjs" : "astro",
               gitRepository: { type: "github", repo: `${owner}/${name}` },
             }),
           });
@@ -468,6 +550,27 @@ Deno.serve(async (req) => {
       throw new Error("nothing to commit");
     }
 
+    // ── Pull request for a side branch ──────────────────────────────────
+    let prUrl: string | null = null;
+    if (pullRequest && branch !== "main") {
+      const existing = await gh(`/repos/${owner}/${name}/pulls?head=${owner}:${branch}&base=main&state=open`);
+      const open = existing.ok ? ((await existing.json()) as { html_url: string }[]) : [];
+      if (open[0]) prUrl = open[0].html_url;
+      else {
+        const pr = await gh(`/repos/${owner}/${name}/pulls`, {
+          method: "POST",
+          body: JSON.stringify({
+            title: pullRequest.title ?? message,
+            body: pullRequest.body ?? "Opened by the Compass CRM worker.",
+            head: branch,
+            base: "main",
+          }),
+        });
+        if (!pr.ok) throw fail("pull request", pr, await pr.text());
+        prUrl = (await pr.json()).html_url;
+      }
+    }
+
     // ── Record it ───────────────────────────────────────────────────────
     const commitUrl = `${repoUrl}/commit/${commit.sha}`;
     const branchUrl = `${repoUrl}/tree/${branch}`;
@@ -482,7 +585,9 @@ Deno.serve(async (req) => {
         .from("sites")
         .update({
           repo_url: site.repo_url ?? repoUrl,
-          branch,
+          // A pull-request push lives on a side branch; the site's branch
+          // of record does not move until Tom merges it.
+          ...(pullRequest ? {} : { branch }),
           last_pushed_at: new Date().toISOString(),
           last_commit_url: commitUrl,
         })
@@ -516,6 +621,7 @@ Deno.serve(async (req) => {
       files: files.length,
       deleted: baseTree ? deletes.length : 0,
       created_repo: createdRepo,
+      pull_request_url: prUrl,
       vercel,
       note:
         branch === "compass-astro"
