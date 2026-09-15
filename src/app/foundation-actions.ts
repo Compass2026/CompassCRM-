@@ -475,8 +475,9 @@ export async function redeploySiteAction(
 }
 
 // "Put it back": one commit on the site's branch that restores the previous
-// commit's tree. Vercel's Git integration deploys it (deploy: false — the
-// Next.js projects are linked to their repos). The change stays in history.
+// commit's tree, then a production deployment of it (Vercel's Git
+// integration blocks commits from non-members, so site-push deploys). The
+// change stays in history.
 export async function revertSiteAction(
   clientId: string,
   _prev: RedeployState,
@@ -497,7 +498,7 @@ export async function revertSiteAction(
         apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ client_id: clientId, revert: true, deploy: false }),
+      body: JSON.stringify({ client_id: clientId, revert: true }),
     });
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Could not reach site-push." };
@@ -507,6 +508,17 @@ export async function revertSiteAction(
     | null;
   if (!payload) return { ok: false, message: `Revert failed (${res.status}).` };
   if (payload.error) return { ok: false, message: payload.error };
+
+  // The revert commit is on the branch; now deploy it.
+  await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/site-push`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ client_id: clientId, deploy: true }),
+  }).catch(() => null);
 
   await supabase.from("change_log").insert({
     client_id: clientId,
