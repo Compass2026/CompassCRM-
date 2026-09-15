@@ -1245,21 +1245,27 @@ JSON valid and the array order stable (append).
 **4. Publish.** One push per month per client:
 
 ```json
-{"client_id": "...", "branch": "main", "deploy": false,
+{"client_id": "...", "branch": "main",
  "message": "Website updates <Month YYYY>: +<n> pages, <n> refreshes (Compass CRM)",
  "files": [{"path": "data/locations.json", "content": "<whole file>"}, ...]}
 ```
 
 `branch: "main"` is explicit (the site-push guard that diverts unknown
-authors to a side branch is for full builds, not data entries); `deploy:
-false` because Vercel's Git integration deploys the push. A change to a
-hand-built page (`src/app/services/<slug>/page.tsx`, or a new service
-page) goes to a branch with a pull request instead:
+authors to a side branch is for full builds, not data entries). Leave
+`deploy` alone: Vercel's Git integration **blocks** commits from authors
+who are not team members (ours are "Compass CRM" — they show as BLOCKED
+in Vercel and are harmless), so site-push creates the production
+deployment itself and the response's `vercel.staging_url` is where to
+verify. A change to a hand-built page (`src/app/services/<slug>/page.tsx`,
+or a new service page) goes to a branch with a pull request instead, and
+site-push makes a **preview** deployment for it (`vercel.target:
+"preview"`, `vercel.staging_url` = the preview) — put that URL in the PR
+body so Tom can look before merging:
 
 ```json
-{"client_id": "...", "branch": "compass/<yyyy-mm>-<slug>", "deploy": false,
+{"client_id": "...", "branch": "compass/<yyyy-mm>-<slug>",
  "message": "...", "files": [...],
- "pull_request": {"title": "<Client>: <what>", "body": "<why, evidence, the keyword and its rank>"}}
+ "pull_request": {"title": "<Client>: <what>", "body": "<why, evidence, the keyword and its rank, the preview URL>"}}
 ```
 
 Never touch components, styles, layout files, `package.json` or anything
@@ -1307,7 +1313,7 @@ only.
    `title`, `description`, `datePublished`, `dateModified`, `blocks[]` of
    the same block types the file already uses; `markdown` → a new file in
    `blog_dir` with the same front-matter as its neighbours) and push with
-   `branch: "main", deploy: false`, message `Blog: <title> (Compass CRM)`.
+   `branch: "main"`, message `Blog: <title> (Compass CRM)`.
    Not on the contract: a Google Doc in `04 Website` named `Blog — <Client>
    — <title>` and a line in the task notes for Tom.
 4. **Record:** verify the URL after ~90 s (200, one H1, canonical); a

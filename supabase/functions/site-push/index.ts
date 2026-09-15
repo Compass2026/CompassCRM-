@@ -42,8 +42,10 @@
 // Push options (Sept 14 2026, for Tom's Next.js repos): the repo and the
 // Vercel project come from the client's `sites` row when set, so a push
 // lands in `Compass2026/lucas_construction` and Vercel's own Git
-// integration deploys it — pass `deploy: false` to skip the manual
-// deployment. `branch: "compass/<name>"` creates the branch from `main` if
+// integration would deploy it, except that Vercel blocks Git deployments
+// whose commit author is not a team member (ours is "Compass CRM"), so the
+// deployment is always created here: production for the branch of record,
+// a preview for a side branch. `deploy: false` skips it. `branch: "compass/<name>"` creates the branch from `main` if
 // it does not exist, and `pull_request: { title, body }` opens a PR to
 // `main` for it (the path for hand-built pages the stage may not push to
 // directly).
@@ -315,10 +317,14 @@ Deno.serve(async (req) => {
     // The Vercel project: the one recorded on the sites row when we are on
     // its branch (Tom's projects are named by hand), else the repo name, or
     // `<repo>-astro` for the side branch.
+    // A Next.js site (Tom's) has one project whatever the branch: main
+    // deploys to production, a side branch gets a preview deployment.
     const projectName = () =>
-      siteRow?.vercel_project && branch === (siteRow.branch ?? "main")
+      siteRow?.vercel_project && (siteRow.stack === "nextjs" || branch === (siteRow.branch ?? "main"))
         ? siteRow.vercel_project
         : branch === "main" ? name : `${name}-astro`;
+    const deployTarget = (): "production" | undefined =>
+      branch === (siteRow?.branch ?? "main") ? "production" : undefined;
 
     // ── Vercel client, shared by the domain mode and the deploy step ────
     const vercelCtx = async () => {
@@ -435,21 +441,27 @@ Deno.serve(async (req) => {
           throw fail("vercel project lookup", existing, await existing.text());
         }
         if (!repoId) throw new Error("no GitHub repo id for the deployment");
+        // Vercel's Git integration blocks commits from authors who are not
+        // team members (ours are "Compass CRM"), so the deployment is created
+        // here explicitly: production for the branch of record, a preview
+        // for a side branch / pull request.
+        const target = deployTarget();
         const dep = await vc(`/v13/deployments`, {
           method: "POST",
           body: JSON.stringify({
             name: project,
             project,
-            target: "production",
+            ...(target ? { target } : {}),
             gitSource: { type: "github", repoId, ref: branch },
           }),
         });
         if (!dep.ok) throw fail("vercel deployment", dep, await dep.text());
         const d = await dep.json();
-        const stagingUrl = `https://${project}.vercel.app`;
+        const stagingUrl = target ? `https://${project}.vercel.app` : (d.url ? `https://${d.url}` : `https://${project}.vercel.app`);
         return {
           status: created ? "created" : "deployed",
           project,
+          target: target ?? "preview",
           staging_url: stagingUrl,
           deployment_url: d.url ? `https://${d.url}` : null,
           inspector_url: d.inspectorUrl ?? null,
@@ -461,7 +473,7 @@ Deno.serve(async (req) => {
 
     if (deployOnly) {
       const vercel = await vercelStep();
-      if (vercel.status === "created" || vercel.status === "deployed") {
+      if ((vercel.status === "created" || vercel.status === "deployed") && vercel.target === "production") {
         await supabase
           .from("sites")
           .update({ vercel_project: vercel.project, staging_url: vercel.staging_url })
@@ -606,7 +618,7 @@ Deno.serve(async (req) => {
     }
 
     const vercel = await vercelStep();
-    if (vercel.status === "created" || vercel.status === "deployed") {
+    if ((vercel.status === "created" || vercel.status === "deployed") && vercel.target === "production") {
       await supabase
         .from("sites")
         .update({ vercel_project: vercel.project, staging_url: vercel.staging_url })
