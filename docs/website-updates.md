@@ -17,9 +17,11 @@ plan, open placeholders, the brand board):
    service page for a group with no URL; a rewrite for a keyword at
    positions 4–20; FAQ additions from the questions Search Console shows;
    any open placeholder that now has material.
-3. **Compass sites**: write the entries, run the checks, push, Vercel
-   deploys. The Brief lists what changed with links; "put it back" redeploys
-   the previous commit.
+3. **Compass sites**: write the entries, run the checks, push; `site-push`
+   creates the Vercel deployment (Vercel's own Git integration blocks the
+   CRM's commits because the author is not a team member). The Brief lists
+   what changed with links; "put it back" commits the previous tree and
+   redeploys.
 4. **Client-controlled sites**: the same pages and rewrites land as Google
    Docs in `04 Website` plus a `change_log` row for whoever runs the site.
 5. **Blog**: one post a week per client, each tied to one long-tail keyword
@@ -43,8 +45,8 @@ not components:
 | Canonical | `alternates.canonical` on every route | the repo's own rule: every new route declares its canonical |
 
 A site is "on the contract" when it has those two data files, the two
-dynamic routes, `sitemap.ts` and per-route canonicals. Vercel deploys on
-push, and `site-push` already commits files to any repo.
+dynamic routes, `sitemap.ts` and per-route canonicals. `site-push` commits
+files to any repo and deploys the result on Vercel itself.
 
 ## Where each site stands (Sept 14 2026)
 
