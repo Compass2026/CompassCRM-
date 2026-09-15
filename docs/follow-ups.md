@@ -38,12 +38,17 @@ unblocks and what it costs.
    files, canonicals), Show Me Electrical (full site), Ginger Huff, Show Me
    Design and Logic Solar (rebuild from Vite on the Lucas contract). Each
    one flips the Website Updates stage on for that client.
-5c. **Website Updates stage — built Sept 14** (migration 0035, site-push
-   v6, Put it back, playbooks). Still to do: put BHG on the contract
+5c. **Website Updates stage — built Sept 14, first run Sept 15** (migration
+   0035, site-push v8, Put it back, playbooks). Lucas's September run:
+   two city refreshes live on lucasconstructionmo.com, two service pages
+   in `Compass2026/lucas_construction` PR #9 (Tom merges; the preview
+   needs a Vercel login). Still to do: put BHG on the contract
    (`content_paths` with `blog_format: markdown`, `blog_dir: content/blog`)
    once its blog entry shape is checked; Pensacola after its data files
-   exist; the first real run is the Oct 2 fire (or set a client's
-   `site_updates` task by hand). Revert mode is untested on a real repo.
+   exist; the weekly blog cron only covers `active` clients, so Lucas
+   (still `launching`) gets no blog task until it converges or Tom sets it
+   active. Vercel deployment protection on previews: turn it off on the
+   client projects if the client is to see a PR preview without a login.
 
 ## Worth building next
 

@@ -1274,8 +1274,8 @@ outside `content_paths` and `services_dir`.
 **5. Verify, then record.** Wait ~90 s, then fetch each new or changed URL
 on `sites.url` (else `staging_url`): expect 200, exactly one H1, the
 canonical, and the JSON-LD block. A page that fails → `site-push {revert:
-true, deploy: false}` at once, then fix and re-push, or leave it out and say
-so. For every change one `change_log` row: `object_type = 'site'`,
+true}` then `{deploy: true}` at once, then fix and re-push, or leave it out
+and say so. For every change one `change_log` row: `object_type = 'site'`,
 `change_type` in `page_added` / `page_rewrite` / `faq_added` /
 `pull_request`, `before` (old entry or `{}`), `after` `{url, title,
 keyword, commit, pull_request_url}`, `reasoning` (the evidence: rank,

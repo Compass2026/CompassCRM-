@@ -597,25 +597,33 @@ and the per-site survey in `docs/website-updates.md`.
   `fire_website_updates()` (pg_cron, 2nd 09:00 UTC) fires the worker per
   open cycle. Map tracked keywords to pages first, then pick from ranks
   (positions 4–20), Search Console, the page plan and open placeholders;
-  write entries, push `branch: "main", deploy: false`, verify each URL
-  after ~90 s (200, one H1, canonical, JSON-LD; a failure reverts at once),
+  write entries, push `branch: "main"`, verify each URL the response's
+  `vercel.staging_url` points at (200, one H1, canonical, JSON-LD; a
+  failure reverts at once),
   one `change_log` row per change with the commit, keyword `target_url`,
   close the task flagged with a one-line recommendation for the Brief.
 - **Weekly**: `create_weekly_blog_tasks()` (pg_cron, Wednesdays 09:00 UTC)
   opens a `blog_post` task per active client and fires the worker. One
   post, one long-tail keyword, one service page, brand voice, sourced facts
   only; a `content_posts` row records it.
-- **site-push v6**: repo and Vercel project come from the `sites` row
+- **site-push v8**: repo and Vercel project come from the `sites` row
   (Tom's repos are named by hand — `lucas_construction`,
   `lucas-construction`); `{read: true, paths: [...]}` returns only those
   files inline; `branch: "compass/<x>"` creates the branch from `main` and
   `pull_request: {title, body}` opens the PR (the site's branch of record
   does not move); `{revert: true}` makes a new commit carrying the previous
-  commit's tree; `deploy: false` skips the manual deployment because the
-  Git integration deploys the push. Next.js repos default to their
-  recorded branch — the "not our author → compass-astro" guard is for full
-  builds only. Verified Sept 14 on Lucas: read + branch + PR (test PR
-  closed, branch deleted); revert is untested on a real repo.
+  commit's tree. **Vercel's Git integration blocks every commit authored
+  by "Compass CRM"** (not a team member — the entries show as BLOCKED in
+  Vercel and are harmless), so site-push creates the deployment itself:
+  production for the branch of record, a preview (behind Vercel's
+  deployment protection, so a Vercel login is needed to view it) for a
+  side branch, `vercel.target` / `staging_url` / `deployment_url` in the
+  response; `deploy: false` skips it. `{deploy: true}` with no files
+  redeploys the current head, which is what **Put it back** does after a
+  revert. Next.js repos default to their recorded branch — the "not our
+  author → compass-astro" guard is for full builds only. Verified Sept 15
+  on Lucas: read, push to `main` + production deploy, branch + PR + preview
+  (PR #9), revert (Sept 14 test, redeployed).
 - **Retired:** the Astro proposal builds (Vercel projects and the
   `compass-astro` branch deleted; `sites` rows point at Tom's Next.js repos).
 
