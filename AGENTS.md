@@ -25,8 +25,19 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 - **Auth:** internal team only. Password sign-in is the primary path with a
   magic-link fallback (`src/app/login/page.tsx`); the built-in Supabase mailer
   rate-limits aggressively, so custom SMTP via Resend is the intended fix.
-  RLS is enabled everywhere with a blanket authenticated policy; the Phase 5
-  client portal only adds client-scoped policies.
+  Magic links never create accounts (`shouldCreateUser: false`). RLS is
+  enabled everywhere and every team policy reads `is_team()` (migration
+  0036) — a sign-in whose `auth.uid()` is not on `team_members` sees
+  nothing, and the app layout signs it out via `/auth/signout`. Sign-ups are
+  disabled in Supabase Auth; to add a teammate, invite them in Supabase Auth,
+  then insert a `team_members` row with that email (a trigger links
+  `auth_user_id`). **New tables
+  must use `using ((select is_team())) with check ((select is_team()))`,
+  never `using (true)`**, and new security-definer functions must be revoked
+  from `public, anon, authenticated`. Edge Functions that accept a JWT also
+  require the user to be on `team_members` (403 otherwise); `x-cron-secret`
+  callers are unaffected. The Phase 5 client portal adds client-scoped
+  policies alongside these.
 - **Secrets** live in Supabase Vault, never in the repo, and are read by Edge
   Functions through the service-role-only `get_secret()` function:
   `BRIGHTLOCAL_API_KEY`, `GSC_CLIENT_ID` / `GSC_CLIENT_SECRET` /

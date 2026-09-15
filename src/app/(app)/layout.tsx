@@ -21,6 +21,15 @@ export default async function AppLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // The CRM is team-only. Policies already hide every row from anyone else;
+  // this keeps a non-team sign-in from landing on an empty shell.
+  const { data: member } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (!member) redirect("/auth/signout");
+
   return (
     <div className="min-h-screen">
       <header className="bg-navy-900 text-cream">
