@@ -708,6 +708,42 @@ Verified on Sept 11 2026 with no secrets (both steps `skipped`, 200) and with
 deliberately bad ones (both `failed` with the upstream error, 502, no tasks
 closed).
 
+## Client portal (Phase 5, Sept 17 2026)
+
+Migrations 0037 + 0038, routes under `src/app/portal/`. Read-only in v1:
+rankings, search traffic, a work log, monthly reports and where the work
+stands. No billing, no approvals, no uploads yet.
+
+- **The boundary is views, not policies.** RLS cannot hide a column, so the
+  portal never touches a base table: it reads `portal_client`,
+  `portal_progress`, `portal_rankings`, `portal_search_performance`,
+  `portal_search_queries`, `portal_work_log`, `portal_reports` and
+  `portal_site`, each filtered by `portal_client_id()` and carrying only
+  client-safe columns. The views run as their owner, so **the WHERE clause in
+  each view is the security boundary** — a new portal view must filter by
+  `portal_client_id()`, and 0037's verify block refuses the migration if one
+  does not. Base tables stay team-only (0036), so anything not named here is
+  unreachable: tasks, worker fires, billing, brand internals, other clients.
+- **Grants matter as much as the filter.** Supabase grants ALL on new objects
+  in `public` to anon and authenticated; a simple view is auto-updatable and a
+  write through it runs as the view's owner, bypassing RLS. Every portal view
+  is `revoke all … from public, anon, authenticated` then `grant select to
+  authenticated`, and the verify block fails on anything else.
+- **`portal_users`** is one row per client contact (unique by email), linked to
+  `auth.users` by a trigger, with a second trigger refusing any address that
+  belongs to a team member. `portal_client_id()` reads it. The work log shows
+  approved `change_log` rows and published `content_posts` only — never
+  `reasoning`, `evidence` or anything still `proposed`.
+- **Routing:** the CRM layout sends a non-team sign-in to `/portal` (or to
+  `/auth/signout` if they are neither), and the portal layout sends a team
+  member back to `/`. `portal_seen()` (0038) stamps `last_seen_at` — the one
+  write a portal user may make.
+- **Invites:** `portal-invite` Edge Function (team JWT only) creates the auth
+  user and the `portal_users` row; the Overview tab's **Client portal** card
+  invites and revokes. Supabase's built-in mailer allows a couple of messages
+  an hour, so **custom SMTP (Resend, `send.compassmarketing.ai` is verified)
+  must be set in Auth → Emails before inviting real clients.**
+
 ## Known state / open items (as of Sept 13 2026)
 
 - **Stripe secrets are not in Vault yet.** Billing code is deployed but inert

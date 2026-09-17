@@ -5,6 +5,10 @@ import {
   updateClientAction,
   upsertAccessAction,
 } from "@/app/actions";
+import {
+  invitePortalUserAction,
+  revokePortalUserAction,
+} from "@/app/portal-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,21 +38,31 @@ export default async function OverviewPage({
 }) {
   const { clientId } = await params;
   const supabase = await createClient();
-  const [{ data: client }, { data: contacts }, { data: access }] =
-    await Promise.all([
-      supabase.from("clients").select("*").eq("id", clientId).single(),
-      supabase
-        .from("client_contacts")
-        .select("*")
-        .eq("client_id", clientId)
-        .order("is_primary", { ascending: false }),
-      supabase.from("client_access").select("*").eq("client_id", clientId),
-    ]);
+  const [
+    { data: client },
+    { data: contacts },
+    { data: access },
+    { data: portalUsers },
+  ] = await Promise.all([
+    supabase.from("clients").select("*").eq("id", clientId).single(),
+    supabase
+      .from("client_contacts")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("is_primary", { ascending: false }),
+    supabase.from("client_access").select("*").eq("client_id", clientId),
+    supabase
+      .from("portal_users")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at"),
+  ]);
 
   if (!client) return null;
 
   const updateClient = updateClientAction.bind(null, clientId);
   const addContact = addContactAction.bind(null, clientId);
+  const invitePortalUser = invitePortalUserAction.bind(null, clientId);
 
   const accessBySystem = new Map(access?.map((a) => [a.system, a]));
   const systems: AccessSystem[] = [
@@ -262,6 +276,94 @@ export default async function OverviewPage({
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">Client portal</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Invited contacts can sign in and see this client&apos;s rankings,
+            search traffic, work log and reports — nothing else, and no other
+            client.
+          </p>
+
+          {(portalUsers ?? []).length > 0 && (
+            <div className="space-y-2">
+              {(portalUsers ?? []).map((pu) => {
+                const revoke = revokePortalUserAction.bind(
+                  null,
+                  clientId,
+                  pu.email
+                );
+                return (
+                  <div
+                    key={pu.id}
+                    className="flex flex-wrap items-center gap-3 text-sm"
+                  >
+                    <span className="font-medium">{pu.email}</span>
+                    {pu.name && (
+                      <span className="text-muted-foreground">{pu.name}</span>
+                    )}
+                    <Badge
+                      variant="outline"
+                      className={
+                        !pu.is_active
+                          ? "bg-zinc-100 text-zinc-600 border-zinc-200"
+                          : pu.last_seen_at
+                            ? "bg-green-100 text-green-800 border-green-200"
+                            : "bg-blue-100 text-blue-800 border-blue-200"
+                      }
+                    >
+                      {!pu.is_active
+                        ? "revoked"
+                        : pu.last_seen_at
+                          ? "active"
+                          : "invited"}
+                    </Badge>
+                    {pu.is_active && (
+                      <form action={revoke}>
+                        <Button type="submit" variant="outline" size="sm">
+                          Revoke
+                        </Button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <form
+            action={invitePortalUser}
+            className="flex flex-wrap items-end gap-3"
+          >
+            <div className="space-y-1">
+              <Label htmlFor="portal_email">Email</Label>
+              <Input
+                id="portal_email"
+                name="email"
+                type="email"
+                required
+                placeholder="owner@client.com"
+                className="w-64"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="portal_name">Name</Label>
+              <Input
+                id="portal_name"
+                name="name"
+                placeholder="Optional"
+                className="w-48"
+              />
+            </div>
+            <Button type="submit" variant="outline">
+              Send invite
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>
