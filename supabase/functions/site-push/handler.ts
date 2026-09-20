@@ -131,6 +131,11 @@ export function createSitePushHandler(deps: HandlerDeps) {
       ? { repo: String(body.archive.repo), ref: String(body.archive.ref) }
       : null;
   const previewRequested: boolean = body?.preview === true;
+  // { deployment_status: "<id|url>" } — read-only: what became of a deployment.
+  // The worker has no Vercel connector, so this is how it verifies that a
+  // preview it pushed actually built instead of taking the push on trust.
+  const deploymentStatusReq: string | null =
+    typeof body?.deployment_status === "string" && body.deployment_status.trim() ? body.deployment_status.trim() : null;
   const productionBranchHint: string | null = typeof body?.production_branch === "string" ? body.production_branch : null;
   const brandForVercel: string | null = typeof body?.brand === "string" && body.brand.trim() ? body.brand.trim() : null;
   // { version: true } — what is deployed. The worker's preflight compares
@@ -143,9 +148,9 @@ export function createSitePushHandler(deps: HandlerDeps) {
   const readPaths: string[] | null = Array.isArray(body?.paths) ? body.paths.map(String) : null;
   const pullRequest: { title?: string; body?: string } | null =
     body?.pull_request && typeof body.pull_request === "object" ? body.pull_request : null;
-  if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && !revertOnly && !archiveReq && (!Array.isArray(body.files) || !body.files.length))) {
+  if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && !revertOnly && !archiveReq && !deploymentStatusReq && (!Array.isArray(body.files) || !body.files.length))) {
     return Response.json(
-      { error: "client_id and a non-empty files[] are required (or deploy / read / domain / revert / archive)" },
+      { error: "client_id and a non-empty files[] are required (or deploy / read / domain / revert / archive / deployment_status)" },
       { status: 400 }
     );
   }
@@ -331,7 +336,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
     });
     // Read / deploy / domain / revert modes act on the branch of record (or
     // the named branch) and are never refused by the work mode.
-    const mutating = !readOnly && !deployOnly && !domainOnly && !revertOnly;
+    const mutating = !readOnly && !deployOnly && !domainOnly && !revertOnly && !deploymentStatusReq;
     if (mutating && plan.refuse) {
       return Response.json({ error: plan.refuse.error, work_mode: planSite?.work_mode ?? null, branch_of_record: plan.base }, { status: plan.refuse.status });
     }
@@ -436,6 +441,8 @@ export function createSitePushHandler(deps: HandlerDeps) {
         : branch === base ? name : `${name}-preview`;
     const deployTarget = (): "production" | undefined =>
       branch === base && (!mutating || plan.deployTarget === "production") ? "production" : undefined;
+    /** This request asked for a preview, so production is out of bounds for it. */
+    const previewPush = mutating && plan.deployTarget === "preview";
 
     // ── Vercel client, shared by the domain mode and the deploy step ────
     const vercelCtx = async () => {
@@ -453,6 +460,26 @@ export function createSitePushHandler(deps: HandlerDeps) {
         });
       return { vc, project };
     };
+
+    // ── Deployment status: did the thing we pushed actually build? ──────
+    if (deploymentStatusReq) {
+      const ctx = await vercelCtx();
+      if (!ctx) return Response.json({ error: "VERCEL_TOKEN not in Vault" }, { status: 500 });
+      const id = deploymentStatusReq.replace(/^https?:\/\//, "");
+      const res = await ctx.vc(`/v13/deployments/${encodeURIComponent(id)}`);
+      if (!res.ok) {
+        return Response.json({ error: `deployment ${id} not found (${res.status})` }, { status: 404 });
+      }
+      const d = await res.json();
+      return Response.json({
+        deployment_id: d.id ?? null,
+        url: d.url ? `https://${d.url}` : null,
+        ready_state: d.readyState ?? d.state ?? null,
+        target: d.target ?? "preview",
+        error_message: d.errorMessage ?? null,
+        error_code: d.errorCode ?? null,
+      });
+    }
 
     // ── Domain mode: production domain on the project + DNS to add ──────
     if (domainOnly) {
@@ -555,6 +582,20 @@ export function createSitePushHandler(deps: HandlerDeps) {
         } else if (!existing.ok) {
           throw fail("vercel project lookup", existing, await existing.text());
         }
+        // Vercel promotes a project's FIRST deployment to production whatever
+        // the branch (verified Sept 20 2026: the second deployment on the same
+        // project, same ref, came back target null = preview). So a preview
+        // push must never be the deployment that creates a project — for a
+        // fictional brand that would put it on a production target. The
+        // project is left in place; the next push deploys as a real preview.
+        if (created && previewPush) {
+          return {
+            status: "skipped",
+            project,
+            detail:
+              "Vercel project created, no deployment started: Vercel promotes a project's first deployment to production, and this is a preview push. Push again — the project now exists, so the next deployment is a preview.",
+          };
+        }
         if (!repoId) throw new Error("no GitHub repo id for the deployment");
         // Vercel's Git integration blocks commits from authors who are not
         // team members (ours are "Compass CRM"), so the deployment is created
@@ -572,11 +613,41 @@ export function createSitePushHandler(deps: HandlerDeps) {
         });
         if (!dep.ok) throw fail("vercel deployment", dep, await dep.text());
         const d = await dep.json();
+        // Wait briefly for the deployment to settle. A misconfigured build
+        // (a tree with no framework, say) errors within seconds, and the
+        // caller must hear that rather than record an unbuilt preview as
+        // delivered. A healthy build is still BUILDING when we give up.
+        let settled: Record<string, unknown> = d;
+        const deadline = Date.now() + 45_000;
+        while (d.id && Date.now() < deadline) {
+          const st = String(settled.readyState ?? settled.state ?? "");
+          if (st === "READY" || st === "ERROR" || st === "CANCELED") break;
+          await new Promise((r) => setTimeout(r, 4000));
+          const poll = await vc(`/v13/deployments/${d.id}`);
+          if (!poll.ok) break;
+          settled = await poll.json();
+        }
+        const readyState = String(settled.readyState ?? settled.state ?? "QUEUED");
+        const finalTarget = (settled.target ?? d.target ?? null) as string | null;
+        // The boundary: a preview push may never end up on a production target.
+        if (previewPush && finalTarget === "production") {
+          return {
+            status: "failed",
+            project,
+            target: finalTarget,
+            deployment_url: d.url ? `https://${d.url}` : null,
+            ready_state: readyState,
+            detail:
+              "a preview push produced a PRODUCTION-target deployment — refusing to report it as a preview. Nothing may be published this way.",
+          };
+        }
         const stagingUrl = target ? `https://${project}.vercel.app` : (d.url ? `https://${d.url}` : `https://${project}.vercel.app`);
         return {
-          status: created ? "created" : "deployed",
+          status: readyState === "ERROR" ? "failed" : created ? "created" : "deployed",
           project,
-          target: target ?? "preview",
+          target: finalTarget ?? "preview",
+          ready_state: readyState,
+          error_message: settled.errorMessage ?? null,
           staging_url: stagingUrl,
           deployment_url: d.url ? `https://${d.url}` : null,
           inspector_url: d.inspectorUrl ?? null,

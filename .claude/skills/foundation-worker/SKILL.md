@@ -658,6 +658,43 @@ verbatim.
 Payload shape as before (text files as `content`, binaries base64); never
 `node_modules/`, `.next/`, `.git/`. Do not print the secrets.
 
+**A `new_build` push is the WHOLE TREE, not the brand layer.** Every file
+under `/tmp/site` except `node_modules/`, `.next/`, `.git/` — the framework
+(`app/`, `lib/`, `components/`, `brands/registry.ts`, `package.json`,
+`package-lock.json`, `next.config.ts`, `tsconfig.json`, `scripts/`) as well
+as `brands/<brand>/` and `public/`. A repository holding only
+`brands/<brand>/` has no framework: Vercel answers `NEXT_NO_VERSION` ("No
+Next.js version detected") and nothing builds. That is what a 30-file push
+did on Sept 20 2026. One push of ~250 files is one tree request and is well
+within the limits — do not "optimise" it into batches.
+
+**Verify the deployment before you record it** (both modes). The push
+response's `vercel` block now carries `ready_state` and, when the build
+failed, `error_message`. `site-push` also answers a read-only status call:
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" \
+  --data '{"client_id": "<client_id>", "deployment_status": "<vercel.deployment_url or deployment id>"}'
+# { ready_state, target, error_message, error_code, url }
+```
+
+Rules, and they are not negotiable:
+
+- `ready_state` `ERROR` → the stage is **blocked** with `error_message` in
+  `next_action`. Never complete it.
+- `ready_state` still `BUILDING` / `QUEUED` after the status call → record
+  the deployment as **deferred** in the checks (with the id), say so in the
+  evidence, and leave the stage `in_progress` for the next run to confirm.
+  A deployment you have not seen reach `READY` is never "the preview is up".
+- `vercel.status` `skipped` because the project was just created → push
+  again in the same run; the second push deploys as a real preview.
+- `target` must be `preview` for any preview push. A `production` target on
+  a preview push is a failure, not a result — site-push reports it as one.
+- Deployment protection (a Vercel login) may stop you fetching the preview
+  URL. That is not verification either way: the status call is.
+
 **6. Attach the outcome.** Fold the push response and `/tmp/verify.json`
 into the brief and record them. Write `/tmp/outcome.json` (each `pass`
 entry → `{"name", "result": "pass"}`, each `fail` → `"fail"`, each
