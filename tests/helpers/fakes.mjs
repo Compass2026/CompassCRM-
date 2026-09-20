@@ -38,7 +38,7 @@ export function fakeSupabase({ tables = {}, secrets = {}, teamJwt = "team-jwt" }
 /**
  * repos: { "Owner/name": { id, default_branch, empty, branches: { main: { author: "Tom" | "Compass CRM" } } } }
  */
-export function fakeGitHub({ repos = {}, login = "Compass2026" } = {}) {
+export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } = {}) {
   const calls = [];
   let n = 0;
   const id = (p) => `${p}${++n}`;
@@ -58,7 +58,36 @@ export function fakeGitHub({ repos = {}, login = "Compass2026" } = {}) {
     const method = (init.method ?? "GET").toUpperCase();
     const body = init.body ? JSON.parse(init.body) : null;
     calls.push({ method, path: u.pathname + u.search, body });
-    if (u.host === "api.vercel.com") return json(500, { error: "vercel not faked" });
+    if (u.host === "api.vercel.com") {
+      // Opt-in Vercel model. Its one interesting behaviour, verified against
+      // the real API on Sept 20 2026: a project's FIRST deployment is
+      // promoted to production whatever the branch, and later ones with no
+      // `target` come back as previews (target null).
+      if (!vercel) return json(500, { error: "vercel not faked" });
+      vercel.projects ??= {}; vercel.deployments ??= {};
+      let vm;
+      if ((vm = u.pathname.match(/^\/v9\/projects\/([^/]+)$/)) && method === "GET") {
+        return vercel.projects[vm[1]] ? json(200, { name: vm[1] }) : json(404, { message: "not found" });
+      }
+      if (u.pathname === "/v10/projects" && method === "POST") {
+        vercel.projects[body.name] = { deployments: 0 };
+        return json(201, { name: body.name });
+      }
+      if (u.pathname === "/v13/deployments" && method === "POST") {
+        const proj = (vercel.projects[body.project] ??= { deployments: 0 });
+        const first = proj.deployments === 0;
+        proj.deployments += 1;
+        const id = `dpl_${++n}`;
+        const dep = { id, url: `${body.project}-${id}.vercel.app`, target: body.target ?? (first ? "production" : null), readyState: "READY" };
+        vercel.deployments[id] = dep;
+        return json(200, dep);
+      }
+      if ((vm = u.pathname.match(/^\/v13\/deployments\/([^/]+)$/)) && method === "GET") {
+        const d = vercel.deployments[decodeURIComponent(vm[1])];
+        return d ? json(200, d) : json(404, { message: "not found" });
+      }
+      return json(404, { message: `unhandled vercel ${method} ${u.pathname}` });
+    }
     const m = u.pathname.match(/^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/);
     if (u.pathname === "/user" && method === "GET") return json(200, { login });
     if (u.pathname === "/user/repos" && method === "POST") {

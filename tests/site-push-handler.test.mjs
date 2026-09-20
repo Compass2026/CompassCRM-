@@ -10,16 +10,18 @@ const CLIENT = "00000000-0000-4000-8000-0000000000c1";
 const secrets = { SYNC_CRON_SECRET: "cron", GITHUB_TOKEN: "ghp_fake", GITHUB_ORG: "Compass2026" };
 const clientRow = { id: CLIENT, name: "Ridge Safety Group", website_url: "https://ridge.example" };
 
-function setup({ site, repos, release = null } = {}) {
+function setup({ site, repos, release = null, vercel = null } = {}) {
   const supabase = fakeSupabase({
-    secrets,
+    // A Vercel token only where the test opts into the Vercel fake, so the
+    // other tests keep exercising the "no token, no deployment" path.
+    secrets: vercel ? { ...secrets, VERCEL_TOKEN: "vt_fake" } : secrets,
     tables: {
       clients: [clientRow],
       sites: site ? [{ id: "site-1", client_id: CLIENT, ...site }] : [],
       foundation_releases: release ? [release] : [],
     },
   });
-  const gh = fakeGitHub({ repos });
+  const gh = fakeGitHub({ repos, vercel });
   const handler = createSitePushHandler({ supabase, fetch: gh.fetch });
   const post = async (body, headers = { "x-cron-secret": "cron" }) => {
     const res = await handler(new Request("https://fn.local/site-push", { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) }));
@@ -72,6 +74,36 @@ test("a 250-file new build is one tree request: text inline, a blob only per bin
   const bySha = trees[0].body.tree.filter((e) => typeof e.sha === "string");
   assert.equal(inline.length, 249, "the bootstrap file goes through the Contents API; the other 249 text files ride inline");
   assert.equal(bySha.length, 3);
+});
+
+test("a preview push never creates a new Vercel project's first deployment (Vercel promotes it to production)", async () => {
+  const vercel = { projects: {} };
+  const { post, site } = setup({
+    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
+    vercel,
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.target, "preview");
+  assert.equal(r.body.vercel.status, "skipped");
+  assert.match(r.body.vercel.detail, /promotes a project's first deployment to production/);
+  assert.equal(Object.keys(vercel.deployments ?? {}).length, 0, "no deployment may be created");
+  assert.equal(site().staging_url ?? null, null);
+});
+
+test("a preview push that Vercel puts on a production target is reported failed, never as a preview", async () => {
+  const vercel = { projects: { "ridge-safety-preview": { deployments: 0 } } };
+  const { post } = setup({
+    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
+    vercel,
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.status, "failed");
+  assert.equal(r.body.vercel.target, "production");
+  assert.match(r.body.vercel.detail, /refusing to report it as a preview/);
 });
 
 test("naming the production branch with general code changes is refused: nothing is written to GitHub or the site row", async () => {
