@@ -422,101 +422,255 @@ client at creation (0018) and activates itself when Foundation completes; for
 an older client, whether to enroll Website is Tom's call on the Plan tab — do
 not enroll pipelines yourself.
 
-### Website — Build to 70% (PB4b)
+### Website — Build to 70% (PB4b, on the Compass Website Foundation)
 
 Runs only when Foundation is `complete` and the Website enrollment is
-`active`. Do the CLAUDE tasks on **Discovery** first (site inventory, `sites`
-row: `stack = 'astro'`, `controlled_by_compass = true`, `url` = existing site)
-and set Discovery `in_progress`; its TOM tasks (client request, DNS access)
-stay open — Tom finishes Discovery himself.
+`active`. **The Astro starter is retired** (`templates/astro-site/` is kept
+only as reference). The site line is the accepted **Compass Website
+Foundation** — `foundation_releases` where `is_current` (v1 =
+`Compass2026/showmeelectricalwebsite` @
+`94014af35316c94616dadb3f8d606a4b68577fb0`, accepted Sept 20 2026) — and the
+three governing Drive documents it records. Read the CRM doc
+`docs/compass-foundation-integration.md` once; it is the contract this
+playbook implements.
 
-**GitHub — you cannot reach it, and you do not need to.** Every github.com
-request from a cloud session goes through a proxy that allows only the repo
-attached to the Routine; a PAT never gets past it. Do not try `git clone`,
-`git push`, `curl api.github.com` or the GitHub MCP tools against a client
-repo — they fail before GitHub sees them. The CRM pushes for you: the
-`site-push` Edge Function creates the repo if needed and commits your files
-with the token from Vault. Step 8 below. If `sites.repo_url` is null that is
-fine; `site-push` fills it.
+**Preflight — refuse to run against a half-installed integration.** The
+migration, the Edge Function and this playbook activate separately
+(`docs/compass-foundation-integration.md`, "Activation"). Before claiming
+the stage, check all three; any miss → set the stage `blocked` with the
+exact miss in `next_action` and stop (do not build, do not fall back):
 
-**Build.** The starter is in this repo: `templates/astro-site/`. It already
-carries the SEO / AEO / GEO structure — canonical, one H1, JSON-LD
-(LocalBusiness, Service, FAQPage, BreadcrumbList), an answer-first block, a
-sourced facts block, `llms.txt`, `robots.txt`, a sitemap — so your job is
-the *content*, not the plumbing. Read its `README.md` first.
+```sql
+select version, source_repo, source_sha from foundation_releases where is_current;   -- must return the v1 row
+select column_name from information_schema.columns where table_name = 'sites' and column_name in ('work_mode','build_brief','content_adapter','preview_branch');  -- must return 4 rows
+```
 
-1. `mkdir /tmp/site` and copy `templates/astro-site/` into it — everything
-   except `node_modules/` and `dist/`. You work in `/tmp/site`; nothing is
-   cloned.
-2. Fill `src/config/site.ts` from the CRM. The mapping:
-   - `url` — the production domain if known (`sites.url` when we control it),
-     else `https://<slug>.vercel.app`.
-   - `business` — `clients` (name, phone, city / state, `service_area` split
-     into towns), `schemaType` chosen from schema.org for the vertical
-     (`RoofingContractor`, `Electrician`, `HomeAndConstructionBusiness`…),
-     `sameAs` from the GBP / socials found in Brand Build. **No street
-     address unless the client is a storefront.**
-   - `brand` — `brand_boards.palette` → the seven colour roles, `typography`
-     → `fonts`, `client_brands.tagline` / `positioning`, `hard_rules` copied
-     verbatim, `cta` from the standing CTA.
-   - `facts` — `claims` where `status = 'sourced'` **only**, with the source
-     URL. An unverified claim never reaches the site.
-   - `services[]` — every approved service; `primaryKeyword` from its page
-     group's primary keyword; `question` is what a searcher asks; `answer` is
-     40–60 words and directly answers it; ≥ 3 `faqs`, each answer 25–90
-     words; `description` 70–160 chars.
-   - `cities[]` — page groups of type `city` with their tier; same shape.
-   - `homeFaqs` ≥ 3, `about` from `client_brands.story`, `placeholders[]` —
-     one per missing photo / fact / project, mirrored as `placeholders` rows.
-3. Titles 30–65 chars, one primary keyword per page, in the title, H1 and
-   meta. Supporting keywords in body copy. Never fabricate a testimonial, a
-   licence number, years in business, or a project.
-4. Write `DESIGN.md`, `PRODUCT.md` and `docs/{brand-board,keyword-map,
-   placeholders}.md` from the same data — short; the CRM is the source.
-5. `npm install && npm run build`. A build error is yours to fix.
-6. **Gate.** From the CRM checkout:
-   `node scripts/site-quality-gate.mjs /tmp/site/dist --phone "<phone>"
-   --name "<business name>"`. It must print `PASS`. Fix what it lists and
-   rebuild — up to three rounds. Still failing → *Blocked* with the failure
-   list in `next_action`. Placeholders are counted, never failed.
-7. Run it once more with `--json` and store the report:
-   `update sites set quality = '<json>'::jsonb, quality_checked_at = now()
-   where client_id = '<client_id>'`.
-8. Insert the `placeholders` rows. Then **push through the CRM**: build a
-   JSON payload of every file under `/tmp/site` except `node_modules/`,
-   `dist/`, `.astro/` and `.git/` — text files as `{"path","content"}`,
-   binaries (images) as `{"path","content":<base64>,"encoding":"base64"}` —
-   and POST it:
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" --data '{"client_id": "<client_id>", "version": true}'
+# must answer {"version": 9, "features": [... "content_entry_boundary" ...]}; anything else (400, no version) is the OLD function
+```
 
-   ```bash
-   ANON=$(…)   # select get_secret('SUPABASE_ANON_KEY')
-   CRON=$(…)   # select get_secret('SYNC_CRON_SECRET')
-   curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
-     -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
-     -H "Content-Type: application/json" --data @payload.json
-   ```
+**0. Work mode decides the shape of the stage** (`sites.work_mode`; set at
+intake, editable on the Foundation tab):
 
-   with `payload.json` = `{"client_id": "<client_id>", "message": "Build to
-   70% from Compass CRM", "files": [...]}`. Do **not** pass `branch`: the
-   function picks it. A 200 returns `repo_url`, `branch`, `branch_url` and
-   `commit_url` and updates the `sites` row. **If `branch` comes back as
-   `compass-astro`, the repo's `main` already carries a site that is not
-   ours** (Pensacola has a hand-built Next.js site there) — the build sits on
-   the side branch for Tom to blend, and you say so in the evidence. Anything
-   other than 200 is the GitHub error verbatim. Do not print the secrets.
-9. Put `branch_url` and `commit_url` from the response in the evidence. The
-   response also carries `vercel`: when `VERCEL_TOKEN` is in Vault it has
-   created or reused a Vercel project and started a production deployment,
-   and `sites.vercel_project` / `staging_url` are filled — put `staging_url`
-   in the evidence. `vercel.status = "skipped"` means the token is not set
-   (say so, leave the Vercel checklist task open for Tom); `"failed"` means
-   the push succeeded but the deployment did not — quote `vercel.detail` and
-   leave that task open.
+| Mode | What this stage does | Where the result lands |
+| --- | --- | --- |
+| `new_build` | A Foundation build for the client's brand | the site's branch of record (`sites.branch`, default `main` for a new repo); production deployment = staging |
+| `upgrade_existing` | A bounded upgrade of the site Tom already built | a **preview branch created from the recorded production branch**, a pull request against that branch, a preview deployment; the production branch never moves |
+| `client_retains` | Nothing — the Website pipeline was dropped at intake | if you find this stage open anyway: set it `skipped` with the reason, do not build |
+| null | Not decided | *Blocked*: `next_action` "Set the website work mode on the Foundation tab (new build / upgrade existing / client retains)" |
 
-Close Build-to-70% tasks 1–7 (the Vercel / staging item only if `vercel`
-came back `created` or `deployed`), set the stage `complete`, and put the
-repo URL, the staging URL, the three gate scores and the placeholder count in
-the evidence. Do not touch Polish or Launch.
+Do the CLAUDE tasks on **Discovery** first: the site inventory
+(`site_inventory`) and the site row (`site_row`): confirm `stack`,
+`work_mode`, `repo_url`, the production **branch of record** (`sites.branch`
+— read it from the repo's default branch through `site-push {read: true}`
+`branch` when the row has none; never write `main` on assumption) and
+`vercel_project`. Set Discovery `in_progress`; its TOM tasks stay open.
+
+**1. The build brief** (task PB4b.1). Export the rows the brief reads and
+compose it with the CRM's own module — it is deterministic and the same
+code the Foundation tab's button uses:
+
+```sql
+select json_build_object(
+  'client', (select row_to_json(c) from (select id, name, dba, vertical, business_type, phone, city, state, address_line1, service_area, website_url, drive_folders from clients where id = '<client_id>') c),
+  'site', (select row_to_json(s) from (select id, url, stack, controlled_by_compass, repo_url, branch, preview_branch, vercel_project, staging_url, domain_constant, work_mode, content_paths, content_adapter, foundation_version, foundation_sha from sites where client_id = '<client_id>' order by created_at limit 1) s),
+  'release', (select row_to_json(r) from (select version, source_repo, source_sha, accepted_on, handoff_url as handoff_doc, documents from foundation_releases where is_current) r),
+  'services', (select coalesce(json_agg(json_build_object('id', s.id, 'name', s.name, 'segment', s.segment, 'page_type', s.page_type, 'status', s.status, 'page_url', s.page_url, 'parent_name', p.name) order by s.sort_order), '[]') from services s left join services p on p.id = s.parent_service_id where s.client_id = '<client_id>'),
+  'pageGroups', (select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name, 'page_type', g.page_type, 'target_url', g.target_url, 'city_tier', g.city_tier, 'status', g.status, 'primary_keyword', k.keyword, 'primary_volume', k.volume)), '[]') from page_groups g left join keywords k on k.id = g.primary_keyword_id where g.client_id = '<client_id>'),
+  'claims', (select coalesce(json_agg(json_build_object('claim', claim, 'status', status, 'source', source)), '[]') from claims where client_id = '<client_id>'),
+  'locations', (select coalesce(json_agg(json_build_object('name', name, 'city', city, 'state', state, 'is_physical_location', is_physical_location)), '[]') from locations where client_id = '<client_id>'),
+  'brand', (select row_to_json(b) from (select cb.tagline, cb.positioning, bb.standing_cta, coalesce(bb.hard_rules, '{}') as hard_rules, coalesce(bb.palette, '[]'::jsonb) as palette, bb.typography, bb.status as board_status, bb.drive_doc_url from client_brands cb left join brand_boards bb on bb.client_id = cb.client_id where cb.client_id = '<client_id>' order by bb.version desc nulls last limit 1) b),
+  'assets', (select coalesce(json_agg(json_build_object('kind', kind, 'label', label, 'url', url, 'width', width, 'height', height, 'is_primary', is_primary)), '[]') from brand_assets where client_id = '<client_id>')
+) as input;
+```
+
+Save it as `/tmp/brief-input.json`, add `"generatedBy": "worker <run date>"`
+and, for an existing repo, `"tree": [...]` = the `path`s from `site-push
+{"client_id": "…", "read": true, "paths": []}` (paths only, no contents). For
+a Foundation tree the client's brand is **never guessed**: it must be
+recorded on `sites.content_paths.brand`, exist as `brands/<brand>/` in the
+tree, not be a fictional demonstration brand (`harbor-lane`) and be
+registered in `brands/registry.ts` (read that file with `paths:
+["brands/registry.ts"]`). Otherwise the brief lists the specific missing
+input and the contract is **not writable** — record the brand on the site
+row (a new build records the brand it creates) before any change. Plus
+`"cityEvidence": {"<city group name>": {"coverage_confirmed": true|false,
+"distinctive_evidence": ["<sourced, city-specific fact with its source>"]}}`
+for every `city` page group — `coverage_confirmed` only when
+`clients.service_area` or a sourced claim names the city; evidence only from
+`claims` (`sourced`) or the site's own copy. Then:
+
+```bash
+node --no-warnings scripts/build-brief.mjs /tmp/brief-input.json > /tmp/brief.json
+node --no-warnings scripts/build-brief.mjs /tmp/brief-input.json --markdown > /tmp/brief.md
+```
+
+Store it — `update sites set build_brief = '<brief.json>'::jsonb,
+build_brief_at = now(), content_adapter = '<brief.content_adapter.key>',
+foundation_version = <brief.framework.foundation_version or null>,
+foundation_sha = <… or null> where client_id = …` — write `Build Brief —
+<Client>` to Drive `04 Website` from `brief.md` (update the existing doc
+when one is recorded), and record it: `deliverables (client_id,
+client_stage_id, label, url, type) = ('Build Brief', …, 'drive')`. Read
+`missing_inputs`: each one is either something you can fill from the CRM
+now, a `placeholders` row, or a line in the client request. **Never fill a
+missing input with an invented fact.** Close PB4b.1.
+
+**2. The source.** GitHub is unreachable from this session (see *GitHub —
+you cannot reach it*); the CRM fetches the pinned Foundation for you:
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" \
+  --data '{"client_id": "<client_id>", "archive": {"repo": "<release.source_repo>", "ref": "<release.source_sha>"}}' \
+  -o /tmp/foundation.tar.gz
+mkdir -p /tmp/site && tar -xzf /tmp/foundation.tar.gz -C /tmp/site --strip-components=1
+```
+
+The function serves only the current release (or the client's own repo).
+A non-200 answer is the specific blocker (`error` in the body — the token
+missing, the release row missing, GitHub refusing): set the stage
+*Blocked* with that text in `next_action`. **Do not fall back to
+`templates/astro-site/`, and do not build from any other commit.** Record
+`release.version` / `source_sha` in the evidence.
+
+For `upgrade_existing`, also read the client's repository itself (`site-push
+{read: true}` gives text files inline; binaries as paths + sizes) into
+`/tmp/client-site/` — that is what you change; the Foundation tarball is the
+reference you adopt from, never a replacement for the client's tree.
+
+**3. Build the brand layer** (`new_build`; PB4b.2–PB4b.6). In `/tmp/site`
+follow `docs/starter-checklist.md` of the Foundation: copy
+`brands/harbor-lane` to `brands/<brand>` (brand = the repo slug), register
+it in `brands/registry.ts` with `fictional: false`, and replace **every**
+Harbor Lane value — it is a fictional demonstration and none of its facts,
+copy, images or routes may survive. The mapping from the CRM:
+
+- `site.config.ts` — `clients` (name, phone, city / state, `service_area`),
+  `business_type` (`storefront` → address public; `service_area` → no
+  street address), `sameAs` from the sourced GBP / social claims, `careers:
+  null`, `metadata` from the brand tagline / positioning.
+- `theme.css`, `fonts.ts`, `theme.config.ts` — `brand_boards.palette` →
+  the semantic roles (`primary`, `accent`, `surface`, `ink`), `typography`
+  → fonts, motion and decoration off unless the board asks for them.
+- `inquiry.config.ts` — `forceMock: false`, recipients from the client
+  record's contact, sender left to the environment (`INQUIRY_FROM`); the
+  form is mocked in every preview (`INQUIRY_DELIVERY=mock`). No recipient
+  or secret goes into the brief or the evidence.
+- `content/*` — home, about, services (one hub per hub service, a child
+  page per approved service with a page group), the service-area hub, the
+  contact page; `claims` where `status = 'sourced'` **only**; every service
+  page's primary keyword in its title / H1 / description from the page
+  group; `relatedServices` between hubs and children; a `<Placeholder>`
+  labelled block for each missing photo / fact (mirrored as
+  `placeholders` rows), never an invented one.
+- **City pages** (PB4b.5): only the page groups the brief marks `planned`
+  (coverage confirmed + distinctive local material). A `candidate` city is
+  plain text in the service-area hub, not a route. Physical locations only
+  for `locations` rows with `is_physical_location = true`. Never generate
+  service × city pages.
+- `redirects.ts` — the old site's useful URLs when we replace one
+  (Polish writes the full map).
+
+Keep the framework untouched: components, `lib/`, `app/` routes and the QA
+scripts are the Foundation's; a change there is a Foundation change, not a
+client build.
+
+**3b. Upgrade an existing site** (`upgrade_existing`). Work in
+`/tmp/client-site/`. The brief's `content_adapter` says what the tree is
+(`src/lib/content-adapters.ts`); the page plan says what is `exists`,
+`planned`, `candidate` or `proposed`. Adopt in **small batches** from the
+Foundation reference — motion safeguards, metadata / canonical helpers,
+sitemap and route registry, city and location page structure, inquiry
+retry contract — only where the client's stack is compatible, and record
+in the evidence which modules were adopted and which stayed site-specific.
+Preserve identity, working forms, useful URLs and integrations. A
+wholesale rebuild is a separate decision for Tom, not this stage.
+
+**4. Verify with the Foundation's own checks** (both modes; the old
+`site-quality-gate.mjs` is for auditing non-Foundation sites only). One
+script from the CRM checkout runs the recipe in order — install, the
+**brand-specific** typecheck, the build, the manifest, the provider suite,
+then the shared mock provider service is started **first** and the same
+`INQUIRY_MOCK_PROVIDER_URL` is handed to both the running site and the form
+suite, the crawl, the browser launcher check, the mocked forms suite and
+the browser suite on the brand's representative routes:
+
+```bash
+bash scripts/foundation-verify.sh /tmp/site <brand> <production host> /tmp/verify.json 3450 "/,<service hub>,<service detail>,<city page>,/contact"
+```
+
+It writes `/tmp/verify.json` = `{pass: [...], fail: [...], deferred: [{name,
+detail}], ok}` and exits non-zero when any check **fails**. Without a
+Chromium (`scripts/qa/browser-launch.mjs --check` fails) the forms and
+browser suites are recorded as **deferred** with the reason — never as
+passed, and a deferred check is never acceptance: the brief carries it as
+deferred until someone runs it where a browser exists. Delivery is mocked
+in every step; nothing is sent. A failed check is yours to fix, up to three
+rounds; still failing → *Blocked* with `fail` in `next_action`. For an
+`upgrade_existing` tree that has not adopted the QA scripts, run its own
+`npm run build` plus the Foundation's crawl against the preview URL and
+record everything else as deferred.
+
+The `pass` / `fail` / `deferred` arrays become the `checks` of step 6
+verbatim.
+
+**5. Push through the CRM** — one call, the mode decides the branch:
+
+- `new_build`: `{"client_id", "message": "Foundation v1 build (Compass CRM)",
+  "brand": "<brand>", "files": [...]}` — no `branch`. site-push lands it on
+  the branch of record (a new repo: `main`), creates the Vercel project with
+  `COMPASS_BRAND` set and starts the production deployment that is the
+  staging site. If the response's `note` says the branch of record already
+  carried someone else's site, the build sits on `compass/foundation-build`
+  as a preview and Launch will wait on Tom.
+- `upgrade_existing`: `{"client_id", "preview": true, "message": "…",
+  "files": [<only the files you changed>], "pull_request": {"title":
+  "<Client>: <what>", "body": "<the brief's acceptance checks with results, the preview URL, what was adopted>"}}`.
+  site-push creates `compass/preview-<date>-<slug>` **from the recorded
+  production branch**, opens the PR against it and deploys a preview.
+  `branch_of_record` in the response must equal `sites.branch`; if the
+  function refuses (409), the site row's work mode or branch is wrong —
+  fix the row, do not force anything.
+
+Payload shape as before (text files as `content`, binaries base64); never
+`node_modules/`, `.next/`, `.git/`. Do not print the secrets.
+
+**6. Attach the outcome.** Fold the push response and `/tmp/verify.json`
+into the brief and record them. Write `/tmp/outcome.json` (each `pass`
+entry → `{"name", "result": "pass"}`, each `fail` → `"fail"`, each
+`deferred` → `"deferred"` with its `detail`):
+
+```json
+{"branch": "<response.branch>", "base": "<response.branch_of_record>",
+ "commit_url": "<…>", "pull_request_url": "<… or null>",
+ "deployment_url": "<vercel.deployment_url or staging_url, or null>",
+ "checks": [{"name": "typecheck", "result": "pass"}, {"name": "build", "result": "pass"},
+            {"name": "manifest", "result": "pass"}, {"name": "crawl", "result": "pass"},
+            {"name": "forms (mocked)", "result": "deferred", "detail": "no Chromium"},
+            {"name": "browser", "result": "deferred", "detail": "no Chromium"}]}
+```
+
+then `node --no-warnings scripts/build-brief.mjs /tmp/brief-input.json
+--attach /tmp/outcome.json > /tmp/attached.json`. `attached.brief` →
+`update sites set build_brief = …, preview_branch = <branch when a preview>,
+staging_url = <deployment url when new_build>`; `attached.evidence_line` →
+appended to the stage evidence; `attached.deliverables` → one
+`deliverables` row each (`type = 'site'`); `attached.change_log` → one
+`change_log` row; `attached.decision` → one `decisions` row (`decided_by =
+'worker'`). Refresh the Drive brief doc. Every result is
+**builder-reported**; write "independent review pending" in the evidence,
+not "verified".
+
+Close PB4b.1–PB4b.7 for what you actually did (the Vercel item only when
+`vercel.status` is `created` / `deployed`), set the stage `complete`, and
+put the release SHA, the branch of record, the preview branch or staging
+URL, the PR URL, the check results (pass / fail / deferred) and the
+placeholder count in the evidence. Do not touch Polish or Launch.
 
 ### Website — Polish & client review
 
@@ -534,9 +688,11 @@ curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push
 
 `files[]` carries every text file with `content` (binaries are listed with
 `size` only). Write them to `/tmp/site/<path>`; `npm install` there. That
-is your working copy. Note `branch`: `compass-astro` means `main` carries
-a site that is not ours — you still polish the side branch, and Launch
-will block until Tom blends.
+is your working copy. Pass `"branch": "<sites.preview_branch>"` when the
+build sits on a preview branch (`compass/foundation-build`, or an
+`upgrade_existing` preview): you polish that branch and push back to it
+with the same `branch` (and `pull_request` for an upgrade); Launch waits
+until Tom merges it into the branch of record.
 
 **2. The punch list** is three things, in this order:
 
@@ -579,13 +735,15 @@ One line per old URL; `/` and paths that already exist need none. Keep
 the map in `docs/redirects.md` too, with a reason per line. No old site →
 close the task with "no old URL set".
 
-**4. Build, gate, push.** `npm run build`, then the gate from the CRM
-checkout (`node scripts/site-quality-gate.mjs /tmp/site/dist --phone …
---name … --json`) — it must still print `PASS`; store the report on
-`sites.quality` as at Build. Push **only the files you changed or added**
-(the same payload shape as Build; `site-push` leaves the rest as it is),
-`message` = `Polish: <n> findings applied, <n> images placed`. Images go
-as `encoding: "base64"`.
+**4. Build, check, push.** The Foundation's checks from Build step 4
+(typecheck, build, manifest, crawl; forms and browser when a Chromium
+exists, else deferred) must pass again; a non-Foundation site (an
+`upgrade_existing` tree that has not adopted the QA scripts) gets its own
+build plus the crawl run against the preview URL. Store the results on
+`sites.build_brief` through `--attach` as at Build. Push **only the files
+you changed or added** (the same payload shape and branch as Build;
+`site-push` leaves the rest as it is), `message` = `Polish: <n> findings
+applied, <n> images placed`. Images go as `encoding: "base64"`.
 
 **5. Lighthouse** (`lighthouse_pass`). Two minutes after the push,
 `mcp__Data_for_SEO__on_page_lighthouse` on the staging home page and one
@@ -619,11 +777,13 @@ production host is `sites.domain_constant`, else the host of
 `clients.website_url`, else *Blocked*: "No production domain recorded —
 set it on the Overview tab (website URL)".
 
-**Side branch → blocked.** `sites.branch = 'compass-astro'` means the
-domain's current project serves a site that is not ours from the same
-repo. Set the stage `blocked`, `next_action` = "Blend compass-astro into
-main (or point the Vercel project at compass-astro), then set Launch to
-Not started", open the WAITING task, stop.
+**Preview branch → blocked.** When the build lives on a preview branch
+(`sites.preview_branch` set and the site's open pull request not merged —
+`compass/foundation-build`, or an `upgrade_existing` preview), the branch
+of record still serves the previous site. Set the stage `blocked`,
+`next_action` = "Merge <preview branch> into <branch of record> (the pull
+request), then set Launch to Not started", open the WAITING task, stop.
+Launch never merges a pull request and never relabels the branch of record.
 
 **1. Domain** (`domain_added`):
 
@@ -1188,19 +1348,33 @@ tab's *Put it back* button is the safety net), **Google Docs for
 client-run sites**. Nothing invented: a claim without a source is a
 placeholder line, never copy.
 
-**The contract.** `sites.content_paths` says where you may write:
+**The contract — one adapter per site.** `sites.content_adapter` and
+`sites.content_paths` say what the site is and where you may write
+(`src/lib/content-adapters.ts` is the reference; `docs/website-updates.md`
+the table). Read the adapter's `mutation` per kind of change before doing
+anything:
 
-```json
-{"locations": "data/locations.json", "blog": "data/blog-posts.json",
- "blog_format": "json", "city_route": "/service-areas/{slug}",
- "blog_route": "/blog/{slug}", "services_dir": "src/app/services"}
-```
+| Adapter | City page | Blog post | Service page / FAQ |
+| --- | --- | --- | --- |
+| `lucas_json` (`data/locations.json`, `data/blog-posts.json`) | push | push | pull request |
+| `markdown_blog` (`content/blog/*.mdx` + data files) | proposed document | push | pull request |
+| `foundation_brand_content` (`brands/<brand>/content/*.ts`) | pull request | pull request | pull request |
+| `unsupported` / null | proposed document | proposed document | proposed document |
 
-`content_paths` null → the site is not on the contract (client-run, or a
-Next.js build Tom has not finished): every page and rewrite becomes a Google
-Doc in `04 Website` (`Site update — <Client> — <Month>`; one section per
-page with URL, title, meta description, H1, body, FAQs, schema JSON) plus a
+A **push** goes to the site's recorded branch of record (`sites.branch` —
+name it explicitly; never write `main` from habit). A **pull request** goes
+to a preview branch (`"preview": true` + `pull_request`) and site-push
+targets the branch of record. A **proposed document** is a Google Doc in
+`04 Website` (`Site update — <Client> — <Month>`; one section per page with
+URL, title, meta description, H1, body, FAQs, schema JSON) plus a
 `change_log` row (`status = 'proposed'`), and you skip the push steps.
+Foundation typed content is TypeScript: an entry is a typed object file
+plus a registry import, built and crawled on the preview before the PR is
+opened — never JSON written into a registry, and never a city into the
+physical-locations registry. If the adapter is null, run the detection
+from the tree first (`scripts/build-brief.mjs` with `tree`) and store
+`content_adapter` / `content_paths`; a site whose tree you have not
+inspected is `unsupported` for this month.
 
 **1. Map first (every month, cheap).** For every tracked keyword with no
 `target_url`, pick the page: the `page_groups` row whose primary or
@@ -1245,13 +1419,17 @@ JSON valid and the array order stable (append).
 **4. Publish.** One push per month per client:
 
 ```json
-{"client_id": "...", "branch": "main",
+{"client_id": "...", "branch": "<sites.branch — the recorded branch of record>",
  "message": "Website updates <Month YYYY>: +<n> pages, <n> refreshes (Compass CRM)",
  "files": [{"path": "data/locations.json", "content": "<whole file>"}, ...]}
 ```
 
-`branch: "main"` is explicit (the site-push guard that diverts unknown
-authors to a side branch is for full builds, not data entries). Leave
+Naming the branch of record explicitly asks for the data-entry exception,
+and site-push grants it only when **every** file is a push path of the
+site's recorded adapter (`data/locations.json` / `data/blog-posts.json` on
+`lucas_json`; `content/blog/*.mdx` on `markdown_blog`) and nothing is
+deleted — a component, a layout, a config or a delete in the same request
+is refused (409) and belongs on a preview branch with a pull request. Leave
 `deploy` alone: Vercel's Git integration **blocks** commits from authors
 who are not team members (ours are "Compass CRM" — they show as BLOCKED
 in Vercel and are harmless), so site-push creates the production
@@ -1267,6 +1445,9 @@ body so Tom can look before merging:
  "message": "...", "files": [...],
  "pull_request": {"title": "<Client>: <what>", "body": "<why, evidence, the keyword and its rank, the preview URL>"}}
 ```
+
+The branch is created from the branch of record and the PR targets it
+(`pull_request_base` in the response); `sites.branch` does not move.
 
 Never touch components, styles, layout files, `package.json` or anything
 outside `content_paths` and `services_dir`.
@@ -1308,12 +1489,15 @@ only.
    CTA using `brand_boards.standing_cta`. Numbers, years, licences and
    guarantees only from `claims` (`sourced`) or the site itself; otherwise
    leave them out. No stock phrases, no "in today's fast-paced world".
-3. **File it.** On the contract: append to `content_paths.blog`
-   (`blog_format: json` → an entry shaped like the neighbours — `slug`,
-   `title`, `description`, `datePublished`, `dateModified`, `blocks[]` of
-   the same block types the file already uses; `markdown` → a new file in
-   `blog_dir` with the same front-matter as its neighbours) and push with
-   `branch: "main"`, message `Blog: <title> (Compass CRM)`.
+3. **File it.** Per the adapter's `blog_post` mutation: `push` → append to
+   `content_paths.blog` (`blog_format: json` → an entry shaped like the
+   neighbours — `slug`, `title`, `description`, `datePublished`,
+   `dateModified`, `blocks[]` of the same block types the file already
+   uses; `markdown` → a new file in `blog_dir` with the same front-matter as
+   its neighbours) and push with `branch: "<sites.branch>"`, message `Blog:
+   <title> (Compass CRM)`; `pull_request` (Foundation typed content) → a
+   typed article file plus its registry import on a preview branch with a
+   PR; `proposed_document` → the Doc below.
    Not on the contract: a Google Doc in `04 Website` named `Blog — <Client>
    — <title>` and a line in the task notes for Tom.
 4. **Record:** verify the URL after ~90 s (200, one H1, canonical); a

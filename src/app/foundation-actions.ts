@@ -535,3 +535,117 @@ export async function revertSiteAction(
     message: `Put back to ${payload.restored?.slice(0, 7) ?? "the previous commit"}. Vercel redeploys it in about a minute.`,
   };
 }
+
+// ── Website work mode and the build brief (Foundation integration) ─────────
+import { composeBuildBrief, type BriefInput } from "@/lib/build-brief";
+import type { ContentPaths } from "@/lib/content-adapters";
+
+export type WorkModeState = { ok: boolean; message: string } | null;
+
+export async function setWorkModeAction(clientId: string, _prev: WorkModeState, form: FormData): Promise<WorkModeState> {
+  const supabase = await createClient();
+  const raw = str(form, "work_mode");
+  const mode = raw === "new_build" || raw === "upgrade_existing" || raw === "client_retains" ? raw : null;
+  const { data: site } = await supabase.from("sites").select("id").eq("client_id", clientId).order("created_at").limit(1).maybeSingle();
+  if (!site) return { ok: false, message: "No site row yet — the intake or the worker's Discovery step records one." };
+  const { error } = await supabase
+    .from("sites")
+    .update({ work_mode: mode, ...(mode === "client_retains" ? { controlled_by_compass: false } : mode ? { controlled_by_compass: true } : {}) })
+    .eq("id", site.id);
+  if (error) return { ok: false, message: error.message };
+  revalidate(clientId);
+  return { ok: true, message: mode ? `Work mode ${mode}. Enrollments are unchanged — the Plan tab decides those.` : "Work mode cleared." };
+}
+
+export type BuildBriefState = { ok: boolean; message: string } | null;
+
+/**
+ * Compose the build brief from what the CRM holds today and store it on the
+ * site row. The repository tree is not read here (the app holds no GitHub
+ * token); the worker refreshes the brief with the detected adapter when it
+ * runs, and files the Drive copy. Every unknown lands in missing_inputs.
+ */
+export async function generateBuildBriefAction(clientId: string, _prev: BuildBriefState, _form: FormData): Promise<BuildBriefState> {
+  const supabase = await createClient();
+  const who = await whoami();
+  const [{ data: client }, { data: site }, { data: services }, { data: groups }, { data: claims }, { data: locations }, { data: brand }, { data: board }, { data: assets }, { data: release }] =
+    await Promise.all([
+      supabase.from("clients").select("id, name, dba, vertical, business_type, phone, city, state, address_line1, service_area, website_url, drive_folders").eq("id", clientId).single(),
+      supabase.from("sites").select("id, url, stack, controlled_by_compass, repo_url, branch, preview_branch, vercel_project, staging_url, domain_constant, work_mode, content_paths, content_adapter, foundation_version, foundation_sha").eq("client_id", clientId).order("created_at").limit(1).maybeSingle(),
+      supabase.from("services").select("id, name, segment, page_type, status, page_url, parent_service_id").eq("client_id", clientId).order("sort_order"),
+      supabase.from("page_groups").select("id, name, page_type, target_url, city_tier, status, keywords:primary_keyword_id(keyword, volume)").eq("client_id", clientId),
+      supabase.from("claims").select("claim, status, source").eq("client_id", clientId),
+      supabase.from("locations").select("name, city, state, is_physical_location").eq("client_id", clientId),
+      supabase.from("client_brands").select("tagline, positioning").eq("client_id", clientId).maybeSingle(),
+      supabase.from("brand_boards").select("status, palette, typography, standing_cta, hard_rules, drive_doc_url").eq("client_id", clientId).order("version", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("brand_assets").select("kind, label, url, width, height, is_primary").eq("client_id", clientId),
+      supabase.from("foundation_releases").select("version, source_repo, source_sha, accepted_on, handoff_url, documents").eq("is_current", true).maybeSingle(),
+    ]);
+  if (!client) return { ok: false, message: "Client not found." };
+  if (!site) return { ok: false, message: "No site row yet — set the work mode at intake or let the worker's Discovery step record one." };
+
+  const byId = new Map((services ?? []).map((s) => [s.id, s.name]));
+  const palette = Array.isArray(board?.palette) ? (board!.palette as { role?: string; hex?: string; source?: string }[]) : [];
+  const input: BriefInput = {
+    client: { ...client, drive_folders: (client.drive_folders as Record<string, string> | null) ?? null },
+    site: {
+      ...site,
+      work_mode: site.work_mode ?? null,
+      content_paths: (site.content_paths as ContentPaths | null) ?? null,
+      content_adapter: (site.content_adapter as BriefInput["site"] extends infer S ? (S extends { content_adapter?: infer A } ? A : never) : never) ?? null,
+    },
+    release: release
+      ? {
+          version: release.version,
+          source_repo: release.source_repo,
+          source_sha: release.source_sha,
+          accepted_on: release.accepted_on,
+          documents: (Array.isArray(release.documents) ? release.documents : []) as { label: string; url: string }[],
+          handoff_doc: release.handoff_url,
+        }
+      : undefined,
+    services: (services ?? []).map((s) => ({ id: s.id, name: s.name, segment: s.segment, page_type: s.page_type, status: s.status, page_url: s.page_url, parent_name: s.parent_service_id ? byId.get(s.parent_service_id) ?? null : null })),
+    pageGroups: (groups ?? []).map((g) => {
+      const kw = g.keywords as unknown as { keyword: string; volume: number | null } | null;
+      return { id: g.id, name: g.name, page_type: g.page_type, target_url: g.target_url, city_tier: g.city_tier, status: g.status, primary_keyword: kw?.keyword ?? null, primary_volume: kw?.volume ?? null };
+    }),
+    claims: (claims ?? []).map((c) => ({ claim: c.claim, status: c.status, source: c.source })),
+    locations: (locations ?? []).map((l) => ({ name: l.name, city: l.city, state: l.state, is_physical_location: l.is_physical_location })),
+    brand: board || brand
+      ? {
+          tagline: brand?.tagline ?? null,
+          positioning: brand?.positioning ?? null,
+          standing_cta: board?.standing_cta ?? null,
+          hard_rules: Array.isArray(board?.hard_rules) ? (board!.hard_rules as string[]) : [],
+          palette: palette.filter((p) => typeof p?.hex === "string").map((p) => ({ role: String(p.role ?? ""), hex: String(p.hex), source: p.source })),
+          typography: (board?.typography as { heading?: string; body?: string } | null) ?? null,
+          board_status: (board?.status as "draft" | "approved" | null) ?? null,
+          drive_doc_url: board?.drive_doc_url ?? null,
+        }
+      : null,
+    assets: (assets ?? []).map((a) => ({ kind: a.kind, label: a.label, url: a.url, width: a.width, height: a.height, is_primary: a.is_primary })),
+    detected: null,
+    generatedBy: who,
+  };
+  const brief = composeBuildBrief(input);
+  const { error } = await supabase
+    .from("sites")
+    .update({ build_brief: brief as unknown as Json, build_brief_at: brief.generated_at, ...(site.work_mode ? {} : { work_mode: brief.work_mode }) })
+    .eq("id", site.id);
+  if (error) return { ok: false, message: error.message };
+  await supabase.from("change_log").insert({
+    client_id: clientId,
+    change_type: "build_brief",
+    object_type: "site",
+    object_id: site.id,
+    before: null,
+    after: { work_mode: brief.work_mode, standard: `${brief.standard.version}@${brief.standard.source_sha.slice(0, 7)}`, adapter: brief.content_adapter.key, missing_inputs: brief.missing_inputs.length, page_plan: brief.page_plan.length },
+    reasoning: `Build brief composed on the Foundation tab by ${who}; the worker refreshes it with the detected adapter and files the Drive copy.`,
+    status: "proposed",
+  });
+  revalidate(clientId);
+  return {
+    ok: true,
+    message: `Brief stored (${brief.work_mode}, ${brief.content_adapter.key}, ${brief.page_plan.length} page groups, ${brief.missing_inputs.length} missing inputs). The worker files the Drive copy.`,
+  };
+}

@@ -46,13 +46,39 @@ function businessType(form: FormData): Enums["business_type"] | null {
 // The intake. Everything the Foundation worker reads on its first run is
 // captured here so a new client never stalls on a blank field: the vertical
 // and business type drive the brand board and schema, city / state drive
-// DataForSEO locations and the GBP lookup, phone drives NAP checks. An
-// existing site the client keeps is recorded as a client-controlled `sites`
-// row up front, so the audit files a fix list for Tom to blend rather than a
-// punch list, and the Website build lands on a side branch of nothing.
+// DataForSEO locations and the GBP lookup, phone drives NAP checks.
+//
+// The WEBSITE WORK MODE is explicit (Sept 20 2026, Foundation integration):
+//   new_build        — a Compass Website Foundation build; the Website
+//                      pipeline runs and the build lands on the site's
+//                      branch of record.
+//   upgrade_existing — a site Compass already manages (Tom's Next.js
+//                      builds): the Website pipeline runs as preview work
+//                      from the recorded production branch, pull requests
+//                      only; the production branch never moves on its own.
+//   client_retains   — the client keeps their site: a client-controlled
+//                      `sites` row, the SEO audit becomes a fix list to
+//                      blend, and the Website enrollment is dropped (Tom,
+//                      Sept 13 2026 — BHG got a proposal build it did not
+//                      want). Enrolling Website on the Plan tab is the way
+//                      back.
+// A `sites` row is recorded in every mode so the worker, site-push and the
+// build brief read the same record; nothing is inserted as Astro.
+type WebsiteWorkMode = Enums["website_work_mode"];
+
+function workModeFromForm(form: FormData): WebsiteWorkMode {
+  const v = str(form, "work_mode");
+  if (v === "upgrade_existing" || v === "client_retains" || v === "new_build") return v;
+  // The pre-Foundation checkbox, kept for anything still posting it.
+  return form.get("existing_site") === "on" ? "client_retains" : "new_build";
+}
+
 export async function createClientAction(form: FormData) {
   const supabase = await createClient();
   const websiteUrl = str(form, "website_url");
+  const workMode = workModeFromForm(form);
+  const repoUrl = str(form, "repo_url");
+  const productionBranch = str(form, "production_branch");
   const { data, error } = await supabase
     .from("clients")
     .insert({
@@ -71,20 +97,18 @@ export async function createClientAction(form: FormData) {
     .single();
   if (error) throw new Error(error.message);
 
-  if (form.get("existing_site") === "on" && websiteUrl) {
+  if (workMode === "client_retains") {
     const { error: siteError } = await supabase.from("sites").insert({
       client_id: data.id,
       url: websiteUrl,
       stack: "other",
       controlled_by_compass: false,
+      work_mode: "client_retains",
     });
     if (siteError) throw new Error(siteError.message);
 
     // The client keeps their site, so there is nothing for the Website
-    // pipeline to build: drop the enrollment the insert trigger just made
-    // (Tom, Sept 13 2026 — BHG Safety Partners got a proposal build it did
-    // not want). The SEO audit still covers the site. Enrolling Website
-    // later on the Plan tab is the way back if that changes.
+    // pipeline to build: drop the enrollment the insert trigger just made.
     const { data: websitePipeline } = await supabase
       .from("pipelines")
       .select("id")
@@ -98,6 +122,20 @@ export async function createClientAction(form: FormData) {
         .eq("pipeline_id", websitePipeline.id);
       if (dropError) throw new Error(dropError.message);
     }
+  } else {
+    // new_build or upgrade_existing: the Website enrollment stays. The
+    // stack is what we know (an upgrade names its repo and production
+    // branch; the worker confirms both against the tree at Discovery).
+    const { error: siteError } = await supabase.from("sites").insert({
+      client_id: data.id,
+      url: websiteUrl,
+      stack: workMode === "new_build" ? "nextjs" : "other",
+      controlled_by_compass: true,
+      work_mode: workMode,
+      repo_url: workMode === "upgrade_existing" ? repoUrl : null,
+      branch: workMode === "upgrade_existing" ? productionBranch : null,
+    });
+    if (siteError) throw new Error(siteError.message);
   }
 
   revalidatePath("/clients");

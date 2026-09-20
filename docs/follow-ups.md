@@ -49,6 +49,12 @@ unblocks and what it costs.
    (still `launching`) gets no blog task until it converges or Tom sets it
    active. Vercel deployment protection on previews: turn it off on the
    client projects if the client is to see a PR preview without a login.
+5d. **Foundation v1 integration — built Sept 20, not activated.** Branch
+   `claude/foundation-v1-crm-integration`: migration 0039 (work modes,
+   build brief, `foundation_releases`), site-push v9 (branch of record,
+   previews, archive mode), content adapters, worker playbook. Activation
+   steps in `docs/compass-foundation-integration.md`. BHG Safety Partners
+   is the first upgrade pilot (`docs/clients/bhg-safety-partners-upgrade-brief.md`).
 
 ## Worth building next
 

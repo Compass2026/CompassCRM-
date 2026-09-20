@@ -1,0 +1,53 @@
+{
+  "new_build": {
+    "client": { "id": "00000000-0000-4000-8000-000000000001", "name": "Northgate Plumbing Co", "vertical": "plumbing", "business_type": "service_area", "phone": "(555) 010-0000", "city": "Northgate", "state": "MO", "service_area": "Northgate and the ring towns", "website_url": null },
+    "site": { "id": "00000000-0000-4000-8000-0000000000a1", "url": null, "stack": "nextjs", "controlled_by_compass": true, "repo_url": null, "branch": null, "vercel_project": null, "staging_url": null, "domain_constant": null, "work_mode": "new_build", "content_paths": null },
+    "services": [
+      { "id": "s1", "name": "Residential", "segment": "residential", "page_type": "hub", "status": "approved", "page_url": null },
+      { "id": "s2", "name": "Water heater replacement", "segment": "residential", "page_type": "service", "status": "approved", "page_url": null, "parent_name": "Residential" }
+    ],
+    "pageGroups": [
+      { "id": "g1", "name": "Home", "page_type": "home", "target_url": null, "city_tier": null, "status": "approved", "primary_keyword": "plumber northgate", "primary_volume": 90 },
+      { "id": "g2", "name": "Residential", "page_type": "hub", "target_url": null, "city_tier": null, "status": "approved", "primary_keyword": "residential plumber", "primary_volume": 40 },
+      { "id": "g3", "name": "Water heater replacement", "page_type": "service", "target_url": null, "city_tier": null, "status": "approved", "primary_keyword": "water heater replacement", "primary_volume": 880 },
+      { "id": "g4", "name": "Northgate, MO", "page_type": "city", "target_url": null, "city_tier": "1", "status": "approved", "primary_keyword": "plumber northgate", "primary_volume": 90 },
+      { "id": "g5", "name": "Eastgate, MO", "page_type": "city", "target_url": null, "city_tier": "2", "status": "approved", "primary_keyword": "plumber eastgate", "primary_volume": 20 }
+    ],
+    "claims": [
+      { "claim": "Licensed in Missouri", "status": "sourced", "source": "https://example.test/about" },
+      { "claim": "Founded 1998", "status": "unverified", "source": null }
+    ],
+    "locations": [],
+    "brand": { "tagline": "Plumbing done right", "positioning": "…", "standing_cta": "Book a visit", "hard_rules": ["one phone number"], "palette": [{ "role": "primary", "hex": "#0f4c5c" }], "typography": { "heading": "Manrope", "body": "Source Sans 3" }, "board_status": "approved", "drive_doc_url": "https://docs.google.com/document/d/x/edit" },
+    "assets": [{ "kind": "logo_primary", "label": "Logo", "url": "https://example.test/logo.png" }],
+    "cityEvidence": {
+      "Northgate, MO": { "coverage_confirmed": true, "distinctive_evidence": ["sourced: 12 water heater replacements in Northgate in 2025 (client job log)"] },
+      "Eastgate, MO": { "coverage_confirmed": true, "distinctive_evidence": [] }
+    }
+  },
+  "client_retains": {
+    "client": { "id": "00000000-0000-4000-8000-000000000002", "name": "Keeps Their Site LLC", "vertical": "roofing", "business_type": "storefront", "phone": "(555) 010-0001", "city": "Springfield", "state": "MO", "service_area": "Springfield", "website_url": "https://keeps.example" },
+    "site": { "id": "00000000-0000-4000-8000-0000000000a2", "url": "https://keeps.example", "stack": "other", "controlled_by_compass": false, "repo_url": null, "branch": null, "vercel_project": null, "staging_url": null, "domain_constant": null, "work_mode": "client_retains", "content_paths": null },
+    "services": [{ "id": "s1", "name": "Roof replacement", "segment": null, "page_type": "service", "status": "approved", "page_url": "https://keeps.example/roofing" }],
+    "pageGroups": [{ "id": "g1", "name": "Roof replacement", "page_type": "service", "target_url": "https://keeps.example/roofing", "city_tier": null, "status": "approved", "primary_keyword": "roof replacement springfield", "primary_volume": 210 }],
+    "claims": [], "locations": [], "brand": null, "assets": []
+  },
+  "upgrade_non_main": {
+    "client": { "id": "00000000-0000-4000-8000-000000000003", "name": "Ridge Safety Group", "vertical": "safety_training", "business_type": "service_area", "phone": "(555) 010-0002", "city": "Hannibal", "state": "MO", "service_area": "Midwest", "website_url": "https://ridge.example" },
+    "site": { "id": "00000000-0000-4000-8000-0000000000a3", "url": "https://ridge.example", "stack": "nextjs", "controlled_by_compass": true, "repo_url": "https://github.com/Compass2026/ridge-safety", "branch": "production", "vercel_project": "ridge-safety", "staging_url": null, "domain_constant": "ridge.example", "work_mode": "upgrade_existing", "content_paths": null },
+    "services": [
+      { "id": "s1", "name": "Workplace Safety Training", "segment": "Training", "page_type": "hub", "status": "approved", "page_url": "https://ridge.example/services/workplace-safety-training" },
+      { "id": "s2", "name": "Forklift Operator Certification", "segment": "Training", "page_type": "service", "status": "approved", "page_url": "https://ridge.example/services/forklift-operator-certification", "parent_name": "Workplace Safety Training" }
+    ],
+    "pageGroups": [
+      { "id": "g1", "name": "Home", "page_type": "home", "target_url": "https://ridge.example/", "city_tier": null, "status": "approved", "primary_keyword": "safety training company", "primary_volume": 90 },
+      { "id": "g2", "name": "Forklift Operator Certification", "page_type": "service", "target_url": "https://ridge.example/services/forklift-operator-certification", "city_tier": null, "status": "approved", "primary_keyword": "forklift training near me", "primary_volume": 5400 },
+      { "id": "g3", "name": "St. Louis, MO", "page_type": "city", "target_url": "https://ridge.example/locations/missouri/st-louis", "city_tier": "1", "status": "approved", "primary_keyword": "osha training st. louis", "primary_volume": 20 },
+      { "id": "g4", "name": "Chicago, IL", "page_type": "city", "target_url": null, "city_tier": "1", "status": "approved", "primary_keyword": "osha training chicago", "primary_volume": 140 }
+    ],
+    "claims": [{ "claim": "Founded in 2014", "status": "sourced", "source": "https://ridge.example/about" }],
+    "locations": [{ "name": "Ridge Safety Group", "city": "Hannibal", "state": "MO", "is_physical_location": false }],
+    "brand": { "tagline": "Safety you can trust", "positioning": "…", "standing_cta": "Get a Free Quote", "hard_rules": [], "palette": [{ "role": "accent", "hex": "#f97316" }], "typography": { "heading": "Inter", "body": "Inter" }, "board_status": "draft", "drive_doc_url": null },
+    "assets": [{ "kind": "logo_primary", "label": "Logo", "url": "https://ridge.example/logo.png" }, { "kind": "photo", "label": "Training", "url": "https://ridge.example/a.png", "width": 1024, "height": 768 }]
+  }
+}

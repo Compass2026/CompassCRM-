@@ -1881,6 +1881,45 @@ export type Database = {
           },
         ]
       }
+      foundation_releases: {
+        Row: {
+          id: string
+          version: string
+          source_repo: string
+          source_sha: string
+          accepted_on: string | null
+          handoff_url: string | null
+          documents: Json
+          is_current: boolean
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          version: string
+          source_repo: string
+          source_sha: string
+          accepted_on?: string | null
+          handoff_url?: string | null
+          documents?: Json
+          is_current?: boolean
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          version?: string
+          source_repo?: string
+          source_sha?: string
+          accepted_on?: string | null
+          handoff_url?: string | null
+          documents?: Json
+          is_current?: boolean
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       sites: {
         Row: {
           client_id: string
@@ -1903,6 +1942,13 @@ export type Database = {
           audit: Json | null
           audit_checked_at: string | null
           ga4_measurement_id: string | null
+          work_mode: Database["public"]["Enums"]["website_work_mode"] | null
+          preview_branch: string | null
+          content_adapter: string | null
+          foundation_version: string | null
+          foundation_sha: string | null
+          build_brief: Json | null
+          build_brief_at: string | null
         }
         Insert: {
           client_id: string
@@ -1925,6 +1971,13 @@ export type Database = {
           audit?: Json | null
           audit_checked_at?: string | null
           ga4_measurement_id?: string | null
+          work_mode?: Database["public"]["Enums"]["website_work_mode"] | null
+          preview_branch?: string | null
+          content_adapter?: string | null
+          foundation_version?: string | null
+          foundation_sha?: string | null
+          build_brief?: Json | null
+          build_brief_at?: string | null
         }
         Update: {
           client_id?: string
@@ -1947,6 +2000,13 @@ export type Database = {
           audit?: Json | null
           audit_checked_at?: string | null
           ga4_measurement_id?: string | null
+          work_mode?: Database["public"]["Enums"]["website_work_mode"] | null
+          preview_branch?: string | null
+          content_adapter?: string | null
+          foundation_version?: string | null
+          foundation_sha?: string | null
+          build_brief?: Json | null
+          build_brief_at?: string | null
         }
         Relationships: [
           {
@@ -2526,6 +2586,7 @@ export type Database = {
       run_trigger: "cron" | "manual"
       service_page_type: "service" | "hub"
       site_stack: "astro" | "nextjs" | "other"
+      website_work_mode: "new_build" | "upgrade_existing" | "client_retains"
       social_account_status: "connected" | "expired" | "manual_only"
       social_platform: "facebook" | "instagram" | "linkedin" | "x" | "tiktok"
       social_post_status:

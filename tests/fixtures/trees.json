@@ -1,0 +1,7 @@
+{
+  "foundation": ["package.json", "next.config.ts", "brands/registry.ts", "brands/showme/site.config.ts", "brands/showme/content/home.ts", "brands/showme/content/cities/index.ts", "brands/harbor-lane/site.config.ts", "lib/routes.ts", "app/service-area/[city]/page.tsx", "app/locations/[slug]/page.tsx", "scripts/qa/verify.sh"],
+  "lucas_json": ["package.json", "next.config.ts", "data/locations.json", "data/blog-posts.json", "src/app/service-areas/[city]/page.tsx", "src/app/blog/[slug]/page.tsx", "src/app/services/roofing/page.tsx", "src/app/sitemap.ts"],
+  "markdown_blog": ["package.json", "next.config.ts", "content/blog/why-onsite-safety-training-matters.mdx", "data/locations.json", "data/services.json", "src/app/blog/[slug]/page.tsx", "src/app/locations/[state]/[city]/page.tsx", "src/app/services/[slug]/page.tsx", "src/app/sitemap.ts"],
+  "vite_spa": ["package.json", "vite.config.ts", "src/main.tsx", "src/App.tsx", "src/data/locations-solar.json"],
+  "astro": ["package.json", "astro.config.mjs", "src/config/site.ts", "src/pages/index.astro"]
+}
