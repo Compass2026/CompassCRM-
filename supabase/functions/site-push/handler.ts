@@ -626,15 +626,27 @@ export function createSitePushHandler(deps: HandlerDeps) {
       pending = files.slice(1);
     }
 
-    // ── Blobs → tree → commit → ref ─────────────────────────────────────
+    // ── Tree → commit → ref ─────────────────────────────────────────────
+    // Text files go INLINE in the one tree request (the Trees API accepts
+    // `content` for UTF-8 blobs); only binaries need a blob each. One blob
+    // per file tripped GitHub's secondary rate limit (about 80 content-
+    // creating requests a minute) on the first 250-file Foundation build
+    // (Sept 20 2026), so binaries are also paced.
     let commit: { sha: string } | null = null;
     const tree: Record<string, unknown>[] = [];
+    let blobsMade = 0;
     for (const f of pending) {
+      if ((f.encoding ?? "utf-8") !== "base64") {
+        tree.push({ path: f.path, mode: "100644", type: "blob", content: f.content });
+        continue;
+      }
+      if (blobsMade > 0 && blobsMade % 40 === 0) await new Promise((r) => setTimeout(r, 1500));
       const blob = await gh(`/repos/${owner}/${name}/git/blobs`, {
         method: "POST",
-        body: JSON.stringify({ content: f.content, encoding: f.encoding ?? "utf-8" }),
+        body: JSON.stringify({ content: f.content, encoding: "base64" }),
       });
       if (!blob.ok) throw fail(`blob ${f.path}`, blob, await blob.text());
+      blobsMade++;
       tree.push({ path: f.path, mode: "100644", type: "blob", sha: (await blob.json()).sha });
     }
     for (const p of deletes) {
