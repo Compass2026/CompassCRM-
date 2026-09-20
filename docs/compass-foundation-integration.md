@@ -150,6 +150,60 @@ Routine environment (so forms / browser checks stop being deferred).
 Nothing in this branch applies migrations, deploys functions, enrols
 clients, runs the Routine, publishes a site, changes DNS or sends messages.
 
+## Activation record — Sept 20 2026
+
+Activated in the documented order between 20:11 and 20:19 UTC, with the
+Routine's general client processing paused for the window. Deployed
+versions:
+
+| Part | Before (rollback point) | After |
+| --- | --- | --- |
+| CRM app (Vercel `compass-crm`, production) | `dpl_y6bBSRNBAxk9bxC3SpYjLtyfMfLi` = `main` @ `b847a08` | `dpl_4DvSiC6WFdn7cjKAb5Ek11UU8Jfy` = `main` @ `f8c366d` (merge of PR #38, head `dc8525e`) |
+| Database (`iokcopiyzajigvhwexhe`) | latest migration `20260917185653 0038_portal_seen` | `20260920201305 0039_foundation_v1_work_modes` (additive; `foundation_releases` v1 = `94014af…`, seven `sites` columns, backfill: Lucas + BHG `upgrade_existing`, three client-run sites `client_retains`, Pensacola / Ginger Huff / Shewmaker null) |
+| Edge Function `site-push` | Supabase version 9 (Sept 15; `ezbr` `7702c4a5…`; contract v8, team-member check) | Supabase version 10 (`ezbr` `c7e0ef6f…`); `{version: true}` → `{"version": 9, "features": [branch_of_record, preview, pull_request_base, archive, content_entry_boundary, work_modes, version]}` — probed live through `net.http_post` with the cron secret (request 664, HTTP 200) |
+| Routine "Compass Foundation worker" (`trig_01Gn8V8uXR72fhSz3Dg1JsQm`) | cron `0 13 * * *` UTC, enabled, source `Compass2026/CompassCRM-` with no branch pinned (= default branch `main`), connectors Data-for-SEO / Google-Drive / Supabase | unchanged |
+
+**What differed from the plan, and why.**
+
+- The Routine could not be paused from a session (`update_trigger` is
+  refused for Routines created through the HTTP API; only Tom can toggle it
+  at claude.ai/code/routines). Its next scheduled sweep was 13:00 UTC the
+  following day, outside the window. General processing was paused on the
+  database side instead: a temporary `worker_pause` row and a guarded
+  `fire_foundation_worker()` that **records** a paused fire in
+  `worker_fires` (`request_id null, attempt 99` — never auto-retried by
+  `retry_failed_fires()`, which skips `attempt >= 8`) and sends nothing. The
+  guard allows one client (`allow_client`). Both are removed at close and
+  the function restored verbatim.
+- The remote project already carried migrations 0036–0038 from the portal
+  branches, so the foundation migration was renumbered **0039** and the
+  `foundation_releases` policy uses `(select is_team())`; the deployed
+  `site-push` had the team-member check from 0036, which `handler.ts` now
+  carries too (commit `dc8525e`, 43 checks).
+- `plan.ts` imports `src/lib/content-adapters.ts`; the function is deployed
+  with the repository-relative layout (entrypoint
+  `supabase/functions/site-push/index.ts` plus `src/lib/content-adapters.ts`),
+  which the Supabase bundler resolves.
+
+**Fictional test client** (`67f110bd-fb6e-4432-8536-7f192df92532`,
+"Compass Activation Test (fictional)"; site row
+`fce5f434-5e5e-4e4e-84cf-89fa2867d8ec`, `work_mode = new_build`). Every
+fact is invented and labelled; status stayed `launching` (no billing,
+reporting, monthly cycle, site-updates or blog fires, which are for
+`active` clients), the SEO enrollment was dropped before Foundation
+completed (no audit, no DataForSEO / BrightLocal spend), Foundation data
+was seeded by hand (brand board, 4 services, 6 keywords, 6 page groups, 2
+`unverified` claims) and the three Foundation stages were closed by hand,
+which activated Website through `handle_foundation_completion`.
+
+The intake **form** could not be driven from this environment: the deployed
+app sits behind Vercel SSO (creating an automation bypass was refused, 403)
+and a magic-link sign-in was not permitted. The intake's own two inserts
+(`createClientAction`, `new_build`) were executed as SQL on the production
+database instead, so the intake triggers (Foundation enrollment, pending
+Website / SEO, `client created` fire) ran; the form → server action path
+itself is still to be exercised by Tom once (see the report).
+
 ## BHG Safety Partners
 
 `docs/clients/bhg-safety-partners-upgrade-brief.md` is the version-pinned
