@@ -153,7 +153,14 @@ export function resolvePushPlan(input: PlanInput): PushPlan {
   const requested = input.requestedBranch?.trim() || null;
   const wantsPreview = input.previewRequested || input.pullRequest || (requested !== null && requested !== base);
   if (wantsPreview) {
-    const branch = requested && requested !== base ? requested : previewBranchName(input.slug ?? "site", input.today);
+    let branch = requested && requested !== base ? requested : previewBranchName(input.slug ?? "site", input.today);
+    // The preview branch must never BE the branch of record. The auto-named
+    // one can collide with it — a site whose branch of record is itself an
+    // old `compass/preview-<date>-<slug>` branch generates the same name
+    // again — and the commit would then land on the branch of record with no
+    // pull request, which is the one thing a preview push exists to prevent.
+    // Seen live on Sept 20 2026 during the upgrade_existing exercise.
+    if (branch === base) branch = `${branch}-preview`;
     return plan({
       branch,
       createFrom: input.repoEmpty ? null : base,

@@ -137,3 +137,29 @@ test("the archive mode only serves the client's own repo or the pinned foundatio
   assert.equal(archiveAllowed({ repo: "Compass2026/ridge-safety", ref: "production" }, "Compass2026/ridge-safety", f), true);
   assert.equal(archiveAllowed({ repo: "someone/else", ref: "main" }, "Compass2026/ridge-safety", f), false);
 });
+
+test("an auto-named preview branch that collides with the branch of record is moved off it", () => {
+  // A site whose branch of record is itself an old preview branch: the
+  // generated name would be identical, so the commit would land on the
+  // branch of record with no pull request.
+  const base = "compass/preview-20260920-ridgesafety";
+  const plan = resolvePushPlan({
+    requestedBranch: null,
+    previewRequested: true,
+    pullRequest: true,
+    productionBranchHint: null,
+    siteRow: { branch: base, stack: "nextjs", work_mode: "upgrade_existing", controlled_by_compass: true, vercel_project: null, content_adapter: "foundation_brand_content", content_paths: null },
+    repoDefaultBranch: "main",
+    repoEmpty: false,
+    headAuthorName: "Compass CRM",
+    filePaths: ["docs/page-plan.md"],
+    today: new Date("2026-09-20T12:00:00Z"),
+    slug: "ridgesafety",
+  });
+  assert.equal(plan.base, base);
+  assert.notEqual(plan.branch, base, "the preview must not be the branch of record");
+  assert.equal(plan.branch, `${base}-preview`);
+  assert.equal(plan.prBase, base);
+  assert.equal(plan.deployTarget, "preview");
+  assert.equal(plan.recordAsBranchOfRecord, false);
+});
