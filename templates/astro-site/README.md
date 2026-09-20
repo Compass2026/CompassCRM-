@@ -1,3 +1,8 @@
+> **Retired (Sept 14 2026).** The worker no longer builds from this starter.
+> New builds and upgrades use the accepted Compass Website Foundation
+> (`foundation_releases`; `docs/compass-foundation-integration.md`). This
+> directory stays only as the source of the SEO scaffolding ideas to port.
+
 # Compass Astro starter
 
 The site every Compass client starts from. Copy this directory into the

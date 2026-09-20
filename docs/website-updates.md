@@ -31,7 +31,31 @@ plan, open placeholders, the brand board):
 Caps: 2 new pages + 2 refreshes a month, 1 post a week. Nothing invented:
 a claim without a source is a placeholder, not copy.
 
-## The content contract (from the Lucas repo)
+## The content contract — one adapter per site (Sept 21 2026)
+
+`src/lib/content-adapters.ts` is the reference; `sites.content_adapter` is
+detected from the repository tree (`scripts/build-brief.mjs` with the
+tree from `site-push {read: true}`), never inferred from another client's
+site or from a template version. How a change reaches the site depends on
+the adapter:
+
+| Adapter | Shape | City page | Blog post | Service page / FAQ |
+| --- | --- | --- | --- | --- |
+| `lucas_json` | `data/locations.json` + `data/blog-posts.json` + `/service-areas/[city]` | push | push | pull request |
+| `markdown_blog` | `content/blog/*.mdx` + JSON data files (BHG) | proposed document | push | pull request |
+| `foundation_brand_content` | Compass Website Foundation v1: `brands/<brand>/content/*.ts`, `/service-area/[city]`, `/locations/[slug]` separate | pull request | pull request | pull request |
+| `unsupported` | anything else, or a tree not yet inspected | proposed document | proposed document | proposed document |
+
+A push names the site's recorded branch of record explicitly (never
+`main` by habit); a pull request goes to a preview branch created from
+that branch and targets it; a proposed document is a Google Doc in
+`04 Website` plus a `change_log` row. Foundation typed content is
+TypeScript — an entry is a typed object file and a registry import, built
+and crawled on a preview before the PR opens; writing JSON into a typed
+registry, or a served city into the physical-locations registry, is
+refused (`assertWriteAllowed`).
+
+### The `lucas_json` shape (from the Lucas repo)
 
 `Compass2026/lucas_construction` is the reference. The stage writes data,
 not components:
@@ -53,9 +77,9 @@ files to any repo and deploys the result on Vercel itself.
 | Client | Repo | Stack | On the contract? | Gap |
 | --- | --- | --- | --- | --- |
 | Lucas Construction | `lucas_construction` | Next 16 App Router | **yes** | none — flip on first |
-| BHG Safety Partners | `BHGSafetyPartners` | Next 16 App Router | mostly | blog lives in `content/blog` (markdown) not JSON; `data/services.json` + per-state city files; the stage needs a small adapter for its blog path |
+| BHG Safety Partners | `BHGSafetyPartners` | Next 16 App Router | adapter `markdown_blog` (Sept 21) | blog in `content/blog` (MDX) → push; `data/locations.json` entries render a templated city page with no local material → proposed document until the template carries real local content; `data/services.json` → pull request. Work mode `upgrade_existing`; see `docs/clients/bhg-safety-partners-upgrade-brief.md` |
 | Pensacola Equipment Rentals | `pensacolaequipmentrentals` | Next 15 App Router | partly | equipment pages from `src/data/equipment.ts`; no locations file, no blog, no canonicals — add the two data files and routes |
-| Show Me Electrical | `showmeelectricalwebsite` | Next 15 App Router | no | two pages (home, `jobs/[slug]`); the live site is the client's WordPress — treat as client-controlled until this build is a full site |
+| Show Me Electrical | `showmeelectricalwebsite` | Next 15 App Router — **the Compass Website Foundation v1 reference client** (`brands/showme`, accepted at `94014af`) | adapter `foundation_brand_content` on that repo; the live site is still the client's WordPress | client-controlled until the launch decision; after launch, pull requests only (typed content) |
 | Show Me Design | `Show-Me-Design-Build-` | Vite + React Router SPA | no | the live site; blog in `posts.ts`, JSON-LD in `seo.ts`, no sitemap / robots (audit findings) — client-controlled path until rebuilt in Next |
 | Ginger Huff Interiors | `gingerhuff-website` | Vite React single page | no | one `App.tsx`, no routing — rebuild in Next on the contract |
 | Logic Solar | `Logic-Solar` | Vite + React Router SPA | no | city data in `src/data/locations-solar.json`, pages in `src/pages` — client-controlled path until rebuilt |
@@ -74,4 +98,6 @@ repos and Vercel projects (`lucas-construction`, `gingerhuff-website`,
 `pensacolaequipmentrentals`). The repos `Compass2026/lucasconstruction`
 and `Compass2026/gingerhuffinteriors` need Tom's admin rights to delete.
 `templates/astro-site/` stays in the repo only as the source of the SEO
-scaffolding to port; the worker no longer builds from it.
+scaffolding to port; the worker no longer builds from it. Since Sept 21
+2026 new builds come from the Compass Website Foundation
+(`docs/compass-foundation-integration.md`).

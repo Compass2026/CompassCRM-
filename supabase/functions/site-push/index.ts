@@ -45,12 +45,26 @@
 // integration would deploy it, except that Vercel blocks Git deployments
 // whose commit author is not a team member (ours is "Compass CRM"), so the
 // deployment is always created here: production for the branch of record,
-// a preview for a side branch. `deploy: false` skips it. `branch: "compass/<name>"` creates the branch from `main` if
-// it does not exist, and `pull_request: { title, body }` opens a PR to
-// `main` for it (the path for hand-built pages the stage may not push to
-// directly).
+// a preview for a side branch. `deploy: false` skips it.
+//
+// Branches (v9, Foundation integration — see plan.ts): the BRANCH OF RECORD
+// is `sites.branch`, else the repository's default branch, else main; it is
+// never assumed to be main. `branch: "compass/<name>"` (or `preview: true`
+// for an auto-named branch) creates a side branch FROM the branch of record
+// and `pull_request: { title, body }` opens a PR whose base is the branch of
+// record; a preview push records `sites.preview_branch` and never moves
+// `sites.branch` or starts a production deployment. A site in work mode
+// `client_retains` is never pushed to (409). A site row created by a push is
+// recorded with the stack the files imply, never astro by default.
+//
+// Archive mode: { archive: { repo, ref } } streams that repository's tarball
+// at that ref through the Vault token — how the worker (which cannot reach
+// GitHub) obtains the pinned Foundation source. Only the client's own repo or
+// the pinned Foundation release recorded in `foundation_releases` is served.
+// `brand` on a push sets COMPASS_BRAND on a Vercel project this call creates.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { archiveAllowed, resolvePushPlan, type SiteRowForPlan } from "./plan.ts";
 
 type FileIn = { path: string; content: string; encoding?: "utf-8" | "base64" };
 
@@ -92,13 +106,20 @@ Deno.serve(async (req) => {
   const readOnly: boolean = body?.read === true;
   const domainOnly: boolean = typeof body?.domain === "string" && body.domain.trim() !== "";
   const revertOnly: boolean = body?.revert === true;
+  const archiveReq: { repo: string; ref: string } | null =
+    body?.archive && typeof body.archive === "object" && typeof body.archive.repo === "string" && typeof body.archive.ref === "string"
+      ? { repo: String(body.archive.repo), ref: String(body.archive.ref) }
+      : null;
+  const previewRequested: boolean = body?.preview === true;
+  const productionBranchHint: string | null = typeof body?.production_branch === "string" ? body.production_branch : null;
+  const brandForVercel: string | null = typeof body?.brand === "string" && body.brand.trim() ? body.brand.trim() : null;
   const noDeploy: boolean = body?.deploy === false;
   const readPaths: string[] | null = Array.isArray(body?.paths) ? body.paths.map(String) : null;
   const pullRequest: { title?: string; body?: string } | null =
     body?.pull_request && typeof body.pull_request === "object" ? body.pull_request : null;
-  if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && !revertOnly && (!Array.isArray(body.files) || !body.files.length))) {
+  if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && !revertOnly && !archiveReq && (!Array.isArray(body.files) || !body.files.length))) {
     return Response.json(
-      { error: "client_id and a non-empty files[] are required (or deploy / read / domain / revert)" },
+      { error: "client_id and a non-empty files[] are required (or deploy / read / domain / revert / archive)" },
       { status: 400 }
     );
   }
@@ -130,7 +151,7 @@ Deno.serve(async (req) => {
   const org = (await secret("GITHUB_ORG")) ?? "Compass2026";
   const { data: siteRow } = await supabase
     .from("sites")
-    .select("id, repo_url, branch, vercel_project, stack")
+    .select("id, repo_url, branch, preview_branch, vercel_project, stack, work_mode, controlled_by_compass")
     .eq("client_id", client.id)
     .order("created_at")
     .limit(1)
@@ -159,6 +180,36 @@ Deno.serve(async (req) => {
   const fail = (step: string, res: Response, text: string) =>
     new Error(`${step} failed (${res.status}): ${text.slice(0, 300)}`);
 
+  // ── Archive mode: the pinned Foundation source (or the client's repo) ──
+  if (archiveReq) {
+    const { data: release } = await supabase
+      .from("foundation_releases")
+      .select("source_repo, source_sha")
+      .eq("is_current", true)
+      .limit(1)
+      .maybeSingle();
+    const foundation = release ? { repo: String(release.source_repo), sha: String(release.source_sha) } : null;
+    if (!archiveAllowed(archiveReq, repoFromSite ? `${repoFromSite[1]}/${repoFromSite[2].replace(/\.git$/, "")}` : null, foundation)) {
+      return Response.json(
+        { error: `archive refused: only this client's repository or the current Foundation release (${foundation ? `${foundation.repo}@${foundation.sha}` : "none recorded"}) may be fetched` },
+        { status: 403 }
+      );
+    }
+    const tar = await gh(`/repos/${archiveReq.repo}/tarball/${archiveReq.ref}`, { redirect: "follow" });
+    if (!tar.ok || !tar.body) {
+      return Response.json({ error: `archive ${archiveReq.repo}@${archiveReq.ref} failed (${tar.status}): ${(await tar.text()).slice(0, 300)}` }, { status: 502 });
+    }
+    return new Response(tar.body, {
+      status: 200,
+      headers: {
+        "content-type": "application/gzip",
+        "content-disposition": `attachment; filename="${archiveReq.repo.replace("/", "-")}-${archiveReq.ref.slice(0, 12)}.tar.gz"`,
+        "x-archive-repo": archiveReq.repo,
+        "x-archive-ref": archiveReq.ref,
+      },
+    });
+  }
+
   try {
     // ── Ensure the repo ─────────────────────────────────────────────────
     // Compass2026 is a user account, not an organization: a repo under it is
@@ -166,11 +217,13 @@ Deno.serve(async (req) => {
     let createdRepo = false;
     let repoUrl: string;
     let repoId: number | null = null; // GitHub's numeric id; Vercel deploys by it
+    let repoDefaultBranch: string | null = null; // never assumed to be main
     const head = await gh(`/repos/${owner}/${name}`);
     if (head.ok) {
       const r = await head.json();
       repoUrl = r.html_url;
       repoId = r.id;
+      repoDefaultBranch = typeof r.default_branch === "string" ? r.default_branch : null;
     } else if (head.status === 404) {
       const me = await gh(`/user`);
       if (!me.ok) throw fail("whoami", me, await me.text());
@@ -202,13 +255,18 @@ Deno.serve(async (req) => {
     }
 
     // ── Which branch, and its current head ──────────────────────────────
-    // A repo whose main already carries someone else's work (Pensacola has
-    // a hand-built Next.js site on main) is never overwritten: the build
-    // goes to `compass-astro` instead, and the caller is told which.
-    const requested: string | null = body.branch ?? (siteRow?.stack === "nextjs" ? (siteRow.branch ?? "main") : null);
-    let branch = requested ?? "main";
-    let parentSha: string | null = null;
-    let baseTree: string | null = null;
+    // plan.ts decides: the branch of record (never assumed main), whether
+    // this is a preview from it, where a pull request points, whether the
+    // push may deploy to production, and whether it may move sites.branch.
+    const planSite: SiteRowForPlan | null = siteRow
+      ? {
+          branch: siteRow.branch ?? null,
+          stack: (siteRow.stack as SiteRowForPlan["stack"]) ?? null,
+          work_mode: (siteRow.work_mode as SiteRowForPlan["work_mode"]) ?? null,
+          controlled_by_compass: siteRow.controlled_by_compass ?? null,
+          vercel_project: siteRow.vercel_project ?? null,
+        }
+      : null;
 
     // 409 from the ref lookup means the repository has no commits at all —
     // distinct from 404, which is a missing branch in a repo that has some.
@@ -227,21 +285,43 @@ Deno.serve(async (req) => {
       throw fail("read ref", ref, await ref.text());
     };
 
-    let headInfo = await readHead(branch);
-    if (!requested && headInfo && headInfo.authorName !== "Compass CRM") {
-      branch = "compass-astro";
-      headInfo = await readHead(branch); // null → an orphan branch with only our tree
+    const requestedBranch: string | null = typeof body.branch === "string" && body.branch.trim() ? body.branch.trim() : null;
+    const baseGuess = planSite?.branch ?? productionBranchHint ?? repoDefaultBranch ?? "main";
+    const baseHead = createdRepo ? null : await readHead(baseGuess);
+    const plan = resolvePushPlan({
+      requestedBranch,
+      previewRequested,
+      pullRequest: !!pullRequest,
+      productionBranchHint,
+      siteRow: planSite,
+      repoDefaultBranch,
+      repoEmpty,
+      headAuthorName: baseHead?.authorName ?? null,
+      filePaths: files.map((f) => f.path),
+      slug: repoSlug(client.name).slice(0, 24) || "site",
+    });
+    // Read / deploy / domain / revert modes act on the branch of record (or
+    // the named branch) and are never refused by the work mode.
+    const mutating = !readOnly && !deployOnly && !domainOnly && !revertOnly;
+    if (mutating && plan.refuse) {
+      return Response.json({ error: plan.refuse.error, work_mode: planSite?.work_mode ?? null, branch_of_record: plan.base }, { status: plan.refuse.status });
     }
-    // A requested side branch that does not exist yet starts from main.
-    if (!headInfo && requested && requested !== "main" && !repoEmpty) {
-      const mainHead = await readHead("main");
-      if (mainHead) {
+    const base = plan.base;
+    let branch = mutating ? plan.branch : (requestedBranch ?? base);
+    let parentSha: string | null = null;
+    let baseTree: string | null = null;
+
+    let headInfo = branch === baseGuess ? baseHead : await readHead(branch);
+    // A side branch that does not exist yet starts from the branch of record.
+    if (!headInfo && mutating && plan.createFrom && !repoEmpty) {
+      const fromHead = plan.createFrom === baseGuess ? baseHead : await readHead(plan.createFrom);
+      if (fromHead) {
         const mk = await gh(`/repos/${owner}/${name}/git/refs`, {
           method: "POST",
-          body: JSON.stringify({ ref: `refs/heads/${requested}`, sha: mainHead.sha }),
+          body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromHead.sha }),
         });
-        if (!mk.ok) throw fail(`create branch ${requested}`, mk, await mk.text());
-        headInfo = mainHead;
+        if (!mk.ok) throw fail(`create branch ${branch} from ${plan.createFrom}`, mk, await mk.text());
+        headInfo = fromHead;
       }
     }
     if (headInfo) {
@@ -319,12 +399,14 @@ Deno.serve(async (req) => {
     // `<repo>-astro` for the side branch.
     // A Next.js site (Tom's) has one project whatever the branch: main
     // deploys to production, a side branch gets a preview deployment.
+    // One project per site; the Foundation side branch (a build parked next
+    // to someone else's site) gets its own so it never collides.
     const projectName = () =>
-      siteRow?.vercel_project && (siteRow.stack === "nextjs" || branch === (siteRow.branch ?? "main"))
+      siteRow?.vercel_project && (siteRow.stack === "nextjs" || branch === base)
         ? siteRow.vercel_project
-        : branch === "main" ? name : `${name}-astro`;
+        : branch === base ? name : `${name}-preview`;
     const deployTarget = (): "production" | undefined =>
-      branch === (siteRow?.branch ?? "main") ? "production" : undefined;
+      branch === base && (!mutating || plan.deployTarget === "production") ? "production" : undefined;
 
     // ── Vercel client, shared by the domain mode and the deploy step ────
     const vercelCtx = async () => {
@@ -427,12 +509,16 @@ Deno.serve(async (req) => {
         let created = false;
         const existing = await vc(`/v9/projects/${project}`);
         if (existing.status === 404) {
+          const framework = (siteRow?.stack ?? plan.stackForInsert) === "astro" ? "astro" : (siteRow?.stack ?? plan.stackForInsert) === "nextjs" ? "nextjs" : null;
           const mk = await vc(`/v10/projects`, {
             method: "POST",
             body: JSON.stringify({
               name: project,
-              framework: siteRow?.stack === "nextjs" ? "nextjs" : "astro",
+              ...(framework ? { framework } : {}),
               gitRepository: { type: "github", repo: `${owner}/${name}` },
+              ...(brandForVercel
+                ? { environmentVariables: [{ key: "COMPASS_BRAND", value: brandForVercel, target: ["production", "preview"], type: "plain" }] }
+                : {}),
             }),
           });
           if (!mk.ok) throw fail("vercel project create", mk, await mk.text());
@@ -564,8 +650,8 @@ Deno.serve(async (req) => {
 
     // ── Pull request for a side branch ──────────────────────────────────
     let prUrl: string | null = null;
-    if (pullRequest && branch !== "main") {
-      const existing = await gh(`/repos/${owner}/${name}/pulls?head=${owner}:${branch}&base=main&state=open`);
+    if (pullRequest && branch !== base) {
+      const existing = await gh(`/repos/${owner}/${name}/pulls?head=${owner}:${branch}&base=${encodeURIComponent(plan.prBase)}&state=open`);
       const open = existing.ok ? ((await existing.json()) as { html_url: string }[]) : [];
       if (open[0]) prUrl = open[0].html_url;
       else {
@@ -575,7 +661,7 @@ Deno.serve(async (req) => {
             title: pullRequest.title ?? message,
             body: pullRequest.body ?? "Opened by the Compass CRM worker.",
             head: branch,
-            base: "main",
+            base: plan.prBase,
           }),
         });
         if (!pr.ok) throw fail("pull request", pr, await pr.text());
@@ -597,21 +683,27 @@ Deno.serve(async (req) => {
         .from("sites")
         .update({
           repo_url: site.repo_url ?? repoUrl,
-          // A pull-request push lives on a side branch; the site's branch
-          // of record does not move until Tom merges it.
-          ...(pullRequest ? {} : { branch }),
+          // A preview / pull-request push lives on a side branch; the site's
+          // branch of record does not move until Tom merges it.
+          ...(plan.recordAsBranchOfRecord ? { branch } : {}),
+          ...(plan.recordAsPreviewBranch ? { preview_branch: branch } : {}),
           last_pushed_at: new Date().toISOString(),
           last_commit_url: commitUrl,
         })
         .eq("id", site.id);
     } else {
+      // No row yet: record what the push implies. The stack comes from the
+      // files (never astro by default); the branch of record is the branch
+      // this push landed on only when it IS the branch of record.
       await supabase.from("sites").insert({
         client_id: client.id,
         url: client.website_url,
-        stack: "astro",
+        stack: plan.stackForInsert,
         controlled_by_compass: true,
         repo_url: repoUrl,
-        branch,
+        branch: plan.recordAsBranchOfRecord ? branch : base,
+        ...(plan.recordAsPreviewBranch ? { preview_branch: branch } : {}),
+        work_mode: "new_build",
         last_pushed_at: new Date().toISOString(),
         last_commit_url: commitUrl,
       });
@@ -634,11 +726,11 @@ Deno.serve(async (req) => {
       deleted: baseTree ? deletes.length : 0,
       created_repo: createdRepo,
       pull_request_url: prUrl,
+      branch_of_record: base,
+      pull_request_base: pullRequest ? plan.prBase : undefined,
+      target: plan.deployTarget,
       vercel,
-      note:
-        branch === "compass-astro"
-          ? "main already carries a site that is not ours; the build is on compass-astro for Tom to blend."
-          : undefined,
+      note: plan.note ?? undefined,
     });
   } catch (e) {
     return Response.json(

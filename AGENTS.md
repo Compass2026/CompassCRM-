@@ -366,17 +366,37 @@ a chat.
   listings and builds the board from those; it blocks only when there is no
   public footprint at all.
 
-**Website bones** are built from `templates/astro-site/` — the Compass Astro
-starter the Shewmaker README promised — copied into the client's repo and
-filled from `src/config/site.ts`. The quality bar is in the layout, not the
-prompt: every page gets a canonical, one H1, JSON-LD and breadcrumbs; every
-service and city page gets an answer-first block, a FAQ with FAQPage schema
-and a sourced facts block; the site gets `llms.txt`, `robots.txt` and a
-sitemap. `scripts/site-quality-gate.mjs` checks all of it against `dist/`
-(SEO / AEO / GEO scores, hard failures, placeholders counted never failed) and
-the worker cannot mark Build to 70% complete until it prints `PASS`; the
-report lands on `sites.quality`. The starter passes its own gate at
-100 / 100 / 100.
+**Website builds come from the Compass Website Foundation** (Sept 21
+2026; `docs/compass-foundation-integration.md`), not the retired Astro
+starter (`templates/astro-site/` stays as reference only). The pinned
+release is the `foundation_releases` row with `is_current` — v1 =
+`Compass2026/showmeelectricalwebsite` @
+`94014af35316c94616dadb3f8d606a4b68577fb0`, accepted Sept 20 2026 with the
+three governing Drive documents recorded on the row. The worker fetches it
+through `site-push {archive}`, builds the brand layer per the Foundation's
+`docs/starter-checklist.md` from the CRM's brand board, taxonomy, page
+groups and sourced claims, and verifies with the Foundation's own checks
+(typecheck, build, manifest, crawl; mocked forms and browser suites when a
+Chromium exists, else recorded as deferred). Every build or upgrade starts
+from a **build brief** (`sites.build_brief`, `Build Brief — <Client>` in
+Drive 04 Website; `src/lib/build-brief.ts`, the Foundation tab button):
+standard version + SHA, repository and branches, framework and content
+adapter, brand and factual sources, page + keyword plan, links, assets,
+contact configuration, missing inputs, evidence. The old
+`scripts/site-quality-gate.mjs` now only audits non-Foundation sites.
+
+**Website work mode** (`sites.work_mode`, chosen at intake, editable on the
+Foundation tab): `new_build` (a Foundation build; lands on the site's
+branch of record), `upgrade_existing` (a site Tom already built; every
+change is a preview branch created from the recorded production branch plus
+a pull request against it — the production branch never moves by itself),
+`client_retains` (the client runs the site; the Website enrollment is
+dropped at intake and content lands as proposed documents). **Content
+adapters** (`src/lib/content-adapters.ts`) are detected from the actual
+repository tree, never inferred from another site or from a template
+version: `foundation_brand_content` (typed TS content; pull requests only),
+`lucas_json` (the Sept 14 contract; data pushes), `markdown_blog` (BHG's
+shape; blog pushes, city pages as documents), `unsupported` (documents).
 
 **The worker never touches GitHub; the CRM pushes for it.** A cloud session
 reaches github.com only through a credential-protecting proxy that permits
@@ -606,12 +626,23 @@ and the per-site survey in `docs/website-updates.md`.
   opens a `blog_post` task per active client and fires the worker. One
   post, one long-tail keyword, one service page, brand voice, sourced facts
   only; a `content_posts` row records it.
-- **site-push v8**: repo and Vercel project come from the `sites` row
+- **site-push v9** (Sept 21 2026; branch logic in
+  `supabase/functions/site-push/plan.ts`, unit-tested by `npm test`): the
+  **branch of record** is `sites.branch`, else the repository's default
+  branch, else `main` — never assumed; `branch: "compass/<x>"` or
+  `preview: true` creates a side branch **from the branch of record**,
+  `pull_request: {title, body}` opens the PR **against it**, the deployment
+  is a preview, `sites.preview_branch` is recorded and `sites.branch` is
+  untouched; a `client_retains` site is refused (409); an
+  `upgrade_existing` site takes only previews unless the caller names the
+  branch of record for an authorised content entry; a row inserted by a
+  push carries the stack the files imply, never astro; `{archive: {repo,
+  ref}}` streams the pinned Foundation tarball (or the client's own repo)
+  to the worker; `brand` sets `COMPASS_BRAND` on a Vercel project the push
+  creates. v8 behaviour kept: repo and Vercel project from the `sites` row
   (Tom's repos are named by hand — `lucas_construction`,
   `lucas-construction`); `{read: true, paths: [...]}` returns only those
-  files inline; `branch: "compass/<x>"` creates the branch from `main` and
-  `pull_request: {title, body}` opens the PR (the site's branch of record
-  does not move); `{revert: true}` makes a new commit carrying the previous
+  files inline; `{revert: true}` makes a new commit carrying the previous
   commit's tree. **Vercel's Git integration blocks every commit authored
   by "Compass CRM"** (not a team member — the entries show as BLOCKED in
   Vercel and are harmless), so site-push creates the deployment itself:
@@ -626,6 +657,8 @@ and the per-site survey in `docs/website-updates.md`.
   (PR #9), revert (Sept 14 test, redeployed).
 - **Retired:** the Astro proposal builds (Vercel projects and the
   `compass-astro` branch deleted; `sites` rows point at Tom's Next.js repos).
+  Since Sept 21 the side-branch name for a build parked next to someone
+  else's site is `compass/foundation-build`.
 
 ## Reporting worker (Sept 13 2026)
 

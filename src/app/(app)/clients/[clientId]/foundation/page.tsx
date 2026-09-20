@@ -51,6 +51,9 @@ import {
 import { cn } from "@/lib/utils";
 import { ProvisionButton } from "@/components/provision-button";
 import { RedeployButton } from "@/components/redeploy-button";
+import { BuildBriefButton } from "@/components/build-brief-button";
+import { WorkModeSelect } from "@/components/work-mode-select";
+import type { BuildBrief } from "@/lib/build-brief";
 import { RevertButton } from "@/components/revert-button";
 import { parseAudit, parseQuality, scoreTone, shortDate } from "@/lib/site-status";
 
@@ -141,7 +144,7 @@ export default async function FoundationPage({
     supabase
       .from("sites")
       .select(
-        "id, url, stack, controlled_by_compass, repo_url, branch, vercel_project, staging_url, last_pushed_at, last_commit_url, quality, quality_checked_at, audit, audit_checked_at, content_paths"
+        "id, url, stack, controlled_by_compass, repo_url, branch, preview_branch, vercel_project, staging_url, last_pushed_at, last_commit_url, quality, quality_checked_at, audit, audit_checked_at, content_paths, work_mode, content_adapter, foundation_version, foundation_sha, build_brief, build_brief_at"
       )
       .eq("client_id", clientId)
       .order("created_at")
@@ -407,6 +410,7 @@ export default async function FoundationPage({
                 />
               )}
               {site?.repo_url && <RedeployButton clientId={clientId} />}
+              {site && <BuildBriefButton clientId={clientId} hasBrief={!!site.build_brief} />}
             </div>
           </div>
         </CardHeader>
@@ -417,6 +421,10 @@ export default async function FoundationPage({
             </p>
           ) : (
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+              <span className="inline-flex items-center gap-1">
+                <span className="text-muted-foreground">Work mode: </span>
+                <WorkModeSelect clientId={clientId} value={site.work_mode} />
+              </span>
               <span>
                 <span className="text-muted-foreground">Updates: </span>
                 {site.content_paths ? (
@@ -462,6 +470,18 @@ export default async function FoundationPage({
                     {site.branch}
                   </Badge>
                 )}
+                {site.preview_branch && (
+                  <Badge variant="outline" className="ml-1 text-[10px]" title="latest preview branch; its pull request targets the branch of record">
+                    preview: {site.preview_branch}
+                  </Badge>
+                )}
+              </span>
+              <span>
+                <span className="text-muted-foreground">Adapter: </span>
+                {site.content_adapter ?? "not detected"}
+                {site.foundation_version && (
+                  <span className="text-muted-foreground"> · Foundation {site.foundation_version}{site.foundation_sha ? ` @ ${site.foundation_sha.slice(0, 7)}` : ""}</span>
+                )}
               </span>
               <span>
                 <span className="text-muted-foreground">Staging: </span>
@@ -491,6 +511,57 @@ export default async function FoundationPage({
               </span>
             </div>
           )}
+          {site?.build_brief && (() => {
+            const b = site.build_brief as unknown as BuildBrief;
+            const counts = b.page_plan.reduce<Record<string, number>>((acc, p) => ((acc[p.status] = (acc[p.status] ?? 0) + 1), acc), {});
+            return (
+              <div className="rounded-md border p-3 text-xs space-y-1">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-medium">
+                    Build brief · {b.work_mode} · {b.standard.version} @ {b.standard.source_sha.slice(0, 7)} ({b.standard.applies_as})
+                  </span>
+                  <span className="text-muted-foreground">{site.build_brief_at ? shortDate(site.build_brief_at) : ""} · {b.generated_by}</span>
+                </div>
+                <div className="text-muted-foreground">
+                  Production branch <code>{b.repository.production_branch}</code>
+                  {b.repository.preview_branch && <> · preview <code>{b.repository.preview_branch}</code> · PR base <code>{b.repository.pr_base}</code></>}
+                  {" · "}adapter {b.content_adapter.key}
+                  {" · "}page plan {Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(", ") || "empty"}
+                </div>
+                {b.missing_inputs.length > 0 && (
+                  <details>
+                    <summary className="cursor-pointer">{b.missing_inputs.length} missing input{b.missing_inputs.length === 1 ? "" : "s"}</summary>
+                    <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                      {b.missing_inputs.map((m, i) => (
+                        <li key={i}>{m}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {(b.preview.pull_request_url || b.preview.url) && (
+                  <div>
+                    {b.preview.url && (
+                      <a href={b.preview.url} target="_blank" rel="noreferrer" className="text-primary hover:underline mr-3">
+                        preview
+                      </a>
+                    )}
+                    {b.preview.pull_request_url && (
+                      <a href={b.preview.pull_request_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                        pull request
+                      </a>
+                    )}
+                  </div>
+                )}
+                {(b.evidence.builder_checks.length > 0 || b.evidence.deferred.length > 0) && (
+                  <div className="text-muted-foreground">
+                    Builder checks: {b.evidence.builder_checks.join("; ") || "none"}
+                    {b.evidence.deferred.length > 0 && <> · deferred: {b.evidence.deferred.join("; ")}</>}
+                    {" · "}independent review: {b.evidence.independent_review.join("; ") || "pending"}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {site && (siteChanges?.length ?? 0) > 0 && (
             <div>
               <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Recent changes</h3>

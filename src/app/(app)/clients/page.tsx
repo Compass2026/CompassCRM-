@@ -92,17 +92,49 @@ export default async function ClientsPage() {
                 <Label htmlFor="website_url">Website</Label>
                 <Input id="website_url" name="website_url" placeholder="https://" />
               </div>
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" name="existing_site" className="mt-1" />
-                <span>
-                  The client keeps this website.
-                  <span className="block text-xs text-muted-foreground">
-                    Compass does not control it: the SEO audit becomes a fix list to blend, and the
-                    Website pipeline is skipped. Leave unchecked when there is no site or we will
-                    replace it.
+              <fieldset className="space-y-2 text-sm">
+                <legend className="text-sm font-medium">Website work</legend>
+                <label className="flex items-start gap-2">
+                  <input type="radio" name="work_mode" value="new_build" defaultChecked className="mt-1" />
+                  <span>
+                    New build on the Compass Website Foundation.
+                    <span className="block text-xs text-muted-foreground">
+                      There is no site, or we replace it. The worker builds from the pinned Foundation
+                      release into a Compass repo and deploys it as staging.
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input type="radio" name="work_mode" value="upgrade_existing" className="mt-1" />
+                  <span>
+                    Upgrade a site Compass already manages.
+                    <span className="block text-xs text-muted-foreground">
+                      Tom&apos;s existing Next.js build. Every change is a preview branch and a pull
+                      request against its production branch; nothing lands on production by itself.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input type="radio" name="work_mode" value="client_retains" className="mt-1" />
+                  <span>
+                    The client keeps this website.
+                    <span className="block text-xs text-muted-foreground">
+                      Compass does not control it: the SEO audit becomes a fix list to blend, content
+                      lands as proposed documents, and the Website pipeline is skipped.
+                    </span>
+                  </span>
+                </label>
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="space-y-1 col-span-2">
+                    <Label htmlFor="repo_url">Repository (upgrade only)</Label>
+                    <Input id="repo_url" name="repo_url" placeholder="https://github.com/Compass2026/…" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="production_branch">Production branch</Label>
+                    <Input id="production_branch" name="production_branch" placeholder="main" />
+                  </div>
+                </div>
+              </fieldset>
               <Button type="submit" className="w-full">
                 Create client
               </Button>
