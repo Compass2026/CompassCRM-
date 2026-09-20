@@ -445,6 +445,22 @@ select version, source_repo, source_sha from foundation_releases where is_curren
 select column_name from information_schema.columns where table_name = 'sites' and column_name in ('work_mode','build_brief','content_adapter','preview_branch');  -- must return 4 rows
 ```
 
+**Credentials for every `site-push` call.** The Routine environment sets no
+environment variables; `$ANON` and `$CRON` below are two Vault values you
+read once per run through the Supabase MCP and put into the shell yourself:
+
+```sql
+select get_secret('SUPABASE_ANON_KEY') as anon, get_secret('SYNC_CRON_SECRET') as cron;
+```
+
+then, in the same Bash call as each curl (or once as `export ANON=… CRON=…`
+in `/tmp/.crm-env` and `source /tmp/.crm-env` in every later call):
+`ANON='<anon value>'; CRON='<cron value>'`. Never echo them, never write
+them into the CRM, the brief, the evidence, a document or a commit.
+`net.http_post` from SQL is fine for a JSON answer (brand-scan, the version
+probe) but cannot carry the Foundation tarball or a large push payload —
+the archive and the push are always curl with these two headers.
+
 ```bash
 curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
   -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
@@ -520,7 +536,9 @@ now, a `placeholders` row, or a line in the client request. **Never fill a
 missing input with an invented fact.** Close PB4b.1.
 
 **2. The source.** GitHub is unreachable from this session (see *GitHub —
-you cannot reach it*); the CRM fetches the pinned Foundation for you:
+you cannot reach it*); the CRM fetches the pinned Foundation for you. This
+is a curl with the two credentials from the preflight (a binary answer;
+`net.http_post` cannot carry it):
 
 ```bash
 curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
