@@ -10,7 +10,7 @@ Every fact below names its source; anything not sourced is listed under
 | --- | --- |
 | Client | BHG Safety Partners, CRM client `3eaa3389-2a33-4004-837c-8aef90404410` (status `active`, vertical `safety_training`, `service_area` business, Hannibal MO) |
 | Not to be confused with | BHG Forklift Training (`Compass2026/BHG-Forklift-Training`, bhgforklifttraining.com) and BHG Heavy Equipment (`Compass2026/BHG-Heavy-Equipment`) — separate repositories and projects; nothing from them is used here |
-| Work mode | `upgrade_existing` (a site Compass manages; CRM `sites.controlled_by_compass = true`, `stack = nextjs`; migration 0036 backfills this) |
+| Work mode | `upgrade_existing` (a site Compass manages; CRM `sites.controlled_by_compass = true`, `stack = nextjs`; migration 0039 backfills this) |
 | Standard | Compass Website Foundation v1, `Compass2026/showmeelectricalwebsite` @ `94014af35316c94616dadb3f8d606a4b68577fb0` (accepted Sept 20 2026), applied as **reference** — BHG has not adopted it; adoption is what this upgrade decides module by module |
 | Governing documents | Build Standard v1.1, Page Template Library v1.1, Foundation v1 Review and Completion Brief (links in `foundation_releases.documents` / `docs/compass-foundation-integration.md`) |
 | Content adapter | `markdown_blog` (detected from the tree: `content/blog/*.mdx`, `src/app/blog/[slug]/page.tsx`, `data/locations.json`, `data/services.json`) |

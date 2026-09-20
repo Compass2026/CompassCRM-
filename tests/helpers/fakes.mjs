@@ -4,7 +4,7 @@
 // recorded so a test can assert what was (and was not) written.
 
 export function fakeSupabase({ tables = {}, secrets = {}, teamJwt = "team-jwt" } = {}) {
-  const store = structuredClone(tables);
+  const store = structuredClone({ team_members: [{ id: "tm-1", auth_user_id: "team" }], ...tables });
   const writes = [];
   class Query {
     constructor(table) { this.table = table; this.filters = []; this.op = "select"; this.payload = null; this.take = null; }
@@ -31,7 +31,7 @@ export function fakeSupabase({ tables = {}, secrets = {}, teamJwt = "team-jwt" }
     writes,
     from: (table) => new Query(table),
     rpc: async (fn, args) => (fn === "get_secret" ? { data: secrets[args.secret_name] ?? null } : { data: null }),
-    auth: { getUser: async (jwt) => ({ data: { user: jwt === teamJwt ? { id: "team" } : null } }) },
+    auth: { getUser: async (jwt) => ({ data: { user: jwt === teamJwt ? { id: "team" } : jwt === "client-jwt" ? { id: "client" } : null } }) },
   };
 }
 

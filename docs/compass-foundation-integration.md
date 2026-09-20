@@ -5,7 +5,7 @@ Implemented Sept 20 2026 on `claude/foundation-v1-crm-integration` from the
 and the [CRM onboarding review](https://github.com/Compass2026/showmeelectricalwebsite/blob/codex/foundation-v1-handoff/docs/compass-crm-onboarding-review.md).
 Accepted foundation code: `Compass2026/showmeelectricalwebsite` @
 `94014af35316c94616dadb3f8d606a4b68577fb0`. The three governing Drive
-originals are listed in `foundation_releases.documents` (migration 0036).
+originals are listed in `foundation_releases.documents` (migration 0039_foundation_v1_work_modes).
 
 This branch changes code and instructions. **Nothing is deployed by it**:
 the migration is not applied, the Edge Function is not redeployed, the
@@ -22,7 +22,7 @@ says exactly what turns each part on.
 | Content adapters | Monthly instructions assumed Lucas JSON paths and `/service-areas/{slug}` | `src/lib/content-adapters.ts`: `foundation_brand_content` (typed TS, `/service-area/[city]`, locations separate — pull requests only), `lucas_json` (push), `markdown_blog` (BHG shape — blog pushes, city pages are documents), `unsupported` (documents). Detected from the actual tree; JSON into a typed registry is refused; a version is not evidence of adoption |
 | site-push branches | Side branch from `main`, PR base `main`, non-PR push relabelled the branch of record, missing row inserted as Astro | `plan.ts`: branch of record = `sites.branch` → repo default branch → `main` (never assumed); preview created from it, PR base = it, preview deploy, `sites.preview_branch` recorded, `sites.branch` untouched; `client_retains` refused (409); `upgrade_existing` requires a preview + PR unless the branch of record is named for an authorised content entry; inserted rows carry the detected stack |
 | Evidence | Gate report on `sites.quality` | Preview outcomes fold into the brief (`attachPreviewOutcome`): stage evidence line, `deliverables` rows for the preview and PR, a `change_log` row, a `decisions` row; builder checks, deferred checks, independent review and launch work are separate buckets |
-| Stage wording | "Confirm the stack and record the site row (Astro, …)" | Migration 0036 rewrites the Website stage description and the Discovery / Build task titles; open tasks on not-started stages pick the wording up |
+| Stage wording | "Confirm the stack and record the site row (Astro, …)" | Migration 0039 rewrites the Website stage description and the Discovery / Build task titles; open tasks on not-started stages pick the wording up |
 
 Preserved: Foundation enrollment and gates (0012, 0016), Website / SEO
 default enrollment (0018, 0022), the Sept 14 authorisation to publish
@@ -73,11 +73,12 @@ recipe for a human. Results are builder-reported; the brief keeps
 
 ## Tests
 
-`npm test` (Node's test runner, no new dependency) — 42 checks:
+`npm test` (Node's test runner, no new dependency) — 43 checks:
 
 - `tests/site-push-handler.test.mjs` — the **request boundary**: the real
   `handler.ts` with a fake Supabase client and a fake GitHub API
-  (`tests/helpers/fakes.mjs`). Version mode; 401 without credentials;
+  (`tests/helpers/fakes.mjs`). Version mode; 401 without credentials; 403 for a
+  signed-in non-team user (the team-only check from 0036_team_only_access);
   naming `main` with `src/app/page.tsx` + `src/components/Header.tsx` →
   409 and no GitHub write; a data entry mixed with code, or with a
   deletion → 409; an authorised blog/data entry → commit on the branch of
@@ -129,7 +130,7 @@ playbook's **preflight** refuses to build unless all three parts answer.
 | Step | Action | Verifies | Rollback |
 | --- | --- | --- | --- |
 | 0 | **Pause the Routine** ("Compass Foundation worker" at claude.ai/code/routines) and note the time. Fires that arrive while it is paused are recorded in `worker_fires` (the CRM keeps POSTing) and `retry_failed_fires()` re-sends the recent ones once it is resumed; nothing is lost, nothing runs. | `select count(*) from worker_fires where fired_at > '<pause time>'` grows without sessions starting | resume the Routine |
-| 1 | **Apply migration 0036** to `iokcopiyzajigvhwexhe` through the Supabase MCP (`apply_migration`, name `0036_foundation_v1_work_modes`). | `select version, source_sha from foundation_releases where is_current` → v1 / `94014af…`; `sites.work_mode` backfilled (`select name, work_mode from sites join clients …`) | the migration is additive (new type, columns, table, wording); leave it in place — nothing reads it until step 3 |
+| 1 | **Apply migration 0039** to `iokcopiyzajigvhwexhe` through the Supabase MCP (`apply_migration`, name `0039_foundation_v1_work_modes`; the remote already carries 0036–0038 from the portal branches). | `select version, source_sha from foundation_releases where is_current` → v1 / `94014af…`; `sites.work_mode` backfilled (`select name, work_mode from sites join clients …`) | the migration is additive (new type, columns, table, wording); leave it in place — nothing reads it until step 3 |
 | 2 | **Deploy site-push v9** from `supabase/functions/site-push/` (dashboard upload or `supabase functions deploy site-push`). | `POST {client_id, version: true}` with the cron secret → `{"version": 9, "features": [...]}` | redeploy the previous function from `main` (v8: no `version` mode, `main` assumed) |
 | 3 | **Merge PR #38 into `main`.** Vercel deploys the CRM app (project `compass-crm`) from `main`: intake radio, Foundation-tab work mode / adapter / preview branch / build-brief card. The app reads the columns from step 1. | the Foundation tab of a client renders the Site card with a work mode | revert the merge commit; the app then ignores the new columns |
 | 4 | **Verify the Routine's source branch** — do not assume it. Open the Routine at claude.ai/code/routines and read the repository and branch it starts sessions from; it must be `Compass2026/CompassCRM-` @ `main` (the merged branch). If it is pinned to another branch or SHA, point it at `main`. The skill is read from that checkout at session start. | the Routine's source shows `main`; a hand run `/foundation-worker <client>` prints the preflight lines | pause again |

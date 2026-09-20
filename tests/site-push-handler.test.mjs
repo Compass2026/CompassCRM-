@@ -51,6 +51,13 @@ test("no cron secret and no team session → 401 before anything is read", async
   assert.equal(gh.calls.length, 0);
 });
 
+test("a signed-in user who is not a team member → 403 before anything is read (team-only boundary from migration 0036_team_only_access)", async () => {
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
+  const r = await post({ client_id: CLIENT, branch: "main", files: [{ path: "data/blog-posts.json", content: "[]" }] }, { Authorization: "Bearer client-jwt" });
+  assert.equal(r.status, 403);
+  assert.equal(gh.calls.length, 0);
+});
+
 test("naming the production branch with general code changes is refused: nothing is written to GitHub or the site row", async () => {
   const { post, gh, site } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
   const r = await post({ client_id: CLIENT, branch: "main", message: "x", files: [{ path: "src/app/page.tsx", content: "a" }, { path: "src/components/Header.tsx", content: "b" }] });

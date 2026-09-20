@@ -107,6 +107,16 @@ export function createSitePushHandler(deps: HandlerDeps) {
     if (!userData?.user) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
+    // Signed in is not enough once clients have portal logins: team only
+    // (matches migration 0036_team_only_access and the deployed function).
+    const { data: member } = await supabase
+      .from("team_members")
+      .select("id")
+      .eq("auth_user_id", userData.user.id)
+      .maybeSingle();
+    if (!member) {
+      return Response.json({ error: "forbidden" }, { status: 403 });
+    }
   }
 
   const body = await req.json().catch(() => null);

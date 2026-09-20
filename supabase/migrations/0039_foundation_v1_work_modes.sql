@@ -19,8 +19,11 @@
 --    archive mode will fetch.
 --
 -- Nothing here changes existing enrollments, gates or the content contract
--- Tom authorised on Sept 14. Not applied to the remote project by this
--- branch; see docs/compass-foundation-integration.md "Activation".
+-- Tom authorised on Sept 14. Numbered 0039 because the remote project already
+-- carries 0036_team_only_access, 0037_portal_access and 0038_portal_seen from
+-- the portal branches (the foundation_releases policy uses their is_team()).
+-- Applied during the Sept 20 activation; see
+-- docs/compass-foundation-integration.md "Activation".
 
 -- ── Work mode ─────────────────────────────────────────────────────────────
 do $$ begin
@@ -77,7 +80,7 @@ create unique index if not exists foundation_releases_one_current on foundation_
 alter table foundation_releases enable row level security;
 do $$ begin
   if not exists (select 1 from pg_policies where tablename = 'foundation_releases' and policyname = 'team full access') then
-    create policy "team full access" on foundation_releases for all to authenticated using (true) with check (true);
+    create policy "team full access" on foundation_releases for all to authenticated using ((select is_team())) with check ((select is_team()));
   end if;
 end $$;
 
