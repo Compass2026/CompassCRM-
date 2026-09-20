@@ -204,6 +204,21 @@ database instead, so the intake triggers (Foundation enrollment, pending
 Website / SEO, `client created` fire) ran; the form → server action path
 itself is still to be exercised by Tom once (see the report).
 
+**Worker runs on the test client** (each fired through the CRM's own path:
+`fire_foundation_worker()` → `pg_net` → the Routine API, HTTP 200 with the
+session id in `worker_fires`/`net._http_response`):
+
+| Run | Session | Fire | Outcome |
+| --- | --- | --- | --- |
+| 1 | `cse_01NDVwoFivFa36sBGGYgeSdS`, 20:35–20:46 UTC | `worker_fires` 116 / request 667 | Preflight passed (release row, columns, `site-push` v9 probe). Discovery done, Drive folders created, **build brief composed and stored** (`sites.build_brief`: standard v1 @ `94014af…`, Drive doc filed, `deliverables` row). Blocked at the source fetch: the playbook used `$ANON` / `$CRON` without saying where they come from. Fixed in PR #39 (skill: read both with `get_secret()` through the Supabase MCP). |
+| 2 | `cse_01AGHgd7WUwvWvFk9ieynLQG`, 20:56–21:03 UTC | 118 / 672 | Credentials read, version probe OK, **pinned Foundation archive fetched through `site-push` archive mode (4.0 MB)**, brand `activation-test` started with `fictional: true`. Blocked on a real Foundation gap: `site.address` is required and rendered unconditionally (footer, contact page, JSON-LD), so a `service_area` business cannot be built on v1 without a Foundation change. The worker refused to invent an address or patch framework files, which is the intended behaviour. |
+| 3 | see below | 120 / 674 | Test client recast as `storefront` with a labelled fictional address; run to exercise the build, verification, push and record-keeping on the release unchanged. |
+
+**Foundation follow-up (not done here):** an optional / omittable
+`site.address` with a conditional render in `components/site/SiteFooter.tsx`,
+`app/contact/page.tsx` and `lib/seo.ts` before any real service-area client
+is built on Foundation v1.
+
 ## BHG Safety Partners
 
 `docs/clients/bhg-safety-partners-upgrade-brief.md` is the version-pinned
