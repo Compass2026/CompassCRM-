@@ -58,6 +58,22 @@ test("a signed-in user who is not a team member → 403 before anything is read 
   assert.equal(gh.calls.length, 0);
 });
 
+test("a 250-file new build is one tree request: text inline, a blob only per binary (GitHub secondary rate limit)", async () => {
+  const { post, gh } = setup({ site: { ...LUCAS_SITE, work_mode: "new_build", branch: null, content_adapter: null, content_paths: null }, repos: { "Compass2026/lucas_construction": { id: 7, default_branch: "main", empty: true, branches: {} } } });
+  const files = Array.from({ length: 250 }, (_, i) => ({ path: `brands/x/content/file-${i}.ts`, content: `export const f${i} = ${i};` }));
+  files.push({ path: "public/a.png", content: "AAAA", encoding: "base64" }, { path: "public/b.png", content: "BBBB", encoding: "base64" }, { path: "public/c.webp", content: "CCCC", encoding: "base64" });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const blobs = gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/blobs"));
+  const trees = gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/trees"));
+  assert.equal(blobs.length, 3);
+  assert.equal(trees.length, 1);
+  const inline = trees[0].body.tree.filter((e) => typeof e.content === "string");
+  const bySha = trees[0].body.tree.filter((e) => typeof e.sha === "string");
+  assert.equal(inline.length, 249, "the bootstrap file goes through the Contents API; the other 249 text files ride inline");
+  assert.equal(bySha.length, 3);
+});
+
 test("naming the production branch with general code changes is refused: nothing is written to GitHub or the site row", async () => {
   const { post, gh, site } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
   const r = await post({ client_id: CLIENT, branch: "main", message: "x", files: [{ path: "src/app/page.tsx", content: "a" }, { path: "src/components/Header.tsx", content: "b" }] });

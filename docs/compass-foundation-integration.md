@@ -73,7 +73,7 @@ recipe for a human. Results are builder-reported; the brief keeps
 
 ## Tests
 
-`npm test` (Node's test runner, no new dependency) — 43 checks:
+`npm test` (Node's test runner, no new dependency) — 44 checks:
 
 - `tests/site-push-handler.test.mjs` — the **request boundary**: the real
   `handler.ts` with a fake Supabase client and a fake GitHub API
@@ -203,6 +203,21 @@ and a magic-link sign-in was not permitted. The intake's own two inserts
 database instead, so the intake triggers (Foundation enrollment, pending
 Website / SEO, `client created` fire) ran; the form → server action path
 itself is still to be exercised by Tom once (see the report).
+
+**Worker runs on the test client** (each fired through the CRM's own path:
+`fire_foundation_worker()` → `pg_net` → the Routine API, HTTP 200 with the
+session id in `worker_fires`/`net._http_response`):
+
+| Run | Session | Fire | Outcome |
+| --- | --- | --- | --- |
+| 1 | `cse_01NDVwoFivFa36sBGGYgeSdS`, 20:35–20:46 UTC | `worker_fires` 116 / request 667 | Preflight passed (release row, columns, `site-push` v9 probe). Discovery done, Drive folders created, **build brief composed and stored** (`sites.build_brief`: standard v1 @ `94014af…`, Drive doc filed, `deliverables` row). Blocked at the source fetch: the playbook used `$ANON` / `$CRON` without saying where they come from. Fixed in PR #39 (skill: read both with `get_secret()` through the Supabase MCP). |
+| 2 | `cse_01AGHgd7WUwvWvFk9ieynLQG`, 20:56–21:03 UTC | 118 / 672 | Credentials read, version probe OK, **pinned Foundation archive fetched through `site-push` archive mode (4.0 MB)**, brand `activation-test` started with `fictional: true`. Blocked on a real Foundation gap: `site.address` is required and rendered unconditionally (footer, contact page, JSON-LD), so a `service_area` business cannot be built on v1 without a Foundation change. The worker refused to invent an address or patch framework files, which is the intended behaviour. |
+| 3 | `cse_01QQVJ5MKzfutgtmvJ6sV1Ec`, 21:14–21:47 UTC | 120 / 674 | Test client recast as `storefront` with a labelled fictional address. **Brand layer built on the pinned source, brand registered `fictional: true`, inquiry `forceMock: true`; the Foundation verification recipe ran in the worker environment and every check passed with nothing deferred** (install, brand typecheck, build, manifest, provider suite, crawl, mocked forms, browser — a Chromium exists there). Brief regenerated (`content_adapter = foundation_brand_content`, `foundation_version = v1`, `foundation_sha = 94014af…`), two placeholders logged. **Push failed three times with GitHub's secondary rate limit (403)**: site-push created one blob per file with sequential POSTs, and a 250-file build exceeds the ~80 content-creating requests a minute GitHub allows. Fixed in site-push (text files ride inline in the single tree request; blobs only for binaries, paced) — Supabase function version 11, contract still v9; test "a 250-file new build is one tree request". |
+
+**Foundation follow-up (not done here):** an optional / omittable
+`site.address` with a conditional render in `components/site/SiteFooter.tsx`,
+`app/contact/page.tsx` and `lib/seo.ts` before any real service-area client
+is built on Foundation v1.
 
 ## BHG Safety Partners
 
