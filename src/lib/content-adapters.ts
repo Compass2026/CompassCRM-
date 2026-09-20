@@ -63,13 +63,16 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
     case "foundation_brand_content": {
       const brand = paths.brand ?? "<brand>";
       const dir = paths.content_dir ?? `brands/${brand}/content`;
+      // Layout of the accepted foundation (94014af): brands/<brand>/content/
+      // {blog,cities,services,legal}/ with an index.ts registry in each —
+      // verified against the tree fixture in tests/content-adapters.test.mjs.
       return {
         key,
         label: "Compass Website Foundation v1 (typed brand content)",
         writes: {
           city_page: `${dir}/cities/<slug>.ts + registry entry in ${dir}/cities/index.ts`,
-          blog_post: `${dir}/articles/<slug>.ts + registry entry in ${dir}/articles/index.ts`,
-          service_page: `${dir}/services/<slug>.ts + registry entry (serviceDetailPages)`,
+          blog_post: `${dir}/blog/<slug>.ts + registry entry in ${dir}/blog/index.ts`,
+          service_page: `${dir}/services/<slug>.ts + registry entry in ${dir}/services/index.ts`,
           faq_addition: "the page's typed content file",
         },
         // Typed TypeScript content is compiled: nothing reaches the branch of
@@ -138,29 +141,70 @@ export interface DetectedContract {
   adapter: ContentAdapterKey;
   paths: ContentPaths;
   /** Present only when the tree actually carries the Foundation layout. */
-  foundation?: { brand: string | null; version: "v1" };
+  foundation?: { brand: string | null; version: "v1"; brands: string[] };
   reasons: string[];
+  /** Specific inputs still needed before any write is allowed. */
+  missing_inputs: string[];
+  /** False until the contract is unambiguous (for the Foundation: a verified active client brand). */
+  writable: boolean;
 }
+
+export interface DetectOptions {
+  /** Brands the site's registry marks fictional (demonstration content, never a client). */
+  fictionalBrands?: string[];
+  /** When known (read from brands/registry.ts), the brands actually registered. */
+  registeredBrands?: string[];
+}
+
+/** The fictional demonstration brand shipped with the accepted foundation. */
+export const FOUNDATION_FICTIONAL_BRANDS = ["harbor-lane"];
 
 /**
  * Decide the adapter from the repository's file list (what site-push
  * `{read: true}` returns as paths). Order matters: the Foundation layout is
  * unmistakable; the JSON contract needs both data files and the route; the
  * Markdown shape needs a blog dir. Anything else is unsupported.
+ *
+ * The Foundation's client brand is never guessed. It must be RECORDED on
+ * the site (`content_paths.brand`), exist in the tree, not be a fictional
+ * demonstration brand, and (when the registry is known) be registered.
+ * Anything else is a named missing input and the contract is not writable.
  */
-export function detectContentContract(treePaths: string[], recorded: ContentPaths | null = null): DetectedContract {
+export function detectContentContract(treePaths: string[], recorded: ContentPaths | null = null, options: DetectOptions = {}): DetectedContract {
   const has = (re: RegExp) => treePaths.some((p) => re.test(p));
   const reasons: string[] = [];
+  const fictional = new Set(options.fictionalBrands ?? FOUNDATION_FICTIONAL_BRANDS);
 
-  const brandDirs = new Set(treePaths.map((p) => p.match(/^brands\/([^/]+)\/site\.config\.ts$/)?.[1]).filter((b): b is string => !!b));
-  if (has(/^brands\/registry\.ts$/) && has(/^lib\/routes\.ts$/) && brandDirs.size > 0) {
-    const brand = recorded?.brand && brandDirs.has(recorded.brand) ? recorded.brand : [...brandDirs].find((b) => b !== "harbor-lane") ?? [...brandDirs][0];
-    reasons.push(`brands/registry.ts, lib/routes.ts and brands/${brand}/site.config.ts present`);
+  const brandDirs = [...new Set(treePaths.map((p) => p.match(/^brands\/([^/]+)\/site\.config\.ts$/)?.[1]).filter((b): b is string => !!b))].sort();
+  if (has(/^brands\/registry\.ts$/) && has(/^lib\/routes\.ts$/) && brandDirs.length > 0) {
+    const clientBrands = brandDirs.filter((b) => !fictional.has(b) && (!options.registeredBrands || options.registeredBrands.includes(b)));
+    const missing: string[] = [];
+    let brand: string | null = null;
+    const rec = recorded?.brand?.trim() || null;
+    if (!rec) {
+      missing.push(
+        clientBrands.length === 1
+          ? `content_paths.brand is not recorded; the tree carries one client brand (${clientBrands[0]}) — record it on the site row after confirming it is this client's`
+          : `content_paths.brand is not recorded; the tree carries ${clientBrands.length} client brands (${clientBrands.join(", ") || "none"}) — record the client's brand on the site row`
+      );
+    } else if (!brandDirs.includes(rec)) {
+      missing.push(`recorded brand "${rec}" has no brands/${rec}/site.config.ts in the tree (present: ${brandDirs.join(", ")})`);
+    } else if (fictional.has(rec)) {
+      missing.push(`recorded brand "${rec}" is a fictional demonstration brand, not a client brand`);
+    } else if (options.registeredBrands && !options.registeredBrands.includes(rec)) {
+      missing.push(`recorded brand "${rec}" is not registered in brands/registry.ts (${options.registeredBrands.join(", ")})`);
+    } else {
+      brand = rec;
+    }
+    reasons.push(`brands/registry.ts, lib/routes.ts and ${brandDirs.length} brand dir(s) present (${brandDirs.join(", ")}); ${brand ? `client brand ${brand} verified` : "client brand not verified"}`);
+    const dir = brand ? `brands/${brand}/content` : undefined;
     return {
       adapter: "foundation_brand_content",
-      paths: { adapter: "foundation_brand_content", brand, content_dir: `brands/${brand}/content`, blog_format: "typescript", city_route: "/service-area/{slug}", blog_route: "/blog/{slug}" },
-      foundation: { brand, version: "v1" },
+      paths: { adapter: "foundation_brand_content", ...(brand ? { brand, content_dir: dir } : {}), blog_format: "typescript", city_route: "/service-area/{slug}", blog_route: "/blog/{slug}" },
+      foundation: { brand, version: "v1", brands: brandDirs },
       reasons,
+      missing_inputs: missing,
+      writable: brand !== null,
     };
   }
 
@@ -172,6 +216,8 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
       adapter: "lucas_json",
       paths: { adapter: "lucas_json", locations, blog: blogJson, blog_format: "json", city_route: "/service-areas/{slug}", blog_route: "/blog/{slug}", services_dir: recorded?.services_dir ?? "src/app/services" },
       reasons,
+      missing_inputs: [],
+      writable: true,
     };
   }
 
@@ -190,11 +236,13 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
         ...(has(/^data\/services\.json$/) ? { services_dir: "data/services.json" } : {}),
       },
       reasons,
+      missing_inputs: [],
+      writable: true,
     };
   }
 
   reasons.push("no known content contract in the tree");
-  return { adapter: "unsupported", paths: { adapter: "unsupported" }, reasons };
+  return { adapter: "unsupported", paths: { adapter: "unsupported" }, reasons, missing_inputs: ["no supported content contract: every change is a proposed document"], writable: false };
 }
 
 function escape(s: string): string {
@@ -222,6 +270,9 @@ export function planMutation(adapter: ContentAdapterKey, kind: ChangeKind, paths
  * caller (the worker, or a test) sees exactly what was rejected.
  */
 export function assertWriteAllowed(adapter: ContentAdapterKey, path: string, content: string, paths: ContentPaths = {}): void {
+  if (adapter === "foundation_brand_content" && !paths.brand) {
+    throw new Error(`Refusing ${path}: no verified client brand recorded for this Foundation site (content_paths.brand)`);
+  }
   const d = describeAdapter(adapter, paths);
   if (path.startsWith("/") || path.includes("..")) throw new Error(`Refusing ${path}: not a repository-relative path`);
   if (!d.allowedPaths.some((p) => (p.endsWith("/") ? path.startsWith(p) : path === p))) {
@@ -240,4 +291,72 @@ export function assertWriteAllowed(adapter: ContentAdapterKey, path: string, con
       throw new Error(`Refusing ${path}: the JSON does not parse`);
     }
   }
+}
+
+// ── The automatic content-publication exception ───────────────────────────
+// Tom's Sept 14 2026 authorisation: routine data entries (a city page or a
+// blog post on the Lucas contract, a Markdown post on the BHG shape) may be
+// published on a Compass-run site without a look. It is an exception for
+// DATA ENTRIES ONLY. site-push grants it when — and only when — every file
+// in the request is a push-permitted write path of the site's recorded
+// adapter and nothing is deleted. Anything else (a component, a layout, a
+// config, a delete, an adapter with no push paths) goes through a preview
+// branch and a pull request.
+export interface ContentEntryVerdict {
+  ok: boolean;
+  /** The change kinds the files were matched to (when ok). */
+  kinds: ChangeKind[];
+  reason: string;
+}
+
+/** Does `path` fall under the adapter's declared write path for `kind`? */
+function matchesWritePath(adapter: ContentAdapterKey, kind: ChangeKind, path: string, paths: ContentPaths): boolean {
+  switch (adapter) {
+    case "lucas_json": {
+      const loc = paths.locations ?? "data/locations.json";
+      const blog = paths.blog ?? "data/blog-posts.json";
+      if (kind === "city_page" || kind === "faq_addition") return path === loc;
+      if (kind === "blog_post") return path === blog;
+      return false;
+    }
+    case "markdown_blog": {
+      const dir = (paths.blog_dir ?? "content/blog").replace(/\/$/, "");
+      if (kind === "blog_post") return new RegExp(`^${escape(dir)}/[^/]+\\.(mdx?|markdown)$`).test(path);
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
+export function validateContentEntry(
+  adapter: ContentAdapterKey | null | undefined,
+  paths: ContentPaths | null | undefined,
+  filePaths: string[],
+  deletePaths: string[] = []
+): ContentEntryVerdict {
+  if (!adapter || adapter === "unsupported") {
+    return { ok: false, kinds: [], reason: "no recorded content adapter with push paths: use a preview branch and a pull request" };
+  }
+  const d = describeAdapter(adapter, paths ?? {});
+  const pushKinds = (Object.keys(d.mutation) as ChangeKind[]).filter((k) => d.mutation[k] === "push");
+  if (pushKinds.length === 0) {
+    return { ok: false, kinds: [], reason: `${d.label}: no change is published without a pull request` };
+  }
+  if (deletePaths.length > 0) {
+    return { ok: false, kinds: [], reason: `deletions (${deletePaths.join(", ")}) are never part of the content-entry exception: use a preview branch and a pull request` };
+  }
+  if (filePaths.length === 0) {
+    return { ok: false, kinds: [], reason: "no files" };
+  }
+  const kinds = new Set<ChangeKind>();
+  for (const p of filePaths) {
+    if (p.startsWith("/") || p.includes("..")) return { ok: false, kinds: [], reason: `${p}: not a repository-relative path` };
+    const kind = pushKinds.find((k) => matchesWritePath(adapter, k, p, paths ?? {}));
+    if (!kind) {
+      return { ok: false, kinds: [], reason: `${p} is not a ${d.label} data entry (push paths: ${pushKinds.map((k) => d.writes[k]).join("; ")}): use a preview branch and a pull request` };
+    }
+    kinds.add(kind);
+  }
+  return { ok: true, kinds: [...kinds], reason: `${d.label}: ${[...kinds].join(", ")} entries on the recorded write paths` };
 }

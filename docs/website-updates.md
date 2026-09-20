@@ -31,7 +31,7 @@ plan, open placeholders, the brand board):
 Caps: 2 new pages + 2 refreshes a month, 1 post a week. Nothing invented:
 a claim without a source is a placeholder, not copy.
 
-## The content contract — one adapter per site (Sept 21 2026)
+## The content contract — one adapter per site (Sept 20 2026)
 
 `src/lib/content-adapters.ts` is the reference; `sites.content_adapter` is
 detected from the repository tree (`scripts/build-brief.mjs` with the
@@ -77,7 +77,7 @@ files to any repo and deploys the result on Vercel itself.
 | Client | Repo | Stack | On the contract? | Gap |
 | --- | --- | --- | --- | --- |
 | Lucas Construction | `lucas_construction` | Next 16 App Router | **yes** | none — flip on first |
-| BHG Safety Partners | `BHGSafetyPartners` | Next 16 App Router | adapter `markdown_blog` (Sept 21) | blog in `content/blog` (MDX) → push; `data/locations.json` entries render a templated city page with no local material → proposed document until the template carries real local content; `data/services.json` → pull request. Work mode `upgrade_existing`; see `docs/clients/bhg-safety-partners-upgrade-brief.md` |
+| BHG Safety Partners | `BHGSafetyPartners` | Next 16 App Router | adapter `markdown_blog` (Sept 20) | blog in `content/blog` (MDX) → push; `data/locations.json` entries render a templated city page with no local material → proposed document until the template carries real local content; `data/services.json` → pull request. Work mode `upgrade_existing`; see `docs/clients/bhg-safety-partners-upgrade-brief.md` |
 | Pensacola Equipment Rentals | `pensacolaequipmentrentals` | Next 15 App Router | partly | equipment pages from `src/data/equipment.ts`; no locations file, no blog, no canonicals — add the two data files and routes |
 | Show Me Electrical | `showmeelectricalwebsite` | Next 15 App Router — **the Compass Website Foundation v1 reference client** (`brands/showme`, accepted at `94014af`) | adapter `foundation_brand_content` on that repo; the live site is still the client's WordPress | client-controlled until the launch decision; after launch, pull requests only (typed content) |
 | Show Me Design | `Show-Me-Design-Build-` | Vite + React Router SPA | no | the live site; blog in `posts.ts`, JSON-LD in `seo.ts`, no sitemap / robots (audit findings) — client-controlled path until rebuilt in Next |
@@ -98,6 +98,6 @@ repos and Vercel projects (`lucas-construction`, `gingerhuff-website`,
 `pensacolaequipmentrentals`). The repos `Compass2026/lucasconstruction`
 and `Compass2026/gingerhuffinteriors` need Tom's admin rights to delete.
 `templates/astro-site/` stays in the repo only as the source of the SEO
-scaffolding to port; the worker no longer builds from it. Since Sept 21
+scaffolding to port; the worker no longer builds from it. Since Sept 20
 2026 new builds come from the Compass Website Foundation
 (`docs/compass-foundation-integration.md`).

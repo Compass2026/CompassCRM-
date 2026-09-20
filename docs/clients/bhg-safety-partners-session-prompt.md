@@ -11,7 +11,7 @@ claude/foundation-v1-crm-integration) — the version-pinned brief with the curr
 the applicable Foundation modules, the first batch and the missing information.
 
 Do the first batch, in order, on ONE preview branch created from main named
-compass/preview-<yyyymmdd>-bhgsafetypartners, and open ONE pull request against main:
+compass/preview-YYYYMMDD-bhgsafetypartners (YYYYMMDD = today, digits only), and open ONE pull request against main:
 1. truthful basics (llms.txt host, sitemap lastmod, keywords meta, default share image);
 2. motion + accessibility safeguards (video poster/reduced motion, CTA pulse, keyboard nav/FAQ, skip link);
 3. duplicate-safe inquiry (content-bound submission id, Resend idempotencyKey, explicit retry outcomes,

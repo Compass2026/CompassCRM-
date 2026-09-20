@@ -1,6 +1,6 @@
 # Compass Website Foundation v1 in the CRM
 
-Implemented Sept 21 2026 on `claude/foundation-v1-crm-integration` from the
+Implemented Sept 20 2026 on `claude/foundation-v1-crm-integration` from the
 [accepted handoff](https://github.com/Compass2026/showmeelectricalwebsite/blob/codex/foundation-v1-handoff/docs/foundation-v1-handoff.md)
 and the [CRM onboarding review](https://github.com/Compass2026/showmeelectricalwebsite/blob/codex/foundation-v1-handoff/docs/compass-crm-onboarding-review.md).
 Accepted foundation code: `Compass2026/showmeelectricalwebsite` @
@@ -51,78 +51,102 @@ as the blocker too.
 
 ## Verification the worker runs
 
-From the Foundation at the pinned SHA: `npm run typecheck`,
-`COMPASS_BRAND=<brand> npx next build`, `npm run qa:manifest`, `npm run
-qa:crawl -- <preview> --host <production host> --assets remap`; with a
-Chromium (`scripts/qa/browser-launch.mjs --check`) also the mocked forms
-suite and the browser suite; without one they are recorded as deferred,
-never as passed. `FRESH=1 npm run verify` remains the documented
-clean-checkout recipe for a human or a session with a browser. Results are
-builder-reported; the brief keeps "independent review" empty until someone
-else records it.
+`scripts/foundation-verify.sh <site-dir> <brand> <production-host>
+[results.json] [port] [browser-paths]` is the recipe, executable as written
+by the worker, a human or a test fixture. In order: `npm ci`; the
+**brand-specific** typecheck (`node scripts/qa/typecheck-brand.mjs
+<brand>`); `COMPASS_BRAND=<brand> npx next build`; the route manifest; the
+provider suite (`npx tsx scripts/qa/provider.test.mjs`, its own in-process
+mock service); then ONE shared mock provider service is started **first**
+and the same `INQUIRY_MOCK_PROVIDER_URL` is passed to both the site
+(`next start` with `INQUIRY_DELIVERY=mock`) and the form suite; the crawl
+against the production host with assets remapped; the browser launcher
+check; the mocked forms suite and the browser suite on the brand's
+representative routes when a Chromium exists — otherwise both are recorded
+as `deferred` with the reason, never as passed, and a deferred check is
+never acceptance. Results land in `results.json` (`pass`, `fail`,
+`deferred`, `ok`) and become the brief's evidence verbatim through
+`attachPreviewOutcome`. Delivery is mocked in every step; nothing is sent.
+`FRESH=1 npm run verify` in the foundation remains the clean-checkout
+recipe for a human. Results are builder-reported; the brief keeps
+"independent review" empty until someone else records it.
 
 ## Tests
 
-`npm test` (Node's test runner, no new dependency):
+`npm test` (Node's test runner, no new dependency) — 42 checks:
 
-- `tests/site-push-plan.test.mjs` — new build on an empty repo (main,
-  production, nextjs); no-row insert never astro; client-retains refused;
-  **non-main production branch** (`production`): preview created from it,
-  PR base `production`, branch of record unchanged; upgrade push at the
-  branch of record refused unless named; authorised entry deploys to
-  production; `preview: true` auto-naming; repo default branch as baseline;
-  foreign-author full build → side branch; archive allow-list.
-- `tests/content-adapters.test.mjs` — Foundation / Lucas JSON / Markdown /
-  unknown trees each resolve to their adapter; unknown → proposed documents
-  for every kind; JSON into typed content refused; locations registry
-  protected; verification declared per adapter; SHA pinned.
-- `tests/build-brief.test.mjs` — new-build brief is v1-pinned with the
-  Foundation adapter; city gate (coverage + evidence → planned, else
-  candidate); unverified claims not usable; client-retains brief has no
-  push; upgrade with `production` branch keeps branch, framework and
-  Vercel project and plans a preview; Markdown rendering; preview outcome
-  attaches to the work records.
+- `tests/site-push-handler.test.mjs` — the **request boundary**: the real
+  `handler.ts` with a fake Supabase client and a fake GitHub API
+  (`tests/helpers/fakes.mjs`). Version mode; 401 without credentials;
+  naming `main` with `src/app/page.tsx` + `src/components/Header.tsx` →
+  409 and no GitHub write; a data entry mixed with code, or with a
+  deletion → 409; an authorised blog/data entry → commit on the branch of
+  record, `grant: content_entry`; an upgrade preview on a `production`
+  branch → branch created from the production head, PR base `production`,
+  `production` and `main` unmoved, `sites.preview_branch` recorded; a
+  `new_build` into a repo whose `main` is authored by someone else → parked
+  on `compass/foundation-build` (orphan), `main` untouched; a new build into
+  an empty repo → `main`, production; client-retains → 409; no site row +
+  default branch `trunk` → baseline `trunk`, inserted row `nextjs`; archive
+  allow-list (403 / 200).
+- `tests/site-push-plan.test.mjs` — the planning helper, including the
+  content-entry verdicts and the `new_build`-over-foreign-head rule.
+- `tests/content-adapters.test.mjs` — against the **accepted foundation
+  tree** (`tests/fixtures/foundation-94014af-tree.json`, from `git ls-tree`
+  at `94014af`): the blog registry is `brands/<brand>/content/blog/index.ts`
+  (no `content/articles`); a recorded, registered, non-fictional brand is
+  verified; no recorded brand, multiple client brands, a brand missing from
+  the tree, the fictional brand, an unregistered brand → each a specific
+  missing input and `writable: false`; the Lucas / BHG / unknown shapes;
+  typed-registry writes refused; the content-entry validator.
+- `tests/build-brief.test.mjs` — the brief, the city gate, a Foundation
+  site with no recorded brand (not writable, says why), outcome attachment.
 
-The edge function itself was type-checked against a Deno shim
-(`tsc` with `Deno` declared); it was not executed against GitHub or Vercel
-in this pass.
+`next build`, `tsc --noEmit` and `eslint` pass. The edge function is
+type-checked against a Deno shim; its HTTP paths are exercised by the
+handler tests, not against the live GitHub or Vercel APIs.
 
-## Activation (what turns each part on)
+**Verification recipe, executed in an isolated fixture** (Sept 20 2026): the
+accepted foundation at `94014af` was extracted with `git archive` into a
+temporary directory and `scripts/foundation-verify.sh <dir> harbor-lane
+harbor-lane.example … "/,/locations/westfield,/service-area/northgate,/contact"`
+was run as the worker would run it. See the PR description for the
+`results.json` of that run. The browser suite depends on the routes passed
+in: the foundation's own `verify.sh` uses per-brand representative routes,
+and the script takes them as its sixth argument.
+
+## Activation — one sequence, in this order
 
 Code on the branch does nothing to the running system until these steps.
+Three parts activate separately (the database, the Edge Function, the app
+and the Routine's skill), and scheduled runs keep firing during the
+transition — the daily sweep, the monthly `site_updates` fire on the 2nd,
+the weekly `blog_post` fire on Wednesdays, and any stage completion. The
+sequence below makes a run against a half-installed integration impossible
+in two independent ways: the Routine is paused for the window, and the
+playbook's **preflight** refuses to build unless all three parts answer.
 
-1. **Review and merge** `claude/foundation-v1-crm-integration` into `main`.
-   Vercel deploys the CRM app from `main` (project `compass-crm`): the
-   intake radio, the Foundation-tab work mode, adapter, preview branch and
-   build-brief card go live with that deployment. They read columns from
-   step 2, so **merge after the migration is applied** or the Foundation
-   tab errors on the missing columns.
-2. **Apply migration 0036** to `iokcopiyzajigvhwexhe` through the Supabase
-   MCP (`apply_migration`), the way earlier migrations were applied. Adds
-   `website_work_mode`, the site columns, `foundation_releases` (with the v1
-   row), rewrites the Website stage / task wording, backfills work modes
-   (client-run → `client_retains`; Tom's pushed Next.js sites →
-   `upgrade_existing`). No client rows are otherwise touched.
-3. **Deploy `site-push`** (v9) from `supabase/functions/site-push/` (the
-   dashboard or `supabase functions deploy site-push`). Until then the
-   deployed function keeps the old branch logic; the worker instructions
-   that send `preview: true` / `archive` would get 400s from the old
-   version, which the skill treats as a blocker, not a fallback.
-4. **The Routine picks up the skill on its next fire**: `.claude/skills/
-   foundation-worker/SKILL.md` is read from the attached repo at session
-   start, so the merge is the activation. Confirm the Routine's source is
-   `main` (or point it at the branch for a trial run on one client by hand
-   with `/foundation-worker <client>`).
-5. **Per client**: set the work mode on the Foundation tab for existing
-   clients where the backfill left it null (Shewmaker; any site never
-   pushed), press *Generate build brief*, read `missing_inputs`. For a new
-   client the intake radio records it.
-6. **Optional, later**: Vercel deployment protection on client previews
-   (a login is needed to view an `upgrade_existing` preview today), a
-   Chromium in the Routine environment (so forms / browser checks stop
-   being deferred).
+| Step | Action | Verifies | Rollback |
+| --- | --- | --- | --- |
+| 0 | **Pause the Routine** ("Compass Foundation worker" at claude.ai/code/routines) and note the time. Fires that arrive while it is paused are recorded in `worker_fires` (the CRM keeps POSTing) and `retry_failed_fires()` re-sends the recent ones once it is resumed; nothing is lost, nothing runs. | `select count(*) from worker_fires where fired_at > '<pause time>'` grows without sessions starting | resume the Routine |
+| 1 | **Apply migration 0036** to `iokcopiyzajigvhwexhe` through the Supabase MCP (`apply_migration`, name `0036_foundation_v1_work_modes`). | `select version, source_sha from foundation_releases where is_current` → v1 / `94014af…`; `sites.work_mode` backfilled (`select name, work_mode from sites join clients …`) | the migration is additive (new type, columns, table, wording); leave it in place — nothing reads it until step 3 |
+| 2 | **Deploy site-push v9** from `supabase/functions/site-push/` (dashboard upload or `supabase functions deploy site-push`). | `POST {client_id, version: true}` with the cron secret → `{"version": 9, "features": [...]}` | redeploy the previous function from `main` (v8: no `version` mode, `main` assumed) |
+| 3 | **Merge PR #38 into `main`.** Vercel deploys the CRM app (project `compass-crm`) from `main`: intake radio, Foundation-tab work mode / adapter / preview branch / build-brief card. The app reads the columns from step 1. | the Foundation tab of a client renders the Site card with a work mode | revert the merge commit; the app then ignores the new columns |
+| 4 | **Verify the Routine's source branch** — do not assume it. Open the Routine at claude.ai/code/routines and read the repository and branch it starts sessions from; it must be `Compass2026/CompassCRM-` @ `main` (the merged branch). If it is pinned to another branch or SHA, point it at `main`. The skill is read from that checkout at session start. | the Routine's source shows `main`; a hand run `/foundation-worker <client>` prints the preflight lines | pause again |
+| 5 | **Resume the Routine.** `retry_failed_fires()` (every 15 min) re-fires what arrived during the pause; the daily sweep covers the rest. | `worker_fires` answers turn 200 again; the next run's evidence carries `release v1 …` and `site-push v9` from the preflight | pause |
+| 6 | **Per client**: set the work mode on the Foundation tab where the backfill left it null (Shewmaker; any site never pushed), press *Generate build brief*, read `missing_inputs`; for a Foundation site record `content_paths.brand`. | the brief card shows the mode, adapter and count of missing inputs | — |
 
-Nothing in this branch applies migrations, deploys functions, enrolls
+If steps 1–3 cannot all be completed in one window, leave the Routine
+paused: a run that finds the release row missing, the columns missing or
+the function answering without `version` **blocks the stage** with the
+exact miss (playbook preflight) instead of building — but pausing is the
+first line, the preflight the second.
+
+Optional, later: Vercel deployment protection on client previews (a login
+is needed to view an `upgrade_existing` preview today); a Chromium in the
+Routine environment (so forms / browser checks stop being deferred).
+
+Nothing in this branch applies migrations, deploys functions, enrols
 clients, runs the Routine, publishes a site, changes DNS or sends messages.
 
 ## BHG Safety Partners

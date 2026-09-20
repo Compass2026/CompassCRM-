@@ -48,7 +48,7 @@ function businessType(form: FormData): Enums["business_type"] | null {
 // and business type drive the brand board and schema, city / state drive
 // DataForSEO locations and the GBP lookup, phone drives NAP checks.
 //
-// The WEBSITE WORK MODE is explicit (Sept 21 2026, Foundation integration):
+// The WEBSITE WORK MODE is explicit (Sept 20 2026, Foundation integration):
 //   new_build        — a Compass Website Foundation build; the Website
 //                      pipeline runs and the build lands on the site's
 //                      branch of record.

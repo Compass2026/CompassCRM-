@@ -1,0 +1,93 @@
+// Fakes for the site-push request-boundary tests: a Supabase client that
+// answers the query chains the handler uses from an in-memory store, and a
+// GitHub API served from an in-memory repository model. Every call is
+// recorded so a test can assert what was (and was not) written.
+
+export function fakeSupabase({ tables = {}, secrets = {}, teamJwt = "team-jwt" } = {}) {
+  const store = structuredClone(tables);
+  const writes = [];
+  class Query {
+    constructor(table) { this.table = table; this.filters = []; this.op = "select"; this.payload = null; this.take = null; }
+    select() { return this; }
+    order() { return this; }
+    limit(n) { this.take = n; return this; }
+    eq(k, v) { this.filters.push([k, v]); return this; }
+    update(patch) { this.op = "update"; this.payload = patch; return this; }
+    insert(row) { this.op = "insert"; this.payload = row; return this; }
+    delete() { this.op = "delete"; return this; }
+    rows() { return (store[this.table] ?? []).filter((r) => this.filters.every(([k, v]) => r[k] === v)); }
+    run() {
+      if (this.op === "update") { const rows = this.rows(); for (const r of rows) Object.assign(r, this.payload); writes.push({ table: this.table, op: "update", filters: this.filters, patch: this.payload, matched: rows.length }); return { data: rows, error: null }; }
+      if (this.op === "insert") { const row = { id: `${this.table}-${(store[this.table] ?? []).length + 1}`, ...this.payload }; (store[this.table] ??= []).push(row); writes.push({ table: this.table, op: "insert", row }); return { data: [row], error: null }; }
+      if (this.op === "delete") { const rows = this.rows(); store[this.table] = (store[this.table] ?? []).filter((r) => !rows.includes(r)); writes.push({ table: this.table, op: "delete", filters: this.filters }); return { data: rows, error: null }; }
+      return { data: this.rows(), error: null };
+    }
+    single() { const r = this.run(); return Promise.resolve(r.data?.[0] ? { data: r.data[0], error: null } : { data: null, error: { message: "not found" } }); }
+    maybeSingle() { const r = this.run(); return Promise.resolve({ data: r.data?.[0] ?? null, error: null }); }
+    then(resolve, reject) { try { resolve(this.run()); } catch (e) { reject(e); } }
+  }
+  return {
+    store,
+    writes,
+    from: (table) => new Query(table),
+    rpc: async (fn, args) => (fn === "get_secret" ? { data: secrets[args.secret_name] ?? null } : { data: null }),
+    auth: { getUser: async (jwt) => ({ data: { user: jwt === teamJwt ? { id: "team" } : null } }) },
+  };
+}
+
+/**
+ * repos: { "Owner/name": { id, default_branch, empty, branches: { main: { author: "Tom" | "Compass CRM" } } } }
+ */
+export function fakeGitHub({ repos = {}, login = "Compass2026" } = {}) {
+  const calls = [];
+  let n = 0;
+  const id = (p) => `${p}${++n}`;
+  const model = {};
+  for (const [full, r] of Object.entries(repos)) {
+    const refs = {}; const commits = {};
+    for (const [b, info] of Object.entries(r.branches ?? {})) {
+      const tree = id("tree-"); const sha = id("head-");
+      commits[sha] = { sha, tree, author: { name: info.author ?? "Compass CRM" }, parents: [], message: `head of ${b}` };
+      refs[b] = sha;
+    }
+    model[full] = { id: r.id ?? 1000 + n, html_url: `https://github.com/${full}`, default_branch: r.default_branch ?? "main", empty: !!r.empty, refs, commits, pulls: [] };
+  }
+  const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+  const fetch = async (url, init = {}) => {
+    const u = new URL(String(url));
+    const method = (init.method ?? "GET").toUpperCase();
+    const body = init.body ? JSON.parse(init.body) : null;
+    calls.push({ method, path: u.pathname + u.search, body });
+    if (u.host === "api.vercel.com") return json(500, { error: "vercel not faked" });
+    const m = u.pathname.match(/^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/);
+    if (u.pathname === "/user" && method === "GET") return json(200, { login });
+    if (u.pathname === "/user/repos" && method === "POST") {
+      const full = `${login}/${body.name}`;
+      model[full] = { id: 5000 + ++n, html_url: `https://github.com/${full}`, default_branch: "main", empty: true, refs: {}, commits: {}, pulls: [] };
+      return json(201, { id: model[full].id, html_url: model[full].html_url, default_branch: "main" });
+    }
+    if (!m) return json(404, { message: "no route" });
+    const full = `${m[1]}/${m[2]}`; const rest = m[3] ?? ""; const repo = model[full];
+    if (!repo) return json(404, { message: "Not Found" });
+    if (rest === "" && method === "GET") return json(200, { id: repo.id, html_url: repo.html_url, default_branch: repo.default_branch });
+    let mm;
+    if ((mm = rest.match(/^\/git\/ref\/heads\/(.+)$/)) && method === "GET") {
+      if (repo.empty) return json(409, { message: "Git Repository is empty." });
+      const sha = repo.refs[decodeURIComponent(mm[1])];
+      return sha ? json(200, { object: { sha } }) : json(404, { message: "Not Found" });
+    }
+    if ((mm = rest.match(/^\/git\/commits\/([^/]+)$/)) && method === "GET") { const c = repo.commits[mm[1]]; return c ? json(200, { sha: c.sha, tree: { sha: c.tree }, author: c.author, parents: c.parents.map((p) => ({ sha: p })), message: c.message }) : json(404, {}); }
+    if (rest === "/git/refs" && method === "POST") { repo.refs[body.ref.replace(/^refs\/heads\//, "")] = body.sha; return json(201, { ref: body.ref, object: { sha: body.sha } }); }
+    if ((mm = rest.match(/^\/git\/refs\/heads\/(.+)$/)) && method === "PATCH") { const b = decodeURIComponent(mm[1]); if (!(b in repo.refs)) return json(422, { message: "Reference does not exist" }); repo.refs[b] = body.sha; return json(200, { object: { sha: body.sha } }); }
+    if (rest === "/git/blobs" && method === "POST") return json(201, { sha: id("blob-") });
+    if (rest === "/git/trees" && method === "POST") return json(201, { sha: id("tree-") });
+    if (rest === "/git/commits" && method === "POST") { const sha = id("commit-"); repo.commits[sha] = { sha, tree: body.tree, author: body.author, parents: body.parents ?? [], message: body.message }; return json(201, { sha }); }
+    if ((mm = rest.match(/^\/contents\/(.+)$/)) && method === "PUT") { const sha = id("commit-"); const tree = id("tree-"); repo.commits[sha] = { sha, tree, author: body.committer, parents: [], message: body.message }; repo.refs[body.branch] = sha; repo.empty = false; return json(201, { commit: { sha, tree: { sha: tree }, html_url: `${repo.html_url}/commit/${sha}` } }); }
+    if ((mm = rest.match(/^\/git\/trees\/([^/?]+)/)) && method === "GET") return json(200, { sha: mm[1], tree: [] });
+    if (rest.startsWith("/pulls") && method === "GET") return json(200, repo.pulls.filter((p) => u.searchParams.get("base") === p.base && u.searchParams.get("head")?.endsWith(`:${p.head}`)));
+    if (rest === "/pulls" && method === "POST") { const pr = { number: repo.pulls.length + 1, html_url: `${repo.html_url}/pull/${repo.pulls.length + 1}`, base: body.base, head: body.head, title: body.title }; repo.pulls.push(pr); return json(201, pr); }
+    if ((mm = rest.match(/^\/tarball\/(.+)$/)) && method === "GET") return new Response(new TextEncoder().encode(`TARBALL ${full}@${mm[1]}`), { status: 200, headers: { "content-type": "application/x-gzip" } });
+    return json(404, { message: `unhandled ${method} ${u.pathname}` });
+  };
+  return { fetch, calls, model, writes: () => calls.filter((c) => c.method !== "GET") };
+}

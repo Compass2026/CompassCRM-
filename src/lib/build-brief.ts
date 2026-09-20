@@ -153,7 +153,7 @@ export interface BriefInput {
   /** Per city page-group name: what the gate has. Missing = nothing confirmed. */
   cityEvidence?: Record<string, CityEvidence>;
   /** From detectContentContract on the actual tree; null when the tree was not read. */
-  detected?: { adapter: ContentAdapterKey; paths: ContentPaths; foundation?: { brand: string | null; version: "v1" }; reasons: string[] } | null;
+  detected?: { adapter: ContentAdapterKey; paths: ContentPaths; foundation?: { brand: string | null; version: "v1"; brands?: string[] }; reasons: string[]; missing_inputs?: string[]; writable?: boolean } | null;
   /** The repository's default branch as GitHub reports it, when known. */
   repoDefaultBranch?: string | null;
   generatedBy: string;
@@ -247,6 +247,8 @@ export function composeBuildBrief(input: BriefInput): BuildBrief {
     adapterKey = input.detected.adapter;
     adapterPaths = input.detected.paths;
     detection = input.detected.reasons;
+    for (const m of input.detected.missing_inputs ?? []) missing.push(`content contract: ${m}`);
+    if (input.detected.writable === false && adapterKey !== "unsupported") missing.push("content contract is not writable until the inputs above are recorded; no push or pull request may be prepared");
   } else if (site?.content_paths?.adapter) {
     adapterKey = site.content_paths.adapter;
     adapterPaths = site.content_paths;
@@ -267,7 +269,7 @@ export function composeBuildBrief(input: BriefInput): BuildBrief {
   }
   const adapter = describeAdapter(adapterKey, adapterPaths);
 
-  const foundationAdopted = adapterKey === "foundation_brand_content" && (!!input.detected?.foundation || workMode === "new_build");
+  const foundationAdopted = adapterKey === "foundation_brand_content" && (!!input.detected?.foundation?.brand || (workMode === "new_build" && !input.detected));
   const stack = site?.stack ?? (workMode === "new_build" ? "nextjs" : "other");
   const detectedFrom = input.detected ? "repository tree" : site?.stack ? "sites.stack" : workMode === "new_build" ? "the Foundation source" : "unknown";
   if (!input.detected && workMode === "upgrade_existing") missing.push("framework and adapter are from the site row, not from an inspected tree; confirm before the first change");

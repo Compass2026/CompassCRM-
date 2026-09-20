@@ -434,6 +434,24 @@ three governing Drive documents it records. Read the CRM doc
 `docs/compass-foundation-integration.md` once; it is the contract this
 playbook implements.
 
+**Preflight — refuse to run against a half-installed integration.** The
+migration, the Edge Function and this playbook activate separately
+(`docs/compass-foundation-integration.md`, "Activation"). Before claiming
+the stage, check all three; any miss → set the stage `blocked` with the
+exact miss in `next_action` and stop (do not build, do not fall back):
+
+```sql
+select version, source_repo, source_sha from foundation_releases where is_current;   -- must return the v1 row
+select column_name from information_schema.columns where table_name = 'sites' and column_name in ('work_mode','build_brief','content_adapter','preview_branch');  -- must return 4 rows
+```
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" --data '{"client_id": "<client_id>", "version": true}'
+# must answer {"version": 9, "features": [... "content_entry_boundary" ...]}; anything else (400, no version) is the OLD function
+```
+
 **0. Work mode decides the shape of the stage** (`sites.work_mode`; set at
 intake, editable on the Foundation tab):
 
@@ -471,7 +489,14 @@ select json_build_object(
 
 Save it as `/tmp/brief-input.json`, add `"generatedBy": "worker <run date>"`
 and, for an existing repo, `"tree": [...]` = the `path`s from `site-push
-{"client_id": "…", "read": true, "paths": []}` (paths only, no contents), plus
+{"client_id": "…", "read": true, "paths": []}` (paths only, no contents). For
+a Foundation tree the client's brand is **never guessed**: it must be
+recorded on `sites.content_paths.brand`, exist as `brands/<brand>/` in the
+tree, not be a fictional demonstration brand (`harbor-lane`) and be
+registered in `brands/registry.ts` (read that file with `paths:
+["brands/registry.ts"]`). Otherwise the brief lists the specific missing
+input and the contract is **not writable** — record the brand on the site
+row (a new build records the brand it creates) before any change. Plus
 `"cityEvidence": {"<city group name>": {"coverage_confirmed": true|false,
 "distinctive_evidence": ["<sourced, city-specific fact with its source>"]}}`
 for every `city` page group — `coverage_confirmed` only when
@@ -567,26 +592,32 @@ Preserve identity, working forms, useful URLs and integrations. A
 wholesale rebuild is a separate decision for Tom, not this stage.
 
 **4. Verify with the Foundation's own checks** (both modes; the old
-`site-quality-gate.mjs` is for auditing non-Foundation sites only):
+`site-quality-gate.mjs` is for auditing non-Foundation sites only). One
+script from the CRM checkout runs the recipe in order — install, the
+**brand-specific** typecheck, the build, the manifest, the provider suite,
+then the shared mock provider service is started **first** and the same
+`INQUIRY_MOCK_PROVIDER_URL` is handed to both the running site and the form
+suite, the crawl, the browser launcher check, the mocked forms suite and
+the browser suite on the brand's representative routes:
 
 ```bash
-cd /tmp/site   # or /tmp/client-site
-npm ci
-npm run typecheck                                   # Foundation: tsc; a client site: its own typecheck/lint
-COMPASS_BRAND=<brand> npx next build                # Foundation; a client site: npm run build
-COMPASS_BRAND=<brand> npm run qa:manifest           # Foundation only
-COMPASS_BRAND=<brand> INQUIRY_DELIVERY=mock npx next start -p 3450 &   # mocked delivery
-npm run qa:crawl -- http://localhost:3450 --host <production host> --assets remap
-node scripts/qa/browser-launch.mjs --check          # is there a Chromium?
+bash scripts/foundation-verify.sh /tmp/site <brand> <production host> /tmp/verify.json 3450 "/,<service hub>,<service detail>,<city page>,/contact"
 ```
 
-With a browser: `npm run qa:mock-provider & INQUIRY_MOCK_PROVIDER_URL=… node
-scripts/qa/forms.test.mjs http://localhost:3450 --host <host>` and
-`node scripts/qa/browser.test.mjs http://localhost:3450 --host <host> --paths /,/services,/contact`.
-Without one: record `forms` and `browser` as **deferred — no Chromium in the
-Routine environment**, never as passed. A failed check is yours to fix, up
-to three rounds; still failing → *Blocked* with the failure list. Nothing
-is sent anywhere: the provider is mocked in every check.
+It writes `/tmp/verify.json` = `{pass: [...], fail: [...], deferred: [{name,
+detail}], ok}` and exits non-zero when any check **fails**. Without a
+Chromium (`scripts/qa/browser-launch.mjs --check` fails) the forms and
+browser suites are recorded as **deferred** with the reason — never as
+passed, and a deferred check is never acceptance: the brief carries it as
+deferred until someone runs it where a browser exists. Delivery is mocked
+in every step; nothing is sent. A failed check is yours to fix, up to three
+rounds; still failing → *Blocked* with `fail` in `next_action`. For an
+`upgrade_existing` tree that has not adopted the QA scripts, run its own
+`npm run build` plus the Foundation's crawl against the preview URL and
+record everything else as deferred.
+
+The `pass` / `fail` / `deferred` arrays become the `checks` of step 6
+verbatim.
 
 **5. Push through the CRM** — one call, the mode decides the branch:
 
@@ -609,8 +640,10 @@ is sent anywhere: the provider is mocked in every check.
 Payload shape as before (text files as `content`, binaries base64); never
 `node_modules/`, `.next/`, `.git/`. Do not print the secrets.
 
-**6. Attach the outcome.** Fold the push response and the check results
-into the brief and record them. Write `/tmp/outcome.json`:
+**6. Attach the outcome.** Fold the push response and `/tmp/verify.json`
+into the brief and record them. Write `/tmp/outcome.json` (each `pass`
+entry → `{"name", "result": "pass"}`, each `fail` → `"fail"`, each
+`deferred` → `"deferred"` with its `detail`):
 
 ```json
 {"branch": "<response.branch>", "base": "<response.branch_of_record>",
@@ -1391,9 +1424,12 @@ JSON valid and the array order stable (append).
  "files": [{"path": "data/locations.json", "content": "<whole file>"}, ...]}
 ```
 
-Naming the branch of record explicitly is what authorises the data entry
-(the site-push guard that diverts full builds to a side branch does not
-apply to it; an `upgrade_existing` site refuses anything else). Leave
+Naming the branch of record explicitly asks for the data-entry exception,
+and site-push grants it only when **every** file is a push path of the
+site's recorded adapter (`data/locations.json` / `data/blog-posts.json` on
+`lucas_json`; `content/blog/*.mdx` on `markdown_blog`) and nothing is
+deleted — a component, a layout, a config or a delete in the same request
+is refused (409) and belongs on a preview branch with a pull request. Leave
 `deploy` alone: Vercel's Git integration **blocks** commits from authors
 who are not team members (ours are "Compass CRM" — they show as BLOCKED
 in Vercel and are harmless), so site-push creates the production

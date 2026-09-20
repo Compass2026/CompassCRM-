@@ -6,7 +6,7 @@ import { detectContentContract } from "../src/lib/content-adapters.ts";
 
 const fx = JSON.parse(readFileSync(new URL("./fixtures/sites.json", import.meta.url), "utf8"));
 const trees = JSON.parse(readFileSync(new URL("./fixtures/trees.json", import.meta.url), "utf8"));
-const now = new Date("2026-09-21T12:00:00Z");
+const now = new Date("2026-09-20T12:00:00Z");
 
 test("new build: v1-pinned brief with the Foundation brand-content adapter, not Astro", () => {
   const b = composeBuildBrief({ ...fx.new_build, generatedBy: "test", now });
@@ -57,7 +57,7 @@ test("existing-site upgrade with a non-main production branch keeps its branch, 
   assert.equal(b.work_mode, "upgrade_existing");
   assert.equal(b.repository.production_branch, "production");
   assert.equal(b.repository.pr_base, "production");
-  assert.match(b.repository.preview_branch, /^compass\/preview-20260921-/);
+  assert.match(b.repository.preview_branch, /^compass\/preview-20260920-/);
   assert.equal(b.repository.vercel_project, "ridge-safety");
   assert.equal(b.repository.production_url, "https://ridge.example");
   assert.equal(b.framework.stack, "nextjs");
@@ -75,6 +75,19 @@ test("an existing city page counts as existing; a city group with no page and no
   assert.equal(b.page_plan.find((p) => p.group === "Chicago, IL").status, "candidate");
 });
 
+test("a Foundation site whose brand is not recorded is not writable and says why", () => {
+  const foundation = JSON.parse(readFileSync(new URL("./fixtures/foundation-94014af-tree.json", import.meta.url), "utf8"));
+  const site = { ...fx.upgrade_non_main.site, content_paths: null };
+  const b = composeBuildBrief({ ...fx.upgrade_non_main, site, detected: detectContentContract(foundation), generatedBy: "test", now });
+  assert.equal(b.content_adapter.key, "foundation_brand_content");
+  assert.equal(b.framework.foundation_adopted, false);
+  assert.ok(b.missing_inputs.some((m) => /content_paths\.brand is not recorded/.test(m)));
+  assert.ok(b.missing_inputs.some((m) => /not writable/.test(m)));
+  const ok = composeBuildBrief({ ...fx.upgrade_non_main, site, detected: detectContentContract(foundation, { brand: "showme" }), generatedBy: "test", now });
+  assert.equal(ok.framework.foundation_adopted, true);
+  assert.equal(ok.framework.foundation_sha, "94014af35316c94616dadb3f8d606a4b68577fb0");
+});
+
 test("the Markdown rendering carries the pinned SHA, the branches and the acceptance checklist", () => {
   const md = renderBuildBriefMarkdown(composeBuildBrief({ ...fx.upgrade_non_main, generatedBy: "test", now }));
   assert.match(md, /94014af35316c94616dadb3f8d606a4b68577fb0/);
@@ -85,7 +98,7 @@ test("the Markdown rendering carries the pinned SHA, the branches and the accept
 test("verification results and preview links attach to the existing work records", () => {
   const b = composeBuildBrief({ ...fx.upgrade_non_main, generatedBy: "test", now });
   const out = attachPreviewOutcome(b, {
-    branch: "compass/preview-20260921-ridge",
+    branch: "compass/preview-20260920-ridge",
     base: "production",
     commit_url: "https://github.com/Compass2026/ridge-safety/commit/abc",
     pull_request_url: "https://github.com/Compass2026/ridge-safety/pull/7",
@@ -97,7 +110,7 @@ test("verification results and preview links attach to the existing work records
     ],
   }, now);
   assert.equal(out.brief.repository.production_branch, "production");
-  assert.equal(out.brief.repository.preview_branch, "compass/preview-20260921-ridge");
+  assert.equal(out.brief.repository.preview_branch, "compass/preview-20260920-ridge");
   assert.equal(out.brief.preview.pull_request_url, "https://github.com/Compass2026/ridge-safety/pull/7");
   assert.deepEqual(out.brief.evidence.builder_checks, ["pass: typecheck", "pass: crawl"]);
   assert.deepEqual(out.brief.evidence.deferred, ["browser suite (no Chromium in the Routine environment)"]);

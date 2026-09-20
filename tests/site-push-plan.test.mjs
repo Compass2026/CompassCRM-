@@ -12,7 +12,7 @@ const base = (over = {}) => ({
   repoEmpty: false,
   headAuthorName: "Compass CRM",
   filePaths: ["package.json", "next.config.ts", "brands/registry.ts"],
-  today: new Date("2026-09-21T00:00:00Z"),
+  today: new Date("2026-09-20T00:00:00Z"),
   slug: "ridge",
   ...over,
 });
@@ -55,28 +55,44 @@ test("non-main production branch: the preview is created from it and the PR targ
 });
 
 test("an upgrade push straight at the branch of record without naming it is refused", () => {
-  const site = { branch: "production", stack: "nextjs", work_mode: "upgrade_existing", controlled_by_compass: true, vercel_project: "x" };
+  const site = { branch: "production", stack: "nextjs", work_mode: "upgrade_existing", controlled_by_compass: true, vercel_project: "x", content_adapter: "lucas_json" };
   const p = resolvePushPlan(base({ siteRow: site }));
   assert.ok(p.refuse);
   assert.match(p.refuse.error, /preview branch/);
 });
 
-test("an authorised content-contract entry names the branch of record explicitly and deploys to production", () => {
-  const site = { branch: "production", stack: "nextjs", work_mode: "upgrade_existing", controlled_by_compass: true, vercel_project: "x" };
-  const p = resolvePushPlan(base({ siteRow: site, requestedBranch: "production" }));
-  assert.equal(p.refuse, null);
-  assert.equal(p.branch, "production");
-  assert.equal(p.deployTarget, "production");
-  assert.equal(p.recordAsBranchOfRecord, true);
+test("naming the branch of record grants production only to a data entry on the recorded adapter", () => {
+  const site = { branch: "production", stack: "nextjs", work_mode: "upgrade_existing", controlled_by_compass: true, vercel_project: "x", content_adapter: "lucas_json", content_paths: { adapter: "lucas_json", locations: "data/locations.json", blog: "data/blog-posts.json" } };
+  const ok = resolvePushPlan(base({ siteRow: site, requestedBranch: "production", filePaths: ["data/blog-posts.json"] }));
+  assert.equal(ok.refuse, null);
+  assert.equal(ok.deployTarget, "production");
+  assert.equal(ok.grant, "content_entry");
+  // general code changes are refused even with the branch named
+  const code = resolvePushPlan(base({ siteRow: site, requestedBranch: "production", filePaths: ["src/app/page.tsx", "src/components/Header.tsx"] }));
+  assert.ok(code.refuse);
+  assert.match(code.refuse.error, /not an authorised content entry/);
+  const mixed = resolvePushPlan(base({ siteRow: site, requestedBranch: "production", filePaths: ["data/blog-posts.json", "src/app/layout.tsx"] }));
+  assert.ok(mixed.refuse);
+  const del = resolvePushPlan(base({ siteRow: site, requestedBranch: "production", filePaths: ["data/blog-posts.json"], deletePaths: ["src/app/layout.tsx"] }));
+  assert.ok(del.refuse);
+  assert.match(del.refuse.error, /deletions/);
+  // an adapter with no push paths never gets the exception
+  const foundation = { ...site, content_adapter: "foundation_brand_content", content_paths: { adapter: "foundation_brand_content", brand: "ridge" } };
+  const typed = resolvePushPlan(base({ siteRow: foundation, requestedBranch: "production", filePaths: ["brands/ridge/content/blog/x.ts"] }));
+  assert.ok(typed.refuse);
+  assert.match(typed.refuse.error, /pull request/);
+  // no adapter recorded at all
+  const none = resolvePushPlan(base({ siteRow: { ...site, content_adapter: null, content_paths: null }, requestedBranch: "production", filePaths: ["data/blog-posts.json"] }));
+  assert.ok(none.refuse);
 });
 
 test("preview: true without a branch name gets a dated compass/preview-* branch from the branch of record", () => {
   const site = { branch: "release", stack: "nextjs", work_mode: "upgrade_existing", controlled_by_compass: true, vercel_project: "x" };
   const p = resolvePushPlan(base({ siteRow: site, previewRequested: true }));
-  assert.equal(p.branch, "compass/preview-20260921-ridge");
+  assert.equal(p.branch, "compass/preview-20260920-ridge");
   assert.equal(p.createFrom, "release");
   assert.equal(p.prBase, "release");
-  assert.equal(previewBranchName("ridge", new Date("2026-09-21T00:00:00Z")), "compass/preview-20260921-ridge");
+  assert.equal(previewBranchName("ridge", new Date("2026-09-20T00:00:00Z")), "compass/preview-20260920-ridge");
 });
 
 test("no site row and a repo whose default branch is not main: the default branch is the baseline, not main", () => {
@@ -94,6 +110,24 @@ test("a full build over someone else's branch of record goes to the foundation s
   assert.equal(p.deployTarget, "preview");
   assert.equal(p.recordAsBranchOfRecord, false);
   assert.match(p.note, /not ours/);
+});
+
+test("a new_build label does not authorise overwriting an existing authored site", () => {
+  const site = { branch: "main", stack: "nextjs", work_mode: "new_build", controlled_by_compass: true, vercel_project: null };
+  const p = resolvePushPlan(base({ headAuthorName: "Tom", siteRow: site }));
+  assert.equal(p.branch, FOUNDATION_SIDE_BRANCH);
+  assert.equal(p.deployTarget, "preview");
+  assert.equal(p.recordAsBranchOfRecord, false);
+  assert.equal(p.recordAsPreviewBranch, true);
+  assert.match(p.note, /new_build does not override/);
+  // naming main does not help either without a data entry
+  const named = resolvePushPlan(base({ headAuthorName: "Tom", siteRow: site, requestedBranch: "main" }));
+  assert.equal(named.branch, FOUNDATION_SIDE_BRANCH);
+  // our own previous build on main may be replaced
+  const ours = resolvePushPlan(base({ headAuthorName: "Compass CRM", siteRow: site }));
+  assert.equal(ours.branch, "main");
+  assert.equal(ours.deployTarget, "production");
+  assert.equal(ours.grant, "compass_owned");
 });
 
 test("the archive mode only serves the client's own repo or the pinned foundation SHA", () => {

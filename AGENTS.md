@@ -366,7 +366,7 @@ a chat.
   listings and builds the board from those; it blocks only when there is no
   public footprint at all.
 
-**Website builds come from the Compass Website Foundation** (Sept 21
+**Website builds come from the Compass Website Foundation** (Sept 20
 2026; `docs/compass-foundation-integration.md`), not the retired Astro
 starter (`templates/astro-site/` stays as reference only). The pinned
 release is the `foundation_releases` row with `is_current` — v1 =
@@ -376,8 +376,11 @@ three governing Drive documents recorded on the row. The worker fetches it
 through `site-push {archive}`, builds the brand layer per the Foundation's
 `docs/starter-checklist.md` from the CRM's brand board, taxonomy, page
 groups and sourced claims, and verifies with the Foundation's own checks
-(typecheck, build, manifest, crawl; mocked forms and browser suites when a
-Chromium exists, else recorded as deferred). Every build or upgrade starts
+(`scripts/foundation-verify.sh`: install, brand-specific typecheck, build,
+manifest, provider suite, one shared mock provider started first and handed
+to both the site and the form suite, crawl, then the mocked forms and
+browser suites when a Chromium exists — otherwise recorded as deferred,
+never as passed or as acceptance). Every build or upgrade starts
 from a **build brief** (`sites.build_brief`, `Build Brief — <Client>` in
 Drive 04 Website; `src/lib/build-brief.ts`, the Foundation tab button):
 standard version + SHA, repository and branches, framework and content
@@ -626,7 +629,7 @@ and the per-site survey in `docs/website-updates.md`.
   opens a `blog_post` task per active client and fires the worker. One
   post, one long-tail keyword, one service page, brand voice, sourced facts
   only; a `content_posts` row records it.
-- **site-push v9** (Sept 21 2026; branch logic in
+- **site-push v9** (Sept 20 2026; branch logic in
   `supabase/functions/site-push/plan.ts`, unit-tested by `npm test`): the
   **branch of record** is `sites.branch`, else the repository's default
   branch, else `main` — never assumed; `branch: "compass/<x>"` or
@@ -639,7 +642,19 @@ and the per-site survey in `docs/website-updates.md`.
   push carries the stack the files imply, never astro; `{archive: {repo,
   ref}}` streams the pinned Foundation tarball (or the client's own repo)
   to the worker; `brand` sets `COMPASS_BRAND` on a Vercel project the push
-  creates. v8 behaviour kept: repo and Vercel project from the `sites` row
+  creates; `{version: true}` answers `{version: 9, features}` so the
+  worker's preflight can tell the deployed function from the old one.
+  **The production-write boundary:** naming the branch of record asks for
+  Tom's Sept 14 data-entry exception, and it is granted only when every
+  file in the request is a push path of the site's recorded adapter
+  (`validateContentEntry`) and nothing is deleted — components, layouts,
+  configs and deletes are refused (409) and go through a preview + PR. A
+  `new_build` label never overrides the existing-site protection: a branch
+  of record authored by someone else is parked on the side branch. The
+  function is `handler.ts` (a factory over its Supabase and fetch
+  dependencies) wired by `index.ts`, so `npm test` exercises the real
+  request boundary with a fake GitHub and a fake Supabase
+  (`tests/site-push-handler.test.mjs`). v8 behaviour kept: repo and Vercel project from the `sites` row
   (Tom's repos are named by hand — `lucas_construction`,
   `lucas-construction`); `{read: true, paths: [...]}` returns only those
   files inline; `{revert: true}` makes a new commit carrying the previous
@@ -657,7 +672,7 @@ and the per-site survey in `docs/website-updates.md`.
   (PR #9), revert (Sept 14 test, redeployed).
 - **Retired:** the Astro proposal builds (Vercel projects and the
   `compass-astro` branch deleted; `sites` rows point at Tom's Next.js repos).
-  Since Sept 21 the side-branch name for a build parked next to someone
+  Since Sept 20 the side-branch name for a build parked next to someone
   else's site is `compass/foundation-build`.
 
 ## Reporting worker (Sept 13 2026)

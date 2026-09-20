@@ -1,6 +1,7 @@
 # BHG Safety Partners — Foundation upgrade brief (version-pinned)
 
-Prepared Sept 21 2026 for the next working session. **Read-only
+Prepared Sept 20 2026 (UTC; the preparation session ran Sept 19–20 local
+time) for the next working session. **Read-only
 preparation**: no BHG code, deployment, DNS, GBP or CRM row was changed.
 Every fact below names its source; anything not sourced is listed under
 *Missing information* and must stay unknown until BHG or Tom confirms it.
@@ -13,9 +14,9 @@ Every fact below names its source; anything not sourced is listed under
 | Standard | Compass Website Foundation v1, `Compass2026/showmeelectricalwebsite` @ `94014af35316c94616dadb3f8d606a4b68577fb0` (accepted Sept 20 2026), applied as **reference** — BHG has not adopted it; adoption is what this upgrade decides module by module |
 | Governing documents | Build Standard v1.1, Page Template Library v1.1, Foundation v1 Review and Completion Brief (links in `foundation_releases.documents` / `docs/compass-foundation-integration.md`) |
 | Content adapter | `markdown_blog` (detected from the tree: `content/blog/*.mdx`, `src/app/blog/[slug]/page.tsx`, `data/locations.json`, `data/services.json`) |
-| Branch plan | production branch of record **`main`** (the repository's only branch); preview branch `compass/preview-<yyyymmdd>-bhgsafetypartners` created from `main`; pull request base `main`; Vercel **preview** deployment; `main` and the production deployment unchanged until Tom merges |
+| Branch plan | production branch of record **`main`** (the repository's only branch); preview branch `compass/preview-YYYYMMDD-bhgsafetypartners` created from `main`; pull request base `main`; Vercel **preview** deployment; `main` and the production deployment unchanged until Tom merges |
 
-## 1. Current state (verified Sept 21 2026)
+## 1. Current state (verified Sept 20 2026)
 
 **Repository.** `Compass2026/BHGSafetyPartners` (private). Single branch
 `main`; HEAD `9c5766d5c3a0bcfc91fce9e90d5cd6a36e4b8b21` (Sept 14 2026
@@ -149,7 +150,7 @@ and citation work (SEO pipeline, Tom's tasks).
 
 ## 4. First implementation batch (prioritised) and acceptance checks
 
-All work on `compass/preview-<yyyymmdd>-bhgsafetypartners` from `main`,
+All work on `compass/preview-YYYYMMDD-bhgsafetypartners` from `main`,
 one pull request against `main`, Vercel preview only. Mocked email in the
 preview; no real inquiry. No deployment to production, no DNS, no domain
 changes, no CRM row changes beyond attaching evidence when the CRM path is
