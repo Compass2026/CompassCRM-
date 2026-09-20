@@ -73,7 +73,7 @@ recipe for a human. Results are builder-reported; the brief keeps
 
 ## Tests
 
-`npm test` (Node's test runner, no new dependency) — 46 checks:
+`npm test` (Node's test runner, no new dependency) — 51 checks:
 
 - `tests/site-push-handler.test.mjs` — the **request boundary**: the real
   `handler.ts` with a fake Supabase client and a fake GitHub API
@@ -265,6 +265,42 @@ never be the deployment that creates a project.
   session's Vercel connection has no delete-project capability. It is not
   publicly reachable in the meantime (no custom domain, team SSO on all
   deployments, `noindex` and `Disallow: /` from the fictional brand).
+
+**Gaps closed after the close-out (23:00–23:40 UTC).**
+
+- **`upgrade_existing`, end to end, live.** Exercised against the disposable
+  fictional repository with its built branch recorded as the branch of record.
+  A push with no preview is refused (409, branch of record resolved from the
+  record, not assumed `main`); naming the branch of record with typed
+  Foundation content is refused too, because that adapter publishes nothing
+  without a pull request; and the authorised path produced preview branch
+  `…-preview`, pull request #1 against the branch of record, and a `READY`
+  preview-target deployment, with the branch of record still at `fc2aabf` and
+  without the change.
+- **A seventh defect, found by that exercise and fixed.**
+  `previewBranchName()` generates `compass/preview-<date>-<slug>`. When a
+  site's branch of record is *itself* an old preview branch, the generated
+  name equalled it, so the "preview" commit landed on the branch of record —
+  and because a pull request is only opened when the branch differs, no pull
+  request was opened either. A colliding name now takes a `-preview` suffix.
+  site-push v13; test "an auto-named preview branch that collides with the
+  branch of record is moved off it".
+- **Intake form.** Still cannot be clicked from a session: the deployed CRM is
+  behind Vercel SSO and the server action needs a signed-in team session. The
+  contract it depends on is now enforced by tests instead
+  (`tests/intake-contract.test.mjs`): every field the form posts is read by
+  `createClientAction`, the work-mode radio offers exactly the three enum
+  values, the action branches on all three, `client_retains` drops the Website
+  enrollment, every mode records a `sites` row and none records Astro. One
+  manual action remains for Tom: add one client through the form once and
+  confirm the Foundation tab shows the work mode.
+- **Service-area businesses** are supported by the Foundation as of
+  `claude/foundation-service-area` (`e214dae`): `address.street` and
+  `address.zip` are `string | null`, so the typechecker proves every consumer
+  handles their absence. Verified by the full suite plus a built and served
+  service-area variant — no street anywhere in the HTML, and the structured
+  data carries locality, region and country with no `streetAddress` and no
+  `postalCode`.
 
 **Foundation follow-up (not done here):** an optional / omittable
 `site.address` with a conditional render in `components/site/SiteFooter.tsx`,
