@@ -215,7 +215,17 @@ session id in `worker_fires`/`net._http_response`):
 | 3 | `cse_01QQVJ5MKzfutgtmvJ6sV1Ec`, 21:14–21:47 UTC | 120 / 674 | Test client recast as `storefront` with a labelled fictional address. **Brand layer built on the pinned source, brand registered `fictional: true`, inquiry `forceMock: true`; the Foundation verification recipe ran in the worker environment and every check passed with nothing deferred** (install, brand typecheck, build, manifest, provider suite, crawl, mocked forms, browser — a Chromium exists there). Brief regenerated (`content_adapter = foundation_brand_content`, `foundation_version = v1`, `foundation_sha = 94014af…`), two placeholders logged. **Push failed three times with GitHub's secondary rate limit (403)**: site-push created one blob per file with sequential POSTs, and a 250-file build exceeds the ~80 content-creating requests a minute GitHub allows. Fixed in site-push (text files ride inline in the single tree request; blobs only for binaries, paced) — Supabase function version 11, contract still v9; test "a 250-file new build is one tree request". |
 
 | 4 | `cse_01GmdSYEiXQNwPgAmKauwEcG`, 21:58–22:16 UTC | 122 / 678 | The push succeeded on the first attempt, confirming the rate-limit fix. Three defects instead: the worker pushed **only the brand layer** (30 files, no framework), so Vercel answered `NEXT_NO_VERSION`; the push **created** the Vercel project, and Vercel promotes a project's first deployment to **production**, which for a fictional brand is the one boundary this test forbids (nothing was published: the build failed); and the worker **completed the stage** on a deployment its own evidence said it had not verified. Completion rolled back by hand. All three fixed (below). |
-| 5 | fired 22:33 UTC | 126 / 685 | Re-run against site-push v12 and the corrected playbook. |
+| 5 | `cse_01PTQwqUVZn2MeRxH1YzdKJT`, 22:32–22:43 UTC | 126 / 685 | **Pass.** Whole tree pushed in one request (commit `3efb25f0`, 251 files, framework included), preview branch from `main` with `main` unmoved, Vercel deployment `dpl_FyNm9s537Ghbv5JhwnuxXgK1rREu` **READY** on a **preview** target, verified through the new `{ deployment_status }` call rather than assumed. All eight Foundation checks passed with nothing deferred. Brief, deliverables, change-log and decision rows written back. |
+
+**Independently verified by the activation session, not taken from the
+worker's evidence:** the deployment is `READY` with `target` preview (the
+Vercel API, not the worker); the pushed branch carries 251 files including
+`package.json` (with `next`), `next.config.ts`, `tsconfig.json`,
+`brands/registry.ts`, `lib/routes.ts`, `app/layout.tsx` and `app/robots.ts`;
+the brand is `fictional: true` in **both** `brands/registry.ts` (which fails a
+production build) and `site.config.ts` (which forces `noindex` and a
+`Disallow: /` robots.txt); and `inquiry.config.ts` has `forceMock: true`.
+Nothing was delivered and nothing is indexable.
 
 **What the platform actually does, verified against the live Vercel API:**
 a project's **first** deployment is promoted to `production` whatever the
@@ -235,6 +245,26 @@ never be the deployment that creates a project.
 | Deployments were taken on trust | site-push waits up to 45 s, returns `ready_state` / `error_message`, and answers a read-only `{ deployment_status }` call | site-push v12 |
 | A `new_build` push of only the brand layer leaves the repo with no framework | the playbook requires the whole tree and forbids splitting it into batches | skill |
 | A stage completed on an unverified deployment | the playbook forbids completing a stage on a deployment not seen `READY`; an unverified one is deferred or blocked | skill |
+
+**Close-out (22:45 UTC).**
+
+- **Queued work.** Every fire recorded during the window (9) belongs to the
+  fictional test client; none to a real client. `retry_failed_fires()` had
+  zero candidates, so resuming re-fired nothing. The ten `pg_cron` jobs were
+  never paused — only the worker fire path was gated — and all stayed active.
+- **Scheduling restored.** `fire_foundation_worker()` is back to its
+  pre-window definition verbatim (2-minute debounce, no pause gate) and the
+  temporary `worker_pause` table is dropped. The Routine itself was never
+  disabled; its next sweep is 13:00 UTC as usual.
+- **Test client archived** as `offboarded`, which the worker's ground rules
+  already refuse to touch.
+- **Preview resources.** The GitHub repository
+  `Compass2026/compassactivationtestfictional` is kept as the evidence trail
+  and should be deleted once this record is accepted. The Vercel project
+  `compassactivationtestfictional-preview` needs deleting by hand: this
+  session's Vercel connection has no delete-project capability. It is not
+  publicly reachable in the meantime (no custom domain, team SSO on all
+  deployments, `noindex` and `Disallow: /` from the fictional brand).
 
 **Foundation follow-up (not done here):** an optional / omittable
 `site.address` with a conditional render in `components/site/SiteFooter.tsx`,
