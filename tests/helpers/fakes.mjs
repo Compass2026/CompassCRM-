@@ -36,7 +36,12 @@ export function fakeSupabase({ tables = {}, secrets = {}, teamJwt = "team-jwt" }
 }
 
 /**
- * repos: { "Owner/name": { id, default_branch, empty, branches: { main: { author: "Tom" | "Compass CRM" } } } }
+ * repos: { "Owner/name": { id, default_branch, empty, files: { "vercel.json": "…" },
+ *                          branches: { main: { author: "Tom" | "Compass CRM" } } } }
+ *
+ * `files` is the repository content a GET of the Contents API serves — used
+ * by the vercel.json enforcement, which reads the current file before it
+ * commits. A path absent from `files` answers 404, as GitHub does.
  */
 export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } = {}) {
   const calls = [];
@@ -50,9 +55,17 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
       commits[sha] = { sha, tree, author: { name: info.author ?? "Compass CRM" }, parents: [], message: `head of ${b}` };
       refs[b] = sha;
     }
-    model[full] = { id: r.id ?? 1000 + n, html_url: `https://github.com/${full}`, default_branch: r.default_branch ?? "main", empty: !!r.empty, refs, commits, pulls: [] };
+    model[full] = { id: r.id ?? 1000 + n, html_url: `https://github.com/${full}`, default_branch: r.default_branch ?? "main", empty: !!r.empty, refs, commits, pulls: [], files: { ...(r.files ?? {}) } };
   }
   const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+  // site-push deploys by { repoId, ref }; Vercel resolves that to the head
+  // commit, and that is the SHA its deployment record carries.
+  const resolveGitSha = (src) => {
+    if (!src) return null;
+    if (src.sha) return src.sha;
+    const repo = Object.values(model).find((r) => r.id === src.repoId);
+    return repo?.refs?.[src.ref] ?? null;
+  };
   const fetch = async (url, init = {}) => {
     const u = new URL(String(url));
     const method = (init.method ?? "GET").toUpperCase();
@@ -76,6 +89,16 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
       }
       // The deployment listing site-push checks BEFORE deploying a preview.
       if (u.pathname === "/v6/deployments" && method === "GET") {
+        // The duplicate sweep site-push runs after its own deployment:
+        // every record Vercel holds for one commit SHA. `duplicateSha`
+        // models a repo that slipped through without vercel.json, so the
+        // Git integration deployed the commit as well.
+        const sha = u.searchParams.get("sha");
+        if (sha) {
+          const ours = Object.values(vercel.deployments ?? {}).filter((d) => d.sha === sha);
+          const extra = vercel.duplicateSha ? [{ id: "dpl_git_integration", source: "git", target: null }] : [];
+          return json(200, { deployments: [...ours.map((d) => ({ id: d.id, source: "rest-api", target: d.target ?? null })), ...extra] });
+        }
         const wanted = u.searchParams.get("projectId");
         const entry = Object.entries(vercel.projects).find(([nm, p]) => p.id === wanted || nm === wanted);
         // `listingSays` lets a test simulate a listing that disagrees with
@@ -95,7 +118,7 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
         const first = proj.deployments === 0;
         proj.deployments += 1;
         const id = `dpl_${++n}`;
-        const dep = { id, url: `${body.project}-${id}.vercel.app`, target: body.target ?? (first ? "production" : null), readyState: "READY" };
+        const dep = { id, url: `${body.project}-${id}.vercel.app`, target: body.target ?? (first ? "production" : null), readyState: "READY", sha: resolveGitSha(body.gitSource) };
         vercel.deployments[id] = dep;
         return json(200, dep);
       }
@@ -109,7 +132,7 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
     if (u.pathname === "/user" && method === "GET") return json(200, { login });
     if (u.pathname === "/user/repos" && method === "POST") {
       const full = `${login}/${body.name}`;
-      model[full] = { id: 5000 + ++n, html_url: `https://github.com/${full}`, default_branch: "main", empty: true, refs: {}, commits: {}, pulls: [] };
+      model[full] = { id: 5000 + ++n, html_url: `https://github.com/${full}`, default_branch: "main", empty: true, refs: {}, commits: {}, pulls: [], files: {} };
       return json(201, { id: model[full].id, html_url: model[full].html_url, default_branch: "main" });
     }
     if (!m) return json(404, { message: "no route" });
@@ -128,7 +151,18 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
     if (rest === "/git/blobs" && method === "POST") return json(201, { sha: id("blob-") });
     if (rest === "/git/trees" && method === "POST") return json(201, { sha: id("tree-") });
     if (rest === "/git/commits" && method === "POST") { const sha = id("commit-"); repo.commits[sha] = { sha, tree: body.tree, author: body.author, parents: body.parents ?? [], message: body.message }; return json(201, { sha }); }
-    if ((mm = rest.match(/^\/contents\/(.+)$/)) && method === "PUT") { const sha = id("commit-"); const tree = id("tree-"); repo.commits[sha] = { sha, tree, author: body.author ?? body.committer, parents: [], message: body.message }; repo.refs[body.branch] = sha; repo.empty = false; return json(201, { commit: { sha, tree: { sha: tree }, html_url: `${repo.html_url}/commit/${sha}` } }); }
+    if ((mm = rest.match(/^\/contents\/([^?]+)/)) && method === "GET") {
+      const want = decodeURIComponent(mm[1]);
+      const body404 = { message: "Not Found" };
+      if (!(want in repo.files)) return json(404, body404);
+      const raw = repo.files[want];
+      // `serveRaw` lets a test return a shape the handler must refuse (a
+      // directory listing, say) or a non-200 it must fail closed on.
+      if (raw && typeof raw === "object" && "status" in raw) return json(raw.status, raw.body ?? {});
+      if (Array.isArray(raw)) return json(200, raw);
+      return json(200, { type: "file", path: want, encoding: "base64", content: btoa(String(raw)) });
+    }
+    if ((mm = rest.match(/^\/contents\/(.+)$/)) && method === "PUT") { const sha = id("commit-"); const tree = id("tree-"); repo.commits[sha] = { sha, tree, author: body.author ?? body.committer, parents: [], message: body.message }; repo.refs[body.branch] = sha; repo.empty = false; repo.files[decodeURIComponent(mm[1])] = atob(String(body.content)); return json(201, { commit: { sha, tree: { sha: tree }, html_url: `${repo.html_url}/commit/${sha}` } }); }
     if ((mm = rest.match(/^\/git\/trees\/([^/?]+)/)) && method === "GET") return json(200, { sha: mm[1], tree: [] });
     if (rest.startsWith("/pulls") && method === "GET") return json(200, repo.pulls.filter((p) => u.searchParams.get("base") === p.base && u.searchParams.get("head")?.endsWith(`:${p.head}`)));
     if (rest === "/pulls" && method === "POST") { const pr = { number: repo.pulls.length + 1, html_url: `${repo.html_url}/pull/${repo.pulls.length + 1}`, base: body.base, head: body.head, title: body.title }; repo.pulls.push(pr); return json(201, pr); }

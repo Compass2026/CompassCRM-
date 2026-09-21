@@ -131,11 +131,58 @@ first and Vercel would promote it to production. The inference rests on the
 three prior pushes to the same branch and on the author change biasing
 toward a record appearing, not away.
 
+## What site-push does about it (v10)
+
+Every commit site-push makes carries `vercel.json` with
+`git.deploymentEnabled: false`. `supabase/functions/site-push/vercel-config.ts`
+holds the merge and the guards; the handler wires them in.
+
+- **Merged, never overwritten.** The file on the branch is read first and the
+  property is merged into it, so redirects, headers, framework, regions,
+  functions and any sibling key under `git` survive untouched. A caller that
+  sends its own `vercel.json` has that content used as the base instead.
+- **Empty repository:** `vercel.json` is the FIRST bootstrap commit, ahead of
+  every other file, so the integration is off before Vercel has anything to
+  react to.
+- **Existing repository:** it rides in the same tree as the requested
+  changes — one commit, atomic. There is never a commit without it.
+- **Fails closed.** Unparseable JSON, an empty file, a non-object, a `git`
+  key that is not an object, or a Contents read that answers anything but
+  200/404 all refuse **before** any commit or deployment exists (409, or 502
+  for an unreadable branch), with `vercel_config: "refused"` in the body.
+- **Not removable.** A push may not delete `vercel.json`, and may not set
+  `git.deploymentEnabled` to anything but `false` — base64 included.
+- **Scope.** `new_build`, `upgrade_existing` and every CRM-controlled content
+  push. `client_retains` never reaches this code: `resolvePushPlan` refuses
+  those pushes first, and that is left exactly as it was.
+- **Not caller content.** The enforcement runs *after* `resolvePushPlan`, so
+  `validateContentEntry` still judges only the caller's paths — an
+  `upgrade_existing` content entry is held to its adapter's push paths, and
+  `vercel.json` rides along as CRM infrastructure.
+- **Defence in depth.** After its own deployment, site-push lists Vercel's
+  deployments for that commit SHA. More than one is reported as
+  `vercel.duplicates` with both ids and the Git-integration record's source,
+  so a repository that slipped through is visible rather than silent. A
+  listing that cannot be read is reported as `checked: false`, never as
+  "none found".
+
+**Known gap:** `{revert: true}` restores a previous commit's tree verbatim.
+If that tree predates the rollout it will not contain `vercel.json`, and the
+revert commit would re-enable the integration. After every CRM-managed repo
+is seeded this cannot arise, but until then a revert across the boundary
+needs a following push.
+
 ## What the tests here do and do not cover
 
-`tests/site-push-handler.test.mjs` pins path 2: exactly one
-`POST /v13/deployments` per push, previews never requested on the
-production target, a blocked push making no request at all, and the commit
-identity on all three commit paths. Nothing in this repository can observe
-path 1 — it is Vercel reacting to GitHub. Those tests passing does **not**
-mean one deployment happened.
+`tests/vercel-config.test.mjs` unit-tests the merge and the guards.
+`tests/site-push-handler.test.mjs` pins the request boundary: exactly one
+`POST /v13/deployments` per push, previews never requested on the production
+target, a blocked push making no request at all, the commit identity on all
+three commit paths, and the `vercel.json` enforcement — bootstrap ordering,
+atomic inclusion, settings preserved, invalid and unreadable failing closed
+before any commit, deletion and re-enabling refused, and duplicate detection
+by SHA.
+
+Nothing in this repository can observe path 1 — it is Vercel reacting to
+GitHub. Those tests passing does **not** by itself mean one deployment
+happened; the duplicate sweep is what reports that from production.

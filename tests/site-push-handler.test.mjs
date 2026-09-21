@@ -46,6 +46,8 @@ test("version mode reports the deployed contract", async () => {
   assert.equal(r.status, 200);
   assert.equal(r.body.version, SITE_PUSH_VERSION);
   assert.ok(r.body.features.includes("content_entry_boundary"));
+  assert.ok(r.body.features.includes("single_deployment_path"), "the worker's preflight must be able to tell a function that writes vercel.json from one that does not");
+  assert.ok(SITE_PUSH_VERSION >= 10, "vercel.json enforcement landed in v10");
 });
 
 test("no cron secret and no team session → 401 before anything is read", async () => {
@@ -74,7 +76,10 @@ test("a 250-file new build is one tree request: text inline, a blob only per bin
   assert.equal(trees.length, 1);
   const inline = trees[0].body.tree.filter((e) => typeof e.content === "string");
   const bySha = trees[0].body.tree.filter((e) => typeof e.sha === "string");
-  assert.equal(inline.length, 249, "the bootstrap file goes through the Contents API; the other 249 text files ride inline");
+  assert.equal(inline.length, 250, "vercel.json is the bootstrap commit, so all 250 text files ride inline behind it");
+  const boot = gh.calls.filter((c) => c.method === "PUT" && c.path.includes("/contents/"));
+  assert.equal(boot.length, 1);
+  assert.match(decodeURIComponent(boot[0].path), /\/contents\/vercel\.json$/, "the first commit in an empty repo disables the Git integration");
   assert.equal(bySha.length, 3);
 });
 
@@ -397,4 +402,142 @@ test("a blocked push makes no deployment request at all", async () => {
   const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
   assert.equal(r.body.vercel.status, "blocked");
   assert.equal(deployPosts(gh).length, 0);
+});
+
+// ── vercel.json enforcement at the request boundary ──────────────────────
+// git.deploymentEnabled:false is what keeps Vercel's Git integration from
+// deploying the same commit alongside site-push's own deployment. Every
+// commit must carry it, every failure to establish it must happen BEFORE a
+// commit, and no push may remove it.
+const CONFIG_OFF = JSON.stringify({ git: { deploymentEnabled: false } }, null, 2) + "\n";
+const treeOf = (gh) => gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/trees"));
+const configInTree = (gh) => {
+  const t = treeOf(gh);
+  assert.equal(t.length, 1, "one tree request");
+  return t[0].body.tree.find((e) => e.path === "vercel.json");
+};
+const wrote = (gh) => gh.calls.filter((c) => c.method !== "GET");
+
+test("empty repository: vercel.json is the very first commit, before any other file", async () => {
+  const { post, gh } = setup({
+    site: { ...LUCAS_SITE, work_mode: "new_build", branch: null, content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", empty: true, branches: {} } },
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "package.json", content: "{}" }, { path: "next.config.ts", content: "export default {}" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const puts = gh.calls.filter((c) => c.method === "PUT" && c.path.includes("/contents/"));
+  assert.equal(puts.length, 1);
+  assert.match(decodeURIComponent(puts[0].path), /\/contents\/vercel\.json/);
+  assert.equal(Buffer.from(puts[0].body.content, "base64").toString("utf8"), CONFIG_OFF);
+  // And it precedes every other write to the repository.
+  const order = wrote(gh).map((c) => c.path);
+  const bootstrapAt = order.findIndex((p) => p.includes("/contents/vercel.json"));
+  const treeAt = order.findIndex((p) => p.endsWith("/git/trees"));
+  assert.ok(bootstrapAt >= 0 && bootstrapAt < treeAt, "the config commit lands before the tree carrying the site");
+});
+
+test("existing repo with no vercel.json: one is added in the same commit as the site changes", async () => {
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const entry = configInTree(gh);
+  assert.ok(entry, "vercel.json rides in the tree");
+  assert.equal(entry.content, CONFIG_OFF);
+  const blog = treeOf(gh)[0].body.tree.find((e) => e.path === "data/blog-posts.json");
+  assert.ok(blog, "atomically, in the same tree as the requested change");
+  assert.equal(gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits")).length, 1, "one commit, not two");
+});
+
+test("existing repo with other vercel.json settings: they all survive", async () => {
+  const existing = JSON.stringify({
+    framework: "nextjs",
+    redirects: [{ source: "/old-roofing", destination: "/roofing", permanent: true }],
+    headers: [{ source: "/(.*)", headers: [{ key: "X-Robots-Tag", value: "all" }] }],
+  }, null, 2);
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Tom" } }, files: { "vercel.json": existing } } };
+  const { post, gh } = setup({ site: LUCAS_SITE, repos });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const merged = JSON.parse(configInTree(gh).content);
+  assert.equal(merged.framework, "nextjs");
+  assert.deepEqual(merged.redirects, [{ source: "/old-roofing", destination: "/roofing", permanent: true }]);
+  assert.equal(merged.headers[0].headers[0].key, "X-Robots-Tag");
+  assert.equal(merged.git.deploymentEnabled, false);
+});
+
+test("invalid vercel.json on the branch: fails closed before any commit or deployment", async () => {
+  const vercel = { projects: { "ridge-safety": { id: "prj_ridge-safety", deployments: 1 } } };
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Tom" } }, files: { "vercel.json": "{ truncated" } } };
+  const { post, gh, site } = setup({ site: LUCAS_SITE, repos, vercel });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.vercel_config, "refused");
+  assert.match(r.body.error, /not valid JSON/);
+  assert.equal(treeOf(gh).length, 0, "nothing was committed");
+  assert.equal(gh.calls.filter((c) => c.path.startsWith("/v13/deployments")).length, 0, "nothing was deployed");
+  assert.equal(site().last_commit_url ?? null, null);
+});
+
+test("vercel.json unreadable on the branch: fails closed too, rather than pushing blind", async () => {
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Tom" } }, files: { "vercel.json": { status: 500, body: { message: "upstream" } } } } };
+  const { post, gh } = setup({ site: LUCAS_SITE, repos });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 502);
+  assert.equal(r.body.vercel_config, "refused");
+  assert.match(r.body.error, /could not read vercel\.json/);
+  assert.equal(treeOf(gh).length, 0, "nothing was committed");
+});
+
+test("a push may not delete vercel.json, and may not re-enable Git deployments", async () => {
+  // On a new_build repo of our own, where the plan permits deletions and
+  // arbitrary paths — so these refusals are this guard's, not the content
+  // -entry boundary's.
+  const ours = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+  const site = { ...LUCAS_SITE, work_mode: "new_build", content_adapter: null, content_paths: null };
+  const { post, gh } = setup({ site, repos: ours });
+
+  const del = await post({ client_id: CLIENT, branch: "main", message: "x", files: [{ path: "app/page.tsx", content: "x" }], delete: ["vercel.json"] });
+  assert.equal(del.status, 409, JSON.stringify(del.body));
+  assert.match(del.body.error, /may not be deleted/);
+
+  const reEnable = await post({ client_id: CLIENT, branch: "main", message: "x", files: [{ path: "vercel.json", content: '{"git":{"deploymentEnabled":true}}' }] });
+  assert.equal(reEnable.status, 409, JSON.stringify(reEnable.body));
+  assert.match(reEnable.body.error, /may not set git\.deploymentEnabled/);
+
+  assert.equal(treeOf(gh).length, 0, "neither attempt committed anything");
+});
+
+test("the config rides along without widening the content-entry boundary", async () => {
+  // upgrade_existing only lets an adapter data path onto the branch of
+  // record. vercel.json is CRM infrastructure, not caller content, so it
+  // rides along — but a caller's code file is still refused.
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
+  const ok = await post({ client_id: CLIENT, branch: "main", message: "Blog (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.ok(configInTree(gh));
+
+  const refused = await post({ client_id: CLIENT, branch: "main", message: "code", files: [{ path: "components/Hero.tsx", content: "export default () => null" }] });
+  assert.equal(refused.status, 409);
+  assert.match(refused.body.error, /not an authorised content entry/);
+});
+
+test("duplicate deployments for one commit are detected and reported", async () => {
+  const vercel = { projects: { "ridge-safety": { id: "prj_ridge-safety", deployments: 1 } }, duplicateSha: true };
+  const { post } = setup({ site: LUCAS_SITE, repos: TOM_REPO, vercel });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.duplicates.checked, true);
+  assert.equal(r.body.vercel.duplicates.count, 2);
+  assert.equal(r.body.vercel.duplicates.others.length, 1);
+  assert.equal(r.body.vercel.duplicates.others[0].source, "git");
+  assert.match(r.body.vercel.duplicates.detail, /must be the only deployment path/);
+});
+
+test("a clean commit reports one deployment and no duplicates", async () => {
+  const vercel = { projects: { "ridge-safety": { id: "prj_ridge-safety", deployments: 1 } } };
+  const { post } = setup({ site: LUCAS_SITE, repos: TOM_REPO, vercel });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.body.vercel.duplicates.checked, true);
+  assert.equal(r.body.vercel.duplicates.count, 1);
+  assert.equal(r.body.vercel.duplicates.others, undefined);
 });

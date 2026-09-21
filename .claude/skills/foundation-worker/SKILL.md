@@ -465,7 +465,11 @@ the archive and the push are always curl with these two headers.
 curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/site-push \
   -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
   -H "Content-Type: application/json" --data '{"client_id": "<client_id>", "version": true}'
-# must answer {"version": 9, "features": [... "content_entry_boundary" ...]}; anything else (400, no version) is the OLD function
+# must answer {"version": 10, "features": [... "content_entry_boundary",
+#              "single_deployment_path" ...]}; anything else (400, no
+# version, version < 10) is the OLD function. Below 10 a push does not
+# carry vercel.json git.deploymentEnabled:false, so Vercel deploys every
+# commit twice — stop and tell Tom rather than pushing.
 ```
 
 **0. Work mode decides the shape of the stage** (`sites.work_mode`; set at
