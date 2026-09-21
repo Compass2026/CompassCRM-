@@ -356,6 +356,20 @@ Foundation's own guards stand behind this one anyway — a fictional brand
 throws on `VERCEL_ENV=production` at build time, `noindex` in the layout and
 `Disallow: /` from `app/robots.ts`.
 
+**One open interaction, flagged not fixed.** PR #46 (a parallel session)
+makes site-push commit as a Vercel **team member** so the Git integration
+stops blocking our deployments. That is right in itself, but it also means
+the Git-integration deployment described above stops being `BLOCKED`: on a
+project with zero deployments it would build and be promoted to production,
+from a push site-push itself deliberately refused to deploy. The Git
+integration is a second, independent deploy path and site-push's probe does
+not gate it. A fictional brand is still safe by defence in depth (the
+Foundation throws on `VERCEL_ENV=production`); a **real** client's first
+Foundation build is the case to settle before #46 lands — most likely by
+turning off the Git integration's automatic deployments on projects
+site-push creates, so deploys only ever happen through the gated path.
+Raised on the PR; not changed here.
+
 ## Service-area support — Sept 21 2026
 
 The first Foundation build for a service-area client stopped dead. The
