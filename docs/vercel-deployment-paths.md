@@ -85,19 +85,51 @@ deployment `dpl_9BtHeaguLiy66m8VeiHiafUhnh8X`, commit `4e40310` on branch
 ## What has to happen first
 
 Path 1 must be switched off for the projects `site-push` manages, so
-`POST /v13/deployments` stays the only path. Candidates, neither yet
-verified on a live project:
+`POST /v13/deployments` stays the only path. Two candidates were tested on
+Sept 21 2026 against `compassactivationtestfictional-zero`
+(`prj_YodN37ffiywps9cEAjlgVtYM9vIk`), the Vercel project of the fictional,
+offboarded client *Compass Activation Test (fictional)*.
 
-- **Project-level:** `PATCH /v9/projects/{id}` with
-  `deploymentPolicy.deploymentSources` — disable source `git` for the
-  production and preview environments, leaving `rest-api`. The field is in
-  Vercel's live API schema; its semantics are **not** in the public docs, so
-  it needs one experiment on a disposable project before `site-push` relies
-  on it.
-- **Repo-level:** `vercel.json` `git: { deploymentEnabled: false }`. This
-  one *is* documented. `site-push` already writes `vercel.json` (the
-  redirect map at Polish), so it could own this key — but it lands per repo,
-  and the first push to a repo without it is unprotected.
+### Project-level `deploymentPolicy` — not available
+
+`PATCH /v9/projects/{id}` with `deploymentPolicy.deploymentSources`
+(disable source `git` for production and preview) and again with
+`deploymentPolicy.gitSources` scoped to the repository. Both returned:
+
+```
+404 {"error":{"code":"not_found","message":"Deployment Policy not found."}}
+```
+
+The field is in Vercel's live API schema but the feature is not provisioned
+for this team. Nothing was modified — the project read back at its
+unchanged baseline of 3 deployments. **Rule this out.**
+
+### Repo-level `vercel.json` — works
+
+```json
+{ "git": { "deploymentEnabled": false } }
+```
+
+Commit `7119da7` on branch `compass/preview-20260921-compassactivationtestfic`,
+authored **and** committed as `Compass CRM <thomas@compassmarketing.ai>` —
+the post-fix identity on purpose, so Vercel had no reason to block it.
+
+- **Baseline:** 3 deployments, every one `source: "git"`, each created
+  within ~2 s of its push. That is the control: pushes to this branch do
+  produce Git-integration records.
+- **Result:** no deployment record for `7119da7` at 55 s, 89 s, 2.5 min or
+  3.5 min. The count stayed at 3.
+
+So the config suppresses the Git integration before it creates anything —
+and it does so for a commit whose author *is* a team member, which is the
+state this repository is moving to.
+
+**Caveat, stated plainly:** the clean proof of causation is a negative
+control — re-push without `vercel.json` and watch a record appear. It was
+not run, because on this project that deployment would be the project's
+first and Vercel would promote it to production. The inference rests on the
+three prior pushes to the same branch and on the author change biasing
+toward a record appearing, not away.
 
 ## What the tests here do and do not cover
 
