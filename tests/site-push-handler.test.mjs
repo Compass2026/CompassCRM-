@@ -344,3 +344,57 @@ test("no commit path ships the old non-team address", async () => {
   assert.equal((src.match(/committer:/g) ?? []).length, 3, "three commit paths, each with a committer");
   assert.equal((src.match(/author: CRM_COMMIT_IDENTITY/g) ?? []).length, 3, "three commit paths, each with an author");
 });
+
+// ── One deployment path per push ──────────────────────────────────────────
+// These pin what THIS function does: it issues exactly one deployment
+// request per push, previews stay previews and production pushes deploy
+// once. They cannot see Vercel's Git integration, which is a SECOND,
+// out-of-band path triggered by the GitHub push itself — see
+// docs/vercel-deployment-paths.md. Keep both halves honest: if the Git
+// integration is ever allowed to deploy CRM commits, these tests still pass
+// while the system deploys twice.
+const deployPosts = (gh) => gh.calls.filter((c) => c.method === "POST" && c.path.startsWith("/v13/deployments"));
+
+test("a production push issues exactly one deployment request, on the production target", async () => {
+  const vercel = { projects: { "ridge-safety": { id: "prj_ridge-safety", deployments: 1 } } };
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO, vercel });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const posts = deployPosts(gh);
+  assert.equal(posts.length, 1, "exactly one deployment request for one commit");
+  assert.equal(posts[0].body.target, "production");
+  assert.equal(posts[0].body.gitSource.ref, "main");
+  assert.equal(Object.keys(vercel.deployments).length, 1, "exactly one deployment exists for this commit");
+});
+
+test("a preview push issues exactly one deployment request and never asks for production", async () => {
+  const vercel = { projects: { "ridge-safety-preview": { id: "prj_ridge-safety-preview", deployments: 1 } }, deployments: { dpl_seed: { id: "dpl_seed", url: "seed.vercel.app", target: "production", readyState: "READY" } } };
+  const { post, gh, site } = setup({
+    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
+    vercel,
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const posts = deployPosts(gh);
+  assert.equal(posts.length, 1, "exactly one deployment request for one commit");
+  assert.equal(posts[0].body.target, undefined, "a preview must never be requested on the production target");
+  assert.notEqual(posts[0].body.gitSource.ref, "main", "a preview deploys the side branch, not the branch of record");
+  assert.notEqual(r.body.vercel.target, "production");
+  assert.equal(site().branch, "main", "a preview never moves the branch of record");
+});
+
+test("a blocked push makes no deployment request at all", async () => {
+  // The zero-deployment project guard: no request, so the Git integration is
+  // the only thing that could deploy this commit — which is exactly why it
+  // must be switched off before the commit author becomes a team member.
+  const vercel = { projects: {} };
+  const { post, gh } = setup({
+    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
+    vercel,
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
+  assert.equal(r.body.vercel.status, "blocked");
+  assert.equal(deployPosts(gh).length, 0);
+});
