@@ -76,34 +76,66 @@ test("a 250-file new build is one tree request: text inline, a blob only per bin
   assert.equal(bySha.length, 3);
 });
 
-test("a preview push never creates a new Vercel project's first deployment (Vercel promotes it to production)", async () => {
+test("a preview push is blocked when the Vercel project has no deployments — twice in a row", async () => {
+  // Vercel promotes a project's FIRST deployment to production whatever the
+  // branch, and the API rejects an explicit preview target. Creating the
+  // project does not help: the next deployment is still its first. So the
+  // SECOND consecutive preview request must be blocked as firmly as the
+  // first — that is the case the earlier "push again" advice got wrong.
   const vercel = { projects: {} };
-  const { post, site } = setup({
-    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
-    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
-    vercel,
-  });
-  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.target, "preview");
-  assert.equal(r.body.vercel.status, "skipped");
-  assert.match(r.body.vercel.detail, /promotes a project's first deployment to production/);
-  assert.equal(Object.keys(vercel.deployments ?? {}).length, 0, "no deployment may be created");
-  assert.equal(site().staging_url ?? null, null);
+  const site = { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null };
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+  const { post } = setup({ site, repos, vercel });
+  const body = { client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] };
+
+  const first = await post(body);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.vercel.status, "blocked");
+  assert.equal(first.body.vercel.created_project, true);
+  assert.match(first.body.vercel.detail, /no deployments yet/);
+  assert.match(first.body.vercel.detail, /Pushing again on its own does NOT help/);
+
+  const second = await post(body);
+  assert.equal(second.body.vercel.status, "blocked", "the second consecutive preview must be blocked too");
+  assert.equal(second.body.vercel.created_project, false, "the project already exists by now");
+  assert.match(second.body.vercel.detail, /no deployments yet/);
+
+  assert.equal(Object.keys(vercel.deployments ?? {}).length, 0, "neither request may create a deployment");
+  assert.equal(vercel.projects["ridge-safety-preview"].deployments, 0);
 });
 
-test("a preview push that Vercel puts on a production target is reported failed, never as a preview", async () => {
-  const vercel = { projects: { "ridge-safety-preview": { deployments: 0 } } };
+test("a preview deploys normally once the project has a deployment", async () => {
+  const vercel = { projects: { "ridge-safety-preview": { id: "prj_ridge-safety-preview", deployments: 1 } }, deployments: { dpl_seed: { id: "dpl_seed", url: "seed.vercel.app", target: "production", readyState: "READY" } } };
   const { post } = setup({
     site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
     repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
     vercel,
   });
   const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.status, "deployed");
+  assert.equal(r.body.vercel.target, null ?? r.body.vercel.target);
+  assert.notEqual(r.body.vercel.target, "production");
+  assert.equal(r.body.vercel.ready_state, "READY");
+});
+
+test("a preview that Vercel still puts on a production target is reported failed, never as a preview", async () => {
+  // Defence in depth behind the pre-flight check: the listing claims the
+  // project has a deployment, so the push proceeds, but Vercel returns a
+  // production target anyway. That must never be reported as a preview.
+  const vercel = {
+    projects: { "ridge-safety-preview": { id: "prj_ridge-safety-preview", deployments: 0, listingSays: 1 } },
+    deployments: {},
+  };
+  const { post, site } = setup({
+    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
+    vercel,
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
   assert.equal(r.body.vercel.status, "failed");
   assert.equal(r.body.vercel.target, "production");
   assert.match(r.body.vercel.detail, /refusing to report it as a preview/);
+  assert.equal(site().staging_url ?? null, null, "a production-target preview never becomes the staging URL");
 });
 
 test("naming the production branch with general code changes is refused: nothing is written to GitHub or the site row", async () => {

@@ -563,6 +563,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
         });
       try {
         let created = false;
+        let projectId: string | null = null;
         const existing = await vc(`/v9/projects/${project}`);
         if (existing.status === 404) {
           const framework = (siteRow?.stack ?? plan.stackForInsert) === "astro" ? "astro" : (siteRow?.stack ?? plan.stackForInsert) === "nextjs" ? "nextjs" : null;
@@ -579,22 +580,43 @@ export function createSitePushHandler(deps: HandlerDeps) {
           });
           if (!mk.ok) throw fail("vercel project create", mk, await mk.text());
           created = true;
+          projectId = (await mk.json())?.id ?? null;
         } else if (!existing.ok) {
           throw fail("vercel project lookup", existing, await existing.text());
+        } else {
+          projectId = (await existing.json())?.id ?? null;
         }
-        // Vercel promotes a project's FIRST deployment to production whatever
-        // the branch (verified Sept 20 2026: the second deployment on the same
-        // project, same ref, came back target null = preview). So a preview
-        // push must never be the deployment that creates a project — for a
-        // fictional brand that would put it on a production target. The
-        // project is left in place; the next push deploys as a real preview.
-        if (created && previewPush) {
-          return {
-            status: "skipped",
-            project,
-            detail:
-              "Vercel project created, no deployment started: Vercel promotes a project's first deployment to production, and this is a preview push. Push again — the project now exists, so the next deployment is a preview.",
-          };
+
+        // ── A preview may never be a project's FIRST deployment ───────────
+        // Vercel promotes a project's first deployment to production whatever
+        // the branch, and the API rejects an explicit `target: "preview"`
+        // ("should be 'production', 'staging', or a custom environment
+        // identifier"), so a preview cannot be asked for directly. Creating
+        // the project does NOT help: the next deployment is still its first.
+        // The only safe move is to look before deploying and refuse when the
+        // project has nothing yet — a production deployment that should not
+        // exist cannot be undone by reporting it afterwards.
+        if (previewPush) {
+          const probe = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&limit=1`);
+          const list = probe.ok ? ((await probe.json())?.deployments ?? null) : null;
+          if (!Array.isArray(list)) {
+            return {
+              status: "blocked",
+              project,
+              created_project: created,
+              detail:
+                `Could not confirm whether Vercel project ${project} already has a deployment (${probe.status}). Refusing to deploy: a preview that turns out to be this project's first deployment becomes a PRODUCTION deployment. Next action: check the project in Vercel and re-run once it has a deployment.`,
+            };
+          }
+          if (list.length === 0) {
+            return {
+              status: "blocked",
+              project,
+              created_project: created,
+              detail:
+                `Vercel project ${project} has no deployments yet, so this preview would be its first — and Vercel promotes a first deployment to production whatever the branch. Nothing was deployed. Next action: give the project its first PRODUCTION deployment deliberately (Vercel → ${project} → deploy the branch of record ${base}), then re-run this push and it will deploy as a preview. A fictional or demonstration brand must never have a production deployment, so a preview is not available for one at all — verify it from the local build instead. Pushing again on its own does NOT help: the next deployment would still be the project's first.`,
+            };
+          }
         }
         if (!repoId) throw new Error("no GitHub repo id for the deployment");
         // Vercel's Git integration blocks commits from authors who are not

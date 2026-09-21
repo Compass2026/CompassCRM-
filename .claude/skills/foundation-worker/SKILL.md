@@ -688,8 +688,14 @@ Rules, and they are not negotiable:
   the deployment as **deferred** in the checks (with the id), say so in the
   evidence, and leave the stage `in_progress` for the next run to confirm.
   A deployment you have not seen reach `READY` is never "the preview is up".
-- `vercel.status` `skipped` because the project was just created → push
-  again in the same run; the second push deploys as a real preview.
+- `vercel.status` `blocked` → the Vercel project has no deployment yet, so a
+  preview cannot be made: Vercel promotes a project's first deployment to
+  production whatever the branch. **Pushing again does not help** — the next
+  deployment would still be the project's first. The commit is on the preview
+  branch and is fine; record the deployment as *deferred* with the blocked
+  detail, put that detail in `next_action`, and leave the stage for Tom. For a
+  fictional or demonstration brand a preview is never available, because it
+  may never have a production deployment: verify it from the local build.
 - `target` must be `preview` for any preview push. A `production` target on
   a preview push is a failure, not a result — site-push reports it as one.
 - Deployment protection (a Vercel login) may stop you fetching the preview
