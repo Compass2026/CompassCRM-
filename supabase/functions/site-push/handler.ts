@@ -570,7 +570,10 @@ export function createSitePushHandler(deps: HandlerDeps) {
     // The side branch gets its own project so it never collides with an
     // existing site's project on the same repo.
     const vercelStep = async (commitSha?: string | null): Promise<Record<string, unknown>> => {
-      if (noDeploy) return { status: "skipped", detail: "deploy: false — Vercel's Git integration deploys the push" };
+      // Since v10 the commit carries git.deploymentEnabled:false, so the
+      // Git integration will NOT pick this push up: `deploy: false` now
+      // means the commit is not deployed at all until someone asks.
+      if (noDeploy) return { status: "skipped", detail: "deploy: false — nothing was deployed; the commit is pushed but not live. Vercel's Git integration will not deploy it either (vercel.json git.deploymentEnabled:false). Deploy it with {client_id, deploy: true}." };
       const vToken = await secret("VERCEL_TOKEN");
       if (!vToken) return { status: "skipped", detail: "VERCEL_TOKEN not in Vault" };
       const teamId = (await secret("VERCEL_TEAM_ID")) ?? "team_JxUWGz1PjUP4jOAqXQqy3YFN";

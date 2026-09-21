@@ -541,3 +541,18 @@ test("a clean commit reports one deployment and no duplicates", async () => {
   assert.equal(r.body.vercel.duplicates.count, 1);
   assert.equal(r.body.vercel.duplicates.others, undefined);
 });
+
+test("deploy:false no longer leaves the Git integration to deploy the push", async () => {
+  // Before v10 this relied on Vercel's Git integration picking the commit
+  // up. The config now stops it, so `deploy: false` means nothing is live —
+  // the message has to say so or a caller will wait for a deployment that
+  // never comes.
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "x (Compass CRM)", deploy: false, files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.status, "skipped");
+  assert.match(r.body.vercel.detail, /nothing was deployed/);
+  assert.doesNotMatch(r.body.vercel.detail, /Git integration deploys the push/);
+  assert.equal(gh.calls.filter((c) => c.path.startsWith("/v13/deployments")).length, 0);
+  assert.ok(configInTree(gh), "the commit still carries the config");
+});
