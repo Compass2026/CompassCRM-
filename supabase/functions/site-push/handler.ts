@@ -597,7 +597,13 @@ export function createSitePushHandler(deps: HandlerDeps) {
         // project has nothing yet — a production deployment that should not
         // exist cannot be undone by reporting it afterwards.
         if (previewPush) {
-          const probe = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&limit=1`);
+          // READY only. Vercel's own Git integration registers deployments
+          // for our pushes and then BLOCKS them (our commit author is not a
+          // team member), and a blocked or errored record is not a real
+          // deployment: counting it would let the next preview through and
+          // that one would be the project's first real — production —
+          // deployment. Seen live on Sept 21 2026.
+          const probe = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&state=READY&limit=1`);
           const list = probe.ok ? ((await probe.json())?.deployments ?? null) : null;
           if (!Array.isArray(list)) {
             return {
@@ -605,7 +611,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
               project,
               created_project: created,
               detail:
-                `Could not confirm whether Vercel project ${project} already has a deployment (${probe.status}). Refusing to deploy: a preview that turns out to be this project's first deployment becomes a PRODUCTION deployment. Next action: check the project in Vercel and re-run once it has a deployment.`,
+                `Could not confirm whether Vercel project ${project} already has a successful deployment (${probe.status}). Refusing to deploy: a preview that turns out to be this project's first deployment becomes a PRODUCTION deployment. Next action: check the project in Vercel and re-run once it has a deployment.`,
             };
           }
           if (list.length === 0) {
@@ -614,7 +620,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
               project,
               created_project: created,
               detail:
-                `Vercel project ${project} has no deployments yet, so this preview would be its first — and Vercel promotes a first deployment to production whatever the branch. Nothing was deployed. Next action: give the project its first PRODUCTION deployment deliberately (Vercel → ${project} → deploy the branch of record ${base}), then re-run this push and it will deploy as a preview. A fictional or demonstration brand must never have a production deployment, so a preview is not available for one at all — verify it from the local build instead. Pushing again on its own does NOT help: the next deployment would still be the project's first.`,
+                `Vercel project ${project} has no successful (READY) deployment yet, so this preview would be its first real one — and Vercel promotes a first deployment to production whatever the branch. Nothing was deployed. Next action: give the project its first PRODUCTION deployment deliberately (Vercel → ${project} → deploy the branch of record ${base}), then re-run this push and it will deploy as a preview. A fictional or demonstration brand must never have a production deployment, so a preview is not available for one at all — verify it from the local build instead. Pushing again on its own does NOT help: the next deployment would still be the project's first.`,
             };
           }
         }

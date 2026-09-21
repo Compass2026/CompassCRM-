@@ -80,7 +80,14 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
         const entry = Object.entries(vercel.projects).find(([nm, p]) => p.id === wanted || nm === wanted);
         // `listingSays` lets a test simulate a listing that disagrees with
         // reality, to exercise the check behind the pre-flight one.
-        const made = entry ? (entry[1].listingSays ?? entry[1].deployments) : 0;
+        // `blockedOnly` models Vercel's Git integration registering a
+        // deployment for our push and then blocking it: it exists, but it is
+        // not READY, so a state=READY query must not see it.
+        const wantsReady = (u.searchParams.get("state") ?? "").includes("READY");
+        const p = entry ? entry[1] : null;
+        const ready = p ? (p.listingSays ?? (p.blockedOnly ? 0 : p.deployments)) : 0;
+        const any = p ? (p.listingSays ?? p.deployments + (p.blockedOnly ? 1 : 0)) : 0;
+        const made = wantsReady ? ready : any;
         return json(200, { deployments: made > 0 ? [{ id: "dpl_existing" }] : [] });
       }
       if (u.pathname === "/v13/deployments" && method === "POST") {

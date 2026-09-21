@@ -92,16 +92,33 @@ test("a preview push is blocked when the Vercel project has no deployments — t
   assert.equal(first.status, 200, JSON.stringify(first.body));
   assert.equal(first.body.vercel.status, "blocked");
   assert.equal(first.body.vercel.created_project, true);
-  assert.match(first.body.vercel.detail, /no deployments yet/);
+  assert.match(first.body.vercel.detail, /no successful \(READY\) deployment yet/);
   assert.match(first.body.vercel.detail, /Pushing again on its own does NOT help/);
 
   const second = await post(body);
   assert.equal(second.body.vercel.status, "blocked", "the second consecutive preview must be blocked too");
   assert.equal(second.body.vercel.created_project, false, "the project already exists by now");
-  assert.match(second.body.vercel.detail, /no deployments yet/);
+  assert.match(second.body.vercel.detail, /no successful \(READY\) deployment yet/);
 
   assert.equal(Object.keys(vercel.deployments ?? {}).length, 0, "neither request may create a deployment");
   assert.equal(vercel.projects["ridge-safety-preview"].deployments, 0);
+});
+
+test("a blocked Git-integration deployment does not count as the project having one", async () => {
+  // Vercel's Git integration registers a deployment for our push and blocks
+  // it, because the commit author is not a team member. That record must not
+  // satisfy the pre-flight check: the next deployment would still be the
+  // project's first real one, and therefore production.
+  const vercel = { projects: { "ridge-safety-preview": { id: "prj_ridge-safety-preview", deployments: 0, blockedOnly: true } } };
+  const { post } = setup({
+    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
+    vercel,
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "brands/x/content/home.ts", content: "export const home = {};" }] });
+  assert.equal(r.body.vercel.status, "blocked");
+  assert.match(r.body.vercel.detail, /no successful \(READY\) deployment yet/);
+  assert.equal(Object.keys(vercel.deployments ?? {}).length, 0);
 });
 
 test("a preview deploys normally once the project has a deployment", async () => {
