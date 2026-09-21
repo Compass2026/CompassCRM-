@@ -67,14 +67,24 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
       vercel.projects ??= {}; vercel.deployments ??= {};
       let vm;
       if ((vm = u.pathname.match(/^\/v9\/projects\/([^/]+)$/)) && method === "GET") {
-        return vercel.projects[vm[1]] ? json(200, { name: vm[1] }) : json(404, { message: "not found" });
+        const p = vercel.projects[vm[1]];
+        return p ? json(200, { id: p.id ?? `prj_${vm[1]}`, name: vm[1] }) : json(404, { message: "not found" });
       }
       if (u.pathname === "/v10/projects" && method === "POST") {
-        vercel.projects[body.name] = { deployments: 0 };
-        return json(201, { name: body.name });
+        vercel.projects[body.name] = { id: `prj_${body.name}`, deployments: 0 };
+        return json(201, { id: `prj_${body.name}`, name: body.name });
+      }
+      // The deployment listing site-push checks BEFORE deploying a preview.
+      if (u.pathname === "/v6/deployments" && method === "GET") {
+        const wanted = u.searchParams.get("projectId");
+        const entry = Object.entries(vercel.projects).find(([nm, p]) => p.id === wanted || nm === wanted);
+        // `listingSays` lets a test simulate a listing that disagrees with
+        // reality, to exercise the check behind the pre-flight one.
+        const made = entry ? (entry[1].listingSays ?? entry[1].deployments) : 0;
+        return json(200, { deployments: made > 0 ? [{ id: "dpl_existing" }] : [] });
       }
       if (u.pathname === "/v13/deployments" && method === "POST") {
-        const proj = (vercel.projects[body.project] ??= { deployments: 0 });
+        const proj = (vercel.projects[body.project] ??= { id: `prj_${body.project}`, deployments: 0 });
         const first = proj.deployments === 0;
         proj.deployments += 1;
         const id = `dpl_${++n}`;
