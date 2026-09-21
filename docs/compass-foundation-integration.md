@@ -296,8 +296,46 @@ never be the deployment that creates a project.
   `createClientAction`, the work-mode radio offers exactly the three enum
   values, the action branches on all three, `client_retains` drops the Website
   enrollment, every mode records a `sites` row and none records Astro. One
-  manual action remains for Tom: add one client through the form once and
-  confirm the Foundation tab shows the work mode.
+  manual action remains for Tom — the supervised intake below, still
+  **UNVERIFIED**.
+
+## Tom's one supervised intake — UNVERIFIED
+
+The only part of this integration that has never been exercised through the
+interface it ships with. Everything below the form is covered by tests and by
+five live worker runs; the form itself needs a signed-in team session, which
+no session in this environment can obtain (the deployed CRM is behind Vercel
+SSO, creating an automation bypass returned 403). **This stays marked
+unverified until Tom actually completes it.** Ten minutes, fictional data,
+nothing sent.
+
+1. Open <https://compass-crm-ten.vercel.app/clients> signed in as a team
+   member and click **New client**.
+2. Fill the dialog with invented data, clearly labelled as such, e.g.
+   Business name `Intake Check (fictional)`, Vertical `electrical`, Business
+   type **Service area (goes to the customer)** — already the default, and
+   the case this release exists for — City `Westfield`, State `MO`, Service area
+   `Westfield and Northgate (fictional)`. Leave Website URL, Phone and
+   Industry empty or fictional. Never a real business, and never a real
+   phone number or address.
+3. Under **Website work**, leave the first radio selected — *"New build on
+   the Compass Website Foundation."* Leave Repository and Production branch
+   empty: they belong to the upgrade path.
+4. Click **Create client**.
+5. On the new client, open the **Foundation** tab. Check three things:
+   - **Work mode** reads *new build* (the select next to "Work mode:"). This
+     is the whole point of the exercise: the radio reached `sites.work_mode`.
+   - The site row exists and its stack is **not** Astro.
+   - Press **Generate build brief**. The summary line that appears must read
+     `Build brief · new_build · v1 @ f928381 (source)`. Any other SHA means
+     the app is serving an older deployment or the release row moved.
+6. Then dispose of it: set the client's status to `offboarded`. Nothing was
+   sent, no repository or Vercel project was created — the intake only writes
+   CRM rows.
+
+If step 5 shows the work mode blank or the brief names a different SHA, stop
+and say so rather than continuing; those are the two failure modes the form
+could still have.
 - **Service-area businesses** are supported by the Foundation as of
   `claude/foundation-service-area` (`e214dae`): `address.street` and
   `address.zip` are `string | null`, so the typechecker proves every consumer
