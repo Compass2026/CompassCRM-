@@ -370,9 +370,15 @@ a chat.
 2026; `docs/compass-foundation-integration.md`), not the retired Astro
 starter (`templates/astro-site/` stays as reference only). The pinned
 release is the `foundation_releases` row with `is_current` — v1 accepted
-Sept 20 2026, with its source repository, pinned SHA and the three
-governing Drive documents recorded on that row (read them from the row;
-they are not copied here). The worker fetches it
+Sept 20 2026, with its source repository, pinned SHA and the three governing
+Drive documents recorded on that row (read them from the row; they are not
+copied here). The pin moved Sept 21 2026 to a later commit of the same
+repository for **service-area support**: `site.address.street` and
+`site.address.zip` are nullable, and the footer, the contact card and the
+LocalBusiness / JobPosting JSON-LD omit what is absent. A business that goes
+to the customer has no public street address; the worker never invents one
+and no longer blocks for the lack of it (migration
+0040_foundation_v1_service_area). The worker fetches it
 through `site-push {archive}`, builds the brand layer per the Foundation's
 `docs/starter-checklist.md` from the CRM's brand board, taxonomy, page
 groups and sourced claims, and verifies with the Foundation's own checks

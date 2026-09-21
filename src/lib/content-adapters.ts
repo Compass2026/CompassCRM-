@@ -48,7 +48,13 @@ export interface AdapterDescription {
   notes: string[];
 }
 
-export const FOUNDATION_V1_SHA = "94014af35316c94616dadb3f8d606a4b68577fb0";
+// v1 moved from 94014af to f928381 on Sept 21 2026 for service-area support
+// (address.street / address.zip nullable). The brand content LAYOUT below is
+// unchanged by that commit — it touched only the address fields and their
+// consumers — so the tree fixture still describes this SHA. The database row
+// (foundation_releases.is_current) is what the worker and site-push read;
+// this constant is the fallback build-brief.ts uses when no row is loaded.
+export const FOUNDATION_V1_SHA = "f928381b3a81e20694571cefc5091392b2c84e86";
 export const FOUNDATION_V1_REPO = "Compass2026/showmeelectricalwebsite";
 
 const DOC_ONLY: Record<ChangeKind, MutationMode> = {

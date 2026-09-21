@@ -5,7 +5,7 @@ import { detectContentContract, planMutation, assertWriteAllowed, describeAdapte
 
 const trees = JSON.parse(readFileSync(new URL("./fixtures/trees.json", import.meta.url), "utf8"));
 // The accepted foundation's tree at 94014af35316c94616dadb3f8d606a4b68577fb0 (git ls-tree, brands/ lib/ app/ scripts/qa/).
-const foundation = JSON.parse(readFileSync(new URL("./fixtures/foundation-94014af-tree.json", import.meta.url), "utf8"));
+const foundation = JSON.parse(readFileSync(new URL("./fixtures/foundation-v1-tree.json", import.meta.url), "utf8"));
 
 test("the accepted foundation tree: a recorded, registered, non-fictional brand is verified and the blog registry path is real", () => {
   const d = detectContentContract(foundation, { brand: "showme" }, { registeredBrands: ["showme", "harbor-lane"] });
@@ -123,5 +123,5 @@ test("the content-entry exception: data entries only, on the recorded adapter's 
 test("every adapter describes its verification and the Foundation pins the accepted SHA", () => {
   for (const key of ["foundation_brand_content", "lucas_json", "markdown_blog"]) assert.ok(describeAdapter(key).verify.length > 0);
   assert.equal(describeAdapter("unsupported").verify.length, 0);
-  assert.equal(FOUNDATION_V1_SHA, "94014af35316c94616dadb3f8d606a4b68577fb0");
+  assert.equal(FOUNDATION_V1_SHA, "f928381b3a81e20694571cefc5091392b2c84e86");
 });

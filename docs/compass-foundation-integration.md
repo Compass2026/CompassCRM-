@@ -4,7 +4,10 @@ Implemented Sept 20 2026 on `claude/foundation-v1-crm-integration` from the
 [accepted handoff](https://github.com/Compass2026/showmeelectricalwebsite/blob/codex/foundation-v1-handoff/docs/foundation-v1-handoff.md)
 and the [CRM onboarding review](https://github.com/Compass2026/showmeelectricalwebsite/blob/codex/foundation-v1-handoff/docs/compass-crm-onboarding-review.md).
 Accepted foundation code: `Compass2026/showmeelectricalwebsite` @
-`94014af35316c94616dadb3f8d606a4b68577fb0`. The three governing Drive
+`f928381b3a81e20694571cefc5091392b2c84e86` (v1 was accepted at
+`94014af35316c94616dadb3f8d606a4b68577fb0` on Sept 20 2026 and moved to
+`f928381` on Sept 21 2026 for service-area support — see "Service-area
+support" below; migration 0040_foundation_v1_service_area). The three governing Drive
 originals are listed in `foundation_releases.documents` (migration 0039_foundation_v1_work_modes).
 
 This branch changes code and instructions. **Nothing is deployed by it**:
@@ -93,8 +96,9 @@ recipe for a human. Results are builder-reported; the brief keeps
 - `tests/site-push-plan.test.mjs` — the planning helper, including the
   content-entry verdicts and the `new_build`-over-foreign-head rule.
 - `tests/content-adapters.test.mjs` — against the **accepted foundation
-  tree** (`tests/fixtures/foundation-94014af-tree.json`, from `git ls-tree`
-  at `94014af`): the blog registry is `brands/<brand>/content/blog/index.ts`
+  tree** (`tests/fixtures/foundation-v1-tree.json`, from `git ls-tree`
+  at `94014af`, still accurate at the pinned `f928381` — every path in it
+  exists there and the service-area commit added none): the blog registry is `brands/<brand>/content/blog/index.ts`
   (no `content/articles`); a recorded, registered, non-fictional brand is
   verified; no recorded brand, multiple client brands, a brand missing from
   the tree, the fictional brand, an unregistered brand → each a specific
@@ -292,20 +296,188 @@ never be the deployment that creates a project.
   `createClientAction`, the work-mode radio offers exactly the three enum
   values, the action branches on all three, `client_retains` drops the Website
   enrollment, every mode records a `sites` row and none records Astro. One
-  manual action remains for Tom: add one client through the form once and
-  confirm the Foundation tab shows the work mode.
+  manual action remains for Tom — the supervised intake below, still
+  **UNVERIFIED**.
+
+## Tom's one supervised intake — UNVERIFIED
+
+The only part of this integration that has never been exercised through the
+interface it ships with. Everything below the form is covered by tests and by
+five live worker runs; the form itself needs a signed-in team session, which
+no session in this environment can obtain (the deployed CRM is behind Vercel
+SSO, creating an automation bypass returned 403). **This stays marked
+unverified until Tom actually completes it.** Ten minutes, fictional data,
+nothing sent.
+
+1. Open <https://compass-crm-ten.vercel.app/clients> signed in as a team
+   member and click **New client**.
+2. Fill the dialog with invented data, clearly labelled as such, e.g.
+   Business name `Intake Check (fictional)`, Vertical `electrical`, Business
+   type **Service area (goes to the customer)** — already the default, and
+   the case this release exists for — City `Westfield`, State `MO`, Service area
+   `Westfield and Northgate (fictional)`. Leave Website URL, Phone and
+   Industry empty or fictional. Never a real business, and never a real
+   phone number or address.
+3. Under **Website work**, leave the first radio selected — *"New build on
+   the Compass Website Foundation."* Leave Repository and Production branch
+   empty: they belong to the upgrade path.
+4. Click **Create client**.
+5. On the new client, open the **Foundation** tab. Check three things:
+   - **Work mode** reads *new build* (the select next to "Work mode:"). This
+     is the whole point of the exercise: the radio reached `sites.work_mode`.
+   - The site row exists and its stack is **not** Astro.
+   - Press **Generate build brief**. The summary line that appears must read
+     `Build brief · new_build · v1 @ f928381 (source)`. Any other SHA means
+     the app is serving an older deployment or the release row moved.
+6. Then dispose of it: set the client's status to `offboarded`. Nothing was
+   sent, no repository or Vercel project was created — the intake only writes
+   CRM rows.
+
+If step 5 shows the work mode blank or the brief names a different SHA, stop
+and say so rather than continuing; those are the two failure modes the form
+could still have.
 - **Service-area businesses** are supported by the Foundation as of
   `claude/foundation-service-area` (`e214dae`): `address.street` and
   `address.zip` are `string | null`, so the typechecker proves every consumer
   handles their absence. Verified by the full suite plus a built and served
   service-area variant — no street anywhere in the HTML, and the structured
   data carries locality, region and country with no `streetAddress` and no
-  `postalCode`.
+  `postalCode`. **Merged and activated in the CRM on Sept 21 2026** — see
+  "Service-area support" above; this closes the Foundation follow-up that
+  stood here.
 
-**Foundation follow-up (not done here):** an optional / omittable
-`site.address` with a conditional render in `components/site/SiteFooter.tsx`,
-`app/contact/page.tsx` and `lib/seo.ts` before any real service-area client
-is built on Foundation v1.
+**An eighth defect, and the correction that found it (Sept 21 2026).**
+Worker run 4 had produced a production-target deployment on a fictional brand
+because Vercel promotes a project's *first* deployment to production whatever
+the branch. The first guard written for it was wrong in two ways, and Tom
+named both: it only *reported* the promotion after the deployment existed,
+and its "create the project, then push again" advice was false — creating a
+project does not make the next deployment its second. Both are now prevented
+**before** anything is deployed:
+
+- site-push **v14** (Supabase function version 14): a preview push probes the
+  project's deployments first and returns `{"vercel": {"status": "blocked"}}`
+  without deploying when there are none, with an accurate next action — give
+  the project its first production deployment deliberately, and, for a
+  fictional or demonstration brand, that a preview is not available at all and
+  the build is verified locally instead.
+- site-push **v15** (Supabase function version 15): the probe counts only
+  `state=READY` deployments. The live v14 test exposed the hole: Vercel's own
+  Git integration registers a deployment for our push and then **BLOCKS** it
+  (commit author "Compass CRM" is not a team member), and a blocked
+  deployment that never built would have satisfied a bare count — so the
+  *third* request would have deployed to production after all.
+
+The contract stays v9. Tests: "a preview push is blocked when the Vercel
+project has no deployments — twice in a row", "a blocked Git-integration
+deployment does not count as the project having one", "a preview deploys
+normally once the project has a deployment", "a preview that Vercel still
+puts on a production target is reported failed".
+
+**The live fresh-project test (Sept 21 2026, function v15).** Two consecutive
+preview requests for the fictional test client against
+`compassactivationtestfictional-fresh`, a Vercel project that did not exist
+when the first request arrived:
+
+| # | Request | Answer | Deployments created by site-push |
+| --- | --- | --- | --- |
+| 1 | 706 | `vercel.status: "blocked"`, `created_project: true` | none |
+| 2 | 707 | `vercel.status: "blocked"`, `created_project: false` | none |
+
+Both carried the same detail and next action. Vercel's deployment list for
+the project afterwards holds exactly one entry —
+`dpl_Hf3T1tjW29Pq8ggHvtFvYGYTzU2S`, `state: BLOCKED`, `target: production`,
+created by the **Git integration** from request 2's commit, never built and
+serving nothing. That is the entry v15 is written to disregard: under v14 it
+would have cleared the next preview. Nothing reached production, and the
+Foundation's own guards stand behind this one anyway — a fictional brand
+throws on `VERCEL_ENV=production` at build time, `noindex` in the layout and
+`Disallow: /` from `app/robots.ts`.
+
+**That interaction is settled in PR #46 (site-push v10).** Making site-push
+commit as a Vercel **team member** is right in itself, but it also stops the
+Git-integration deployment described above being `BLOCKED`: on a project
+with zero deployments it would build and be promoted to production, from a
+push site-push itself deliberately refused to deploy. The Git integration is
+a second, independent deploy path and site-push's probe does not gate it.
+
+The fix is the one guessed at here — turn the Git integration's automatic
+deployments off — done in the repository rather than on the project, because
+Vercel's project-level `deploymentPolicy` is not provisioned for this team
+(it answers 404). Every commit site-push makes now carries `vercel.json`
+with `git.deploymentEnabled: false`, merged into whatever settings the file
+already holds: first in an empty repository's bootstrap commit, atomically
+in the tree of every other push, on the revert path too, and fail-closed if
+it cannot be read or merged. After deploying, site-push also lists Vercel's
+deployments for the commit SHA and reports any it did not create. See
+`docs/vercel-deployment-paths.md` for the evidence and the verification.
+
+**Still to do before this is true in production:** #46 is not merged and
+site-push is not redeployed, and the guarantee only holds for repositories
+whose head already carries the config. The rollout order matters — seed each
+CRM-managed repository while commits are still blocked by the old identity,
+confirm no `source: "git"` deployment appears, and only then merge.
+
+## Service-area support — Sept 21 2026
+
+The first Foundation build for a service-area client stopped dead. The
+Foundation read `site.address` as required and rendered the street in the
+footer, on the contact page and in the LocalBusiness JSON-LD with no way to
+omit it; the worker refused to invent an address and blocked (worker run 2,
+below). Refusing was right — a street address for a business that goes to the
+customer is a false claim — but the Foundation had to grow the case.
+
+**The Foundation change** (`Compass2026/showmeelectricalwebsite` PR #1,
+`e214dae`, merged as `f928381b3a81e20694571cefc5091392b2c84e86` on
+`claude/template-completion`; six files, +52 −14). `address.street` and
+`address.zip` are typed `string | null`, which makes the typechecker prove
+every consumer handles the absence:
+
+| Consumer | With a street | Without one |
+| --- | --- | --- |
+| `components/site/SiteFooter.tsx` | street line, then `City, ST ZIP` | `City, ST` only |
+| `app/contact/page.tsx` | street line, then `City, ST ZIP` | `City, ST` then `site.serviceAreaLong` |
+| `lib/seo.ts` (LocalBusiness) | `streetAddress` + `postalCode` | both keys **omitted**, never `""` |
+| `lib/jobs.ts` (JobPosting) | `streetAddress` + `postalCode` | both keys **omitted** |
+
+Locality, region and country stay in the structured data: they are true and
+they anchor the listing. It is the same omit-rather-than-invent rule the
+locations registry already applies to its optional street and `geo` applies
+to coordinates. `v1` stays the accepted version — a required field becoming
+optional is additive, and both brand configs still type check — so
+`foundation_releases` keeps one v1 row and moves its SHA.
+
+**Checks run before pinning** (Sept 21 2026): `FRESH=1 npm run verify` on a
+clean clone of the merged tree, whole and with nothing deferred — browser
+probe, `tsc --noEmit`, brand typecheck for `harbor-lane`, lint, crawl
+fixtures, the provider suite, then per brand build → manifest → crawl →
+mocked forms → browser for `showme` and `harbor-lane`, then both production
+guards. `verify: ALL PASSED`. The clone was at `e214dae`, whose tree
+(`1acf5158…`) is byte-identical to the merge commit `f928381` — the merge
+brought in nothing else.
+
+**Pinning** (migration `0040_foundation_v1_service_area`, applied to
+`iokcopiyzajigvhwexhe` Sept 21 2026): `foundation_releases` v1 `source_sha`
+→ `f928381…`, `accepted_on` → 2026-09-21, notes updated. `FOUNDATION_V1_SHA`
+in `src/lib/content-adapters.ts` (the fallback `build-brief.ts` uses when no
+row is loaded) moved with it.
+
+**Both consumers confirmed live, after pinning:**
+
+| What | How it was checked | Result |
+| --- | --- | --- |
+| A newly generated build brief | `composeBuildBrief` (the same module the Foundation tab button calls) over the fictional test client's rows exported from the live database, release row read from `foundation_releases` | `standard.source_sha` = `f928381…`, `applies_as: source`, `framework.foundation_sha` = `f928381…`; rendered line: ``Standard: v1 at `f928381b3a81e20694571cefc5091392b2c84e86` in Compass2026/showmeelectricalwebsite (source, accepted 2026-09-21).`` |
+| The worker's downloaded source | `site-push {archive}` called live for the new SHA (request 711) | HTTP 200, `content-type: application/gzip`, `x-archive-ref: f928381b3a81e20694571cefc5091392b2c84e86`, body opens with the gzip magic `1f 8b 08` |
+| …and the old SHA is no longer reachable | same call for `94014af…` (request 710) | HTTP 403 — *"archive refused: only this client's repository or the current Foundation release (Compass2026/showmeelectricalwebsite@f928381b3a81e20694571cefc5091392b2c84e86) may be fetched"* |
+
+**Documentation moved with it**: `AGENTS.md` (pinned release paragraph),
+`.claude/skills/foundation-worker/SKILL.md` (pinned release + a standing
+"service-area clients have no street address" rule: leave the fields null,
+never invent one, never block a build for the want of one), this document,
+and the Foundation's own `docs/starter-checklist.md`. The tree fixture was
+renamed `tests/fixtures/foundation-v1-tree.json` so it stops carrying a SHA
+that moves, and `tests/build-brief.test.mjs` now asserts against
+`FOUNDATION_V1.source_sha` rather than a literal. 53 checks pass.
 
 ## BHG Safety Partners
 

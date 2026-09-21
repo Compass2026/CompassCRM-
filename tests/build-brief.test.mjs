@@ -76,7 +76,7 @@ test("an existing city page counts as existing; a city group with no page and no
 });
 
 test("a Foundation site whose brand is not recorded is not writable and says why", () => {
-  const foundation = JSON.parse(readFileSync(new URL("./fixtures/foundation-94014af-tree.json", import.meta.url), "utf8"));
+  const foundation = JSON.parse(readFileSync(new URL("./fixtures/foundation-v1-tree.json", import.meta.url), "utf8"));
   const site = { ...fx.upgrade_non_main.site, content_paths: null };
   const b = composeBuildBrief({ ...fx.upgrade_non_main, site, detected: detectContentContract(foundation), generatedBy: "test", now });
   assert.equal(b.content_adapter.key, "foundation_brand_content");
@@ -85,12 +85,15 @@ test("a Foundation site whose brand is not recorded is not writable and says why
   assert.ok(b.missing_inputs.some((m) => /not writable/.test(m)));
   const ok = composeBuildBrief({ ...fx.upgrade_non_main, site, detected: detectContentContract(foundation, { brand: "showme" }), generatedBy: "test", now });
   assert.equal(ok.framework.foundation_adopted, true);
-  assert.equal(ok.framework.foundation_sha, "94014af35316c94616dadb3f8d606a4b68577fb0");
+  // The pinned SHA moves when a Foundation change is accepted (v1 went to
+  // f928381 on Sept 21 2026 for service-area support). Assert against the
+  // constant, not a literal, so a move shows up as one edit in one place.
+  assert.equal(ok.framework.foundation_sha, FOUNDATION_V1.source_sha);
 });
 
 test("the Markdown rendering carries the pinned SHA, the branches and the acceptance checklist", () => {
   const md = renderBuildBriefMarkdown(composeBuildBrief({ ...fx.upgrade_non_main, generatedBy: "test", now }));
-  assert.match(md, /94014af35316c94616dadb3f8d606a4b68577fb0/);
+  assert.ok(md.includes(FOUNDATION_V1.source_sha));
   assert.match(md, /Production branch of record: `production`/);
   assert.match(md, /- \[ \] /);
 });
