@@ -429,8 +429,17 @@ Runs only when Foundation is `complete` and the Website enrollment is
 only as reference). The site line is the accepted **Compass Website
 Foundation** — `foundation_releases` where `is_current` (v1 =
 `Compass2026/showmeelectricalwebsite` @
-`94014af35316c94616dadb3f8d606a4b68577fb0`, accepted Sept 20 2026) — and the
-three governing Drive documents it records. Read the CRM doc
+`f928381b3a81e20694571cefc5091392b2c84e86`, accepted Sept 20 2026, moved to
+this commit Sept 21 2026) — and the three governing Drive documents it
+records. Read the SHA from the row every run; never type one from memory.
+
+**Service-area clients have no street address.** Since `f928381` the
+Foundation types `site.address.street` and `site.address.zip` as
+`string | null`: leave them `null` for a business that goes to the customer
+and the footer, the contact card and the LocalBusiness / JobPosting JSON-LD
+drop the street line and the postal code and keep "City, ST" plus the service
+area. Inventing a street address is a false claim — never do it, and never
+block a build for the want of one either. Read the CRM doc
 `docs/compass-foundation-integration.md` once; it is the contract this
 playbook implements.
 
