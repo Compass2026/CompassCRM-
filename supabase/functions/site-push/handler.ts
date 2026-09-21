@@ -384,6 +384,31 @@ export function createSitePushHandler(deps: HandlerDeps) {
       baseTree = headInfo.tree;
     }
 
+    // Read vercel.json at a ref. `{ text: null }` means the file is simply
+    // absent; a `refusal` means we could not establish the current state and
+    // the caller must stop rather than commit blind.
+    const readVercelConfigAt = async (ref: string): Promise<{ text: string | null } | { refusal: Response }> => {
+      const cur = await gh(`/repos/${owner}/${name}/contents/${VERCEL_CONFIG_PATH}?ref=${encodeURIComponent(ref)}`);
+      if (cur.status === 404) return { text: null };
+      if (!cur.ok) {
+        return {
+          refusal: Response.json(
+            { error: `could not read ${VERCEL_CONFIG_PATH} at ${ref} (${cur.status}) — refusing to commit without confirming Vercel's Git integration stays disabled`, vercel_config: "refused" },
+            { status: 502 },
+          ),
+        };
+      }
+      const c = await cur.json();
+      if (Array.isArray(c) || typeof c.content !== "string") {
+        return { refusal: Response.json({ error: `${VERCEL_CONFIG_PATH} at ${ref} is not a readable file — refusing to commit without it`, vercel_config: "refused" }, { status: 409 }) };
+      }
+      try {
+        return { text: new TextDecoder().decode(Uint8Array.from(atob(String(c.content).replace(/\s/g, "")), (ch) => ch.charCodeAt(0))) };
+      } catch (e) {
+        return { refusal: Response.json({ error: `${VERCEL_CONFIG_PATH} at ${ref} could not be decoded (${e instanceof Error ? e.message : String(e)})`, vercel_config: "refused" }, { status: 409 }) };
+      }
+    };
+
     // ── Revert mode: a new commit carrying the previous commit's tree ───
     if (revertOnly) {
       if (!headInfo) return Response.json({ error: "branch has no commits" }, { status: 400 });
@@ -395,11 +420,31 @@ export function createSitePushHandler(deps: HandlerDeps) {
       const prev = await gh(`/repos/${owner}/${name}/git/commits/${parent}`);
       if (!prev.ok) throw fail("read previous commit", prev, await prev.text());
       const pc = await prev.json();
+      // The restored tree may predate the single-deployment-path rollout, or
+      // may carry a vercel.json we cannot read. Restoring it verbatim would
+      // hand Vercel's Git integration back the right to deploy every later
+      // commit, so the property is merged into the restored tree and
+      // anything unreadable stops the revert before it commits.
+      const prevConfig = await readVercelConfigAt(parent);
+      if ("refusal" in prevConfig) return prevConfig.refusal;
+      const revertConfig = buildVercelConfig(prevConfig.text);
+      if (!revertConfig.ok) {
+        return Response.json({ error: `${revertConfig.error} (in the commit being restored, ${parent})`, vercel_config: "refused" }, { status: 409 });
+      }
+      const revertTree = await gh(`/repos/${owner}/${name}/git/trees`, {
+        method: "POST",
+        body: JSON.stringify({
+          base_tree: pc.tree.sha,
+          tree: [{ path: VERCEL_CONFIG_PATH, mode: "100644", type: "blob", content: revertConfig.content }],
+        }),
+      });
+      if (!revertTree.ok) throw fail("revert tree", revertTree, await revertTree.text());
+      const revertTreeSha = (await revertTree.json()).sha;
       const mk = await gh(`/repos/${owner}/${name}/git/commits`, {
         method: "POST",
         body: JSON.stringify({
           message: body.message ?? `Put it back: revert "${String(c.message).split("\n")[0].slice(0, 60)}" (Compass CRM)`,
-          tree: pc.tree.sha,
+          tree: revertTreeSha,
           parents: [headInfo.sha],
           author: CRM_COMMIT_IDENTITY,
           committer: CRM_COMMIT_IDENTITY,
@@ -416,7 +461,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
       if (siteRow) {
         await supabase.from("sites").update({ last_pushed_at: new Date().toISOString(), last_commit_url: commitUrl }).eq("id", siteRow.id);
       }
-      return Response.json({ repo_url: repoUrl, branch, reverted: headInfo.sha, restored: parent, commit_url: commitUrl });
+      return Response.json({ repo_url: repoUrl, branch, reverted: headInfo.sha, restored: parent, commit_url: commitUrl, vercel_config: revertConfig.changed ? "restored" : "unchanged" });
     }
 
     // ── Read mode: the pushed tree, text files inline ───────────────────
@@ -775,26 +820,9 @@ export function createSitePushHandler(deps: HandlerDeps) {
         return Response.json({ error: `the supplied vercel.json could not be decoded (${e instanceof Error ? e.message : String(e)})`, vercel_config: "refused" }, { status: 409 });
       }
     } else if (headInfo) {
-      const cur = await gh(`/repos/${owner}/${name}/contents/${VERCEL_CONFIG_PATH}?ref=${encodeURIComponent(headInfo.sha)}`);
-      if (cur.ok) {
-        const c = await cur.json();
-        if (Array.isArray(c) || typeof c.content !== "string") {
-          return Response.json({ error: "vercel.json on the branch is not a readable file — refusing to commit without it", vercel_config: "refused" }, { status: 409 });
-        }
-        try {
-          existingConfig = new TextDecoder().decode(
-            Uint8Array.from(atob(String(c.content).replace(/\s/g, "")), (ch) => ch.charCodeAt(0)),
-          );
-        } catch (e) {
-          return Response.json({ error: `vercel.json on the branch could not be decoded (${e instanceof Error ? e.message : String(e)})`, vercel_config: "refused" }, { status: 409 });
-        }
-      } else if (cur.status !== 404) {
-        // Could not establish the current state: do not commit.
-        return Response.json(
-          { error: `could not read vercel.json from ${branch} (${cur.status}) — refusing to push without confirming Vercel's Git integration stays disabled`, vercel_config: "refused" },
-          { status: 502 },
-        );
-      }
+      const onBranch = await readVercelConfigAt(headInfo.sha);
+      if ("refusal" in onBranch) return onBranch.refusal;
+      existingConfig = onBranch.text;
     }
     const builtConfig = buildVercelConfig(existingConfig);
     if (!builtConfig.ok) {

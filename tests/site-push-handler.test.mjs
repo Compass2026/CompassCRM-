@@ -556,3 +556,123 @@ test("deploy:false no longer leaves the Git integration to deploy the push", asy
   assert.equal(gh.calls.filter((c) => c.path.startsWith("/v13/deployments")).length, 0);
   assert.ok(configInTree(gh), "the commit still carries the config");
 });
+
+// ── Revert keeps the protection ──────────────────────────────────────────
+// "Put it back" restores a previous commit's tree. A tree from before the
+// single-deployment-path rollout has no vercel.json, so restoring it
+// verbatim would hand Vercel's Git integration back the right to deploy
+// every later commit. The revert merges the property into the restored
+// tree instead.
+//
+// The fake serves repo.files at any ref, which is exactly the parent's
+// state here: a tree commit does not write back into it, so after one push
+// the fixture still describes the commit being restored.
+const revertCalls = (gh) => {
+  const trees = gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/trees"));
+  const commits = gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits"));
+  return { tree: trees[trees.length - 1], commit: commits[commits.length - 1], trees, commits };
+};
+
+async function pushThenRevert(fixtureFiles) {
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } }, ...(fixtureFiles ? { files: fixtureFiles } : {}) } };
+  const site = { ...LUCAS_SITE, work_mode: "new_build", content_adapter: null, content_paths: null };
+  const { post, gh, supabase } = setup({ site, repos });
+  const originalTree = Object.values(gh.model["Compass2026/ridge-safety"].commits)[0].tree;
+  const pushed = await post({ client_id: CLIENT, branch: "main", message: "a change (Compass CRM)", files: [{ path: "app/page.tsx", content: "x" }] });
+  assert.equal(pushed.status, 200, JSON.stringify(pushed.body));
+  const before = gh.calls.length;
+  const reverted = await post({ client_id: CLIENT, revert: true });
+  return { reverted, gh, supabase, originalTree, revertOnly: { calls: gh.calls.slice(before) } };
+}
+
+test("revert across the pre-rollout boundary: the restored tree had no vercel.json, the revert commit has one", async () => {
+  const { reverted, gh } = await pushThenRevert(null);
+  assert.equal(reverted.status, 200, JSON.stringify(reverted.body));
+  assert.equal(reverted.body.vercel_config, "restored");
+
+  const { tree, commit } = revertCalls(gh);
+  const entry = tree.body.tree.find((e) => e.path === "vercel.json");
+  assert.ok(entry, "the revert builds a tree carrying vercel.json");
+  assert.equal(JSON.parse(entry.content).git.deploymentEnabled, false);
+  assert.ok(tree.body.base_tree, "built on the restored tree, so nothing else is lost");
+  assert.equal(tree.body.tree.length, 1, "only vercel.json is overlaid; the rest of the tree is the restored one");
+  assert.equal(commit.body.tree, undefined ?? commit.body.tree);
+  assert.notEqual(commit.body.tree, tree.body.base_tree, "the commit uses the merged tree, not the bare restored one");
+  // and the identity still holds on this path
+  assert.equal(commit.body.author.email, TEAM_EMAIL);
+  assert.equal(commit.body.committer.email, TEAM_EMAIL);
+});
+
+test("revert preserves redirects and other settings already in the restored vercel.json", async () => {
+  const existing = JSON.stringify({
+    framework: "nextjs",
+    redirects: [{ source: "/old-roof", destination: "/roofing", permanent: true }, { source: "/a", destination: "/b", permanent: false }],
+    headers: [{ source: "/(.*)", headers: [{ key: "X-Robots-Tag", value: "all" }] }],
+    regions: ["iad1"],
+  }, null, 2);
+  const { reverted, gh } = await pushThenRevert({ "vercel.json": existing });
+  assert.equal(reverted.status, 200, JSON.stringify(reverted.body));
+
+  const { tree } = revertCalls(gh);
+  const merged = JSON.parse(tree.body.tree.find((e) => e.path === "vercel.json").content);
+  assert.equal(merged.framework, "nextjs");
+  assert.equal(merged.redirects.length, 2);
+  assert.deepEqual(merged.redirects[0], { source: "/old-roof", destination: "/roofing", permanent: true });
+  assert.equal(merged.headers[0].headers[0].key, "X-Robots-Tag");
+  assert.deepEqual(merged.regions, ["iad1"]);
+  assert.equal(merged.git.deploymentEnabled, false);
+});
+
+test("revert of a tree whose vercel.json is already compliant reports it unchanged", async () => {
+  const { reverted } = await pushThenRevert({ "vercel.json": JSON.stringify({ git: { deploymentEnabled: false } }, null, 2) + "\n" });
+  assert.equal(reverted.status, 200, JSON.stringify(reverted.body));
+  assert.equal(reverted.body.vercel_config, "unchanged");
+});
+
+test("revert fails closed when the restored vercel.json is invalid — before committing or deploying", async () => {
+  // Push first (so the head has a parent), then make the commit being
+  // restored carry an unparseable config. A verbatim restore would put that
+  // file back and leave the Git integration's state unknowable.
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+  const site = { ...LUCAS_SITE, work_mode: "new_build", content_adapter: null, content_paths: null };
+  const vercel = { projects: { "ridge-safety": { id: "prj_ridge-safety", deployments: 1 } } };
+  const { post, gh } = setup({ site, repos, vercel });
+  assert.equal((await post({ client_id: CLIENT, branch: "main", message: "a change", files: [{ path: "app/page.tsx", content: "x" }] })).status, 200);
+  gh.model["Compass2026/ridge-safety"].files["vercel.json"] = "{ truncated";
+
+  const before = gh.calls.length;
+  const r = await post({ client_id: CLIENT, revert: true });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.vercel_config, "refused");
+  assert.match(r.body.error, /not valid JSON/);
+  assert.match(r.body.error, /in the commit being restored/);
+  const after = gh.calls.slice(before);
+  assert.equal(after.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits")).length, 0, "no revert commit");
+  assert.equal(after.filter((c) => c.method === "PATCH").length, 0, "the branch was not moved");
+  assert.equal(after.filter((c) => c.path.startsWith("/v13/deployments")).length, 0, "nothing deployed");
+});
+
+test("revert fails closed when the restored vercel.json cannot be read at all", async () => {
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+  const site = { ...LUCAS_SITE, work_mode: "new_build", content_adapter: null, content_paths: null };
+  const { post, gh } = setup({ site, repos });
+  assert.equal((await post({ client_id: CLIENT, branch: "main", message: "a change", files: [{ path: "app/page.tsx", content: "x" }] })).status, 200);
+  gh.model["Compass2026/ridge-safety"].files["vercel.json"] = { status: 500, body: { message: "upstream" } };
+
+  const before = gh.calls.length;
+  const r = await post({ client_id: CLIENT, revert: true });
+  assert.equal(r.status, 502, JSON.stringify(r.body));
+  assert.equal(r.body.vercel_config, "refused");
+  assert.match(r.body.error, /could not read vercel\.json/);
+  const after = gh.calls.slice(before);
+  assert.equal(after.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits")).length, 0, "no revert commit");
+  assert.equal(after.filter((c) => c.method === "PATCH").length, 0, "the branch was not moved");
+});
+
+test("a single-commit branch still reports that there is nothing to go back to", async () => {
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+  const { post } = setup({ site: { ...LUCAS_SITE, work_mode: "new_build", content_adapter: null, content_paths: null }, repos });
+  const r = await post({ client_id: CLIENT, revert: true });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /no parent/);
+});

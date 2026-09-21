@@ -1,7 +1,11 @@
 # Vercel deployment paths for a CRM push
 
-Verified against the live `compassmarketin` team on Sept 21 2026, before
-merging the `site-push` commit-identity change (PR #46).
+Verified against the live Vercel team on Sept 21 2026, before merging the
+`site-push` commit-identity change (PR #46).
+
+Identifiers here are illustrative. Client names, Vercel project and
+deployment ids and real commit SHAs are deliberately left out — look them
+up in Vercel and GitHub rather than trusting a copy in a document.
 
 ## There are two paths, not one
 
@@ -22,15 +26,15 @@ commit author is not a team member, and the CRM committed as
 
 ## The evidence
 
-`lucas-construction` (`prj_q0vm00Aw8zOvmPHiW2x9FC2ST8eu`), one commit,
-two deployment records:
+A CRM-managed client project, two commits, two deployment records each
+(identifiers below are illustrative; the live ones are in Vercel):
 
 | commit | deployment | state | target | path |
 | --- | --- | --- | --- | --- |
-| `7ecd1c5` (`main`) | `dpl_D2J7YTpx…` | **BLOCKED** | production | Git integration |
-| `7ecd1c5` (`main`) | `dpl_4ZtokR2C…` | READY | production | `site-push` |
-| `117f2bd` (`compass/2026-09-roof-repair-storm-damage`) | `dpl_CL9fxLBr…` | **BLOCKED** | null | Git integration |
-| `117f2bd` (same) | `dpl_37nryFSE…` | READY | null | `site-push` |
+| `c0ffee1` (branch of record) | `dpl_A1` | **BLOCKED** | production | Git integration |
+| `c0ffee1` (branch of record) | `dpl_A2` | READY | production | `site-push` |
+| `c0ffee2` (`compass/<content-branch>`) | `dpl_B1` | **BLOCKED** | null | Git integration |
+| `c0ffee2` (same) | `dpl_B2` | READY | null | `site-push` |
 
 The BLOCKED record is not a curiosity — it is the duplicate, already being
 created today and stopped only by the author check.
@@ -51,16 +55,16 @@ and `source: "git"`. That page says it plainly:
 So the chain is: commit email → GitHub user → Vercel team member. Both ends
 are confirmed on the same repository:
 
-| commit | author email | GitHub `author.login` | Git deployment |
-| --- | --- | --- | --- |
-| `57d8ab8` | `crm@compassmarketing.ai` | **none** — GitHub returns no author object | BLOCKED |
-| `7119da7` | `thomas@compassmarketing.ai` | `Compass2026` (id 262452829) | see below |
+| author email | GitHub author | Git deployment |
+| --- | --- | --- |
+| the CRM's old address | **none** — GitHub returns no author object for it | BLOCKED |
+| the team member's address | the team's connected Git account | not blocked |
 
-`compass2026-5316` is the Vercel account that creates every deployment on
-this team, so `Compass2026` is the team's connected Git account. Moving the
-CRM's commit email to `thomas@compassmarketing.ai` therefore makes the
-author resolvable **and** a team member — which is what PR #46 intends, and
-also exactly what stops Vercel blocking path 1.
+The account that creates every deployment on this team is the same Git
+account the team member's address resolves to. Moving the CRM's commit email
+to that address therefore makes the author resolvable **and** a team member
+— which is what the identity change intends, and also exactly what stops
+Vercel blocking path 1.
 
 ## Why the commit-identity fix cannot ship on its own
 
@@ -76,19 +80,18 @@ from the GitHub push, before and independently of anything `site-push`
 checks, so a preview-branch commit would become a live production
 deployment with no guard in front of it.
 
-That accident is already on record, stopped only by BLOCKED, on
-`compassactivationtestfictional-zero` (`prj_YodN37ffiywps9cEAjlgVtYM9vIk`):
-deployment `dpl_9BtHeaguLiy66m8VeiHiafUhnh8X`, commit `4e40310` on branch
-`compass/preview-20260921-compassactivationtestfic`, **target
-`production`**, state BLOCKED.
+That accident is already on record, stopped only by BLOCKED: on a
+disposable test project with no successful deployment, a commit on a
+`compass/preview-…` branch produced a deployment whose target was
+**`production`**.
 
 ## What has to happen first
 
 Path 1 must be switched off for the projects `site-push` manages, so
 `POST /v13/deployments` stays the only path. Two candidates were tested on
-Sept 21 2026 against `compassactivationtestfictional-zero`
-(`prj_YodN37ffiywps9cEAjlgVtYM9vIk`), the Vercel project of the fictional,
-offboarded client *Compass Activation Test (fictional)*.
+Sept 21 2026 against a disposable Vercel project belonging to a fictional,
+offboarded test client — no custom domain, and no successful deployment
+ever.
 
 ### Project-level `deploymentPolicy` — not available
 
@@ -110,15 +113,15 @@ unchanged baseline of 3 deployments. **Rule this out.**
 { "git": { "deploymentEnabled": false } }
 ```
 
-Commit `7119da7` on branch `compass/preview-20260921-compassactivationtestfic`,
-authored **and** committed as `Compass CRM <thomas@compassmarketing.ai>` —
-the post-fix identity on purpose, so Vercel had no reason to block it.
+One commit on that project's `compass/preview-…` branch, authored **and**
+committed with the team member's address — the post-fix identity on
+purpose, so Vercel had no reason to block it.
 
 - **Baseline:** 3 deployments, every one `source: "git"`, each created
   within ~2 s of its push. That is the control: pushes to this branch do
   produce Git-integration records.
-- **Result:** no deployment record for `7119da7` at 55 s, 89 s, 2.5 min or
-  3.5 min. The count stayed at 3.
+- **Result:** no deployment record for that commit at 55 s, 89 s, 2.5 min,
+  3.5 min or 5 min. The count never moved off its baseline.
 
 So the config suppresses the Git integration before it creates anything —
 and it does so for a commit whose author *is* a team member, which is the
@@ -166,11 +169,15 @@ holds the merge and the guards; the handler wires them in.
   listing that cannot be read is reported as `checked: false`, never as
   "none found".
 
-**Known gap:** `{revert: true}` restores a previous commit's tree verbatim.
-If that tree predates the rollout it will not contain `vercel.json`, and the
-revert commit would re-enable the integration. After every CRM-managed repo
-is seeded this cannot arise, but until then a revert across the boundary
-needs a following push.
+- **Revert too.** `{revert: true}` no longer restores a tree verbatim. It
+  reads `vercel.json` from the commit being restored, merges the property
+  in, and commits a tree built on the restored one with only that file
+  overlaid — so a revert across the pre-rollout boundary, where the old
+  tree has no `vercel.json`, still lands with the integration off, and a
+  revert of a tree that has redirects or other settings keeps them. An
+  invalid or unreadable `vercel.json` in the restored commit stops the
+  revert before it commits or moves the branch. The response says
+  `vercel_config: "restored"` or `"unchanged"`.
 
 ## What the tests here do and do not cover
 
@@ -180,8 +187,9 @@ needs a following push.
 target, a blocked push making no request at all, the commit identity on all
 three commit paths, and the `vercel.json` enforcement — bootstrap ordering,
 atomic inclusion, settings preserved, invalid and unreadable failing closed
-before any commit, deletion and re-enabling refused, and duplicate detection
-by SHA.
+before any commit, deletion and re-enabling refused, duplicate detection by
+SHA, and the revert path: across the pre-rollout boundary, with settings to
+preserve, and failing closed on an invalid or unreadable restored file.
 
 Nothing in this repository can observe path 1 — it is Vercel reacting to
 GitHub. Those tests passing does **not** by itself mean one deployment
