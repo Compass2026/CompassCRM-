@@ -41,7 +41,8 @@
 //
 // Push options (Sept 14 2026, for Tom's Next.js repos): the repo and the
 // Vercel project come from the client's `sites` row when set, so a push
-// lands in `Compass2026/lucas_construction`. Every commit here — revert,
+// lands in the repository that row names, not one derived from the client
+// name. Every commit here — revert,
 // empty-repo bootstrap and normal tree alike — carries the single
 // CRM_COMMIT_IDENTITY (plan.ts), author AND committer, on a team member's
 // address, so Vercel no longer blocks them.

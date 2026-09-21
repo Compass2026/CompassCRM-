@@ -369,10 +369,10 @@ a chat.
 **Website builds come from the Compass Website Foundation** (Sept 20
 2026; `docs/compass-foundation-integration.md`), not the retired Astro
 starter (`templates/astro-site/` stays as reference only). The pinned
-release is the `foundation_releases` row with `is_current` — v1 =
-`Compass2026/showmeelectricalwebsite` @
-`94014af35316c94616dadb3f8d606a4b68577fb0`, accepted Sept 20 2026 with the
-three governing Drive documents recorded on the row. The worker fetches it
+release is the `foundation_releases` row with `is_current` — v1 accepted
+Sept 20 2026, with its source repository, pinned SHA and the three
+governing Drive documents recorded on that row (read them from the row;
+they are not copied here). The worker fetches it
 through `site-push {archive}`, builds the brand layer per the Foundation's
 `docs/starter-checklist.md` from the CRM's brand board, taxonomy, page
 groups and sourced claims, and verifies with the Foundation's own checks
@@ -611,7 +611,8 @@ client-run sites. Migration 0035; playbooks in the worker skill; the plan
 and the per-site survey in `docs/website-updates.md`.
 
 - **Contract.** `sites.content_paths` (json) says where the stage may
-  write, on the shape of `Compass2026/lucas_construction`: `locations`
+  write, on the shape of the first client site put on the contract:
+  `locations`
   (`data/locations.json`, city pages), `blog` (`data/blog-posts.json` or a
   markdown `blog_dir`), `services_dir` (hand-built pages → pull request,
   never a push). Null = not on the contract → every page and post becomes
@@ -655,8 +656,9 @@ and the per-site survey in `docs/website-updates.md`.
   dependencies) wired by `index.ts`, so `npm test` exercises the real
   request boundary with a fake GitHub and a fake Supabase
   (`tests/site-push-handler.test.mjs`). v8 behaviour kept: repo and Vercel project from the `sites` row
-  (Tom's repos are named by hand — `lucas_construction`,
-  `lucas-construction`); `{read: true, paths: [...]}` returns only those
+  (Tom's repos are named by hand, and a repo name and its Vercel project
+  name often differ — always read both off the `sites` row rather than
+  deriving them); `{read: true, paths: [...]}` returns only those
   files inline; `{revert: true}` makes a new commit carrying the previous
   commit's tree. **Vercel's Git integration blocks every commit authored
   by "Compass CRM"** (not a team member — the entries show as BLOCKED in
@@ -781,18 +783,18 @@ closed).
 - **Sites (Sept 14 2026).** The Astro line is retired: Tom's Next.js builds
   are the sites of record and the worker no longer builds proposal sites
   (`docs/website-updates.md` has the per-site survey, the content contract
-  taken from `Compass2026/lucas_construction` — `data/locations.json`,
+  taken from the first client site on the contract — `data/locations.json`,
   `data/blog-posts.json`, dynamic routes, `sitemap.ts`, per-route
   canonicals — and the monthly Website Updates stage Tom decided on: two
   pages + two refreshes a month, a blog post a week, publish without a look
   with a one-click revert). The three Astro Vercel projects and the
   `compass-astro` branch are deleted; `sites` rows point at the Next.js
-  repos; the `lucasconstruction` and `gingerhuffinteriors` repos need Tom's
-  admin rights to delete. Website › Build to 70% / Polish for Ginger, Lucas
+  repos; two retired Astro repos need Tom's admin rights to delete
+  (named in the per-site survey). Website › Build to 70% / Polish for Ginger, Lucas
   and Pensacola now refer to Tom's builds. Logic Solar, Show Me Design and
   Show Me Electrical's live sites stay client-controlled until their Next.js
-  rebuilds are full sites. Tom deletes the `Compass2026/zz-sitepush-smoke`
-  test repo (the token cannot).
+  rebuilds are full sites. Tom deletes the leftover site-push smoke-test
+  repo (the token cannot).
 - **Reporting has not started.** Every client is still `launching` and none
   is enrolled in Reporting, so no monthly cycle exists; convergence waits on
   the launch pipelines (SEO and Website run through on their own now; Tom's
