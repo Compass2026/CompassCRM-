@@ -394,29 +394,37 @@ Foundation's own guards stand behind this one anyway — a fictional brand
 throws on `VERCEL_ENV=production` at build time, `noindex` in the layout and
 `Disallow: /` from `app/robots.ts`.
 
-**That interaction is settled in PR #46 (site-push v10).** Making site-push
+**That interaction is settled in PR #46 (site-push v11).** Making site-push
 commit as a Vercel **team member** is right in itself, but it also stops the
-Git-integration deployment described above being `BLOCKED`: on a project
-with zero deployments it would build and be promoted to production, from a
-push site-push itself deliberately refused to deploy. The Git integration is
-a second, independent deploy path and site-push's probe does not gate it.
+Git-integration deployment described above being `BLOCKED`: it becomes a
+real deployment, alongside the one site-push used to create.
 
-The fix is the one guessed at here — turn the Git integration's automatic
-deployments off — done in the repository rather than on the project, because
-Vercel's project-level `deploymentPolicy` is not provisioned for this team
-(it answers 404). Every commit site-push makes now carries `vercel.json`
-with `git.deploymentEnabled: false`, merged into whatever settings the file
-already holds: first in an empty repository's bootstrap commit, atomically
-in the tree of every other push, on the revert path too, and fail-closed if
-it cannot be read or merged. After deploying, site-push also lists Vercel's
-deployments for the commit SHA and reports any it did not create. See
-`docs/vercel-deployment-paths.md` for the evidence and the verification.
+**The fix is the opposite of the one guessed at here.** Turning the Git
+integration off was tried and rejected: the only working control is
+`vercel.json` `git.deploymentEnabled: false`, which is **repo-wide** and
+would equally stop the deployments that Claude Code project sessions, Codex
+and a plain `git push` depend on. Deploying from a direct commit is the
+normal way of working here. (Vercel's project-level `deploymentPolicy`,
+which would have been per-source, is not provisioned for this team — it
+answers 404.) **No repository carries that flag and none should; there is
+no seeding step.**
+
+Instead the native Git deployment became the *only* path: site-push no
+longer creates one. It finds Vercel's by commit SHA, verifies the project,
+branch, SHA, `source: "git"` and target, and reports `duplicate`,
+`not_found` or a wrong target rather than guessing. The one REST deployment
+left is `{deploy: true}` with no files — the Redeploy button — which creates
+no commit and so cannot double up.
+
+On a project's **first** push the deployment will not be found, because
+site-push creates the Vercel project after pushing: give it one deliberate
+deployment with `{deploy: true}` and every later push deploys on its own.
+That ordering — production established first, side branches previewing
+after — is what the fictional probe proved. See
+`docs/vercel-deployment-paths.md` for the evidence and verification.
 
 **Still to do before this is true in production:** #46 is not merged and
-site-push is not redeployed, and the guarantee only holds for repositories
-whose head already carries the config. The rollout order matters — seed each
-CRM-managed repository while commits are still blocked by the old identity,
-confirm no `source: "git"` deployment appears, and only then merge.
+site-push is not redeployed.
 
 ## Service-area support — Sept 21 2026
 
