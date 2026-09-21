@@ -209,6 +209,12 @@ which is itself a push and is deferred until the preflight has cleared:
   Reported and the push is blocked. The production branch is **never**
   changed automatically. (An unreported production branch that matches the
   repository's default branch is the Vercel default and needs no change.)
+- **Revert is a push too.** `{revert: true}` commits on the branch of record,
+  so Vercel deploys it to production like anything else. It takes the same
+  preflight before the commit exists and before the ref moves — a mismatched
+  production branch blocks it with no GitHub write — and afterwards its
+  deployment is located and verified by SHA exactly as a normal push is. No
+  REST deployment is ever made for a revert.
 
 ## What the tests here do and do not cover
 

@@ -423,41 +423,6 @@ export function createSitePushHandler(deps: HandlerDeps) {
       baseTree = headInfo.tree;
     }
 
-    // ── Revert mode: a new commit carrying the previous commit's tree ───
-    if (revertOnly) {
-      if (!headInfo) return Response.json({ error: "branch has no commits" }, { status: 400 });
-      const cur = await gh(`/repos/${owner}/${name}/git/commits/${headInfo.sha}`);
-      if (!cur.ok) throw fail("read head", cur, await cur.text());
-      const c = await cur.json();
-      const parent = c.parents?.[0]?.sha as string | undefined;
-      if (!parent) return Response.json({ error: "the head commit has no parent to go back to" }, { status: 400 });
-      const prev = await gh(`/repos/${owner}/${name}/git/commits/${parent}`);
-      if (!prev.ok) throw fail("read previous commit", prev, await prev.text());
-      const pc = await prev.json();
-      const mk = await gh(`/repos/${owner}/${name}/git/commits`, {
-        method: "POST",
-        body: JSON.stringify({
-          message: body.message ?? `Put it back: revert "${String(c.message).split("\n")[0].slice(0, 60)}" (Compass CRM)`,
-          tree: pc.tree.sha,
-          parents: [headInfo.sha],
-          author: CRM_COMMIT_IDENTITY,
-          committer: CRM_COMMIT_IDENTITY,
-        }),
-      });
-      if (!mk.ok) throw fail("revert commit", mk, await mk.text());
-      const rc = await mk.json();
-      const upd = await gh(`/repos/${owner}/${name}/git/refs/heads/${branch}`, {
-        method: "PATCH",
-        body: JSON.stringify({ sha: rc.sha, force: false }),
-      });
-      if (!upd.ok) throw fail("update ref", upd, await upd.text());
-      const commitUrl = `${repoUrl}/commit/${rc.sha}`;
-      if (siteRow) {
-        await supabase.from("sites").update({ last_pushed_at: new Date().toISOString(), last_commit_url: commitUrl }).eq("id", siteRow.id);
-      }
-      return Response.json({ repo_url: repoUrl, branch, reverted: headInfo.sha, restored: parent, commit_url: commitUrl });
-    }
-
     // ── Read mode: the pushed tree, text files inline ───────────────────
     if (readOnly) {
       if (!headInfo) {
@@ -1025,6 +990,52 @@ export function createSitePushHandler(deps: HandlerDeps) {
       }
       return Response.json({ repo_url: repoUrl, branch, deploy_only: true, vercel },
         { status: vercel.status === "failed" ? 502 : 200 });
+    }
+
+    // ── Revert mode: a new commit carrying the previous commit's tree ───
+    if (revertOnly) {
+      if (!headInfo) return Response.json({ error: "branch has no commits" }, { status: 400 });
+      // A revert is a commit on the branch of record, so it deploys to
+      // PRODUCTION through Vercel's Git integration like any other push.
+      // It gets the same preflight, before the commit exists and before the
+      // ref moves: a project whose production branch is not the branch of
+      // record would deploy this to the wrong target.
+      const revertPre = await vercelPreflight();
+      if ("blocked" in revertPre) return revertPre.blocked;
+      const cur = await gh(`/repos/${owner}/${name}/git/commits/${headInfo.sha}`);
+      if (!cur.ok) throw fail("read head", cur, await cur.text());
+      const c = await cur.json();
+      const parent = c.parents?.[0]?.sha as string | undefined;
+      if (!parent) return Response.json({ error: "the head commit has no parent to go back to" }, { status: 400 });
+      const prev = await gh(`/repos/${owner}/${name}/git/commits/${parent}`);
+      if (!prev.ok) throw fail("read previous commit", prev, await prev.text());
+      const pc = await prev.json();
+      const mk = await gh(`/repos/${owner}/${name}/git/commits`, {
+        method: "POST",
+        body: JSON.stringify({
+          message: body.message ?? `Put it back: revert "${String(c.message).split("\n")[0].slice(0, 60)}" (Compass CRM)`,
+          tree: pc.tree.sha,
+          parents: [headInfo.sha],
+          author: CRM_COMMIT_IDENTITY,
+          committer: CRM_COMMIT_IDENTITY,
+        }),
+      });
+      if (!mk.ok) throw fail("revert commit", mk, await mk.text());
+      const rc = await mk.json();
+      const upd = await gh(`/repos/${owner}/${name}/git/refs/heads/${branch}`, {
+        method: "PATCH",
+        body: JSON.stringify({ sha: rc.sha, force: false }),
+      });
+      if (!upd.ok) throw fail("update ref", upd, await upd.text());
+      const commitUrl = `${repoUrl}/commit/${rc.sha}`;
+      if (siteRow) {
+        await supabase.from("sites").update({ last_pushed_at: new Date().toISOString(), last_commit_url: commitUrl }).eq("id", siteRow.id);
+      }
+      // The revert commit deploys itself. This locates and verifies that
+      // deployment; it never asks Vercel for one (no REST deployment is
+      // made for a revert — that was the old duplicate).
+      const vercel = await vercelStep(rc.sha, revertPre.ok);
+      return Response.json({ repo_url: repoUrl, branch, reverted: headInfo.sha, restored: parent, commit_url: commitUrl, vercel });
     }
 
     // ── Vercel preflight, before the first byte reaches GitHub ─────────

@@ -685,7 +685,10 @@ and the per-site survey in `docs/website-updates.md`.
   files is the one remaining REST deployment (Tom's Redeploy button: no
   commit, so the integration cannot serve it) and it refuses while a
   deployment of the same head is in flight. **Put it back** no longer
-  follows its revert with a deploy — the revert commit deploys itself. Next.js repos default to their recorded branch — the "not our
+  follows its revert with a deploy — the revert commit deploys itself, and
+  the revert takes the same preflight (a mismatched production branch blocks
+  it before any GitHub write) and has its deployment located and verified by
+  SHA like any other push. Next.js repos default to their recorded branch — the "not our
   author → compass-astro" guard is for full builds only. Verified Sept 15
   on Lucas: read, push to `main` + production deploy, branch + PR + preview
   (PR #9), revert (Sept 14 test, redeployed).

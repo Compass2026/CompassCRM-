@@ -512,3 +512,78 @@ test("a production-branch mismatch on an existing project blocks before any Git 
   assert.equal(gitWrites(gh).length, 0, "nothing pushed");
   assert.equal(vercel.projects["ridge-safety"].productionBranch, "release", "the production branch is untouched");
 });
+
+// ── Revert goes through the same preflight and verification ─────────────
+// A revert is a commit on the branch of record, so Vercel's Git integration
+// deploys it to production like any other push. It was returning before the
+// preflight ran: no production-branch check, and nothing verified what
+// Vercel actually did with it.
+async function revertOn(vercel) {
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+  const site = { ...LUCAS_SITE, vercel_project: "ridge-safety", work_mode: "new_build", branch: "main", content_adapter: null, content_paths: null };
+  const { post, gh } = setup({ site, repos, vercel });
+  // A push first, so the head has a parent to go back to.
+  const pushed = await post({ client_id: CLIENT, branch: "main", message: "a change (Compass CRM)", files: [{ path: "app/page.tsx", content: "x" }] });
+  assert.equal(pushed.status, 200, JSON.stringify(pushed.body));
+  const before = gh.calls.length;
+  const reverted = await post({ client_id: CLIENT, revert: true });
+  return { reverted, gh, since: gh.calls.slice(before), vercel };
+}
+
+test("a revert produces exactly one native production deployment for the revert commit, and no REST deployment", async () => {
+  const vercel = {
+    projects: { "ridge-safety": { id: "prj_rs", repo: "Compass2026/ridge-safety", productionBranch: "main", deployments: 1 } },
+    deployments: { dpl_seed: { id: "dpl_seed", url: "s.vercel.app", target: "production", state: "READY", readyState: "READY", source: "git", sha: "seed" } },
+  };
+  const { reverted, gh } = await revertOn(vercel);
+  assert.equal(reverted.status, 200, JSON.stringify(reverted.body));
+
+  const sha = reverted.body.commit_url.split("/").pop();
+  const forCommit = Object.values(vercel.deployments).filter((d) => d.sha === sha);
+  assert.equal(forCommit.length, 1, "exactly one deployment for the revert commit");
+  assert.equal(forCommit[0].target, "production", "a revert lands on production");
+
+  assert.ok(reverted.body.vercel, "the revert reports its Vercel result");
+  assert.equal(reverted.body.vercel.source, "git", "verified as the Git-integration deployment");
+  assert.equal(reverted.body.vercel.target, "production");
+  assert.equal(restPosts(gh).length, 0, "no REST deployment is ever made for a revert");
+});
+
+test("a production-branch mismatch blocks the revert before any commit or ref write", async () => {
+  const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+  const site = { ...LUCAS_SITE, vercel_project: "ridge-safety", work_mode: "new_build", branch: "main", content_adapter: null, content_paths: null };
+  // Healthy while the setup push happens, then the project's production
+  // branch is found to be something else before the revert.
+  const vercel = {
+    projects: { "ridge-safety": { id: "prj_rs", repo: "Compass2026/ridge-safety", productionBranch: "main", deployments: 1 } },
+    deployments: { dpl_seed: { id: "dpl_seed", url: "s.vercel.app", target: "production", state: "READY", readyState: "READY", source: "git", sha: "seed" } },
+  };
+  const { post, gh } = setup({ site, repos, vercel });
+  assert.equal((await post({ client_id: CLIENT, branch: "main", message: "a change", files: [{ path: "app/page.tsx", content: "x" }] })).status, 200);
+  vercel.projects["ridge-safety"].productionBranch = "release";
+
+  const before = gh.calls.length;
+  const r = await post({ client_id: CLIENT, revert: true });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.status, "blocked");
+  assert.match(r.body.error, /deploys production from "release"/);
+  assert.match(r.body.error, /was NOT changed/);
+  const after = gh.calls.slice(before);
+  assert.equal(after.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits")).length, 0, "no revert commit");
+  assert.equal(after.filter((c) => c.method === "PATCH").length, 0, "the ref was never moved");
+  assert.equal(after.filter((c) => c.path.startsWith("/v13/deployments")).length, 0, "nothing deployed");
+  assert.equal(vercel.projects["ridge-safety"].productionBranch, "release", "and the production branch is untouched");
+});
+
+test("the revert commit is still authored and committed by the team member", async () => {
+  const vercel = {
+    projects: { "ridge-safety": { id: "prj_rs", repo: "Compass2026/ridge-safety", productionBranch: "main", deployments: 1 } },
+    deployments: { dpl_seed: { id: "dpl_seed", url: "s.vercel.app", target: "production", state: "READY", readyState: "READY", source: "git", sha: "seed" } },
+  };
+  const { reverted, since } = await revertOn(vercel);
+  assert.equal(reverted.status, 200, JSON.stringify(reverted.body));
+  const commit = since.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits")).pop();
+  assert.ok(commit, "a revert commit was made");
+  assert.equal(commit.body.author.email, TEAM_EMAIL);
+  assert.equal(commit.body.committer.email, TEAM_EMAIL);
+});
