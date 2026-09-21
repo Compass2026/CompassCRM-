@@ -269,15 +269,6 @@ test("no commit path ships the old non-team address", async () => {
   assert.equal((src.match(/author: CRM_COMMIT_IDENTITY/g) ?? []).length, 3, "three commit paths, each with an author");
 });
 
-// ── One deployment path per push ──────────────────────────────────────────
-// These pin what THIS function does: it issues exactly one deployment
-// request per push, previews stay previews and production pushes deploy
-// once. They cannot see Vercel's Git integration, which is a SECOND,
-// out-of-band path triggered by the GitHub push itself — see
-// docs/vercel-deployment-paths.md. Keep both halves honest: if the Git
-// integration is ever allowed to deploy CRM commits, these tests still pass
-// while the system deploys twice.
-const deployPosts = (gh) => gh.calls.filter((c) => c.method === "POST" && c.path.startsWith("/v13/deployments"));
 
 
 // ── Native Git deployment (v11) ──────────────────────────────────────────
