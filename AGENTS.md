@@ -369,15 +369,16 @@ a chat.
 **Website builds come from the Compass Website Foundation** (Sept 20
 2026; `docs/compass-foundation-integration.md`), not the retired Astro
 starter (`templates/astro-site/` stays as reference only). The pinned
-release is the `foundation_releases` row with `is_current` — v1 =
-`Compass2026/showmeelectricalwebsite` @
-`f928381b3a81e20694571cefc5091392b2c84e86`, accepted Sept 20 2026 with the
-three governing Drive documents recorded on the row, moved Sept 21 2026 from
-`94014af…` to this commit for **service-area support**: `site.address.street`
-and `site.address.zip` are nullable, and the footer, the contact card and the
-LocalBusiness / JobPosting JSON-LD omit what is absent. A business that goes to
-the customer has no public street address; the worker never invents one and no
-longer blocks for the lack of it (migration 0040_foundation_v1_service_area). The worker fetches it
+release is the `foundation_releases` row with `is_current` — v1 accepted
+Sept 20 2026, with its source repository, pinned SHA and the three governing
+Drive documents recorded on that row (read them from the row; they are not
+copied here). The pin moved Sept 21 2026 to a later commit of the same
+repository for **service-area support**: `site.address.street` and
+`site.address.zip` are nullable, and the footer, the contact card and the
+LocalBusiness / JobPosting JSON-LD omit what is absent. A business that goes
+to the customer has no public street address; the worker never invents one
+and no longer blocks for the lack of it (migration
+0040_foundation_v1_service_area). The worker fetches it
 through `site-push {archive}`, builds the brand layer per the Foundation's
 `docs/starter-checklist.md` from the CRM's brand board, taxonomy, page
 groups and sourced claims, and verifies with the Foundation's own checks
@@ -616,7 +617,8 @@ client-run sites. Migration 0035; playbooks in the worker skill; the plan
 and the per-site survey in `docs/website-updates.md`.
 
 - **Contract.** `sites.content_paths` (json) says where the stage may
-  write, on the shape of `Compass2026/lucas_construction`: `locations`
+  write, on the shape of the first client site put on the contract:
+  `locations`
   (`data/locations.json`, city pages), `blog` (`data/blog-posts.json` or a
   markdown `blog_dir`), `services_dir` (hand-built pages → pull request,
   never a push). Null = not on the contract → every page and post becomes
@@ -660,18 +662,33 @@ and the per-site survey in `docs/website-updates.md`.
   dependencies) wired by `index.ts`, so `npm test` exercises the real
   request boundary with a fake GitHub and a fake Supabase
   (`tests/site-push-handler.test.mjs`). v8 behaviour kept: repo and Vercel project from the `sites` row
-  (Tom's repos are named by hand — `lucas_construction`,
-  `lucas-construction`); `{read: true, paths: [...]}` returns only those
+  (Tom's repos are named by hand, and a repo name and its Vercel project
+  name often differ — always read both off the `sites` row rather than
+  deriving them); `{read: true, paths: [...]}` returns only those
   files inline; `{revert: true}` makes a new commit carrying the previous
-  commit's tree. **Vercel's Git integration blocks every commit authored
-  by "Compass CRM"** (not a team member — the entries show as BLOCKED in
-  Vercel and are harmless), so site-push creates the deployment itself:
+  commit's tree. **Deployments come from Vercel's own Git
+  integration** (v11): commits carry a team member's address, so the
+  integration deploys them like anyone else's, and site-push finds that
+  deployment by commit SHA rather than making a second one. A **preflight
+  runs before anything reaches GitHub** (side-branch creation included): a
+  preview is refused unless the Vercel project already has a READY
+  production deployment, and refused without creating or linking a project;
+  a new production project is created, linked and its production branch
+  confirmed before the push; an existing project whose production branch is
+  not the branch of record blocks the push and is never changed
+  automatically —
   production for the branch of record, a preview (behind Vercel's
   deployment protection, so a Vercel login is needed to view it) for a
   side branch, `vercel.target` / `staging_url` / `deployment_url` in the
-  response; `deploy: false` skips it. `{deploy: true}` with no files
-  redeploys the current head, which is what **Put it back** does after a
-  revert. Next.js repos default to their recorded branch — the "not our
+  response. `deploy: false` is **refused** — the integration deploys from
+  the push, so nothing can suppress it from here. `{deploy: true}` with no
+  files is the one remaining REST deployment (Tom's Redeploy button: no
+  commit, so the integration cannot serve it) and it refuses while a
+  deployment of the same head is in flight. **Put it back** no longer
+  follows its revert with a deploy — the revert commit deploys itself, and
+  the revert takes the same preflight (a mismatched production branch blocks
+  it before any GitHub write) and has its deployment located and verified by
+  SHA like any other push. Next.js repos default to their recorded branch — the "not our
   author → compass-astro" guard is for full builds only. Verified Sept 15
   on Lucas: read, push to `main` + production deploy, branch + PR + preview
   (PR #9), revert (Sept 14 test, redeployed).
@@ -786,18 +803,18 @@ closed).
 - **Sites (Sept 14 2026).** The Astro line is retired: Tom's Next.js builds
   are the sites of record and the worker no longer builds proposal sites
   (`docs/website-updates.md` has the per-site survey, the content contract
-  taken from `Compass2026/lucas_construction` — `data/locations.json`,
+  taken from the first client site on the contract — `data/locations.json`,
   `data/blog-posts.json`, dynamic routes, `sitemap.ts`, per-route
   canonicals — and the monthly Website Updates stage Tom decided on: two
   pages + two refreshes a month, a blog post a week, publish without a look
   with a one-click revert). The three Astro Vercel projects and the
   `compass-astro` branch are deleted; `sites` rows point at the Next.js
-  repos; the `lucasconstruction` and `gingerhuffinteriors` repos need Tom's
-  admin rights to delete. Website › Build to 70% / Polish for Ginger, Lucas
+  repos; two retired Astro repos need Tom's admin rights to delete
+  (named in the per-site survey). Website › Build to 70% / Polish for Ginger, Lucas
   and Pensacola now refer to Tom's builds. Logic Solar, Show Me Design and
   Show Me Electrical's live sites stay client-controlled until their Next.js
-  rebuilds are full sites. Tom deletes the `Compass2026/zz-sitepush-smoke`
-  test repo (the token cannot).
+  rebuilds are full sites. Tom deletes the leftover site-push smoke-test
+  repo (the token cannot).
 - **Reporting has not started.** Every client is still `launching` and none
   is enrolled in Reporting, so no monthly cycle exists; convergence waits on
   the launch pipelines (SEO and Website run through on their own now; Tom's

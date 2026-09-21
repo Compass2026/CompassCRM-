@@ -94,6 +94,14 @@ export interface PushPlan {
 
 export const FOUNDATION_SIDE_BRANCH = "compass/foundation-build";
 export const CRM_AUTHOR = "Compass CRM";
+/**
+ * The one commit identity every site-push commit carries — author AND
+ * committer, on every path (revert, empty-repo bootstrap, normal tree).
+ * The email must be a Vercel team member's: Vercel's Git integration marks a
+ * deployment BLOCKED when the commit author is not on the team, which is what
+ * kept the CRM's own commits from deploying.
+ */
+export const CRM_COMMIT_IDENTITY = { name: CRM_AUTHOR, email: "thomas@compassmarketing.ai" } as const;
 
 /** The stack a set of pushed files implies. Unknown stays `other`. */
 export function detectStack(paths: string[]): SiteStack {
