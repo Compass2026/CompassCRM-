@@ -371,8 +371,13 @@ a chat.
 starter (`templates/astro-site/` stays as reference only). The pinned
 release is the `foundation_releases` row with `is_current` — v1 =
 `Compass2026/showmeelectricalwebsite` @
-`94014af35316c94616dadb3f8d606a4b68577fb0`, accepted Sept 20 2026 with the
-three governing Drive documents recorded on the row. The worker fetches it
+`f928381b3a81e20694571cefc5091392b2c84e86`, accepted Sept 20 2026 with the
+three governing Drive documents recorded on the row, moved Sept 21 2026 from
+`94014af…` to this commit for **service-area support**: `site.address.street`
+and `site.address.zip` are nullable, and the footer, the contact card and the
+LocalBusiness / JobPosting JSON-LD omit what is absent. A business that goes to
+the customer has no public street address; the worker never invents one and no
+longer blocks for the lack of it (migration 0040_foundation_v1_service_area). The worker fetches it
 through `site-push {archive}`, builds the brand layer per the Foundation's
 `docs/starter-checklist.md` from the CRM's brand board, taxonomy, page
 groups and sourced claims, and verifies with the Foundation's own checks
