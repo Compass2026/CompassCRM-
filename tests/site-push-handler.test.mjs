@@ -3,7 +3,9 @@
 // a fake GitHub API. No network; nothing is deployed or delivered.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createSitePushHandler, SITE_PUSH_VERSION } from "../supabase/functions/site-push/handler.ts";
+import { CRM_COMMIT_IDENTITY } from "../supabase/functions/site-push/plan.ts";
 import { fakeSupabase, fakeGitHub } from "./helpers/fakes.mjs";
 
 const CLIENT = "00000000-0000-4000-8000-0000000000c1";
@@ -281,4 +283,64 @@ test("archive mode serves only the client's repository or the current foundation
   assert.match(ok.body, /TARBALL Compass2026\/showmeelectricalwebsite@94014af/);
   const own = await post({ client_id: CLIENT, archive: { repo: "Compass2026/ridge-safety", ref: "main" } });
   assert.equal(own.status, 200);
+});
+
+// ── Commit identity ───────────────────────────────────────────────────────
+// Vercel's Git integration marks a deployment BLOCKED when the commit author
+// is not a team member, which is what the deployment-author mismatch was. So
+// every commit this function makes — on all three paths — must carry the one
+// CRM_COMMIT_IDENTITY as BOTH author and committer.
+const TEAM_EMAIL = "thomas@compassmarketing.ai";
+
+function assertIdentity(body, where) {
+  for (const role of ["author", "committer"]) {
+    assert.ok(body?.[role], `${where}: no ${role} on the commit`);
+    assert.equal(body[role].email, TEAM_EMAIL, `${where}: ${role}.email must be the team member's`);
+    assert.equal(body[role].name, CRM_COMMIT_IDENTITY.name, `${where}: ${role}.name`);
+  }
+}
+
+test("normal tree commits are authored and committed by the Vercel team member", async () => {
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const commits = gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits"));
+  assert.equal(commits.length, 1);
+  assertIdentity(commits[0].body, "tree commit");
+});
+
+test("the empty-repository bootstrap commit carries the same identity", async () => {
+  const { post, gh } = setup({
+    site: { ...LUCAS_SITE, work_mode: "new_build", branch: null, content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", empty: true, branches: {} } },
+  });
+  const r = await post({ client_id: CLIENT, preview: true, message: "Foundation v1 build (Compass CRM)", files: [{ path: "package.json", content: "{}" }, { path: "next.config.ts", content: "export default {}" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const bootstrap = gh.calls.filter((c) => c.method === "PUT" && c.path.includes("/contents/"));
+  assert.equal(bootstrap.length, 1, "the first file seeds the repo through the Contents API");
+  assertIdentity(bootstrap[0].body, "bootstrap commit");
+  // The tree commit that carries the rest of the files answers to it too.
+  const commits = gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits"));
+  assert.equal(commits.length, 1);
+  assertIdentity(commits[0].body, "tree commit after bootstrap");
+});
+
+test("a revert commit carries the same identity", async () => {
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO });
+  const pushed = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(pushed.status, 200, JSON.stringify(pushed.body));
+  const r = await post({ client_id: CLIENT, revert: true });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const commits = gh.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/commits"));
+  assert.equal(commits.length, 2, "the push, then the revert");
+  assertIdentity(commits[1].body, "revert commit");
+});
+
+test("no commit path ships the old non-team address", async () => {
+  // A belt-and-braces sweep of the source: the identity lives in exactly one
+  // place, so a new commit path cannot quietly reintroduce the old one.
+  const src = await readFile(new URL("../supabase/functions/site-push/handler.ts", import.meta.url), "utf8");
+  assert.equal(/crm@compassmarketing\.ai/.test(src), false, "the old non-team commit address is gone");
+  assert.equal((src.match(/committer:/g) ?? []).length, 3, "three commit paths, each with a committer");
+  assert.equal((src.match(/author: CRM_COMMIT_IDENTITY/g) ?? []).length, 3, "three commit paths, each with an author");
 });

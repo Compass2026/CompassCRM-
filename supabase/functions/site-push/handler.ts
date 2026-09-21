@@ -41,11 +41,12 @@
 //
 // Push options (Sept 14 2026, for Tom's Next.js repos): the repo and the
 // Vercel project come from the client's `sites` row when set, so a push
-// lands in `Compass2026/lucas_construction` and Vercel's own Git
-// integration would deploy it, except that Vercel blocks Git deployments
-// whose commit author is not a team member (ours is "Compass CRM"), so the
-// deployment is always created here: production for the branch of record,
-// a preview for a side branch. `deploy: false` skips it.
+// lands in `Compass2026/lucas_construction`. Vercel blocks Git deployments
+// whose commit author is not a team member, so every commit here — revert,
+// empty-repo bootstrap and normal tree alike — carries the single
+// CRM_COMMIT_IDENTITY (plan.ts), author AND committer, on a team member's
+// address. The deployment is still created here explicitly: production for
+// the branch of record, a preview for a side branch. `deploy: false` skips it.
 //
 // Branches (v9, Foundation integration — see plan.ts): the BRANCH OF RECORD
 // is `sites.branch`, else the repository's default branch, else main; it is
@@ -63,7 +64,7 @@
 // the pinned Foundation release recorded in `foundation_releases` is served.
 // `brand` on a push sets COMPASS_BRAND on a Vercel project this call creates.
 
-import { archiveAllowed, resolvePushPlan, type SiteRowForPlan } from "./plan.ts";
+import { archiveAllowed, CRM_COMMIT_IDENTITY, resolvePushPlan, type SiteRowForPlan } from "./plan.ts";
 
 export const SITE_PUSH_VERSION = 9;
 export const SITE_PUSH_FEATURES = ["branch_of_record", "preview", "pull_request_base", "archive", "content_entry_boundary", "work_modes", "version"] as const;
@@ -380,7 +381,8 @@ export function createSitePushHandler(deps: HandlerDeps) {
           message: body.message ?? `Put it back: revert "${String(c.message).split("\n")[0].slice(0, 60)}" (Compass CRM)`,
           tree: pc.tree.sha,
           parents: [headInfo.sha],
-          author: { name: "Compass CRM", email: "crm@compassmarketing.ai" },
+          author: CRM_COMMIT_IDENTITY,
+          committer: CRM_COMMIT_IDENTITY,
         }),
       });
       if (!mk.ok) throw fail("revert commit", mk, await mk.text());
@@ -625,10 +627,11 @@ export function createSitePushHandler(deps: HandlerDeps) {
           }
         }
         if (!repoId) throw new Error("no GitHub repo id for the deployment");
-        // Vercel's Git integration blocks commits from authors who are not
-        // team members (ours are "Compass CRM"), so the deployment is created
-        // here explicitly: production for the branch of record, a preview
-        // for a side branch / pull request.
+        // The deployment is created here explicitly rather than left to
+        // Vercel's Git integration: production for the branch of record, a
+        // preview for a side branch / pull request. (Commits carry
+        // CRM_COMMIT_IDENTITY, a team member's address, so the Git
+        // integration no longer blocks them either.)
         const target = deployTarget();
         const dep = await vc(`/v13/deployments`, {
           method: "POST",
@@ -714,7 +717,8 @@ export function createSitePushHandler(deps: HandlerDeps) {
           message,
           content: b64,
           branch,
-          committer: { name: "Compass CRM", email: "crm@compassmarketing.ai" },
+          author: CRM_COMMIT_IDENTITY,
+          committer: CRM_COMMIT_IDENTITY,
         }),
       });
       if (!put.ok) throw fail(`bootstrap ${first.path}`, put, await put.text());
@@ -766,7 +770,8 @@ export function createSitePushHandler(deps: HandlerDeps) {
           message,
           tree: treeSha,
           parents: parentSha ? [parentSha] : [],
-          author: { name: "Compass CRM", email: "crm@compassmarketing.ai" },
+          author: CRM_COMMIT_IDENTITY,
+          committer: CRM_COMMIT_IDENTITY,
         }),
       });
       if (!commitRes.ok) throw fail("commit", commitRes, await commitRes.text());
