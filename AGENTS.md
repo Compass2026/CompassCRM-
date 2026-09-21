@@ -669,7 +669,14 @@ and the per-site survey in `docs/website-updates.md`.
   commit's tree. **Deployments come from Vercel's own Git
   integration** (v11): commits carry a team member's address, so the
   integration deploys them like anyone else's, and site-push finds that
-  deployment by commit SHA rather than making a second one —
+  deployment by commit SHA rather than making a second one. A **preflight
+  runs before anything reaches GitHub** (side-branch creation included): a
+  preview is refused unless the Vercel project already has a READY
+  production deployment, and refused without creating or linking a project;
+  a new production project is created, linked and its production branch
+  confirmed before the push; an existing project whose production branch is
+  not the branch of record blocks the push and is never changed
+  automatically —
   production for the branch of record, a preview (behind Vercel's
   deployment protection, so a Vercel login is needed to view it) for a
   side branch, `vercel.target` / `staging_url` / `deployment_url` in the

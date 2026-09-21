@@ -40,6 +40,10 @@ const LUCAS_SITE = {
   content_paths: { adapter: "lucas_json", locations: "data/locations.json", blog: "data/blog-posts.json", blog_format: "json" },
 };
 const TOM_REPO = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Tom" } } } };
+// Vercel healthy and out of the way: every project exists and already has a
+// READY production deployment, so the preflight passes and a test can assert
+// what it is actually about.
+const VERCEL_OK = { established: true, projects: {}, deployments: {} };
 
 test("version mode reports the deployed contract", async () => {
   const { post } = setup();
@@ -66,7 +70,7 @@ test("a signed-in user who is not a team member → 403 before anything is read 
 });
 
 test("a 250-file new build is one tree request: text inline, a blob only per binary (GitHub secondary rate limit)", async () => {
-  const { post, gh } = setup({ site: { ...LUCAS_SITE, work_mode: "new_build", branch: null, content_adapter: null, content_paths: null }, repos: { "Compass2026/lucas_construction": { id: 7, default_branch: "main", empty: true, branches: {} } } });
+  const { post, gh } = setup({ vercel: VERCEL_OK, site: { ...LUCAS_SITE, work_mode: "new_build", branch: null, content_adapter: null, content_paths: null }, repos: { "Compass2026/lucas_construction": { id: 7, default_branch: "main", empty: true, branches: {} } } });
   const files = Array.from({ length: 250 }, (_, i) => ({ path: `brands/x/content/file-${i}.ts`, content: `export const f${i} = ${i};` }));
   files.push({ path: "public/a.png", content: "AAAA", encoding: "base64" }, { path: "public/b.png", content: "BBBB", encoding: "base64" }, { path: "public/c.webp", content: "CCCC", encoding: "base64" });
   const r = await post({ client_id: CLIENT, preview: true, message: "build", files });
@@ -121,7 +125,7 @@ test("an authorised blog/data entry on the recorded adapter publishes to the bra
 test("upgrade_existing preview on a non-main production branch: created from it, PR against it, branch of record untouched", async () => {
   const site = { ...LUCAS_SITE, branch: "production" };
   const repos = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Tom" }, production: { author: "Tom" } } } };
-  const { post, gh, site: row } = setup({ site, repos });
+  const { post, gh, site: row } = setup({ vercel: VERCEL_OK, site, repos });
   const prodHead = gh.model["Compass2026/ridge-safety"].refs.production;
   const mainHead = gh.model["Compass2026/ridge-safety"].refs.main;
   const r = await post({ client_id: CLIENT, preview: true, message: "upgrade", files: [{ path: "src/app/page.tsx", content: "new" }], pull_request: { title: "Ridge: upgrade", body: "preview" } });
@@ -143,7 +147,7 @@ test("upgrade_existing preview on a non-main production branch: created from it,
 
 test("a new_build push into a repository whose main was authored by someone else is parked on the foundation side branch", async () => {
   const site = { ...LUCAS_SITE, work_mode: "new_build", content_adapter: null, content_paths: null };
-  const { post, gh, site: row } = setup({ site, repos: TOM_REPO });
+  const { post, gh, site: row } = setup({ vercel: VERCEL_OK, site, repos: TOM_REPO });
   const mainHead = gh.model["Compass2026/ridge-safety"].refs.main;
   const r = await post({ client_id: CLIENT, message: "Foundation v1 build (Compass CRM)", brand: "ridge", files: [{ path: "package.json", content: "{}" }, { path: "next.config.ts", content: "export default {}" }] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -182,7 +186,7 @@ test("a client-managed site is never pushed to", async () => {
 
 test("no site row and a repository whose default branch is trunk: the baseline is trunk and the inserted row is never astro", async () => {
   const repos = { "Compass2026/ridgesafetygroup": { id: 9, default_branch: "trunk", branches: { trunk: { author: "Compass CRM" } } } };
-  const { post, supabase } = setup({ repos });
+  const { post, supabase } = setup({ vercel: VERCEL_OK, repos });
   const r = await post({ client_id: CLIENT, preview: true, message: "x", files: [{ path: "next.config.ts", content: "x" }, { path: "data/x.json", content: "{}" }] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.branch_of_record, "trunk");
@@ -234,7 +238,7 @@ test("normal tree commits are authored and committed by the Vercel team member",
 });
 
 test("the empty-repository bootstrap commit carries the same identity", async () => {
-  const { post, gh } = setup({
+  const { post, gh } = setup({ vercel: VERCEL_OK,
     site: { ...LUCAS_SITE, work_mode: "new_build", branch: null, content_adapter: null, content_paths: null },
     repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", empty: true, branches: {} } },
   });
@@ -312,24 +316,6 @@ test("established project, preview branch: Vercel's deployment is a preview and 
   assert.equal(site().branch, "main", "a preview never moves the branch of record");
 });
 
-test("brand-new project + preview branch: refused before the project is linked, because Vercel would promote it to production", async () => {
-  // The hazard proven live: on a project with no successful deployment, a
-  // side-branch push is deployed as PRODUCTION. site-push cannot refuse
-  // after the fact — the integration deploys from the push — so it refuses
-  // to link the project at all.
-  const vercel = { projects: {} };
-  const { post, gh } = setup({
-    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null },
-    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
-    vercel,
-  });
-  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "app/page.tsx", content: "x" }] });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.vercel.status, "blocked");
-  assert.match(r.body.vercel.detail, /no successful \(READY\) deployment yet/);
-  assert.match(r.body.vercel.detail, /pushing the branch of record/);
-  assert.equal(restPosts(gh).length, 0, "nothing is deployed");
-});
 
 test("two deployments for one commit are reported as a duplicate, never picked between", async () => {
   const vercel = established({ extraGitDeploy: true });
@@ -408,23 +394,121 @@ test("redeploy refuses while a deployment of the same head is still in flight", 
   assert.ok(supabase);
 });
 
-test("a brand-new project's first push says why no deployment exists, instead of blaming the GitHub App", async () => {
-  // The Vercel project is created by this function, AFTER the commit is
-  // pushed — so on a project's very first push the Git integration did not
-  // yet exist to react to it. That is expected, and the diagnostic has to
-  // say so rather than send someone hunting for a permissions problem.
-  const vercel = { projects: {} };
-  const { post } = setup({
-    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", branch: "main", content_adapter: null, content_paths: null },
-    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
-    vercel,
-  });
+
+// ── Preflight ordering: nothing unsafe reaches GitHub ────────────────────
+// The safety property is the ORDER. Vercel's Git integration deploys from
+// the push, and a project with no successful production deployment promotes
+// whatever lands first to PRODUCTION regardless of branch. So a preview must
+// be refused before the branch exists AND before the project is linked — a
+// linked project with zero deployments is armed, and the next preview push
+// fires it.
+const gitWrites = (gh) => gh.calls.filter((c) => c.method !== "GET");
+const vercelWrites = (gh) => gh.calls.filter((c) => c.method !== "GET" && c.path.startsWith("/v"));
+const NEW_BUILD_SITE = { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", content_adapter: null, content_paths: null };
+const OWN_REPO = { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } };
+
+test("two consecutive preview requests create no Vercel project, move no Git ref, and create no deployment", async () => {
+  // The defect this replaces: the first request pushed AND linked a project,
+  // so the second request's push landed in a linked zero-deployment project
+  // and became its first — production — deployment.
+  const vercel = { projects: {}, deployments: {} };
+  const { post, gh } = setup({ site: NEW_BUILD_SITE, repos: OWN_REPO, vercel });
+  const body = { client_id: CLIENT, preview: true, message: "build", files: [{ path: "app/page.tsx", content: "x" }] };
+
+  for (const attempt of ["first", "second"]) {
+    const r = await post(body);
+    assert.equal(r.status, 409, `${attempt}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.vercel.status, "blocked");
+    assert.equal(r.body.pushed, false);
+    assert.match(r.body.error, /does not exist/);
+    assert.match(r.body.error, /Not creating or linking it/);
+  }
+  assert.deepEqual(Object.keys(vercel.projects), [], "no Vercel project was ever created");
+  assert.deepEqual(Object.keys(vercel.deployments), [], "no deployment was ever created");
+  assert.equal(vercelWrites(gh).length, 0, "no write to Vercel at all");
+  assert.equal(gitWrites(gh).length, 0, "not one byte written to GitHub — no blob, tree, commit or ref");
+});
+
+test("an existing project with no READY production deployment blocks the preview before any Git write", async () => {
+  const vercel = { projects: { "ridge-safety-preview": { id: "prj_p", repo: "Compass2026/ridge-safety", productionBranch: "main", deployments: 0 } }, deployments: {} };
+  const { post, gh } = setup({ site: NEW_BUILD_SITE, repos: OWN_REPO, vercel });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "app/page.tsx", content: "x" }] });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.match(r.body.error, /no successful \(READY\) production deployment/);
+  assert.equal(gitWrites(gh).length, 0, "nothing pushed");
+});
+
+test("an unreadable preflight fails closed before any Git write", async () => {
+  // Vercel answers, but not usefully: the promotion window cannot be shown
+  // to be closed, so nothing is pushed.
+  const vercel = { projects: { "ridge-safety-preview": { id: "prj_p", productionBranch: "main", deployments: 1, listingSays: null } }, deployments: {}, unreadableListing: true };
+  const { post, gh } = setup({ site: NEW_BUILD_SITE, repos: OWN_REPO, vercel });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "app/page.tsx", content: "x" }] });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.status, "blocked");
+  assert.match(r.body.error, /cannot be confirmed|not readable/);
+  assert.equal(gitWrites(gh).length, 0, "nothing pushed");
+});
+
+test("no VERCEL_TOKEN: a preview fails closed rather than pushing blind", async () => {
+  const { post, gh } = setup({ site: NEW_BUILD_SITE, repos: OWN_REPO });
+  const r = await post({ client_id: CLIENT, preview: true, message: "build", files: [{ path: "app/page.tsx", content: "x" }] });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.match(r.body.error, /VERCEL_TOKEN is not in Vault/);
+  assert.equal(gitWrites(gh).length, 0, "nothing pushed");
+});
+
+test("a brand-new production project is created and linked BEFORE the push, and gets exactly one native production deployment", async () => {
+  const vercel = { projects: {}, deployments: {} };
+  const { post, gh } = setup({ site: { ...NEW_BUILD_SITE, branch: "main" }, repos: OWN_REPO, vercel });
   const r = await post({ client_id: CLIENT, branch: "main", message: "first build", files: [{ path: "app/page.tsx", content: "x" }] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.vercel.status, "not_found");
-  assert.equal(r.body.vercel.created_project, true);
-  assert.match(r.body.vercel.detail, /did not exist when .* was pushed/);
-  assert.match(r.body.vercel.detail, /Nothing is wrong with the push/);
-  assert.doesNotMatch(r.body.vercel.detail, /GitHub App/, "must not blame App visibility for an expected first-push case");
-  assert.ok(r.body.commit_url, "the commit is still reported as pushed");
+
+  // Ordering: the project POST precedes every GitHub write.
+  const order = gh.calls.filter((c) => c.method !== "GET").map((c) => c.path);
+  const projectAt = order.findIndex((x) => x.startsWith("/v10/projects"));
+  const firstGitWrite = order.findIndex((x) => x.startsWith("/repos/"));
+  assert.ok(projectAt >= 0, "the project is created");
+  assert.ok(firstGitWrite >= 0, "something was pushed");
+  assert.ok(projectAt < firstGitWrite, "the project must be linked before the first GitHub write");
+
+  // Exactly one deployment, native, production, and no REST deployment.
+  assert.equal(r.body.vercel.source, "git");
+  assert.equal(r.body.vercel.target, "production");
+  assert.equal(restPosts(gh).length, 0, "no REST deployment — and no second Redeploy needed");
+  assert.notEqual(r.body.vercel.status, "not_found");
+  assert.equal(Object.keys(vercel.deployments).length, 1, "exactly one deployment exists");
+});
+
+test("a preview after that production deployment creates exactly one native preview deployment", async () => {
+  const vercel = { projects: {}, deployments: {} };
+  const { post, gh } = setup({ site: { ...NEW_BUILD_SITE, branch: "main" }, repos: OWN_REPO, vercel });
+  const prod = await post({ client_id: CLIENT, branch: "main", message: "first build", files: [{ path: "app/page.tsx", content: "x" }] });
+  assert.equal(prod.body.vercel.target, "production", JSON.stringify(prod.body));
+
+  const prev = await post({ client_id: CLIENT, preview: true, message: "a change", files: [{ path: "app/page.tsx", content: "y" }] });
+  assert.equal(prev.status, 200, JSON.stringify(prev.body));
+  assert.equal(prev.body.vercel.source, "git");
+  assert.notEqual(prev.body.vercel.target, "production", "a preview must stay a preview");
+  assert.equal(restPosts(gh).length, 0);
+  // One deployment PER COMMIT is the guarantee. (Creating the side branch is
+  // itself a push, so Vercel also previews the base commit the branch was
+  // cut from — a different SHA, and a preview, so it neither publishes
+  // anything nor trips the duplicate check.)
+  const sha = prev.body.commit_url.split("/").pop();
+  const forCommit = Object.values(vercel.deployments).filter((d) => d.sha === sha);
+  assert.equal(forCommit.length, 1, "exactly one deployment for the pushed commit");
+  assert.equal(forCommit[0].target, null, "and it is a preview");
+});
+
+test("a production-branch mismatch on an existing project blocks before any Git write and changes nothing in Vercel", async () => {
+  const vercel = { projects: { "ridge-safety": { id: "prj_rs", repo: "Compass2026/ridge-safety", productionBranch: "release", deployments: 1 } }, deployments: {} };
+  const { post, gh } = setup({ site: LUCAS_SITE, repos: TOM_REPO, vercel });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "Blog: x (Compass CRM)", files: [{ path: "data/blog-posts.json", content: "[]" }] });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.status, "blocked");
+  assert.match(r.body.error, /deploys production from "release"/);
+  assert.match(r.body.error, /was NOT changed/);
+  assert.equal(gitWrites(gh).length, 0, "nothing pushed");
+  assert.equal(vercel.projects["ridge-safety"].productionBranch, "release", "the production branch is untouched");
 });

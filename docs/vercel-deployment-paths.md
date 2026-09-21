@@ -166,11 +166,12 @@ and SHA, checks the target matches the branch class, and reports it.
   one. *Put it back* no longer calls it — the revert is a new commit, which
   Vercel deploys by itself.
 
-### The new-project rule, proven not guessed
+### The new-project rule, and why ORDER is the safety property
 
-A project with no successful deployment promotes its first deployment to
-production **whatever the branch**. Proven on a disposable fictional project
-on Sept 21 2026, with a static probe folder isolated by `rootDirectory`:
+A project with no successful production deployment promotes its first
+deployment to production **whatever the branch**. Proven on a disposable
+fictional project on Sept 21 2026, with a static probe folder isolated by
+`rootDirectory`:
 
 | # | push | author | deployments for the SHA | `source` | `target` | state |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -179,15 +180,35 @@ on Sept 21 2026, with a static probe folder isolated by `rootDirectory`:
 | C | production branch | a normal Claude session identity | 1 | `git` | `production` | READY |
 
 A establishes the project; B is then correctly a preview; C shows an
-ordinary Claude commit deploying natively. Exactly one deployment each — no
-duplicates anywhere. Before any of this, on a project with no deployment, a
-side-branch push had come back `target: "production"`.
+ordinary Claude commit deploying natively. Before A, a side-branch push on
+that project had come back `target: "production"`.
 
-Since the integration deploys from the push, that cannot be refused after
-the fact. The only lever is **not to link a project whose first deployment
-would be a side-branch push** — so site-push refuses, and says to push the
-branch of record first. Linking is per project and never touches the
-repository, so no other workflow is affected.
+**The check is worth nothing unless it runs first.** The Git integration
+deploys from the push, so a guard that runs after the push is too late —
+and worse, a guard that runs after the project has been *created* leaves a
+linked project with zero deployments behind, which is armed: the next
+preview push lands in it and becomes its first, production, deployment.
+That was a real defect in an earlier revision of this branch, caught in
+review.
+
+So everything that could make a push unsafe is decided in a **preflight,
+before one byte reaches GitHub** — including the creation of a side branch,
+which is itself a push and is deferred until the preflight has cleared:
+
+- **Preview push.** Project missing → blocked, and it is *not* created or
+  linked. Project present but with no READY **production** deployment →
+  blocked. State unconfirmable, including no `VERCEL_TOKEN` → blocked. In
+  every case nothing is pushed.
+- **Production push to a brand-new project.** The project is created and
+  linked, and its production branch is set to the branch of record and
+  **read back** to confirm it — the read-back is the guarantee, and a
+  failure to confirm blocks before pushing. Only then does the push happen,
+  so Vercel's Git integration makes exactly one production deployment. No
+  second Redeploy, no "first push" special case.
+- **Existing project whose production branch is not the branch of record.**
+  Reported and the push is blocked. The production branch is **never**
+  changed automatically. (An unreported production branch that matches the
+  repository's default branch is the Vercel default and needs no change.)
 
 ## What the tests here do and do not cover
 

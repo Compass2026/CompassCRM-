@@ -118,7 +118,26 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
       let vm;
       if ((vm = u.pathname.match(/^\/v9\/projects\/([^/]+)$/)) && method === "GET") {
         const p = vercel.projects[vm[1]];
-        return p ? json(200, { id: p.id ?? `prj_${vm[1]}`, name: vm[1] }) : json(404, { message: "not found" });
+        // `established: true` is the "Vercel is healthy and out of the way"
+        // mode: any project exists, already has a READY production
+        // deployment, and its production branch is whatever was asked for.
+        // Git-behaviour tests use it so the preflight does not stand in
+        // the way of what they are actually asserting.
+        if (!p && vercel.established) {
+          return json(200, { id: `prj_${vm[1]}`, name: vm[1], link: { type: "github", productionBranch: vercel.productionBranch ?? "main" } });
+        }
+        return p
+          ? json(200, { id: p.id ?? `prj_${vm[1]}`, name: vm[1], link: { type: "github", productionBranch: p.productionBranch ?? "main" } })
+          : json(404, { message: "not found" });
+      }
+      if ((vm = u.pathname.match(/^\/v9\/projects\/([^/]+)$/)) && method === "PATCH") {
+        // Setting the production branch on a project we just created.
+        const name = vm[1].replace(/^prj_/, "");
+        if (vercel.refuseBranchPatch) return json(403, { error: { message: "cannot set production branch" } });
+        const proj = vercel.projects[name] ?? Object.values(vercel.projects).find((x) => x.id === vm[1]);
+        const wanted = body?.link?.productionBranch;
+        if (proj && wanted) proj.productionBranch = wanted;
+        return json(200, { id: proj?.id ?? vm[1], link: { type: "github", productionBranch: wanted ?? proj?.productionBranch ?? "main" } });
       }
       if (u.pathname === "/v10/projects" && method === "POST") {
         vercel.projects[body.name] = { id: `prj_${body.name}`, deployments: 0 };
@@ -126,6 +145,9 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
       }
       // The deployment listing site-push checks BEFORE deploying a preview.
       if (u.pathname === "/v6/deployments" && method === "GET") {
+        // Vercel answers, but not with a usable list: the preflight must
+        // treat that as "cannot confirm" rather than "none found".
+        if (vercel.unreadableListing) return json(200, { deployments: "unavailable" });
         // The duplicate sweep site-push runs after its own deployment:
         // every record Vercel holds for one commit SHA. `duplicateSha`
         // models a repo that slipped through without vercel.json, so the
@@ -145,6 +167,7 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
         // deployment for our push and then blocking it: it exists, but it is
         // not READY, so a state=READY query must not see it.
         const wantsReady = (u.searchParams.get("state") ?? "").includes("READY");
+        if (!entry && vercel.established) return json(200, { deployments: [{ id: "dpl_established" }] });
         const p = entry ? entry[1] : null;
         const ready = p ? (p.listingSays ?? (p.blockedOnly ? 0 : p.deployments)) : 0;
         const any = p ? (p.listingSays ?? p.deployments + (p.blockedOnly ? 1 : 0)) : 0;

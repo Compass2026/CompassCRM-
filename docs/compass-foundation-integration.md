@@ -416,11 +416,15 @@ branch, SHA, `source: "git"` and target, and reports `duplicate`,
 left is `{deploy: true}` with no files — the Redeploy button — which creates
 no commit and so cannot double up.
 
-On a project's **first** push the deployment will not be found, because
-site-push creates the Vercel project after pushing: give it one deliberate
-deployment with `{deploy: true}` and every later push deploys on its own.
-That ordering — production established first, side branches previewing
-after — is what the fictional probe proved. See
+Order is the safety property. Everything that could make a push unsafe is
+decided in a preflight **before anything reaches GitHub** — including
+creating a side branch, which is itself a push. A preview into a project
+that does not exist, or that has no READY production deployment, is refused
+without creating or linking anything; a brand-new production project is
+created, linked and its production branch confirmed *before* the push, so
+the Git integration makes exactly one production deployment and no second
+Redeploy is needed. An existing project whose production branch is not the
+branch of record blocks the push and is never changed automatically. See
 `docs/vercel-deployment-paths.md` for the evidence and verification.
 
 **Still to do before this is true in production:** #46 is not merged and
