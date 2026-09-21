@@ -58,6 +58,43 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
     model[full] = { id: r.id ?? 1000 + n, html_url: `https://github.com/${full}`, default_branch: r.default_branch ?? "main", empty: !!r.empty, refs, commits, pulls: [], files: { ...(r.files ?? {}) } };
   }
   const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+
+  // Vercel's Git integration, modelled: a push to a repository linked to a
+  // project creates ONE deployment for that commit. Production when the ref
+  // is the project's production branch, otherwise a preview — except that a
+  // project with no successful deployment yet promotes its first to
+  // production whatever the branch, which is the behaviour observed live on
+  // Sept 21 2026 and the reason site-push refuses to link such a project for
+  // a side-branch push.
+  const gitIntegrationDeploy = (full, ref, sha) => {
+    if (!vercel || vercel.gitIntegration === false) return;
+    vercel.projects ??= {}; vercel.deployments ??= {};
+    for (const [name, proj] of Object.entries(vercel.projects)) {
+      if (proj.repo && proj.repo !== full) continue;
+      if (proj.linked === false) continue;
+      const id = `dpl_git_${++n}`;
+      const isProd = (proj.productionBranch ?? "main") === ref;
+      const firstEver = (proj.deployments ?? 0) === 0;
+      proj.deployments = (proj.deployments ?? 0) + 1;
+      vercel.deployments[id] = {
+        id,
+        url: `${name}-${id}.vercel.app`,
+        target: isProd || firstEver ? "production" : null,
+        readyState: vercel.gitState ?? "READY",
+        state: vercel.gitState ?? "READY",
+        source: "git",
+        sha,
+        project: { id: proj.id ?? `prj_${name}`, name },
+        meta: { githubCommitSha: sha, githubCommitRef: ref },
+        inspectorUrl: `https://vercel.com/x/${name}/${id}`,
+      };
+      // `extraGitDeploy` models something else deploying the same commit.
+      if (vercel.extraGitDeploy) {
+        const id2 = `dpl_other_${++n}`;
+        vercel.deployments[id2] = { ...vercel.deployments[id], id: id2, url: `${name}-${id2}.vercel.app` };
+      }
+    }
+  };
   // site-push deploys by { repoId, ref }; Vercel resolves that to the head
   // commit, and that is the SHA its deployment record carries.
   const resolveGitSha = (src) => {
@@ -95,9 +132,10 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
         // Git integration deployed the commit as well.
         const sha = u.searchParams.get("sha");
         if (sha) {
-          const ours = Object.values(vercel.deployments ?? {}).filter((d) => d.sha === sha);
-          const extra = vercel.duplicateSha ? [{ id: "dpl_git_integration", source: "git", target: null }] : [];
-          return json(200, { deployments: [...ours.map((d) => ({ id: d.id, source: "rest-api", target: d.target ?? null })), ...extra] });
+          const rows = Object.values(vercel.deployments ?? {})
+            .filter((d) => d.sha === sha)
+            .map((d) => ({ id: d.id, url: d.url, state: d.state ?? d.readyState, target: d.target ?? null, meta: d.meta }));
+          return json(200, { deployments: rows });
         }
         const wanted = u.searchParams.get("projectId");
         const entry = Object.entries(vercel.projects).find(([nm, p]) => p.id === wanted || nm === wanted);
@@ -114,6 +152,7 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
         return json(200, { deployments: made > 0 ? [{ id: "dpl_existing" }] : [] });
       }
       if (u.pathname === "/v13/deployments" && method === "POST") {
+        if (vercel.refuseRest) return json(403, { error: { message: "rest deployments disabled in this fake" } });
         const proj = (vercel.projects[body.project] ??= { id: `prj_${body.project}`, deployments: 0 });
         const first = proj.deployments === 0;
         proj.deployments += 1;
@@ -126,6 +165,7 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
         const d = vercel.deployments[decodeURIComponent(vm[1])];
         return d ? json(200, d) : json(404, { message: "not found" });
       }
+      if (u.pathname === "/v9/projects" && method === "GET") return json(200, { projects: [] });
       return json(404, { message: `unhandled vercel ${method} ${u.pathname}` });
     }
     const m = u.pathname.match(/^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/);
@@ -146,8 +186,8 @@ export function fakeGitHub({ repos = {}, login = "Compass2026", vercel = null } 
       return sha ? json(200, { object: { sha } }) : json(404, { message: "Not Found" });
     }
     if ((mm = rest.match(/^\/git\/commits\/([^/]+)$/)) && method === "GET") { const c = repo.commits[mm[1]]; return c ? json(200, { sha: c.sha, tree: { sha: c.tree }, author: c.author, parents: c.parents.map((p) => ({ sha: p })), message: c.message }) : json(404, {}); }
-    if (rest === "/git/refs" && method === "POST") { repo.refs[body.ref.replace(/^refs\/heads\//, "")] = body.sha; return json(201, { ref: body.ref, object: { sha: body.sha } }); }
-    if ((mm = rest.match(/^\/git\/refs\/heads\/(.+)$/)) && method === "PATCH") { const b = decodeURIComponent(mm[1]); if (!(b in repo.refs)) return json(422, { message: "Reference does not exist" }); repo.refs[b] = body.sha; return json(200, { object: { sha: body.sha } }); }
+    if (rest === "/git/refs" && method === "POST") { repo.refs[body.ref.replace(/^refs\/heads\//, "")] = body.sha; gitIntegrationDeploy(full, body.ref.replace(/^refs\/heads\//, ""), body.sha); return json(201, { ref: body.ref, object: { sha: body.sha } }); }
+    if ((mm = rest.match(/^\/git\/refs\/heads\/(.+)$/)) && method === "PATCH") { const b = decodeURIComponent(mm[1]); if (!(b in repo.refs)) return json(422, { message: "Reference does not exist" }); repo.refs[b] = body.sha; gitIntegrationDeploy(full, b, body.sha); return json(200, { object: { sha: body.sha } }); }
     if (rest === "/git/blobs" && method === "POST") return json(201, { sha: id("blob-") });
     if (rest === "/git/trees" && method === "POST") return json(201, { sha: id("tree-") });
     if (rest === "/git/commits" && method === "POST") { const sha = id("commit-"); repo.commits[sha] = { sha, tree: body.tree, author: body.author, parents: body.parents ?? [], message: body.message }; return json(201, { sha }); }

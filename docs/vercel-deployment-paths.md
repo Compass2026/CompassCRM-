@@ -85,10 +85,10 @@ disposable test project with no successful deployment, a commit on a
 `compass/preview-…` branch produced a deployment whose target was
 **`production`**.
 
-## What has to happen first
+## First attempt: switch path 1 off (rejected)
 
-Path 1 must be switched off for the projects `site-push` manages, so
-`POST /v13/deployments` stays the only path. Two candidates were tested on
+The first idea was to switch path 1 off so `POST /v13/deployments` stayed
+the only path. Two candidates were tested on
 Sept 21 2026 against a disposable Vercel project belonging to a fictional,
 offboarded test client — no custom domain, and no successful deployment
 ever.
@@ -107,7 +107,7 @@ The field is in Vercel's live API schema but the feature is not provisioned
 for this team. Nothing was modified — the project read back at its
 unchanged baseline of 3 deployments. **Rule this out.**
 
-### Repo-level `vercel.json` — works
+### Repo-level `vercel.json` — works, but REJECTED as the solution
 
 ```json
 { "git": { "deploymentEnabled": false } }
@@ -123,68 +123,76 @@ purpose, so Vercel had no reason to block it.
 - **Result:** no deployment record for that commit at 55 s, 89 s, 2.5 min,
   3.5 min or 5 min. The count never moved off its baseline.
 
-So the config suppresses the Git integration before it creates anything —
-and it does so for a commit whose author *is* a team member, which is the
-state this repository is moving to.
+So the config does suppress the Git integration — and that is exactly why
+it is the wrong tool. It is **repo-wide**: it would equally suppress the
+deployments that Claude Code project sessions, Codex and plain `git push`
+depend on. Recorded here because the measurement is sound and worth
+keeping; **not** the approach taken. See v11 below.
 
-**Caveat, stated plainly:** the clean proof of causation is a negative
-control — re-push without `vercel.json` and watch a record appear. It was
-not run, because on this project that deployment would be the project's
-first and Vercel would promote it to production. The inference rests on the
-three prior pushes to the same branch and on the author change biasing
-toward a record appearing, not away.
+**Caveat, stated plainly:** the clean proof of causation — re-push without
+the config and watch a record appear — was not run, because on that project
+the deployment would have been its first and Vercel would have promoted it
+to production. Moot now that the approach is rejected.
 
-## What site-push does about it (v10)
+## What site-push does about it (v11): adopt the native deployment
 
-Every commit site-push makes carries `vercel.json` with
-`git.deploymentEnabled: false`. `supabase/functions/site-push/vercel-config.ts`
-holds the merge and the guards; the handler wires them in.
+The first attempt (v10) put `git.deploymentEnabled: false` into every client
+repository. That was **wrong for the workflow** and was never rolled out:
+the flag is repo-wide, so it would also have stopped the deployments that
+Claude Code project sessions, Codex and plain `git push` rely on. Deploying
+from a direct commit is the normal way of working here, not a fault.
 
-- **Merged, never overwritten.** The file on the branch is read first and the
-  property is merged into it, so redirects, headers, framework, regions,
-  functions and any sibling key under `git` survive untouched. A caller that
-  sends its own `vercel.json` has that content used as the base instead.
-- **Empty repository:** `vercel.json` is the FIRST bootstrap commit, ahead of
-  every other file, so the integration is off before Vercel has anything to
-  react to.
-- **Existing repository:** it rides in the same tree as the requested
-  changes — one commit, atomic. There is never a commit without it.
-- **Fails closed.** Unparseable JSON, an empty file, a non-object, a `git`
-  key that is not an object, or a Contents read that answers anything but
-  200/404 all refuse **before** any commit or deployment exists (409, or 502
-  for an unreadable branch), with `vercel_config: "refused"` in the body.
-- **Not removable.** A push may not delete `vercel.json`, and may not set
-  `git.deploymentEnabled` to anything but `false` — base64 included.
-- **Scope.** `new_build`, `upgrade_existing` and every CRM-controlled content
-  push. `client_retains` never reaches this code: `resolvePushPlan` refuses
-  those pushes first, and that is left exactly as it was.
-- **Not caller content.** The enforcement runs *after* `resolvePushPlan`, so
-  `validateContentEntry` still judges only the caller's paths — an
-  `upgrade_existing` content entry is held to its adapter's push paths, and
-  `vercel.json` rides along as CRM infrastructure.
-- **Defence in depth.** After its own deployment, site-push lists Vercel's
-  deployments for that commit SHA. More than one is reported as
-  `vercel.duplicates` with both ids and the Git-integration record's source,
-  so a repository that slipped through is visible rather than silent. A
-  listing that cannot be read is reported as `checked: false`, never as
-  "none found".
+So the native Git deployment becomes the **only** path, and site-push stops
+making one. Per push it now: finds Vercel's deployment by commit SHA
+(polling, since it appears a second or two later), fetches its detail,
+verifies it is the Git-created deployment for the expected project, branch
+and SHA, checks the target matches the branch class, and reports it.
 
-- **Revert too.** `{revert: true}` no longer restores a tree verbatim. It
-  reads `vercel.json` from the commit being restored, merges the property
-  in, and commits a tree built on the restored one with only that file
-  overlaid — so a revert across the pre-rollout boundary, where the old
-  tree has no `vercel.json`, still lands with the integration off, and a
-  revert of a tree that has redirects or other settings keeps them. An
-  invalid or unreadable `vercel.json` in the restored commit stops the
-  revert before it commits or moves the branch. The response says
-  `vercel_config: "restored"` or `"unchanged"`.
+- **Exactly one** deployment per commit is required. Two is reported as
+  `duplicate` with both ids, never silently picked between.
+- **None within the deadline** is reported as `not_found`, naming the
+  likely causes — the Vercel GitHub App cannot see the repository, the
+  project is not linked, or the repository disables Git deployments.
+- **Wrong target** either way is `failed`: a preview push that produced a
+  production target, or a branch-of-record push that did not.
+- **`deploy: false` is refused (400).** It used to mean "do not create the
+  deployment". It cannot mean that now, and silently deploying something a
+  caller asked not to deploy is worse than an error. Nothing in the
+  repository, the app or the worker skill passed it.
+- **One REST deployment survives**, for the only operation that creates no
+  commit and genuinely needs a redeploy: `{client_id, deploy: true}` with no
+  files, behind Tom's Redeploy button. It refuses while a deployment of the
+  same head is still in flight, so it can never be the accidental second
+  one. *Put it back* no longer calls it — the revert is a new commit, which
+  Vercel deploys by itself.
+
+### The new-project rule, proven not guessed
+
+A project with no successful deployment promotes its first deployment to
+production **whatever the branch**. Proven on a disposable fictional project
+on Sept 21 2026, with a static probe folder isolated by `rootDirectory`:
+
+| # | push | author | deployments for the SHA | `source` | `target` | state |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | production branch | the CRM identity | 1 | `git` | `production` | READY |
+| B | first side-branch commit, after A | the CRM identity | 1 | `git` | `null` (preview) | READY |
+| C | production branch | a normal Claude session identity | 1 | `git` | `production` | READY |
+
+A establishes the project; B is then correctly a preview; C shows an
+ordinary Claude commit deploying natively. Exactly one deployment each — no
+duplicates anywhere. Before any of this, on a project with no deployment, a
+side-branch push had come back `target: "production"`.
+
+Since the integration deploys from the push, that cannot be refused after
+the fact. The only lever is **not to link a project whose first deployment
+would be a side-branch push** — so site-push refuses, and says to push the
+branch of record first. Linking is per project and never touches the
+repository, so no other workflow is affected.
 
 ## What the tests here do and do not cover
 
-`tests/vercel-config.test.mjs` unit-tests the merge and the guards.
 `tests/site-push-handler.test.mjs` pins the request boundary: exactly one
-`POST /v13/deployments` per push, previews never requested on the production
-target, a blocked push making no request at all, the commit identity on all
+no REST deployment for a push, the commit identity on all
 three commit paths, and the `vercel.json` enforcement — bootstrap ordering,
 atomic inclusion, settings preserved, invalid and unreadable failing closed
 before any commit, deletion and re-enabling refused, duplicate detection by

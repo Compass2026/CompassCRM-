@@ -42,24 +42,34 @@
 // Push options (Sept 14 2026, for Tom's Next.js repos): the repo and the
 // Vercel project come from the client's `sites` row when set, so a push
 // lands in the repository that row names, not one derived from the client
-// name. Every commit here — revert,
-// empty-repo bootstrap and normal tree alike — carries the single
-// CRM_COMMIT_IDENTITY (plan.ts), author AND committer, on a team member's
-// address, so Vercel no longer blocks them.
+// name. Every commit here — revert, empty-repo bootstrap and normal tree
+// alike — carries the single CRM_COMMIT_IDENTITY (plan.ts), author AND
+// committer, on a team member's address.
 //
-// Single deployment path (v10): because those commits are no longer blocked,
-// Vercel's own Git integration would deploy each one ALONGSIDE the explicit
-// deployment below — twice per push, and on a project with no successful
-// deployment the Git one would be promoted to production whatever the
-// branch. So every commit also carries `vercel.json` with
-// `git.deploymentEnabled: false` (see vercel-config.ts), merged into
-// whatever settings the file already holds. It is the first file of an
-// empty repository's bootstrap commit and rides atomically in the tree of
-// every other push; a request may neither delete it nor re-enable the
-// integration, and anything that cannot be read or merged fails closed
-// before a commit exists. The deployment is created here explicitly:
-// production for the branch of record, a preview for a side branch.
-// `deploy: false` skips it.
+// ONE DEPLOYMENT PATH (v11): Vercel's own Git integration deploys every
+// push to a linked project — Tom's, Codex's and the CRM's alike — and that
+// is the workflow, not a problem to solve. So this function does NOT create
+// a deployment for a push. It finds the one Vercel made, by commit SHA, and
+// verifies it: the right project, branch, SHA, `source: "git"`, and a target
+// that matches the branch class. Exactly one is required; more than one is
+// reported, none within the deadline is reported as a timeout.
+//
+// Until v10 this function POSTed its own /v13/deployments because the CRM
+// committed as an address on no Vercel team, so the Git integration's own
+// deployment came back BLOCKED. With the identity fixed that deployment
+// succeeds, and a second one from here would be a duplicate — which is why
+// the identity change and the removal of the REST deployment ship together.
+//
+// An explicit REST deployment survives for exactly one case: an operation
+// that creates NO new commit and genuinely needs a redeploy
+// (`{client_id, deploy: true}` with no files — Tom's Redeploy button). It
+// refuses while a deployment for that SHA is still in flight, so it can
+// never be the accidental second one.
+//
+// `deploy: false` is REJECTED (400). It used to mean "do not create the
+// deployment"; it cannot mean that any more, because the Git integration
+// deploys from the push itself. Failing loudly beats silently deploying
+// something a caller asked not to deploy.
 //
 // Branches (v9, Foundation integration — see plan.ts): the BRANCH OF RECORD
 // is `sites.branch`, else the repository's default branch, else main; it is
@@ -78,19 +88,20 @@
 // `brand` on a push sets COMPASS_BRAND on a Vercel project this call creates.
 
 import { archiveAllowed, CRM_COMMIT_IDENTITY, resolvePushPlan, type SiteRowForPlan } from "./plan.ts";
-import {
-  buildVercelConfig,
-  decodeFileContent,
-  guardVercelConfigRequest,
-  isVercelConfigPath,
-  VERCEL_CONFIG_PATH,
-  withVercelConfigFirst,
-} from "./vercel-config.ts";
 
-export const SITE_PUSH_VERSION = 10;
-export const SITE_PUSH_FEATURES = ["branch_of_record", "preview", "pull_request_base", "archive", "content_entry_boundary", "work_modes", "version", "single_deployment_path"] as const;
+export const SITE_PUSH_VERSION = 11;
+export const SITE_PUSH_FEATURES = ["branch_of_record", "preview", "pull_request_base", "archive", "content_entry_boundary", "work_modes", "version", "native_git_deploy"] as const;
 
 type FileIn = { path: string; content: string; encoding?: "utf-8" | "base64" };
+
+/** A row of Vercel's /v6/deployments listing. */
+type DeploymentRow = {
+  id: string;
+  url?: string;
+  state?: string;
+  target?: string | null;
+  meta?: Record<string, string | undefined>;
+};
 
 // The handler is a factory over its two external dependencies so the request
 // boundary can be tested with a fake Supabase client and a fake GitHub
@@ -100,6 +111,19 @@ export type SupabaseLike = any;
 export interface HandlerDeps {
   supabase: SupabaseLike;
   fetch: typeof fetch;
+  /**
+   * How long to wait on Vercel. Injectable so the tests exercise the real
+   * polling loops in milliseconds instead of minutes; production uses the
+   * defaults.
+   */
+  timing?: {
+    /** How long to keep looking for the Git integration's deployment. */
+    findMs?: number;
+    /** How long to wait for a located deployment to reach a final state. */
+    settleMs?: number;
+    /** Gap between polls. */
+    pollMs?: number;
+  };
 }
 
 function repoSlug(name: string): string {
@@ -112,6 +136,9 @@ function repoSlug(name: string): string {
 }
 
 export function createSitePushHandler(deps: HandlerDeps) {
+  const FIND_MS = deps.timing?.findMs ?? 90_000;
+  const SETTLE_MS = deps.timing?.settleMs ?? 90_000;
+  const POLL_MS = deps.timing?.pollMs ?? 4000;
   return async (req: Request): Promise<Response> => {
   const supabase = deps.supabase;
   const secret = async (name: string): Promise<string | null> => {
@@ -166,10 +193,21 @@ export function createSitePushHandler(deps: HandlerDeps) {
   if (body?.version === true) {
     return Response.json({ version: SITE_PUSH_VERSION, features: SITE_PUSH_FEATURES });
   }
-  const noDeploy: boolean = body?.deploy === false;
+  // `deploy: false` cannot suppress anything now that Vercel's Git
+  // integration deploys the push. Refuse rather than quietly deploy.
+  const deployFalse: boolean = body?.deploy === false;
   const readPaths: string[] | null = Array.isArray(body?.paths) ? body.paths.map(String) : null;
   const pullRequest: { title?: string; body?: string } | null =
     body?.pull_request && typeof body.pull_request === "object" ? body.pull_request : null;
+  if (deployFalse) {
+    return Response.json(
+      {
+        error:
+          "deploy: false is no longer accepted. Vercel's Git integration deploys every push to a linked project, so this function cannot suppress a deployment — it only finds and reports the one Vercel makes. Drop the flag, or stop the deployment in Vercel (project settings) if that is really what you want.",
+      },
+      { status: 400 },
+    );
+  }
   if (!body?.client_id || (!deployOnly && !readOnly && !domainOnly && !revertOnly && !archiveReq && !deploymentStatusReq && (!Array.isArray(body.files) || !body.files.length))) {
     return Response.json(
       { error: "client_id and a non-empty files[] are required (or deploy / read / domain / revert / archive / deployment_status)" },
@@ -385,31 +423,6 @@ export function createSitePushHandler(deps: HandlerDeps) {
       baseTree = headInfo.tree;
     }
 
-    // Read vercel.json at a ref. `{ text: null }` means the file is simply
-    // absent; a `refusal` means we could not establish the current state and
-    // the caller must stop rather than commit blind.
-    const readVercelConfigAt = async (ref: string): Promise<{ text: string | null } | { refusal: Response }> => {
-      const cur = await gh(`/repos/${owner}/${name}/contents/${VERCEL_CONFIG_PATH}?ref=${encodeURIComponent(ref)}`);
-      if (cur.status === 404) return { text: null };
-      if (!cur.ok) {
-        return {
-          refusal: Response.json(
-            { error: `could not read ${VERCEL_CONFIG_PATH} at ${ref} (${cur.status}) — refusing to commit without confirming Vercel's Git integration stays disabled`, vercel_config: "refused" },
-            { status: 502 },
-          ),
-        };
-      }
-      const c = await cur.json();
-      if (Array.isArray(c) || typeof c.content !== "string") {
-        return { refusal: Response.json({ error: `${VERCEL_CONFIG_PATH} at ${ref} is not a readable file — refusing to commit without it`, vercel_config: "refused" }, { status: 409 }) };
-      }
-      try {
-        return { text: new TextDecoder().decode(Uint8Array.from(atob(String(c.content).replace(/\s/g, "")), (ch) => ch.charCodeAt(0))) };
-      } catch (e) {
-        return { refusal: Response.json({ error: `${VERCEL_CONFIG_PATH} at ${ref} could not be decoded (${e instanceof Error ? e.message : String(e)})`, vercel_config: "refused" }, { status: 409 }) };
-      }
-    };
-
     // ── Revert mode: a new commit carrying the previous commit's tree ───
     if (revertOnly) {
       if (!headInfo) return Response.json({ error: "branch has no commits" }, { status: 400 });
@@ -421,31 +434,11 @@ export function createSitePushHandler(deps: HandlerDeps) {
       const prev = await gh(`/repos/${owner}/${name}/git/commits/${parent}`);
       if (!prev.ok) throw fail("read previous commit", prev, await prev.text());
       const pc = await prev.json();
-      // The restored tree may predate the single-deployment-path rollout, or
-      // may carry a vercel.json we cannot read. Restoring it verbatim would
-      // hand Vercel's Git integration back the right to deploy every later
-      // commit, so the property is merged into the restored tree and
-      // anything unreadable stops the revert before it commits.
-      const prevConfig = await readVercelConfigAt(parent);
-      if ("refusal" in prevConfig) return prevConfig.refusal;
-      const revertConfig = buildVercelConfig(prevConfig.text);
-      if (!revertConfig.ok) {
-        return Response.json({ error: `${revertConfig.error} (in the commit being restored, ${parent})`, vercel_config: "refused" }, { status: 409 });
-      }
-      const revertTree = await gh(`/repos/${owner}/${name}/git/trees`, {
-        method: "POST",
-        body: JSON.stringify({
-          base_tree: pc.tree.sha,
-          tree: [{ path: VERCEL_CONFIG_PATH, mode: "100644", type: "blob", content: revertConfig.content }],
-        }),
-      });
-      if (!revertTree.ok) throw fail("revert tree", revertTree, await revertTree.text());
-      const revertTreeSha = (await revertTree.json()).sha;
       const mk = await gh(`/repos/${owner}/${name}/git/commits`, {
         method: "POST",
         body: JSON.stringify({
           message: body.message ?? `Put it back: revert "${String(c.message).split("\n")[0].slice(0, 60)}" (Compass CRM)`,
-          tree: revertTreeSha,
+          tree: pc.tree.sha,
           parents: [headInfo.sha],
           author: CRM_COMMIT_IDENTITY,
           committer: CRM_COMMIT_IDENTITY,
@@ -462,7 +455,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
       if (siteRow) {
         await supabase.from("sites").update({ last_pushed_at: new Date().toISOString(), last_commit_url: commitUrl }).eq("id", siteRow.id);
       }
-      return Response.json({ repo_url: repoUrl, branch, reverted: headInfo.sha, restored: parent, commit_url: commitUrl, vercel_config: revertConfig.changed ? "restored" : "unchanged" });
+      return Response.json({ repo_url: repoUrl, branch, reverted: headInfo.sha, restored: parent, commit_url: commitUrl });
     }
 
     // ── Read mode: the pushed tree, text files inline ───────────────────
@@ -615,11 +608,77 @@ export function createSitePushHandler(deps: HandlerDeps) {
     // VERCEL_TOKEN in Vault turns it on; VERCEL_TEAM_ID overrides the team.
     // The side branch gets its own project so it never collides with an
     // existing site's project on the same repo.
+    // ── The one surviving REST deployment ──────────────────────────────
+    // For an operation that creates NO new commit and genuinely needs a
+    // redeploy: Tom's Redeploy button. The Git integration cannot help —
+    // it only reacts to a push — so this asks Vercel directly. Duplicate
+    // protection: refuse while a deployment for that same head is still in
+    // flight, so this can never become the accidental second one. A
+    // deliberate redeploy of an already-settled commit is allowed, which is
+    // the whole point of the button.
+    const explicitRedeploy = async (
+      vc: (path: string, init?: RequestInit) => Promise<Response>,
+      project: string,
+      projectId: string | null,
+      repoId: number | string | null,
+    ): Promise<Record<string, unknown>> => {
+      if (!repoId) throw new Error("no GitHub repo id for the deployment");
+      const headSha = headInfo?.sha ?? null;
+      if (headSha) {
+        const r = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&sha=${encodeURIComponent(headSha)}&limit=20`);
+        if (!r.ok) {
+          return { status: "failed", project, detail: `could not check for deployments already in flight for ${headSha} (${r.status}) — not redeploying` };
+        }
+        const inFlight = (((await r.json())?.deployments ?? []) as DeploymentRow[])
+          .filter((d) => !["READY", "ERROR", "CANCELED"].includes(String(d.state ?? "")));
+        if (inFlight.length > 0) {
+          return {
+            status: "skipped",
+            project,
+            commit: headSha,
+            detail: `Vercel is already deploying ${headSha} (${inFlight.map((d) => `${d.id} ${d.state}`).join(", ")}). Not starting a second deployment of the same commit; wait for that one.`,
+          };
+        }
+      }
+      const target = deployTarget();
+      const dep = await vc(`/v13/deployments`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: project,
+          project,
+          ...(target ? { target } : {}),
+          gitSource: { type: "github", repoId, ref: branch },
+        }),
+      });
+      if (!dep.ok) throw fail("vercel deployment", dep, await dep.text());
+      const d = await dep.json();
+      let settled: Record<string, unknown> = d;
+      const deadline = Date.now() + Math.min(45_000, SETTLE_MS);
+      while (d.id && Date.now() < deadline) {
+        const st = String(settled.readyState ?? settled.state ?? "");
+        if (st === "READY" || st === "ERROR" || st === "CANCELED") break;
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        const poll = await vc(`/v13/deployments/${d.id}`);
+        if (!poll.ok) break;
+        settled = await poll.json();
+      }
+      const readyState = String(settled.readyState ?? settled.state ?? "QUEUED");
+      const finalTarget = (settled.target ?? d.target ?? null) as string | null;
+      return {
+        status: readyState === "ERROR" ? "failed" : "deployed",
+        source: "rest-api",
+        redeploy: true,
+        project,
+        target: finalTarget ?? "preview",
+        ready_state: readyState,
+        error_message: settled.errorMessage ?? null,
+        staging_url: finalTarget === "production" ? `https://${project}.vercel.app` : (d.url ? `https://${d.url}` : `https://${project}.vercel.app`),
+        deployment_id: d.id ?? null,
+        deployment_url: d.url ? `https://${d.url}` : null,
+      };
+    };
+
     const vercelStep = async (commitSha?: string | null): Promise<Record<string, unknown>> => {
-      // Since v10 the commit carries git.deploymentEnabled:false, so the
-      // Git integration will NOT pick this push up: `deploy: false` now
-      // means the commit is not deployed at all until someone asks.
-      if (noDeploy) return { status: "skipped", detail: "deploy: false — nothing was deployed; the commit is pushed but not live. Vercel's Git integration will not deploy it either (vercel.json git.deploymentEnabled:false). Deploy it with {client_id, deploy: true}." };
       const vToken = await secret("VERCEL_TOKEN");
       if (!vToken) return { status: "skipped", detail: "VERCEL_TOKEN not in Vault" };
       const teamId = (await secret("VERCEL_TEAM_ID")) ?? "team_JxUWGz1PjUP4jOAqXQqy3YFN";
@@ -658,22 +717,18 @@ export function createSitePushHandler(deps: HandlerDeps) {
           projectId = (await existing.json())?.id ?? null;
         }
 
-        // ── A preview may never be a project's FIRST deployment ───────────
-        // Vercel promotes a project's first deployment to production whatever
-        // the branch, and the API rejects an explicit `target: "preview"`
-        // ("should be 'production', 'staging', or a custom environment
-        // identifier"), so a preview cannot be asked for directly. Creating
-        // the project does NOT help: the next deployment is still its first.
-        // The only safe move is to look before deploying and refuse when the
-        // project has nothing yet — a production deployment that should not
-        // exist cannot be undone by reporting it afterwards.
+        // ── A brand-new project's first deployment must not be a preview ──
+        // Proven on a disposable fictional project (Sept 21 2026): once the
+        // production branch has a READY production deployment, a push to a
+        // side branch gets `target: null` — a preview — exactly as wanted.
+        // Before that, a side-branch push on a zero-deployment project came
+        // back `target: "production"`. The Git integration deploys from the
+        // push, so we cannot refuse it after the fact: the only lever is not
+        // to LINK a project whose first deployment would be that push.
+        // Linking is per project and never touches the repository, so it
+        // leaves every other workflow — Tom's, Codex's, a plain git push —
+        // exactly as it is.
         if (previewPush) {
-          // READY only. Vercel's own Git integration registers deployments
-          // for our pushes and then BLOCKS them (our commit author is not a
-          // team member), and a blocked or errored record is not a real
-          // deployment: counting it would let the next preview through and
-          // that one would be the project's first real — production —
-          // deployment. Seen live on Sept 21 2026.
           const probe = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&state=READY&limit=1`);
           const list = probe.ok ? ((await probe.json())?.deployments ?? null) : null;
           if (!Array.isArray(list)) {
@@ -681,8 +736,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
               status: "blocked",
               project,
               created_project: created,
-              detail:
-                `Could not confirm whether Vercel project ${project} already has a successful deployment (${probe.status}). Refusing to deploy: a preview that turns out to be this project's first deployment becomes a PRODUCTION deployment. Next action: check the project in Vercel and re-run once it has a deployment.`,
+              detail: `Could not confirm whether Vercel project ${project} already has a successful deployment (${probe.status}). Not linking or reporting a deployment: a preview that turns out to be the project's first becomes a PRODUCTION deployment.`,
             };
           }
           if (list.length === 0) {
@@ -691,92 +745,126 @@ export function createSitePushHandler(deps: HandlerDeps) {
               project,
               created_project: created,
               detail:
-                `Vercel project ${project} has no successful (READY) deployment yet, so this preview would be its first real one — and Vercel promotes a first deployment to production whatever the branch. Nothing was deployed. Next action: give the project its first PRODUCTION deployment deliberately (Vercel → ${project} → deploy the branch of record ${base}), then re-run this push and it will deploy as a preview. A fictional or demonstration brand must never have a production deployment, so a preview is not available for one at all — verify it from the local build instead. Pushing again on its own does NOT help: the next deployment would still be the project's first.`,
+                `Vercel project ${project} has no successful (READY) deployment yet, so Vercel would promote the deployment of this side branch to PRODUCTION whatever the branch. Next action: give the project its first production deployment deliberately by pushing the branch of record ${base} (that lands as production, correctly), then side-branch pushes deploy as previews. A fictional or demonstration brand must never have a production deployment, so verify it from the local build instead.`,
             };
           }
         }
-        if (!repoId) throw new Error("no GitHub repo id for the deployment");
-        // The deployment is created here explicitly rather than left to
-        // Vercel's Git integration: production for the branch of record, a
-        // preview for a side branch / pull request. (Commits carry
-        // CRM_COMMIT_IDENTITY, a team member's address, so the Git
-        // integration no longer blocks them either.)
-        const target = deployTarget();
-        const dep = await vc(`/v13/deployments`, {
-          method: "POST",
-          body: JSON.stringify({
-            name: project,
+        // ── Find Vercel's own deployment for this commit ───────────────
+        // The Git integration made it; we locate it rather than making a
+        // second one. It appears a second or two after the push, so poll.
+        if (!commitSha) {
+          // deploy-only mode: no new commit, so there is nothing for the Git
+          // integration to react to. This is the one case that still asks
+          // Vercel to deploy — see explicitRedeploy below.
+          return await explicitRedeploy(vc, project, projectId, repoId);
+        }
+        const wanted = commitSha;
+        const listForSha = async () => {
+          const r = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&sha=${encodeURIComponent(wanted)}&limit=20`);
+          if (!r.ok) return { error: `could not list deployments for ${wanted} (${r.status})`, list: null };
+          return { error: null, list: ((await r.json())?.deployments ?? []) as DeploymentRow[] };
+        };
+        let found: DeploymentRow[] = [];
+        let listError: string | null = null;
+        const findDeadline = Date.now() + FIND_MS;
+        for (let wait = Math.min(2000, POLL_MS); ; wait = Math.min(wait * 2, 15_000)) {
+          const res = await listForSha();
+          listError = res.error;
+          if (res.list) found = res.list;
+          if (found.length > 0 || Date.now() >= findDeadline) break;
+          await new Promise((r) => setTimeout(r, wait));
+        }
+        if (found.length === 0) {
+          return {
+            status: "not_found",
             project,
-            ...(target ? { target } : {}),
-            gitSource: { type: "github", repoId, ref: branch },
-          }),
-        });
-        if (!dep.ok) throw fail("vercel deployment", dep, await dep.text());
-        const d = await dep.json();
-        // Wait briefly for the deployment to settle. A misconfigured build
-        // (a tree with no framework, say) errors within seconds, and the
-        // caller must hear that rather than record an unbuilt preview as
-        // delivered. A healthy build is still BUILDING when we give up.
-        let settled: Record<string, unknown> = d;
-        const deadline = Date.now() + 45_000;
-        while (d.id && Date.now() < deadline) {
-          const st = String(settled.readyState ?? settled.state ?? "");
-          if (st === "READY" || st === "ERROR" || st === "CANCELED") break;
-          await new Promise((r) => setTimeout(r, 4000));
-          const poll = await vc(`/v13/deployments/${d.id}`);
+            created_project: created,
+            commit: wanted,
+            detail: listError
+              ? `Could not read Vercel's deployments for ${wanted}: ${listError}. The commit is pushed; whether Vercel deployed it is unknown.`
+              : `Vercel created no deployment for ${wanted} within 90s. The commit IS pushed. Check that the Vercel GitHub App can see this repository, that the project is linked to it, and that the repository does not disable Git deployments (vercel.json git.deploymentEnabled, or an Ignored Build Step).`,
+          };
+        }
+        // Exactly one deployment per commit. More than one means something
+        // else is deploying too — report it rather than pick a winner.
+        if (found.length > 1) {
+          return {
+            status: "duplicate",
+            project,
+            commit: wanted,
+            count: found.length,
+            deployments: found.map((x) => ({ id: x.id, target: x.target ?? null, state: x.state ?? null, ref: x.meta?.githubCommitRef ?? null })),
+            detail: `Vercel holds ${found.length} deployments for commit ${wanted}; exactly one is expected. Something besides the Git integration is deploying this commit.`,
+          };
+        }
+        const chosen = found[0];
+        // Confirm it really is the Git-integration deployment of this commit
+        // on this branch, and settle its state.
+        let settled: Record<string, unknown> = {};
+        const settleDeadline = Date.now() + SETTLE_MS;
+        for (;;) {
+          const poll = await vc(`/v13/deployments/${chosen.id}`);
           if (!poll.ok) break;
           settled = await poll.json();
+          const st = String(settled.readyState ?? settled.state ?? "");
+          if (st === "READY" || st === "ERROR" || st === "CANCELED" || Date.now() >= settleDeadline) break;
+          await new Promise((r) => setTimeout(r, POLL_MS));
         }
-        const readyState = String(settled.readyState ?? settled.state ?? "QUEUED");
-        const finalTarget = (settled.target ?? d.target ?? null) as string | null;
+        const readyState = String(settled.readyState ?? chosen.state ?? "QUEUED");
+        const meta = (settled.meta ?? chosen.meta ?? {}) as Record<string, string | undefined>;
+        const finalTarget = ((settled.target ?? chosen.target) ?? null) as string | null;
+        const mismatch: string[] = [];
+        if (settled.source && settled.source !== "git") mismatch.push(`source is "${String(settled.source)}", not "git"`);
+        if (meta.githubCommitSha && meta.githubCommitSha !== wanted) mismatch.push(`it is for commit ${meta.githubCommitSha}`);
+        if (meta.githubCommitRef && meta.githubCommitRef !== branch) mismatch.push(`it is for branch ${meta.githubCommitRef}, not ${branch}`);
+        const projOfDep = (settled.project as { id?: string } | undefined)?.id;
+        if (projOfDep && projectId && projOfDep !== projectId) mismatch.push(`it belongs to project ${projOfDep}`);
+        if (mismatch.length > 0) {
+          return {
+            status: "failed",
+            project,
+            commit: wanted,
+            deployment_id: chosen.id,
+            detail: `The deployment found for ${wanted} is not the expected one: ${mismatch.join("; ")}.`,
+          };
+        }
         // The boundary: a preview push may never end up on a production target.
+        const expectedTarget = deployTarget() ?? null;
         if (previewPush && finalTarget === "production") {
           return {
             status: "failed",
             project,
             target: finalTarget,
-            deployment_url: d.url ? `https://${d.url}` : null,
+            deployment_id: chosen.id,
+            deployment_url: chosen.url ? `https://${chosen.url}` : null,
             ready_state: readyState,
-            detail:
-              "a preview push produced a PRODUCTION-target deployment — refusing to report it as a preview. Nothing may be published this way.",
+            detail: "a preview push produced a PRODUCTION-target deployment — refusing to report it as a preview. Nothing may be published this way.",
           };
         }
-        const stagingUrl = target ? `https://${project}.vercel.app` : (d.url ? `https://${d.url}` : `https://${project}.vercel.app`);
-        // ── Defence in depth: one commit, one deployment ────────────────
-        // vercel.json git.deploymentEnabled:false is what actually keeps
-        // Vercel's Git integration from deploying this commit as well. If a
-        // repository ever slips through without it, the symptom is two
-        // deployment records for one SHA — so look, and say so. A failure to
-        // look is reported, never treated as "none found".
-        let duplicates: Record<string, unknown> | null = null;
-        if (commitSha) {
-          const dupes = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&sha=${encodeURIComponent(commitSha)}&limit=10`);
-          if (!dupes.ok) {
-            duplicates = { checked: false, detail: `could not list deployments for ${commitSha} (${dupes.status})` };
-          } else {
-            const list = ((await dupes.json())?.deployments ?? []) as { id: string; source?: string; target?: string | null }[];
-            const others = list.filter((x) => x.id !== d.id);
-            duplicates = others.length > 0
-              ? {
-                  checked: true,
-                  count: list.length,
-                  ours: d.id,
-                  others: others.map((x) => ({ id: x.id, source: x.source ?? null, target: x.target ?? null })),
-                  detail: `Vercel holds ${list.length} deployments for commit ${commitSha}. site-push must be the only deployment path — check that vercel.json on ${branch} carries git.deploymentEnabled:false.`,
-                }
-              : { checked: true, count: list.length, ours: d.id };
-          }
+        if (!previewPush && expectedTarget === "production" && finalTarget !== "production") {
+          return {
+            status: "failed",
+            project,
+            target: finalTarget,
+            deployment_id: chosen.id,
+            ready_state: readyState,
+            detail: `a push to the branch of record ${branch} deployed as ${finalTarget ?? "a preview"}, not production — check the Vercel project's production branch.`,
+          };
         }
+        const stagingUrl = finalTarget === "production"
+          ? `https://${project}.vercel.app`
+          : (chosen.url ? `https://${chosen.url}` : `https://${project}.vercel.app`);
         return {
-          ...(duplicates ? { duplicates } : {}),
           status: readyState === "ERROR" ? "failed" : created ? "created" : "deployed",
+          source: "git",
           project,
           target: finalTarget ?? "preview",
           ready_state: readyState,
           error_message: settled.errorMessage ?? null,
           staging_url: stagingUrl,
-          deployment_url: d.url ? `https://${d.url}` : null,
-          inspector_url: d.inspectorUrl ?? null,
+          deployment_id: chosen.id,
+          deployment_url: chosen.url ? `https://${chosen.url}` : null,
+          inspector_url: settled.inspectorUrl ?? null,
         };
       } catch (e) {
         return { status: "failed", detail: e instanceof Error ? e.message : String(e) };
@@ -795,53 +883,14 @@ export function createSitePushHandler(deps: HandlerDeps) {
         { status: vercel.status === "failed" ? 502 : 200 });
     }
 
-    // ── vercel.json: the CRM's single deployment path, enforced in-repo ──
-    // Every commit site-push makes carries git.deploymentEnabled:false, so
-    // Vercel's Git integration never deploys a commit alongside the explicit
-    // deployment below. This runs AFTER resolvePushPlan on purpose: the plan
-    // (and validateContentEntry with it) judges the CALLER's paths, so a
-    // content entry on an upgrade_existing branch of record is still held to
-    // its adapter's push paths. vercel.json is CRM infrastructure riding
-    // along, not caller content.
-    //
-    // Everything here fails closed — no commit and no deployment — because a
-    // push that lands without the property is a push Vercel may deploy twice.
-    const configGuard = guardVercelConfigRequest(files, deletes);
-    if (!configGuard.ok) {
-      return Response.json({ error: configGuard.error, vercel_config: "refused" }, { status: 409 });
-    }
-    let existingConfig: string | null = null;
-    const suppliedConfig = files.find((f) => isVercelConfigPath(f.path));
-    if (suppliedConfig) {
-      // The caller's own file is the base to merge into, so its settings win
-      // over whatever is on the branch.
-      try {
-        existingConfig = decodeFileContent(suppliedConfig);
-      } catch (e) {
-        return Response.json({ error: `the supplied vercel.json could not be decoded (${e instanceof Error ? e.message : String(e)})`, vercel_config: "refused" }, { status: 409 });
-      }
-    } else if (headInfo) {
-      const onBranch = await readVercelConfigAt(headInfo.sha);
-      if ("refusal" in onBranch) return onBranch.refusal;
-      existingConfig = onBranch.text;
-    }
-    const builtConfig = buildVercelConfig(existingConfig);
-    if (!builtConfig.ok) {
-      return Response.json({ error: builtConfig.error, vercel_config: "refused" }, { status: 409 });
-    }
-    // First in the list: for an empty repository the first entry is the
-    // bootstrap commit, so the integration is off before any other file
-    // exists for Vercel to react to.
-    const pushFiles = withVercelConfigFirst(files, builtConfig.content);
-
     // ── Empty repository: seed the first commit through the Contents API ──
     // The Git Data API refuses to create blobs until a repo has a commit
     // ("Git Repository is empty"); the Contents API does not mind. Write the
     // first file that way, then continue with the rest below.
-    let pending = pushFiles;
+    let pending = files;
     let bootstrapCommit: { sha: string; url: string } | null = null;
     if (repoEmpty) {
-      const first = pushFiles[0];
+      const first = files[0];
       const b64 = first.encoding === "base64"
         ? first.content
         : btoa(Array.from(new TextEncoder().encode(first.content), (b) => String.fromCharCode(b)).join(""));
@@ -860,7 +909,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
       parentSha = p.commit.sha;
       baseTree = p.commit.tree.sha;
       bootstrapCommit = { sha: p.commit.sha, url: p.commit.html_url };
-      pending = pushFiles.slice(1);
+      pending = files.slice(1);
     }
 
     // ── Tree → commit → ref ─────────────────────────────────────────────
@@ -1002,7 +1051,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
       branch,
       branch_url: branchUrl,
       commit_url: commitUrl,
-      files: pushFiles.length,
+      files: files.length,
       deleted: baseTree ? deletes.length : 0,
       created_repo: createdRepo,
       pull_request_url: prUrl,

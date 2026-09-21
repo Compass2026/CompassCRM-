@@ -412,7 +412,10 @@ export async function provisionClientAction(
 
 // ── Redeploy (Edge Function) ───────────────────────────────────────────────
 // site-push with { deploy: true } and no files: ensure the Vercel project and
-// start a production deployment of the branch it last pushed. No commit.
+// start a deployment of the branch it last pushed. No commit is created, so
+// Vercel's Git integration cannot do this one — it is the only operation
+// that still asks Vercel to deploy directly. site-push refuses if a
+// deployment of that same head is already in flight.
 export type RedeployState = { ok: boolean; message: string } | null;
 
 type VercelStep = {
@@ -475,9 +478,9 @@ export async function redeploySiteAction(
 }
 
 // "Put it back": one commit on the site's branch that restores the previous
-// commit's tree, then a production deployment of it (Vercel's Git
-// integration blocks commits from non-members, so site-push deploys). The
-// change stays in history.
+// commit's tree. Vercel's Git integration deploys that commit like any
+// other push — site-push does not deploy it a second time. The change stays
+// in history.
 export async function revertSiteAction(
   clientId: string,
   _prev: RedeployState,
@@ -509,16 +512,9 @@ export async function revertSiteAction(
   if (!payload) return { ok: false, message: `Revert failed (${res.status}).` };
   if (payload.error) return { ok: false, message: payload.error };
 
-  // The revert commit is on the branch; now deploy it.
-  await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/site-push`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ client_id: clientId, deploy: true }),
-  }).catch(() => null);
+  // No second call: the revert is a new commit on the branch, and Vercel's
+  // Git integration deploys it the same as any other push. Asking site-push
+  // to deploy as well would be the duplicate we are trying to avoid.
 
   await supabase.from("change_log").insert({
     client_id: clientId,

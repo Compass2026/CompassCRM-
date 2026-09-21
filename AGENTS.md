@@ -666,15 +666,19 @@ and the per-site survey in `docs/website-updates.md`.
   name often differ — always read both off the `sites` row rather than
   deriving them); `{read: true, paths: [...]}` returns only those
   files inline; `{revert: true}` makes a new commit carrying the previous
-  commit's tree. **Vercel's Git integration blocks every commit authored
-  by "Compass CRM"** (not a team member — the entries show as BLOCKED in
-  Vercel and are harmless), so site-push creates the deployment itself:
+  commit's tree. **Deployments come from Vercel's own Git
+  integration** (v11): commits carry a team member's address, so the
+  integration deploys them like anyone else's, and site-push finds that
+  deployment by commit SHA rather than making a second one —
   production for the branch of record, a preview (behind Vercel's
   deployment protection, so a Vercel login is needed to view it) for a
   side branch, `vercel.target` / `staging_url` / `deployment_url` in the
-  response; `deploy: false` skips it. `{deploy: true}` with no files
-  redeploys the current head, which is what **Put it back** does after a
-  revert. Next.js repos default to their recorded branch — the "not our
+  response. `deploy: false` is **refused** — the integration deploys from
+  the push, so nothing can suppress it from here. `{deploy: true}` with no
+  files is the one remaining REST deployment (Tom's Redeploy button: no
+  commit, so the integration cannot serve it) and it refuses while a
+  deployment of the same head is in flight. **Put it back** no longer
+  follows its revert with a deploy — the revert commit deploys itself. Next.js repos default to their recorded branch — the "not our
   author → compass-astro" guard is for full builds only. Verified Sept 15
   on Lucas: read, push to `main` + production deploy, branch + PR + preview
   (PR #9), revert (Sept 14 test, redeployed).
