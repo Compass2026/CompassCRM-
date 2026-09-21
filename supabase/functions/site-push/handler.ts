@@ -782,6 +782,13 @@ export function createSitePushHandler(deps: HandlerDeps) {
             commit: wanted,
             detail: listError
               ? `Could not read Vercel's deployments for ${wanted}: ${listError}. The commit is pushed; whether Vercel deployed it is unknown.`
+              // Expected, not a fault: the project is created here, AFTER the
+              // commit is pushed, so on a project's first push the Git
+              // integration did not yet exist to react to it. The commit is
+              // safely on the branch; one deliberate deployment gets the
+              // project going and every later push deploys by itself.
+              : created
+              ? `Vercel project ${project} did not exist when ${wanted} was pushed — it was created just now — so the Git integration could not have deployed that commit. Nothing is wrong with the push. Next action: give the project its first deployment with {client_id, deploy: true} (the Redeploy button), which lands as production from the branch of record; after that every push deploys on its own.`
               : `Vercel created no deployment for ${wanted} within 90s. The commit IS pushed. Check that the Vercel GitHub App can see this repository, that the project is linked to it, and that the repository does not disable Git deployments (vercel.json git.deploymentEnabled, or an Ignored Build Step).`,
           };
         }

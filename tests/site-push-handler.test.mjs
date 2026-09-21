@@ -407,3 +407,24 @@ test("redeploy refuses while a deployment of the same head is still in flight", 
   assert.equal(restPosts(gh).length, 0, "no second deployment of the same commit");
   assert.ok(supabase);
 });
+
+test("a brand-new project's first push says why no deployment exists, instead of blaming the GitHub App", async () => {
+  // The Vercel project is created by this function, AFTER the commit is
+  // pushed — so on a project's very first push the Git integration did not
+  // yet exist to react to it. That is expected, and the diagnostic has to
+  // say so rather than send someone hunting for a permissions problem.
+  const vercel = { projects: {} };
+  const { post } = setup({
+    site: { ...LUCAS_SITE, vercel_project: null, work_mode: "new_build", branch: "main", content_adapter: null, content_paths: null },
+    repos: { "Compass2026/ridge-safety": { id: 42, default_branch: "main", branches: { main: { author: "Compass CRM" } } } },
+    vercel,
+  });
+  const r = await post({ client_id: CLIENT, branch: "main", message: "first build", files: [{ path: "app/page.tsx", content: "x" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.vercel.status, "not_found");
+  assert.equal(r.body.vercel.created_project, true);
+  assert.match(r.body.vercel.detail, /did not exist when .* was pushed/);
+  assert.match(r.body.vercel.detail, /Nothing is wrong with the push/);
+  assert.doesNotMatch(r.body.vercel.detail, /GitHub App/, "must not blame App visibility for an expected first-push case");
+  assert.ok(r.body.commit_url, "the commit is still reported as pushed");
+});
