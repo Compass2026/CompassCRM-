@@ -35,6 +35,33 @@ two deployment records:
 The BLOCKED record is not a curiosity — it is the duplicate, already being
 created today and stopped only by the author check.
 
+## Why BLOCKED happens — established, not inferred
+
+The BLOCKED deployment carries
+`errorLink: https://vercel.com/docs/deployments/troubleshoot-project-collaboration#account-configuration`
+and `source: "git"`. That page says it plainly:
+
+> To deploy commits under a Vercel Pro team, the commit author must be a
+> member of the team containing the Vercel project connected to the Git
+> repository.
+>
+> Your git provider associates commits with users by matching the commit
+> email to an email on your git provider account.
+
+So the chain is: commit email → GitHub user → Vercel team member. Both ends
+are confirmed on the same repository:
+
+| commit | author email | GitHub `author.login` | Git deployment |
+| --- | --- | --- | --- |
+| `57d8ab8` | `crm@compassmarketing.ai` | **none** — GitHub returns no author object | BLOCKED |
+| `7119da7` | `thomas@compassmarketing.ai` | `Compass2026` (id 262452829) | see below |
+
+`compass2026-5316` is the Vercel account that creates every deployment on
+this team, so `Compass2026` is the team's connected Git account. Moving the
+CRM's commit email to `thomas@compassmarketing.ai` therefore makes the
+author resolvable **and** a team member — which is what PR #46 intends, and
+also exactly what stops Vercel blocking path 1.
+
 ## Why the commit-identity fix cannot ship on its own
 
 Moving the commit author to `thomas@compassmarketing.ai` makes the author a
