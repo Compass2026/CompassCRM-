@@ -718,6 +718,18 @@ and the per-site survey in `docs/website-updates.md`.
 
 ## Reporting worker (Sept 13 2026)
 
+**Nine-area scorecard update (prepared Sept 22 2026, not deployed):** see
+`docs/client-scorecards.md` and migration 0041. The Reports tab adds early,
+append-only baseline evidence and monthly comparisons for website pages/links,
+citations, backlinks, GBP, reviews, rankings, search traffic, leads and social.
+New intake creates a TOM baseline-review task; capture happens before client
+improvements, independently of monthly enrollment. The ledger is team-only via
+`is_team()`, never blanket authenticated access. Main is missing security
+migrations 0036-0038 referenced by 0039, so verify those prerequisites before
+activation. This is still single-agency access, not organization tenancy.
+No new provider connector is implied. Missing sources stay explicit; original
+baselines cannot be overwritten. Existing cycles and Drive links remain.
+
 Migration 0024 makes the monthly Reporting cycle worker-run (Playbooks 5 and
 6). The month has three beats on the 1st, all pg_cron: 06:00 UTC
 `create_monthly_cycles()` opens a cycle and its keyed tasks per active

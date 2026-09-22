@@ -3,6 +3,16 @@
 Deferred on purpose, in the order to take them up. Each line says what it
 unblocks and what it costs.
 
+## Client scorecard activation
+
+The nine-area baseline/monthly implementation is prepared for review, not
+deployed. Reconcile missing security migrations 0036-0038, validate 0041 with
+isolated test identities, then review the worker's baseline capture and report
+draft in a sandbox. Production migration/deployment needs explicit approval.
+See [client-scorecards.md](client-scorecards.md). Future provider ingestion for
+GBP performance, GA4, social performance and verified leads remains separate;
+until then use sourced manual entries or explicit unavailable states.
+
 ## Needs Tom's decision or money
 
 1. **BrightLocal spend.** Two things wait on a per-client credit cap:

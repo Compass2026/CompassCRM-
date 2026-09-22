@@ -14,6 +14,55 @@ export type Database = {
   }
   public: {
     Tables: {
+      report_measurements: {
+        Row: {
+          id: string
+          sequence: number
+          client_id: string
+          metric: string
+          scope: string
+          source: string
+          platform: string
+          channel: string
+          context: string
+          report_period: string | null
+          window_start: string
+          window_end: string
+          status: string
+          value: number | null
+          evidence: string
+          meaning: string
+          next_action: string
+          created_at: string
+          recorded_by: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          metric: string
+          scope: string
+          source: string
+          platform?: string
+          channel?: string
+          context: string
+          report_period?: string | null
+          window_start: string
+          window_end: string
+          status: string
+          value?: number | null
+          evidence?: string
+          meaning: string
+          next_action: string
+        }
+        Update: never
+        Relationships: [{
+          foreignKeyName: "report_measurements_client_id_fkey"
+          columns: ["client_id"]
+          isOneToOne: false
+          referencedRelation: "clients"
+          referencedColumns: ["id"]
+        }]
+      }
       alerts: {
         Row: {
           acknowledged: boolean
@@ -3166,6 +3215,7 @@ export type Database = {
       }
     }
     Functions: {
+      is_team: { Args: Record<PropertyKey, never>; Returns: boolean }
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined

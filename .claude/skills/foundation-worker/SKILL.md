@@ -58,6 +58,28 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
 
 ## 1. Find work
 
+**Baseline before improvements (once migration 0041 is approved and active).**
+Read `docs/client-scorecards.md` before collecting or reporting measurements.
+At a client's first Foundation run, capture available read-only evidence in
+`report_measurements` before any Website/SEO changes to client assets. Read-only
+research may continue while access is missing. For each of the nine areas,
+record supported measurements or a primary metric with an explicit unavailable
+status, explanation and next action. Do not use zero for missing data. The
+`reporting_baseline` task belongs to TOM for review; do not close it for him.
+This task is independent of monthly-cycle enrollment. Existing clients get
+`context = 'existing_client'` unless dated evidence actually proves pre-work
+capture. Baseline capture does not authorize any external write or new spend.
+
+If the ledger is absent or inaccessible, record the setup problem in the stage
+evidence and next action. Pause client-asset improvements until the initial
+available/missing evidence is recorded; do not apply migrations yourself.
+Use a stable submission UUID per source record/version, and verify an existing
+row's payload before treating a duplicate as a successful retry. Corrections
+append a new ID and explain the correction. Never update/delete ledger rows.
+Reuse the exact metric/scope/source/platform/channel definition for subsequent
+measurements. If coverage, filters, provider or keyword set changes, start a
+separate series and explain it. Query only the current `client_id`.
+
 ```sql
 with fnd as (
   select cp.id as cp_id, cp.client_id, c.name, c.website_url, c.status as client_status
@@ -1313,9 +1335,11 @@ client to `active` and enrolls Reporting.
 
 Runs for an open `monthly_cycles` row (the CRM opens one per active client
 on the 1st and fires you at 09:00 UTC, after the BrightLocal and GSC syncs;
-a cycle started by hand on the Reports tab fires at once). `period` is the
-first of the month being reported on — the cycle opened on Oct 1 reports
-September. Everything below is **read from the CRM and DataForSEO** and
+a cycle started by hand on the Reports tab fires at once). The cycle's `period`
+is its operational month: the cycle opened on Oct 1 normally reports September.
+The scorecard ledger's `report_period` is the actual data month (September 1
+in that example), and every measurement retains its actual start/end dates.
+Everything below is **read from the CRM and DataForSEO** and
 **written to the CRM and Drive**; nothing is sent to the client. Sending is
 Tom's `report_send` task.
 
@@ -1362,13 +1386,17 @@ everything from the CRM first:
   the two periods give the City Index per location.
 - **Grid:** `grid_snapshots` per `grid_configs` — `avg_map_rank` and
   `share_of_voice`, this period vs prior.
-- **Search Console:** `gsc_snapshots` — clicks, impressions, CTR, average
-  position summed / averaged over the period vs prior; top 10 queries and
-  pages by clicks; queries that gained the most impressions.
+- **Search Console:** use verified property totals for the exact window. Existing
+  `gsc_snapshots` contain query/page rows and actual `period_start`/`period_end`
+  (normally a rolling 28-day export). Do not sum overlapping exports, label
+  query/page totals as complete property totals without coverage evidence, or
+  average averages. If totals cannot be verified, record them as not measured;
+  query/page detail can remain in the appendix with its coverage limitation.
 - **Alerts:** `alerts` triggered in the period, acknowledged or not.
 - **Activity:** `content_posts` published in the period, `social_posts`
-  published in the period, GBP posts (count the `gbp_posts` task's notes if
-  Tom recorded a number, else 0), against `plans.gbp_posts_per_month` /
+  with verified publication dates (social `scheduled_at` alone is not proof),
+  GBP posts (count the `gbp_posts` task's notes if Tom recorded a verified number,
+  else not measured), against `plans.gbp_posts_per_month` /
   `blog_posts_per_month` / `social_posts_per_month`.
 - **Off-page:** `backlinks_timeseries_summary` (bare host, `date_from` = the
   first of the prior period, `group_range = 'month'`): referring domains and
@@ -1382,7 +1410,22 @@ snapshots this period — BrightLocal reports not set up"), never a blocker.
 A client with nothing at all (no snapshots, no GSC, no activity) still gets
 a report; it says so.
 
-**Write.** `monthly_cycles.summary`:
+**Scorecard ledger first.** Follow `docs/client-scorecards.md` and the metric
+catalog in `src/lib/reporting.ts`. Append the nine areas' supported measurements
+to `report_measurements`, with source, scope, dates, status, evidence, meaning
+and next action. Keep social per profile/platform and organic/paid channel.
+GBP call-button clicks are not actual calls; qualified leads must be verified.
+No new integration is assumed: manual verified exports are acceptable, otherwise
+use an unavailable status with an empty value. The first measured sequence is
+the permanent per-series baseline. Compare to the immediately preceding data
+month; never substitute older data. Suppress deltas for changed definitions,
+overlapping dates or unequal partial windows. Calendar months may have different
+day counts; disclose that. Never populate a baseline by copying an unverified
+old `summary`.
+
+**Compatibility summary.** Continue writing `monthly_cycles.summary` for
+existing consumers, omitting unavailable numeric fields rather than inventing
+zeroes. This shape is supplementary; the sourced ledger drives the scorecard:
 
 ```json
 {"period": "<yyyy-mm>", "ranks": {"tracked": n, "up": n, "down": n, "flat": n, "top3": n, "top10": n, "prev_top3": n, "prev_top10": n, "movers_up": [{"keyword","city","from","to"}], "movers_down": [...]},
@@ -1400,11 +1443,15 @@ a report; it says so.
 and `monthly_cycles.rank_summary` = `{"organic_index": <avg City Index
 organic>, "map_index": <avg map>, "note": "<one line>"}` (the Reports tab
 reads that shape). Then the report: `Monthly Report — <Client> — <Month
-YYYY>` to Drive `05 Reports`, in this order: three wins, the numbers
-(ranks, City Index, Search Console, GBP, backlinks) each with the
-month-over-month delta, activity against plan, what the industry did
-(from the pulse, two or three items that matter to *this* client), next
-month's three moves. Plain language, no jargon, no internal ids; the
+YYYY>` to Drive `05 Reports`. Start with a short progress overview, then the
+nine areas in catalog order. Each area has a small scorecard with dated baseline,
+previous period, current period and supported changes, followed by one sentence
+on what it means and one next action. Show missing data explicitly. Keep the
+primary report easy to review; keyword positions, URL inventories, detailed
+activity and industry pulse belong in an optional appendix. Finish with the
+next month's three priorities. An initial report is titled `Starting Baseline`
+and uses actual first-measurement dates; no fictional earlier comparisons.
+Plain language, no jargon, no internal ids; the
 client's name, never "the client". Store the link on the cycle
 (`report_url`) and as `deliverables (client_id, monthly_cycle_id, label,
 url, type)` = `('…', '…', 'Monthly Report <yyyy-mm>', '<url>', 'report')`.
