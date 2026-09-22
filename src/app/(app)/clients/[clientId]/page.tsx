@@ -9,6 +9,7 @@ import {
   invitePortalUserAction,
   revokePortalUserAction,
 } from "@/app/portal-actions";
+import { PORTAL_INVITES_FLAG, portalInvitesEnabled } from "@/lib/portal-invites";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +64,7 @@ export default async function OverviewPage({
   const updateClient = updateClientAction.bind(null, clientId);
   const addContact = addContactAction.bind(null, clientId);
   const invitePortalUser = invitePortalUserAction.bind(null, clientId);
+  const invitesEnabled = portalInvitesEnabled();
 
   const accessBySystem = new Map(access?.map((a) => [a.system, a]));
   const systems: AccessSystem[] = [
@@ -336,34 +338,51 @@ export default async function OverviewPage({
             </div>
           )}
 
-          <form
-            action={invitePortalUser}
-            className="flex flex-wrap items-end gap-3"
-          >
-            <div className="space-y-1">
-              <Label htmlFor="portal_email">Email</Label>
-              <Input
-                id="portal_email"
-                name="email"
-                type="email"
-                required
-                placeholder="owner@client.com"
-                className="w-64"
-              />
+          {invitesEnabled ? (
+            <form
+              action={invitePortalUser}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <div className="space-y-1">
+                <Label htmlFor="portal_email">Email</Label>
+                <Input
+                  id="portal_email"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="owner@client.com"
+                  className="w-64"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="portal_name">Name</Label>
+                <Input
+                  id="portal_name"
+                  name="name"
+                  placeholder="Optional"
+                  className="w-48"
+                />
+              </div>
+              <Button type="submit" variant="outline">
+                Send invite
+              </Button>
+            </form>
+          ) : (
+            <div
+              role="note"
+              className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+            >
+              <p className="font-medium">Invites are switched off for now.</p>
+              <p className="mt-1">
+                The client portal isn&apos;t open to clients yet, so no one can
+                be invited from here. Contacts already listed above keep their
+                access, and Revoke still works. To turn invites on, set{" "}
+                <code className="font-mono text-xs">{PORTAL_INVITES_FLAG}=true</code>{" "}
+                in Vercel and redeploy — see the portal go-live steps in{" "}
+                <code className="font-mono text-xs">docs/portal-reconciliation.md</code>.
+              </p>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="portal_name">Name</Label>
-              <Input
-                id="portal_name"
-                name="name"
-                placeholder="Optional"
-                className="w-48"
-              />
-            </div>
-            <Button type="submit" variant="outline">
-              Send invite
-            </Button>
-          </form>
+          )}
         </CardContent>
       </Card>
     </div>

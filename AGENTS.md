@@ -816,6 +816,13 @@ stands. No billing, no approvals, no uploads yet.
   `/auth/signout` if they are neither), and the portal layout sends a team
   member back to `/`. `portal_seen()` (0038) stamps `last_seen_at` — the one
   write a portal user may make.
+- **Invites are off by default:** the server-side flag
+  `PORTAL_INVITES_ENABLED` must be exactly `true` in the Vercel deployment's
+  environment, or the Send invite form is replaced by a notice and
+  `invitePortalUserAction` refuses before calling anything
+  (`src/lib/portal-invites.ts`). Merging to `main` deploys the app, so this
+  is what keeps invites closed until the go-live steps in
+  `docs/portal-reconciliation.md` are done. Revoke is never gated.
 - **Invites:** `portal-invite` Edge Function (team JWT only) saves the
   `portal_users` row, sends the email (first invite, re-sent invite, or a
   magic link for a returning contact) and links `auth_user_id` on that row,

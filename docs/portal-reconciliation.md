@@ -8,6 +8,34 @@ already depends on 0036's `is_team()`. This branch brings the repository back in
 line with what is running. **Nothing was applied, deployed or changed in the
 project to produce it.**
 
+## Merging this PR deploys the app
+
+Vercel's production branch for `compass-crm` is `main`. **Merging this PR
+into `main` deploys the CRM, portal routes included, to production** at
+https://compass-crm-ten.vercel.app with no manual step. It does **not** apply
+migrations or deploy Edge Functions; those stay manual, in the "To go live"
+steps below.
+
+What ships on merge is safe to expose:
+- the read-only `/portal` routes, which serve only the views 0037 already
+  created live;
+- the Overview tab's **Client portal** card, listing any existing contacts
+  (none today) with **Revoke**.
+
+What does **not** become usable: the card's **Send invite** form. It sits
+behind the server-side flag `PORTAL_INVITES_ENABLED`, which is **off unless
+set to exactly `true`** in the deployment's environment. With the flag off:
+
+- the card shows "Invites are switched off for now" instead of the form;
+- `invitePortalUserAction` refuses before reading the form or calling
+  `portal-invite`, so a hand-crafted POST of the action sends nothing
+  (`src/lib/portal-invites.ts`; `tests/portal-invites.test.mjs`);
+- Revoke is not gated: taking access away always works.
+
+The flag isn't `NEXT_PUBLIC_`, so it's never in the browser bundle.
+Vercel applies environment variable changes only to **new** deployments, so
+turning it on or off needs a redeploy.
+
 ## What the branch contains
 
 | Commit | What |
@@ -271,6 +299,23 @@ enforces 0037 + 0042 and records every email instead of sending it):
    default templates the session arrives in the URL fragment, which
    `/auth/confirm` never sees. This was true of v1 as well and is not
    verified here (no read access to Auth settings).
+4. **Turn invites on, last:**
+   1. Vercel → project `compass-crm` → Settings → Environment Variables.
+      Add `PORTAL_INVITES_ENABLED` with the value `true` (lowercase, no
+      spaces), scoped to **Production**. Add **Preview** too only if you
+      want invites from preview deployments, which invite with a redirect
+      back to that preview URL.
+   2. Deployments → the current production deployment → **Redeploy**.
+      The variable takes effect only in a new deployment.
+   3. Open any client's Overview tab. The Client portal card now shows the
+      **Send invite** form instead of the "switched off" notice.
+   4. Invite a Compass-controlled test address first, sign in through the
+      email, and confirm it lands on `/portal` with only that client's data.
+      Then revoke it.
+
+   **To turn invites off again:** delete the variable (or set it to
+   anything but `true`) and redeploy. The form disappears and the action
+   refuses. Existing contacts keep their access until revoked.
 
 ## Remaining differences and findings
 
@@ -299,8 +344,11 @@ enforces 0037 + 0042 and records every email instead of sending it):
 
 ## Rollback
 
-- **This PR.** It changes only the repository. Revert the merge with
-  `git revert -m 1 <merge commit>`; nothing in the project changes either way.
+- **This PR.** Merging deploys the app (above). Nothing in the Supabase
+  project changes either way. Revert the merge with
+  `git revert -m 1 <merge commit>`; the revert redeploys the previous app.
+  To shut invites without reverting, unset `PORTAL_INVITES_ENABLED` and
+  redeploy.
   Reverting reopens the exposure described above: `main`'s eight Edge
   Functions without the team check would again be what a redeploy ships.
 - **Edge Functions.** Nothing was deployed. If a later deploy from this branch

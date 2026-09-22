@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { runPortalInvite } from "@/lib/portal-invites";
 
 // The portal lives on the same app, so the invite link points back at this
 // deployment — preview or production, whichever the invite was sent from.
@@ -46,22 +47,22 @@ async function callPortalInvite(body: Record<string, unknown>) {
   }
 }
 
+// Refused unless PORTAL_INVITES_ENABLED is "true" in this deployment
+// (src/lib/portal-invites.ts) — the form is hidden when it is off, and this
+// check covers a direct submission.
 export async function invitePortalUserAction(
   clientId: string,
   formData: FormData
 ) {
-  const email = String(formData.get("email") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  if (!email) throw new Error("Email is required");
-
-  await callPortalInvite({
-    client_id: clientId,
-    email,
-    name: name || null,
-    redirect_to: `${await siteOrigin()}/auth/confirm?next=/portal`,
-  });
+  await runPortalInvite(
+    { env: process.env, send: callPortalInvite, origin: siteOrigin },
+    clientId,
+    formData
+  );
   revalidatePath(`/clients/${clientId}`);
 }
+
+// Revoke is not behind the flag: taking access away must always work.
 
 export async function revokePortalUserAction(clientId: string, email: string) {
   // Scoped to this client, so a revoke from one client's page can never touch
