@@ -23,8 +23,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   automations live in Postgres triggers and functions — see
   `0001_initial_schema.sql`. Supabase records each migration under a
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
-  recorded version (one recorded migration, `gsc_snapshots_plain_key`, has
-  no file yet). `scripts/test-portal-sandbox.sh` replays all migrations into
+  recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
+  migration that was missing a file — never apply it; `0042` is written but
+  **not yet applied**). `scripts/test-portal-sandbox.sh` replays all migrations into
   a local Postgres shaped like the project and runs the team / anon / portal
   access tests — run it after any migration that touches policies, grants,
   security-definer functions or `portal_*` views.
@@ -815,9 +816,16 @@ stands. No billing, no approvals, no uploads yet.
   `/auth/signout` if they are neither), and the portal layout sends a team
   member back to `/`. `portal_seen()` (0038) stamps `last_seen_at` — the one
   write a portal user may make.
-- **Invites:** `portal-invite` Edge Function (team JWT only) creates the auth
-  user and the `portal_users` row; the Overview tab's **Client portal** card
-  invites and revokes. Supabase's built-in mailer allows a couple of messages
+- **Invites:** `portal-invite` Edge Function (team JWT only) saves the
+  `portal_users` row, sends the email (first invite, re-sent invite, or a
+  magic link for a returning contact) and links `auth_user_id` on that row,
+  reporting success only once the link is saved; the Overview tab's **Client
+  portal** card invites and revokes. A contact belongs to one client: an
+  address or sign-in already on another client is refused (409), and 0042
+  enforces one active client per sign-in in the database. The handler is
+  `handler.ts`, tested by `tests/portal-invite-handler.test.mjs`. **The
+  deployed v1 predates this** (it never linked first-time invitees and its
+  re-invites sent nothing) — deploy it before inviting anyone. Supabase's built-in mailer allows a couple of messages
   an hour, so **custom SMTP (Resend, `send.compassmarketing.ai` is verified)
   must be set in Auth → Emails before inviting real clients.**
 

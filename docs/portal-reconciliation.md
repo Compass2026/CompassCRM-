@@ -16,8 +16,9 @@ project to produce it.**
 | Deployed-byte alignment | `rank-sync` and `portal-invite` differed from the deployed source only in comment-divider width; the repo now holds the deployed bytes. |
 | Types | `src/lib/database.types.ts` regenerated from the live schema. |
 | Routing fix | A client contact who signs in at `/login` goes to `/portal` instead of being signed out. |
-| Sandbox | `scripts/test-portal-sandbox.sh` + `supabase/tests/sandbox/` — replays every migration into a local Postgres shaped like the project and runs 298 access checks. |
+| Sandbox | `scripts/test-portal-sandbox.sh` + `supabase/tests/sandbox/` — replays every migration into a local Postgres shaped like the project and runs the access checks (310 today). |
 | This document | |
+| **Follow-ups (below)** | `0007a_gsc_snapshots_plain_key.sql` (the recorded migration that had no file); `0042_portal_single_assignment.sql` (**new, not applied**); `portal-invite` rewritten as a tested handler that links first-time invitees and really delivers re-invites (**not deployed**). |
 
 ## Migration files and Supabase's recorded versions
 
@@ -27,7 +28,10 @@ Supabase records a migration applied through the MCP / Management API under a
 prefix. The two are matched by name, not by position: names were passed
 without the prefix up to 0021 and for 0032–0035, and with it from 0022–0031
 and from 0036 on. The project has **41** recorded migrations and the
-repository **40** files — `gsc_snapshots_plain_key` has no file (below).
+repository has a file for each: `gsc_snapshots_plain_key` had none until
+`0007a_gsc_snapshots_plain_key.sql` (the `a` sorts it after 0007 and before
+0008, the order it was applied in). `0042_portal_single_assignment.sql` is
+new and has **no recorded version yet** — it is waiting to be applied.
 
 "Content" compares the recorded SQL (`supabase_migrations.schema_migrations
 .statements`) with the file: *identical* = same md5 once the file's trailing
@@ -44,7 +48,7 @@ executable SQL is the same, only comment text differs.
 | 20260831152053 | brightlocal_sync_plumbing | 0005_brightlocal_sync_plumbing.sql | identical |
 | 20260831153045 | snapshot_dedupe | 0006_snapshot_dedupe.sql | identical |
 | 20260831154138 | gsc_sync | 0007_gsc_sync.sql | identical |
-| 20260831154225 | gsc_snapshots_plain_key | — | **no file** |
+| 20260831154225 | gsc_snapshots_plain_key | 0007a_gsc_snapshots_plain_key.sql | identical (file restored Sept 22) |
 | 20260831174123 | stripe_billing | 0008_stripe_billing.sql | identical |
 | 20260901215256 | brand_board | 0009_brand_board.sql | comments only |
 | 20260908000140 | playbook_schema | 0010_playbook_schema.sql | identical |
@@ -78,6 +82,8 @@ executable SQL is the same, only comment text differs.
 | 20260917185653 | 0038_portal_seen | 0038_portal_seen.sql | identical |
 | 20260920201305 | 0039_foundation_v1_work_modes | 0039_foundation_v1_work_modes.sql | identical |
 | 20260921012235 | 0040_foundation_v1_service_area | 0040_foundation_v1_service_area.sql | identical |
+| — | (PR #50's 0041, not applied) | not on this branch | — |
+| — (not applied) | — | 0042_portal_single_assignment.sql | new |
 
 The migration history was read, never written: no `apply_migration`, no
 `migration repair`, no rename of a recorded version. Renaming files to the
@@ -122,7 +128,7 @@ Deployed source fetched with `get_edge_function` and compared byte-for-byte
 | gsc-sync | v3 | 666074116d1c9c81 | identical | no team check |
 | rank-sync | v4 | 790065b06e1e4bb1 | identical (dividers aligned) | no team check |
 | stripe-billing | v2 | 11db4d26bd39946d | identical | no team check |
-| portal-invite | v1 | 2a3ee13da94729c8 | identical (dividers aligned) | absent |
+| portal-invite | v1 | 2a3ee13da94729c8 | identical at the reconciliation commit; **rewritten by the follow-up, awaiting deploy** | absent |
 
 Before this branch, redeploying any of the first eight from `main` would have
 silently removed the team-only guard that production relies on.
@@ -160,7 +166,9 @@ contact, a stranger, the team account) then feed
 `supabase/tests/sandbox/portal_access.test.sql`, which switches role and JWT
 claims the way PostgREST does.
 
-Result on this branch: **297 pass, 0 fail, 1 gap.**
+Result on this branch: **310 pass, 0 fail, 0 gaps** (297 + 1 gap at the
+reconciliation commit; the follow-up turned the gap into required checks and
+added the GSC upsert).
 
 | Area | Checks |
 | --- | --- |
@@ -197,32 +205,86 @@ The views stay; the checks above are what keeps them honest.
 granted to `authenticated`, an open policy on `keywords`), the suite reports
 15 failures naming each one. So it fails when it should.
 
-**Gap G5** (reported, not failed): `portal_users` has no unique index on
-`auth_user_id`, and `portal_client_id()` is `limit 1` without an order. The
-link trigger only fills a null `auth_user_id`, so one sign-in lands on two
-active rows only through a direct team / service-role write — but if it did,
-which client that sign-in sees would be undefined. Fix: a partial unique
-index on `auth_user_id where is_active` (a new migration; not in this PR).
+**Former gap G5, now required (H1–H7, migration 0042).** `portal_client_id()`
+is `limit 1`, and nothing stopped one sign-in from sitting on two active rows,
+or a row from being moved to another client. Every H write is made as
+`postgres` (the power the team and the service role have), so only the
+constraints can stop it: a second active assignment (23505), a reassignment
+(23514), a case-variant duplicate email (23505) and reactivating a revoked row
+for a sign-in active elsewhere (23505) are all refused; a revoked row may stay
+behind; client A's contact still sees exactly client A afterwards. With 0042
+removed, 7 of these fail — including H7, which shows the contact really does
+end up seeing client B.
+
+**GSC upsert after a fresh replay (I1–I4, 0007a).** The replay's
+`gsc_snapshots_natural_key` equals production's definition, `page` defaults to
+`''`, and the upsert exactly as PostgREST issues it for `gsc-sync`
+(`on conflict (client_id, query, page, period_start, period_end) do nothing`)
+succeeds twice as the service role and leaves one row. With 0007a removed,
+both upserts fail with 42P10 — every sync would have failed on a database
+rebuilt from the repository.
+
+## Follow-ups (Sept 22 2026): what changed and what still has to happen
+
+**`portal-invite`** (`handler.ts` + `index.ts`, tested by
+`tests/portal-invite-handler.test.mjs`, 18 tests over a fake Supabase that
+enforces 0037 + 0042 and records every email instead of sending it):
+
+- **First-time invites now link.** The deployed v1 saved the row *before* the
+  invite created the sign-in, and the link trigger only fires on insert or an
+  email change — so a first-time invitee's `auth_user_id` stayed null,
+  `portal_client_id()` returned nothing, and the CRM layout signed them out.
+  The handler now saves the id `inviteUserByEmail` returns on *that* row
+  (matched by row id and client), reads it back, and reports success only if
+  it stuck. A failed link is a 500 with `saved: true, linked: false`.
+- **Re-invites are delivered.** `generateLink` (which only returns a link) is
+  gone: a contact who has signed in gets a magic link through
+  `signInWithOtp` with `shouldCreateUser: false`; one who never accepted gets
+  the invite re-sent. The status says which (`invited` / `invite_resent` /
+  `link_sent`). Existing sign-ins are found across every page of users, not
+  just the first 50.
+- **No cross-client moves.** An address already on another client's row
+  (active or revoked) is a 409 before anything is written or sent; so is a
+  sign-in already active for another client. 0042 enforces the same in the
+  database, and the handler maps a raced constraint error to 409, never to
+  success. Revoke is scoped to the client the card belongs to.
+- **Partial failures converge.** Order is: refuse → save row → (existing
+  sign-in: link, then send) / (new address: send, then link). Every failure
+  after the row is saved says so, and re-sending the same invite finishes the
+  job without a second row (tests for a failed row save, a failed email, a
+  failed link, a link that matched no row, and each retry).
+- The mutation check: putting back the two original bugs (no link after a
+  first-time invite; `generateLink` for re-invites) fails 7 of the 18 tests.
+
+**To go live (Tom's call; nothing here was applied, deployed or sent):**
+
+1. Apply `0042_portal_single_assignment.sql` through the Supabase MCP
+   (`apply_migration`, name `0042_portal_single_assignment`). `portal_users`
+   is empty, so its pre-checks pass. **Do not apply 0007a** — it is already
+   recorded as `20260831154225`.
+2. Deploy `portal-invite` (both files). It works with or without 0042; 0042 is
+   the database-side guarantee.
+3. Before the first real invite: custom SMTP (below), and check that the Auth
+   email templates for *Invite* and *Magic Link* send the
+   `token_hash` form `/auth/confirm` reads. Emails sent by the server (invite
+   and the re-invite magic link) cannot use the browser's PKCE code; with the
+   default templates the session arrives in the URL fragment, which
+   `/auth/confirm` never sees. This was true of v1 as well and is not
+   verified here (no read access to Auth settings).
 
 ## Remaining differences and findings
 
-1. **`gsc_snapshots_plain_key` has no file.** Production's
-   `gsc_snapshots_natural_key` is on plain `page`, with `page default ''`;
-   a replay of the repository gets 0007's expression index on
-   `coalesce(page, '')`, and `gsc-sync`'s `upsert … onConflict` would fail
-   against it. Restoring the file (as `0007a_…`, so it sorts after 0007)
-   is a follow-up.
+1. ~~`gsc_snapshots_plain_key` has no file.~~ Restored as
+   `0007a_gsc_snapshots_plain_key.sql`, byte-identical to the recorded SQL;
+   the sandbox proves the `gsc-sync` upsert on a fresh replay (I1–I4).
 2. **Comment-only drift** in 19 migrations (table above). Harmless; noted so a
    future checksum comparison is not surprised.
-3. **`portal-invite` re-invites send nothing.** For an address that already
-   has a sign-in it calls `auth.admin.generateLink`, which returns a link but
-   does not email it, then answers `link_sent`. First-time invites
-   (`inviteUserByEmail`) do send. The deployed function behaves the same, so
-   it is left identical here; fixing it means a code change plus a deploy.
-4. **Re-inviting an address under another client moves it.** `portal-invite`
-   upserts on `email`, so the row's `client_id` is overwritten. Team-only, but
-   worth a confirmation step in the UI.
-5. **G5** above.
+3. ~~`portal-invite` re-invites send nothing.~~ Fixed in the repository;
+   **the deployed v1 still behaves this way until the new version is
+   deployed.**
+4. ~~Re-inviting an address under another client moves it.~~ Refused (409) by
+   the handler and, once applied, by 0042.
+5. ~~G5~~ — required checks H1–H7; enforced once 0042 is applied.
 6. **Advisors not caused by these migrations:** `pg_net` in `public`,
    leaked-password protection off. The `authenticated_security_definer_
    function_executable` WARN on the four RPCs is intended (tests B4 / A7 / F).
@@ -230,6 +292,10 @@ index on `auth_user_id where is_active` (a new migration; not in this PR).
 8. **PR #50** (`codex/client-baseline-scorecards`) also edits `AGENTS.md` and
    `src/lib/database.types.ts` and adds `0041`. Whichever lands second
    resolves those two files; this branch does not touch #50.
+9. **First-time invitees are never linked by the deployed v1** (see
+   Follow-ups). Nobody has been invited yet (`portal_users` is empty), so no
+   one is affected today; deploy the new `portal-invite` before the first
+   invite.
 
 ## Rollback
 
@@ -239,7 +305,13 @@ index on `auth_user_id where is_active` (a new migration; not in this PR).
   Functions without the team check would again be what a redeploy ships.
 - **Edge Functions.** Nothing was deployed. If a later deploy from this branch
   misbehaves, redeploy the previous version from the Supabase dashboard
-  (versions listed above).
+  (versions listed above; `portal-invite` v1 is the one to return to).
+- **0042, once applied.** Nothing depends on it. To undo: `drop trigger
+  portal_users_client_fixed on portal_users; drop function
+  portal_user_client_fixed(); drop index portal_users_one_active_client,
+  portal_users_email_lower_key;` as a new migration.
+- **0007a** changes nothing in production (already recorded); reverting the
+  file only makes a fresh replay wrong again.
 - **Database.** Nothing was applied. 0036–0038 are live and were before this
   branch. Undoing them is a new migration, not a history edit, and needs
   Tom's decision:
