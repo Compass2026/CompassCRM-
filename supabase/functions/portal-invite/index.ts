@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     return Response.json({ error: "a valid email is required" }, { status: 400 });
   }
 
-  // ── Revoke ──────────────────────────────────────────────────────────────
+  // ── Revoke ─────────────────────────────────────────────────────────
   if (body.revoke === true) {
     const { error } = await supabase
       .from("portal_users")
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true, email, status: "revoked" });
   }
 
-  // ── Invite ──────────────────────────────────────────────────────────────
+  // ── Invite ─────────────────────────────────────────────────────────
   const clientId: string | null = body.client_id ?? null;
   if (!clientId) {
     return Response.json({ error: "client_id is required" }, { status: 400 });

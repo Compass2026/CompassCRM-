@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
     };
   };
 
-  // ── post ────────────────────────────────────────────────────────────────
+  // ── post ────────────────────────────────────────────────────────────────────
   if (mode === "post") {
     let clientQuery = supabase
       .from("clients")
@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true, mode, posted }, { status: 200 });
   }
 
-  // ── collect ─────────────────────────────────────────────────────────────
+  // ── collect ─────────────────────────────────────────────────────────────────
   const { ok, status, json } = await dfs("/tasks_ready");
   if (!ok || !json) return Response.json({ error: `tasks_ready ${status}` }, { status: 502 });
   const ready: { id: string; tag?: string }[] = json.tasks?.[0]?.result ?? [];
