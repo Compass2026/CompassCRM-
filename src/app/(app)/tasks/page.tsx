@@ -1,26 +1,16 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { toggleTaskAction } from "@/app/actions";
-import { Badge } from "@/components/ui/badge";
+import { NewTaskForm } from "@/components/task-forms";
+import { autonomyLabels, TaskList } from "@/components/task-list";
 import { ownerLabels, owners, type OwnerType } from "@/lib/labels";
+import { fetchTaskList, fetchViewCounts } from "@/lib/task-queries";
+import { getCurrentTeamMember, listTeamMembers } from "@/lib/team";
+import { groupByClient, parseTaskView, taskViews, todayIn } from "@/lib/tasks";
 import type { Database } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 
 type Autonomy = Database["public"]["Enums"]["autonomy_level"];
-
-// The autonomy filter (reconciliation build-order step 8): what Claude runs
-// unattended, what it runs and flags for a look, and what waits on a decision.
-const autonomyLevels: { value: Autonomy; label: string; hint: string }[] = [
-  { value: "run", label: "Run", hint: "Claude does it and logs it" },
-  { value: "run_flag", label: "Run + flag", hint: "Claude does it; review if you want" },
-  { value: "hold", label: "Hold", hint: "waits on a decision" },
-];
-
-const autonomyStyles: Record<Autonomy, string> = {
-  run: "bg-zinc-100 text-zinc-600 border-zinc-200",
-  run_flag: "bg-amber-100 text-amber-800 border-amber-200",
-  hold: "bg-red-100 text-red-800 border-red-200",
-};
+const autonomyLevels = Object.keys(autonomyLabels) as Autonomy[];
 
 function chip(active: boolean): string {
   return cn(
@@ -40,46 +30,95 @@ function href(params: Record<string, string | undefined>): string {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ owner?: string; autonomy?: string; flagged?: string }>;
+  searchParams: Promise<{ view?: string; owner?: string; autonomy?: string; flagged?: string }>;
 }) {
-  const { owner, autonomy, flagged } = await searchParams;
+  const { view: rawView, owner, autonomy, flagged } = await searchParams;
   const supabase = await createClient();
 
+  const view = parseTaskView(rawView);
   const ownerFilter = owner && owners.includes(owner as OwnerType) ? (owner as OwnerType) : undefined;
-  const autonomyFilter = autonomyLevels.some((a) => a.value === autonomy)
-    ? (autonomy as Autonomy)
-    : undefined;
+  const autonomyFilter = autonomyLevels.includes(autonomy as Autonomy) ? (autonomy as Autonomy) : undefined;
   const flaggedOnly = flagged === "1";
+  const today = todayIn();
 
-  let query = supabase
-    .from("tasks")
-    .select(
-      "id, title, owner, status, due_date, client_id, autonomy_level, flagged_for_review, recommendation, playbook_step, completed_at, notes, clients(id, name), client_stages(stages(name))"
-    )
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .limit(200);
+  const [me, members, { data: clients }] = await Promise.all([
+    getCurrentTeamMember(supabase),
+    listTeamMembers(supabase),
+    supabase.from("clients").select("id, name").neq("status", "offboarded").order("name"),
+  ]);
+  const meId = me?.id ?? null;
+  const [tasks, counts] = await Promise.all([
+    fetchTaskList(supabase, {
+      view,
+      meId,
+      today,
+      owner: ownerFilter,
+      autonomy: autonomyFilter,
+      flagged: flaggedOnly,
+    }),
+    fetchViewCounts(supabase, { meId, today }),
+  ]);
 
-  // Flagged is a review view: it includes work that is already done, which
-  // is the point — "done, review if you want". Everything else is open work.
-  if (flaggedOnly) {
-    query = query.eq("flagged_for_review", true).order("completed_at", { ascending: false });
-  } else {
-    query = query.neq("status", "done");
-  }
-  if (ownerFilter) query = query.eq("owner", ownerFilter);
-  if (autonomyFilter) query = query.eq("autonomy_level", autonomyFilter);
-
-  const { data: tasks } = await query;
-
-  const current = { owner: ownerFilter, autonomy: autonomyFilter, flagged: flaggedOnly ? "1" : undefined };
+  const current = {
+    view: view === "all" ? undefined : view,
+    owner: ownerFilter,
+    autonomy: autonomyFilter,
+    flagged: flaggedOnly ? "1" : undefined,
+  };
+  const badge: Partial<Record<string, number>> = counts;
+  const emptyText = flaggedOnly
+    ? "Nothing flagged."
+    : view === "mine"
+      ? "Nothing assigned to you."
+      : view === "unassigned"
+        ? "Every piece of human work has someone on it."
+        : view === "overdue"
+          ? "Nothing overdue."
+          : "No open tasks.";
 
   return (
     <div className="space-y-4">
       <h1 className="page-title kicker">Tasks</h1>
 
+      <details className="rounded-md border bg-card p-4 group">
+        <summary className="cursor-pointer text-sm font-medium">New task</summary>
+        <div className="pt-3">
+          <NewTaskForm members={members} meId={meId} clients={clients ?? []} />
+        </div>
+      </details>
+
+      <nav aria-label="Work views" className="flex gap-1 border-b overflow-x-auto">
+        {taskViews.map((v) => (
+          <Link
+            key={v.value}
+            href={href({ ...current, view: v.value === "all" ? undefined : v.value })}
+            title={v.hint}
+            aria-current={view === v.value ? "page" : undefined}
+            className={cn(
+              "px-3 py-2 font-heading text-sm whitespace-nowrap border-b-2 -mb-px transition-colors",
+              view === v.value
+                ? "border-primary font-semibold text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {v.label}
+            {badge[v.value] ? (
+              <span
+                className={cn(
+                  "ml-1.5 rounded-full px-1.5 text-xs",
+                  v.value === "overdue" ? "bg-red-100 text-red-800" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {badge[v.value]}
+              </span>
+            ) : null}
+          </Link>
+        ))}
+      </nav>
+
       <div className="flex gap-2 flex-wrap">
         <Link href={href({ ...current, owner: undefined })} className={chip(!ownerFilter)}>
-          All owners
+          All lanes
         </Link>
         {owners.map((o) => (
           <Link key={o} href={href({ ...current, owner: o })} className={chip(ownerFilter === o)}>
@@ -94,12 +133,12 @@ export default async function TasksPage({
         </Link>
         {autonomyLevels.map((a) => (
           <Link
-            key={a.value}
-            href={href({ ...current, autonomy: a.value })}
-            className={chip(autonomyFilter === a.value)}
-            title={a.hint}
+            key={a}
+            href={href({ ...current, autonomy: a })}
+            className={chip(autonomyFilter === a)}
+            title={autonomyLabels[a].hint}
           >
-            {a.label}
+            {autonomyLabels[a].label}
           </Link>
         ))}
         <span className="mx-1 text-muted-foreground">·</span>
@@ -112,74 +151,38 @@ export default async function TasksPage({
         </Link>
       </div>
 
-      <div className="rounded-md border bg-card divide-y">
-        {(tasks ?? []).length === 0 && (
-          <p className="p-4 text-sm text-muted-foreground">
-            {flaggedOnly ? "Nothing flagged." : "No open tasks."}
-          </p>
-        )}
-        {(tasks ?? []).map((task) => {
-          const done = task.status === "done";
-          const toggle = toggleTaskAction.bind(null, task.client_id, task.id, !done);
-          return (
-            <div key={task.id} className="px-4 py-2 text-sm">
-              <div className="flex items-center gap-3">
-                <form action={toggle}>
-                  <button
-                    type="submit"
-                    className={cn(
-                      "size-4 rounded border border-input hover:bg-muted",
-                      done && "bg-primary"
-                    )}
-                    title={done ? "Reopen" : "Mark done"}
-                  />
-                </form>
-                <span className={cn("flex-1", done && "line-through text-muted-foreground")}>
-                  {task.title}
-                </span>
-                {task.client_stages?.stages?.name && (
-                  <span className="text-xs text-muted-foreground">
-                    {task.client_stages.stages.name}
-                  </span>
-                )}
-                <Link
-                  href={`/clients/${task.clients?.id}`}
-                  className="text-xs text-muted-foreground hover:underline"
-                >
-                  {task.clients?.name}
-                </Link>
-                <Badge variant="outline" className="text-[10px]">
-                  {ownerLabels[task.owner]}
-                </Badge>
-                {task.autonomy_level && (
-                  <Badge
-                    variant="outline"
-                    className={cn("text-[10px]", autonomyStyles[task.autonomy_level])}
-                    title={task.playbook_step ?? undefined}
-                  >
-                    {autonomyLevels.find((a) => a.value === task.autonomy_level)?.label}
-                  </Badge>
-                )}
-                {task.flagged_for_review && (
-                  <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-800 border-amber-200">
-                    flagged
-                  </Badge>
-                )}
-                {task.due_date && (
-                  <span className="text-xs text-muted-foreground w-20 text-right">
-                    {task.due_date}
-                  </span>
-                )}
-              </div>
-              {(task.recommendation || (flaggedOnly && task.notes)) && (
-                <p className="mt-1 pl-7 text-xs text-muted-foreground">
-                  {task.recommendation ?? task.notes}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {view === "by_client" ? (
+        <div className="space-y-6">
+          {tasks.length === 0 && <TaskList tasks={[]} members={members} meId={meId} today={today} empty={emptyText} />}
+          {groupByClient(tasks).map((g) => (
+            <section key={g.clientId} className="space-y-2">
+              <h2 className="text-sm font-semibold">
+                <Link href={`/clients/${g.clientId}/tasks`} className="hover:underline">
+                  {g.name}
+                </Link>{" "}
+                <span className="font-normal text-muted-foreground">({g.tasks.length})</span>
+              </h2>
+              <TaskList
+                tasks={g.tasks}
+                members={members}
+                meId={meId}
+                today={today}
+                showClient={false}
+                showRecommendation={flaggedOnly}
+              />
+            </section>
+          ))}
+        </div>
+      ) : (
+        <TaskList
+          tasks={tasks}
+          members={members}
+          meId={meId}
+          today={today}
+          showRecommendation={flaggedOnly}
+          empty={emptyText}
+        />
+      )}
     </div>
   );
 }

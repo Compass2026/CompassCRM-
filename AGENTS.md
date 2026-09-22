@@ -786,6 +786,32 @@ Verified on Sept 11 2026 with no secrets (both steps `skipped`, 200) and with
 deliberately bad ones (both `failed` with the upstream error, 502, no tasks
 closed).
 
+## Team work management (Sept 22 2026, migration 0043 — not applied)
+
+Tasks can be assigned to actual team members. Details, rollout and rollback:
+`docs/agency-tasks.md`.
+
+- **Two different things:** `tasks.owner` / `autonomy_level` are the worker's
+  lane and stay exactly as they were; `tasks.assignee_id` (nullable →
+  `team_members`) is the person doing it. Existing tasks stay unassigned.
+- **Who changed what:** `created_by` / `updated_by` / `updated_at` are stamped
+  by trigger from `auth.uid()` (callers cannot forge them); `task_events` is an
+  append-only history written only by trigger; NULL actor = worker / system.
+  `task_comments` are team comments, immutable in v1.
+- **Belong together:** comments and events FK to `(task_id, client_id)`; a
+  task cannot change client; its stage / monthly cycle must be the same
+  client's (`check_violation` otherwise).
+- **Access:** `is_team()` on both new tables; no API writes to `task_events`;
+  portal users reach none of it (no portal view references tasks). Every task
+  server action (`src/app/task-actions.ts`, plus `addTaskAction` /
+  `toggleTaskAction`) calls `requireTeamMember` first.
+- **Screens:** `/tasks` views My work / Unassigned (human lanes only) /
+  Overdue (Central-time today) / By client / All open (default, unchanged);
+  `/tasks/[id]` edit + history + comments; client **Tasks** tab.
+- **Tests:** `npm test`, `npm run test:sandbox` (Postgres replay; 316 portal +
+  65 task checks), `npm run test:tasks-ui` (PostgREST + Chrome over the
+  replay; screenshots with `SCREENSHOTS=dir`).
+
 ## Client portal (Phase 5, Sept 17 2026)
 
 Migrations 0037 + 0038, routes under `src/app/portal/`. Read-only in v1:

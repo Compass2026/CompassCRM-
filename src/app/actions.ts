@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { blockedQuery, blockedReason } from "@/lib/db-errors";
+import { requireTeamMember } from "@/lib/team";
 import type { Database } from "@/lib/database.types";
 
 type Enums = Database["public"]["Enums"];
@@ -370,6 +371,8 @@ export async function addTaskAction(
   form: FormData
 ) {
   const supabase = await createClient();
+  await requireTeamMember(supabase);
+  // The stage must be this client's; 0043's trigger refuses it otherwise.
   const { error } = await supabase.from("tasks").insert({
     client_id: clientId,
     client_stage_id: clientStageId,
@@ -388,15 +391,21 @@ export async function toggleTaskAction(
   done: boolean
 ) {
   const supabase = await createClient();
-  const { error } = await supabase
+  await requireTeamMember(supabase);
+  const { data, error } = await supabase
     .from("tasks")
     .update({
       status: done ? "done" : "open",
       completed_at: done ? new Date().toISOString() : null,
     })
-    .eq("id", taskId);
+    .eq("id", taskId)
+    .eq("client_id", clientId)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("That task does not belong to this client.");
   revalidatePath(`/clients/${clientId}/pipelines`);
+  revalidatePath(`/clients/${clientId}/tasks`);
+  revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/tasks");
 }
 
