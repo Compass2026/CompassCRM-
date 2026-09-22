@@ -64,6 +64,8 @@ export async function invitePortalUserAction(
 }
 
 export async function revokePortalUserAction(clientId: string, email: string) {
-  await callPortalInvite({ email, revoke: true });
+  // Scoped to this client, so a revoke from one client's page can never touch
+  // another client's contact.
+  await callPortalInvite({ email, revoke: true, client_id: clientId });
   revalidatePath(`/clients/${clientId}`);
 }
