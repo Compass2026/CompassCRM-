@@ -2,7 +2,8 @@
 -- (portal_seen), run by scripts/test-portal-sandbox.sh against a replay of
 -- every migration. Each check records pass / fail / gap in t.results; the
 -- run fails if anything failed. "gap" is a known weakness that is reported,
--- not hidden — see docs/portal-reconciliation.md.
+-- not hidden — see docs/portal-reconciliation.md. There are none today: the
+-- duplicate-assignment gap became the required H checks with 0042.
 --
 -- Callers are simulated the way PostgREST does it: SET ROLE to anon or
 -- authenticated and put the JWT claims in request.jwt.claims.
@@ -18,9 +19,9 @@
 -- ── Harness ─────────────────────────────────────────────────────────────────
 create schema t;
 create table t.results (n serial, status text, name text, detail text);
-grant usage on schema t to anon, authenticated;
-grant insert, select on t.results to anon, authenticated;
-grant usage on sequence t.results_n_seq to anon, authenticated;
+grant usage on schema t to anon, authenticated, service_role;
+grant insert, select on t.results to anon, authenticated, service_role;
+grant usage on sequence t.results_n_seq to anon, authenticated, service_role;
 
 create function t.ok(p_name text, p_pass boolean, p_detail text default null) returns void
 language sql as $$
@@ -71,7 +72,7 @@ create function t.public_tables() returns setof text language sql stable as $$
   select c.relname::text from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind in ('r', 'p') order by 1
 $$;
-grant execute on all functions in schema t to anon, authenticated;
+grant execute on all functions in schema t to anon, authenticated, service_role;
 
 -- Sign in as someone (or as nobody, for anon).
 create function t.as_user(p_role text, p_sub text) returns void language plpgsql as $$
@@ -379,24 +380,82 @@ begin
     t.try($q$insert into portal_users (client_id, email) values ('00000000-0000-4000-b000-00000000000a', 'SANDBOX-TEAM@compassmarketing.ai')$q$) is not null);
 end $$;
 
--- portal_client_id() is "limit 1" with no ORDER BY and portal_users has no
--- unique index on auth_user_id. The link trigger only fills a null
--- auth_user_id, so one sign-in can end up on two active rows only through a
--- direct write (team or service role). If it does, which client that
--- sign-in sees is undefined. Recorded as a gap, then undone.
+-- ── H. One sign-in, one client (0042) ──────────────────────────────────────
+-- portal_client_id() is `limit 1`, so a sign-in on two active rows would see
+-- whichever client Postgres returned first. These are required checks, not
+-- reported gaps: every write below is made as postgres (BYPASSRLS, the same
+-- power the team and the service role have), so nothing but the constraints
+-- can stop it.
 do $$
-declare dup_allowed boolean;
+declare st text;
 begin
-  dup_allowed := t.try($q$insert into portal_users (client_id, email, auth_user_id)
-    values ('00000000-0000-4000-b000-00000000000b', 'second-address@example.test', '00000000-0000-4000-a000-000000000011')$q$) is null;
-  if dup_allowed then
-    perform t.gap('G5 one auth user can be linked to two active portal_users rows',
-      'no unique index on portal_users.auth_user_id; portal_client_id() would pick one arbitrarily. Only a team or service-role write can do this.');
-    delete from portal_users where email = 'second-address@example.test';
-  else
-    perform t.ok('G5 one auth user cannot be linked to two portal rows', true);
-  end if;
+  st := t.try($q$insert into portal_users (client_id, email, auth_user_id)
+    values ('00000000-0000-4000-b000-00000000000b', 'second-address@example.test', '00000000-0000-4000-a000-000000000011')$q$);
+  perform t.ok('H1 a sign-in cannot be active for a second client (unique active assignment)', st = '23505', coalesce(st, 'accepted'));
+
+  st := t.try($q$update portal_users set client_id = '00000000-0000-4000-b000-00000000000b' where email = 'portal-a@example.test'$q$);
+  perform t.ok('H2 a contact cannot be reassigned to another client', st = '23514', coalesce(st, 'accepted'));
+  perform t.ok('H2 the refused reassignment left the row on client A',
+    (select client_id from portal_users where email = 'portal-a@example.test') = '00000000-0000-4000-b000-00000000000a');
+
+  st := t.try($q$insert into portal_users (client_id, email) values ('00000000-0000-4000-b000-00000000000b', 'Portal-A@Example.test')$q$);
+  perform t.ok('H3 an email that differs only by case cannot be added again', st = '23505', coalesce(st, 'accepted'));
+
+  -- A revoked row may stay behind: the former contact of client A is linked,
+  -- inactive, and can be given a new active row elsewhere...
+  st := t.try($q$insert into portal_users (client_id, email, auth_user_id, is_active)
+    values ('00000000-0000-4000-b000-00000000000b', 'former-now-b@example.test', '00000000-0000-4000-a000-000000000013', true)$q$);
+  perform t.ok('H4 a revoked assignment does not block a new active one', st is null, coalesce(st, 'accepted'));
+  -- ...but reactivating the old row then collides.
+  st := t.try($q$update portal_users set is_active = true where email = 'portal-a-former@example.test'$q$);
+  perform t.ok('H5 reactivating a revoked row for a sign-in active elsewhere is refused', st = '23505', coalesce(st, 'accepted'));
+  delete from portal_users where email = 'former-now-b@example.test';
+
+  perform t.ok('H6 the 0042 guard trigger function is not callable over PostgREST',
+    to_regprocedure('public.portal_user_client_fixed()') is not null
+    and not has_function_privilege('authenticated', to_regprocedure('public.portal_user_client_fixed()'), 'execute')
+    and not has_function_privilege('anon', to_regprocedure('public.portal_user_client_fixed()'), 'execute'));
 end $$;
+set role authenticated;
+select t.as_user('authenticated', :'pa') \g /dev/null
+do $$
+begin
+  perform t.ok('H7 after the refused writes, client A''s contact still sees exactly client A',
+    portal_client_id() = '00000000-0000-4000-b000-00000000000a'
+    and t.cnt('select 1 from portal_client') = 1);
+end $$;
+reset role;
+
+-- ── I. GSC upsert after a fresh replay (0007a) ──────────────────────────────
+-- gsc-sync upserts with onConflict "client_id,query,page,period_start,
+-- period_end". Postgres accepts that only against a unique index on exactly
+-- those plain columns; 0007's expression index on coalesce(page, '') would
+-- make every sync fail with 42P10. 0007a is the recorded migration that
+-- replaced it on Aug 31.
+do $$
+begin
+  perform t.ok('I1 gsc_snapshots_natural_key matches production',
+    (select indexdef from pg_indexes where schemaname = 'public' and indexname = 'gsc_snapshots_natural_key')
+    = 'CREATE UNIQUE INDEX gsc_snapshots_natural_key ON public.gsc_snapshots USING btree (client_id, query, page, period_start, period_end)');
+  perform t.ok('I2 gsc_snapshots.page defaults to the empty string',
+    (select column_default from information_schema.columns
+     where table_schema = 'public' and table_name = 'gsc_snapshots' and column_name = 'page') = $d$''::text$d$);
+end $$;
+-- The upsert as PostgREST issues it for gsc-sync, as the service role.
+set role service_role;
+do $$
+declare st text; n int;
+begin
+  for i in 1..2 loop
+    st := t.try($q$insert into gsc_snapshots (client_id, query, page, clicks, impressions, ctr, avg_position, period_start, period_end)
+      values ('00000000-0000-4000-b000-00000000000a', 'upsert probe', '/probe', 1, 10, 0.1, 4.0, '2026-09-01', '2026-09-28')
+      on conflict (client_id, query, page, period_start, period_end) do nothing$q$);
+    perform t.ok('I3 gsc-sync upsert run ' || i || ' succeeds', st is null, coalesce(st, 'ok'));
+  end loop;
+  select count(*) into n from gsc_snapshots where query = 'upsert probe';
+  perform t.ok('I4 re-running the sync is a no-op (one row)', n = 1, n::text);
+end $$;
+reset role;
 
 -- ── Report ──────────────────────────────────────────────────────────────────
 \pset footer off
