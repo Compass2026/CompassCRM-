@@ -21,14 +21,21 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 - **Schema:** `supabase/migrations/` mirrors what is applied to the remote
   project via the Supabase MCP. Enrollment / convergence / monthly-cycle
   automations live in Postgres triggers and functions — see
-  `0001_initial_schema.sql`.
+  `0001_initial_schema.sql`. Supabase records each migration under a
+  timestamp version; `docs/portal-reconciliation.md` maps every file to its
+  recorded version (one recorded migration, `gsc_snapshots_plain_key`, has
+  no file yet). `scripts/test-portal-sandbox.sh` replays all migrations into
+  a local Postgres shaped like the project and runs the team / anon / portal
+  access tests — run it after any migration that touches policies, grants,
+  security-definer functions or `portal_*` views.
 - **Auth:** internal team only. Password sign-in is the primary path with a
   magic-link fallback (`src/app/login/page.tsx`); the built-in Supabase mailer
   rate-limits aggressively, so custom SMTP via Resend is the intended fix.
   Magic links never create accounts (`shouldCreateUser: false`). RLS is
   enabled everywhere and every team policy reads `is_team()` (migration
   0036) — a sign-in whose `auth.uid()` is not on `team_members` sees
-  nothing, and the app layout signs it out via `/auth/signout`. Sign-ups are
+  nothing; the app layout sends a portal contact to `/portal` and signs
+  anyone else out via `/auth/signout`. Sign-ups are
   disabled in Supabase Auth; to add a teammate, invite them in Supabase Auth,
   then insert a `team_members` row with that email (a trigger links
   `auth_user_id`). **New tables
