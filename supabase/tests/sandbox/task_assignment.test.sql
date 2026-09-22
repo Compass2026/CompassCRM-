@@ -69,9 +69,14 @@ insert into tk.ids
 select 'stage_b', cs.id from client_stages cs join client_pipelines cp on cp.id = cs.client_pipeline_id
 where cp.client_id = :'cb' order by cs.id limit 1;
 insert into tk.ids select 'cycle_b', id from monthly_cycles where client_id = :'cb' limit 1;
+-- Pipeline tasks in both lanes: a TOM-lane one a person can pick up, and a
+-- CLAUDE-lane one the worker runs.
 insert into tk.ids
 select 'worker_task_a', t.id from tasks t where t.client_id = :'ca' and t.client_stage_id is not null
-order by t.created_at, t.id limit 1;
+  and t.owner = 'TOM' order by t.created_at, t.id limit 1;
+insert into tk.ids
+select 'claude_task_a', t.id from tasks t where t.client_id = :'ca' and t.client_stage_id is not null
+  and t.owner = 'CLAUDE' order by t.created_at, t.id limit 1;
 
 -- ── S. Shape and "nothing changed for existing tasks" ───────────────────────
 do $$
@@ -85,7 +90,8 @@ begin
      where table_schema = 'public' and table_name = 'tasks' and column_name = 'owner'));
   perform tk.ok('S3 every existing task is unassigned (no backfill)',
     not exists (select 1 from tasks where assignee_id is not null));
-  perform tk.ok('S4 pipeline-created tasks exist for the fixtures', tk.id('worker_task_a') is not null);
+  perform tk.ok('S4 pipeline-created tasks exist for the fixtures (TOM and CLAUDE lanes)',
+    tk.id('worker_task_a') is not null and tk.id('claude_task_a') is not null);
   -- Pipeline tasks (created by the enrollment triggers with no JWT).
   -- portal_access.test.sql also writes a task as the team; it is excluded.
   perform tk.ok('S5 pipeline-created tasks carry no human author',
@@ -187,11 +193,11 @@ begin
   st := tk.try(format($q$update tasks set assignee_id = gen_random_uuid() where id = %L$q$, v_task));
   perform tk.ok('T26 assignee must exist', st = '23503', st);
 
-  -- A worker-created task: a person can pick it up and close it; the worker
-  -- fields are left alone.
+  -- A worker-created task in a human lane: a person can pick it up; the
+  -- worker fields are left alone.
   update tasks set assignee_id = tk.id('second') where id = tk.id('worker_task_a');
   select * into r from tasks where id = tk.id('worker_task_a');
-  perform tk.ok('T27 a pipeline task can be assigned', r.assignee_id = tk.id('second'));
+  perform tk.ok('T27 a TOM-lane pipeline task can be assigned', r.assignee_id = tk.id('second') and r.owner = 'TOM');
   perform tk.ok('T28 assigning a pipeline task leaves created_by empty (worker-created stays worker-created)',
     r.created_by is null);
 
@@ -239,6 +245,84 @@ begin
     (select assignee_id is null and created_by is null and owner = 'CLAUDE' from tasks where id = v_task));
   st := tk.try(format($q$insert into task_comments (task_id, body) values (%L, 'x')$q$, v_task));
   perform tk.ok('W6 a comment with no team author is refused', st = '23514', st);
+end $$;
+reset role;
+
+-- ── L. The CLAUDE lane is the worker's: no human assignee ───────────────────
+do $$
+begin
+  perform tk.ok('L1 tasks_claude_lane_unassigned exists and is validated',
+    exists (select 1 from pg_constraint where conname = 'tasks_claude_lane_unassigned'
+            and conrelid = 'public.tasks'::regclass and convalidated));
+  perform tk.ok('L2 no CLAUDE task carries an assignee',
+    not exists (select 1 from tasks where owner = 'CLAUDE' and assignee_id is not null));
+end $$;
+
+set role authenticated;
+select tk.as_user('authenticated', :'team');
+do $$
+declare st text; n int; v_task uuid;
+begin
+  select count(*) into n from task_events where task_id = tk.id('claude_task_a');
+  st := tk.try(format($q$update tasks set assignee_id = %L where id = %L$q$, tk.id('me'), tk.id('claude_task_a')));
+  perform tk.ok('L3 team cannot assign a CLAUDE pipeline task', st = '23514', st);
+  perform tk.ok('L4 the refused assignment leaves the task and its history untouched',
+    (select assignee_id is null from tasks where id = tk.id('claude_task_a'))
+    and (select count(*) from task_events where task_id = tk.id('claude_task_a')) = n);
+  st := tk.try(format($q$insert into tasks (client_id, title, owner, assignee_id) values (%L, 'x', 'CLAUDE', %L)$q$,
+                      '00000000-0000-4000-b000-00000000000a', tk.id('me')));
+  perform tk.ok('L5 team cannot create a CLAUDE task with an assignee', st = '23514', st);
+  st := tk.try(format($q$update tasks set status = 'in_progress', due_date = current_date + 3, notes = 'seen' where id = %L$q$, tk.id('claude_task_a')));
+  perform tk.ok('L6 team can still edit a CLAUDE task''s other fields', st is null, st);
+
+  -- CLAUDE_APPROVAL: the hold lane, a person decides — assignable.
+  insert into tasks (client_id, title, owner, autonomy_level, recommendation)
+  values ('00000000-0000-4000-b000-00000000000a', 'Approve the GBP category change', 'CLAUDE_APPROVAL', 'hold', 'Switch to Plumber')
+  returning id into v_task;
+  st := tk.try(format($q$update tasks set assignee_id = %L where id = %L$q$, tk.id('second'), v_task));
+  perform tk.ok('L7 a CLAUDE_APPROVAL (hold) task can be assigned to the person deciding', st is null, st);
+  perform tk.ok('L8 WAITING / DELEGATED tasks can be assigned',
+    tk.try(format($q$insert into tasks (client_id, title, owner, assignee_id) values (%L, 'w', 'WAITING', %L)$q$,
+                  '00000000-0000-4000-b000-00000000000a', tk.id('me'))) is null
+    and tk.try(format($q$insert into tasks (client_id, title, owner, assignee_id) values (%L, 'd', 'DELEGATED', %L)$q$,
+                      '00000000-0000-4000-b000-00000000000a', tk.id('me'))) is null);
+
+  -- An assigned human-lane task cannot be pushed into the worker's lane
+  -- with its assignee still on it.
+  st := tk.try(format($q$update tasks set owner = 'CLAUDE' where id = %L$q$, tk.id('worker_task_a')));
+  perform tk.ok('L9 an assigned task cannot move to the CLAUDE lane', st = '23514', st);
+  perform tk.ok('L10 ...and keeps its lane and assignee',
+    (select owner = 'TOM' and assignee_id = tk.id('second') from tasks where id = tk.id('worker_task_a')));
+end $$;
+reset role;
+
+-- The worker hands a step to a person by moving the lane (as the skill does
+-- for Google ops it cannot reach); then it can be assigned.
+set role service_role;
+select tk.as_user('service_role', null);
+do $$
+declare st text;
+begin
+  st := tk.try(format($q$update tasks set assignee_id = %L where id = %L$q$, tk.id('me'), tk.id('claude_task_a')));
+  perform tk.ok('L11 the worker (no JWT) cannot assign a CLAUDE task either', st = '23514', st);
+  st := tk.try(format($q$update tasks set status = 'done', completed_at = now() where id = %L$q$, tk.id('claude_task_a')));
+  perform tk.ok('L12 the worker closes an unassigned CLAUDE task as before', st is null, st);
+  update tasks set status = 'open', completed_at = null, owner = 'TOM', notes = 'handed to Tom: no GBP access'
+  where id = tk.id('claude_task_a');
+end $$;
+reset role;
+set role authenticated;
+select tk.as_user('authenticated', :'team');
+do $$
+declare st text;
+begin
+  st := tk.try(format($q$update tasks set assignee_id = %L where id = %L$q$, tk.id('me'), tk.id('claude_task_a')));
+  perform tk.ok('L13 once the worker hands it to the TOM lane, it can be assigned', st is null, st);
+  perform tk.ok('L14 the handover and the assignment are both in the history',
+    exists (select 1 from task_events where task_id = tk.id('claude_task_a') and kind = 'owner'
+            and from_value = 'CLAUDE' and to_value = 'TOM' and actor_id is null)
+    and exists (select 1 from task_events where task_id = tk.id('claude_task_a') and kind = 'assignee'
+                and to_value = tk.id('me')::text and actor_id = tk.id('me')));
 end $$;
 reset role;
 

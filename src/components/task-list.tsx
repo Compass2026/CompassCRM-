@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { AssigneeSelect } from "@/components/task-forms";
 import { ownerLabels } from "@/lib/labels";
 import type { TaskListRow } from "@/lib/task-queries";
-import { formatStamp, isOverdue, taskStatusLabels, WORKER_ACTOR } from "@/lib/tasks";
+import { canAssignLane, formatStamp, isOverdue, taskStatusLabels, WORKER_ACTOR } from "@/lib/tasks";
 import type { Database } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 
@@ -114,13 +114,22 @@ export function TaskList({
                 <p className="text-xs text-muted-foreground">{task.recommendation ?? task.notes}</p>
               )}
             </div>
-            <AssigneeSelect
-              taskId={task.id}
-              assigneeId={task.assignee_id}
-              members={members}
-              meId={meId}
-              className="col-start-2 sm:col-start-3 sm:row-start-1"
-            />
+            {canAssignLane(task.owner) ? (
+              <AssigneeSelect
+                taskId={task.id}
+                assigneeId={task.assignee_id}
+                members={members}
+                meId={meId}
+                className="col-start-2 sm:col-start-3 sm:row-start-1"
+              />
+            ) : (
+              <p
+                className="col-start-2 sm:col-start-3 sm:row-start-1 text-xs text-muted-foreground sm:pt-1.5"
+                title="The worker runs CLAUDE tasks; they are not assigned to a person"
+              >
+                Worker runs this
+              </p>
+            )}
           </div>
         );
       })}

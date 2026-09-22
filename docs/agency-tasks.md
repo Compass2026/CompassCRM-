@@ -36,6 +36,19 @@ existing row.
 - `task_events`: an append-only history (created / status / assignee / due
   date / title / owner), written only by the `tasks_history` trigger. The
   team can read it. Nothing can write it over the API.
+- **The CLAUDE lane can't have an assignee** (`tasks_claude_lane_unassigned`:
+  `check (owner <> 'CLAUDE' or assignee_id is null)`). `CLAUDE` means the
+  worker executes the task, so a person's name on it would be misleading. To
+  give such a step to a person, move the lane first; the worker already sets
+  `owner = 'TOM'` when a Google op fails. The check also refuses moving an
+  assigned task into the CLAUDE lane. It applies to the worker as well as the
+  team. Every live task is unassigned, so it holds for all existing rows.
+  **`CLAUDE_APPROVAL` is not covered.** It's the "hold" lane: the worker has
+  drafted and a person decides. The Brief lists it under "needs a decision"
+  and the Dashboard under "needs attention", and the worker never runs it on
+  its own. Naming the person who decides is the point of assigning it. 0014
+  moved every open one and every template to `CLAUDE`; live data has 0 open
+  and 2 done.
 - `task_comments`: the team can read and add comments; comments can't be
   edited or deleted in v1. The author is the signed-in member, and the client
   is the task's; a comment naming a different client is refused.
@@ -47,19 +60,25 @@ existing row.
 - `src/app/task-actions.ts`: create, update / assign and comment. Every action
   calls `requireTeamMember` first, validates its input (`src/lib/tasks.ts`),
   checks the assignee is on the team and scopes the update to the task's
-  client. `addTaskAction` / `toggleTaskAction` get the same team check, and
+  client. `updateTaskAction` reads the task's lane and refuses an assignee
+  on a CLAUDE task before writing. It also turns the constraint error into
+  the same message, in case the lane changes between the read and the
+  write. `addTaskAction` / `toggleTaskAction` get the same team check, and
   the toggle is now scoped to the client it names.
 - `/tasks` has these views:
   - **My work**
-  - **Unassigned**: open work with no assignee, leaving out the CLAUDE and
-    CLAUDE_APPROVAL lanes
+  - **Unassigned**: open work with no assignee, leaving out only the CLAUDE
+    lane. TOM, CLAUDE_APPROVAL, DELEGATED and WAITING all show.
   - **Overdue**: open work due before today in America/Chicago
   - **By client**
   - **All open**: the default, unchanged
   - The lane, autonomy and flagged filters still combine with every view.
   - There's a New task form, and each row has an inline assignee picker plus
-    "Updated by X, time".
-- `/tasks/[id]`: edit title, status, assignee, due date and notes. The worker
+    "Updated by X, time". CLAUDE rows show "Worker runs this" instead of a
+    picker.
+- `/tasks/[id]`: edit title, status, assignee, due date and notes. On a
+  CLAUDE task the assignee picker is disabled, with a line explaining why.
+  A disabled field isn't submitted, and the action refuses it anyway. The worker
   fields are shown read-only, alongside the activity (history plus comments)
   and a comment box.
 - A client **Tasks** tab (`/clients/[id]/tasks`) holds that client's pipeline,
@@ -79,15 +98,16 @@ These are local, fictional data (`docs/screenshots/agency-tasks/`):
 | Overdue | `tasks-overdue-desktop.png`, `tasks-overdue-mobile.png` |
 | By client | `tasks-by-client-desktop.png` |
 | Task detail | `task-detail-desktop.png`, `task-detail-mobile.png` |
+| CLAUDE-lane task (assignee disabled) | `task-detail-claude-lane-desktop.png` |
 | Client Tasks tab | `client-tasks-tab-desktop.png`, `client-tasks-tab-mobile.png` |
 
 ## Tests
 
 | Command | What | Result |
 | --- | --- | --- |
-| `npm test` | Unit and contract tests: view parsing, Central-time "today", overdue, form validation (worker fields never read from a form), `completed_at` rules, history sentences, grouping, and a static check that every task action calls `requireTeamMember` before writing | 99 / 99 |
-| `npm run test:sandbox` | Every migration replayed into local Postgres 16, then `portal_access.test.sql` (unchanged) and the new `task_assignment.test.sql`. The new checks cover shape; team create / assign / reassign / unassign; attempts to forge `created_by` / `updated_by` / comment author; history; comment rules; attempts to move a task or point it at another client's stage or cycle; assignees that aren't team members (a portal user id, a random id); worker-created tasks (no author, worker closes them, the assignment survives, the worker still creates unassigned tasks); the `client_review` fire; and portal, stranger and anon getting nothing | 316 + 65 pass, 0 fail |
-| `npm run test:tasks-ui` | The same replay behind PostgREST, a stand-in for Supabase Auth's `/user`, `next dev` and headless Chrome. Real RLS, triggers and server actions: every view, create, inline assign, edit, comment, history names, the existing done toggle firing the worker, 390px layouts with no horizontal scroll, and a portal contact redirected to `/portal` who reads and changes nothing through the API | 10 / 10 |
+| `npm test` | Unit and contract tests: view parsing, Central-time "today", overdue, form validation (worker fields never read from a form), `completed_at` rules, history sentences, grouping, a static check that every task action calls `requireTeamMember` before writing, and the lane rule (`canAssignLane`, `assignmentError`, plus a static check that the action, list, edit form and migration all enforce it) | 101 / 101 |
+| `npm run test:sandbox` | Every migration replayed into local Postgres 16, then `portal_access.test.sql` (unchanged) and the new `task_assignment.test.sql`. The new checks cover shape; team create / assign / reassign / unassign; attempts to forge `created_by` / `updated_by` / comment author; history; comment rules; attempts to move a task or point it at another client's stage or cycle; assignees that aren't team members (a portal user id, a random id); worker-created tasks (no author, worker closes them, the assignment survives, the worker still creates unassigned tasks); the `client_review` fire; portal, stranger and anon getting nothing. The CLAUDE lane (L1–L14):<br>• assigning is refused for the team and the worker, and a refused attempt writes no history<br>• a CLAUDE task can't be created with an assignee, but its other fields stay editable<br>• CLAUDE_APPROVAL, WAITING and DELEGATED stay assignable<br>• an assigned task can't move into the CLAUDE lane<br>• the worker's handover to TOM, then an assignment, both land in the history<br>Negative control: with the constraint removed, 7 of the L checks fail | 316 + 79 pass, 0 fail |
+| `npm run test:tasks-ui` | The same replay behind PostgREST, a stand-in for Supabase Auth's `/user`, `next dev` and headless Chrome. Real RLS, triggers and server actions: every view, create, inline assign, edit, comment, history names, the existing done toggle firing the worker, 390px layouts with no horizontal scroll, and a portal contact redirected to `/portal` who reads and changes nothing through the API. For the CLAUDE lane: no picker in lists, the picker disabled on the task, and a forged submit (select re-enabled in the DOM) refused by the server action with the database unchanged. A CLAUDE_APPROVAL task shows in Unassigned with a picker | 11 / 11 |
 | `tsc --noEmit`, `eslint`, `next build` | | clean (12 existing lint warnings in other files) |
 
 The sandbox needs PostgreSQL 15+ and `postgrest` (`brew install
@@ -143,21 +163,22 @@ it after applying.
   `supabase_migrations.schema_migrations`, or add a 0044 containing the
   rollback. Nothing else depends on these objects.
 
-## Remaining decisions
+## Decisions (Tom, Sept 22)
 
-1. **Lane for hand-made tasks.** New tasks keep the column default `owner =
-   TOM`, even when they're assigned to someone else. Should assigning a task
-   to a teammate other than Tom set `DELEGATED`? This slice leaves `owner`
-   alone on purpose.
-2. **"Unassigned" excludes the CLAUDE lanes.** 117 open CLAUDE tasks would
-   otherwise swamp the view. Should WAITING tasks also be excluded? Today
-   they're included.
-3. **Default view.** `/tasks` still opens on All open. Should it open on My
-   work once there's more than one teammate?
-4. **Roles.** Every team member can edit every task. `team_members.role`
-   (admin / member) isn't used yet.
-5. **Comments are immutable**, and there are no notifications or @mentions.
-   Both are candidates for slice 2.
-6. **History volume.** Bulk data migrations that update tasks will also write
-   `task_events` rows attributed to "Worker / system". That's harmless, but
-   worth knowing before the next reseed.
+1. `owner` stays the workflow lane and `assignee_id` the person responsible.
+   Assigning someone never changes `TOM` to `DELEGATED`.
+2. `WAITING` tasks stay visible in Unassigned.
+3. All open stays the default view while most tasks are unassigned.
+4. Any team member can edit tasks in this slice. Role restrictions come
+   before sensitive actions such as publishing.
+5. Comments stay immutable. Notifications and mentions are deferred.
+
+## Open
+
+- A CLAUDE task can only become assignable once its lane moves to a human
+  one, and the UI has no lane control. Today only the worker (or SQL) moves
+  lanes. If the team needs to take over worker steps by hand, a "Take over
+  from the worker" control (CLAUDE → TOM) is the natural next step.
+- Bulk data migrations that update tasks also write `task_events` rows as
+  "Worker / system". That's harmless, but worth knowing before the next
+  reseed.

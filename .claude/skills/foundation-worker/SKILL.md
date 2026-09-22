@@ -28,6 +28,8 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   settings.
 - **`tasks.assignee_id` is the team's, not yours** (0043). It names the
   person doing a task and is independent of `owner`. Never set or clear it;
+  a `CLAUDE` task never has one (the database refuses it), so a step you
+  hand to a person is handed over by moving `owner` to `TOM` as before;
   keep using `owner`, `status`, `notes`, `flagged_for_review` and
   `recommendation` as before. Your writes show in the task history as
   "Worker / system". A task's client never changes, and its stage / cycle

@@ -132,7 +132,12 @@ try {
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const shot = async (name, p = page) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }); };
+  // Let CSS transitions and the dev-mode indicator settle before capturing.
+  const shot = async (name, p = page) => {
+    if (!SHOTS) return;
+    await p.waitForTimeout(600);
+    await p.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
+  };
   const row = (title) => page.locator("div.grid").filter({ has: page.getByRole("link", { name: title, exact: true }) }).last();
 
   // All open: pipeline, monthly and hand-made work together, as before.
@@ -149,7 +154,9 @@ try {
   assert.ok(await page.getByRole("link", { name: "Collect job-site photos from the client", exact: true }).isVisible());
   assert.equal(await page.getByRole("link", { name: "Draft September blog post", exact: true }).count(), 0);
   assert.equal(await page.getByRole("link", { name: "Confirm holiday hours for the GBP", exact: true }).count(), 0);
-  ok("Unassigned shows unowned human work, not CLAUDE-lane or assigned tasks");
+  assert.ok(await page.getByRole("link", { name: "Approve the GBP primary category", exact: true }).isVisible());
+  assert.equal(await row("Approve the GBP primary category").getByLabel("Assignee", { exact: true }).count(), 1);
+  ok("Unassigned shows unowned human work (CLAUDE_APPROVAL included, assignable), not CLAUDE-lane or assigned tasks");
   await shot("tasks-unassigned-desktop");
 
   // Create an assigned, overdue task.
@@ -185,6 +192,27 @@ try {
   assert.ok(await page.getByRole("heading", { name: /Harbor Lane Plumbing/ }).isVisible());
   assert.ok(await page.getByRole("heading", { name: /Summit Electric/ }).isVisible());
   ok("By client groups open work under each client");
+
+  // The worker's lane: no picker on the list, a disabled one on the task,
+  // and a forged submit is refused by the server action.
+  const claudeRow = row("Draft September blog post");
+  await page.goto(`${base}/tasks`, { waitUntil: "networkidle" });
+  assert.equal(await claudeRow.getByLabel("Assignee", { exact: true }).count(), 0);
+  assert.ok(await claudeRow.getByText("Worker runs this", { exact: true }).isVisible());
+  assert.equal(await row("Collect job-site photos from the client").getByLabel("Assignee", { exact: true }).count(), 1);
+  await page.getByRole("link", { name: "Draft September blog post", exact: true }).click();
+  await page.waitForURL(/\/tasks\/[0-9a-f-]{36}$/);
+  const picker = page.getByLabel("Assignee", { exact: true });
+  assert.ok(await picker.isDisabled());
+  assert.ok(await page.getByText("The worker runs CLAUDE tasks, so they aren't assigned to a person.").isVisible());
+  await shot("task-detail-claude-lane-desktop");
+  // Forge it: re-enable the select in the DOM and submit.
+  await picker.evaluate((el) => el.removeAttribute("disabled"));
+  await picker.selectOption({ label: "Sam Team (me)" });
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("alert").filter({ hasText: "can't be assigned to a person" }).waitFor();
+  assert.equal(sql(`select coalesce(assignee_id::text, 'none') from tasks where title = 'Draft September blog post'`), "none");
+  ok("CLAUDE lane: no picker in lists, disabled on the task, forged submit refused by the server action");
   await shot("tasks-by-client-desktop");
 
   // Detail: edit, comment, history with names.

@@ -15,6 +15,8 @@ insert into tasks (client_id, title, owner, due_date, notes) values
   ('00000000-0000-4000-b000-00000000000a', 'Collect job-site photos from the client', 'TOM', current_date - 3, null),
   ('00000000-0000-4000-b000-00000000000b', 'Confirm holiday hours for the GBP', 'TOM', current_date + 5, null),
   ('00000000-0000-4000-b000-00000000000b', 'Draft September blog post', 'CLAUDE', current_date + 1, null);
+insert into tasks (client_id, title, owner, autonomy_level, recommendation) values
+  ('00000000-0000-4000-b000-00000000000b', 'Approve the GBP primary category', 'CLAUDE_APPROVAL', 'hold', 'Switch to Electrician');
 insert into tasks (client_id, title, owner, key) values
   ('00000000-0000-4000-b000-00000000000a', 'Client review of the staging site', 'TOM', 'client_review');
 update tasks set assignee_id = (select id from team_members where email = 'jess@compassmarketing.ai')

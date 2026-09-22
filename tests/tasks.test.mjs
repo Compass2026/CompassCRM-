@@ -3,6 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  assignmentError,
+  canAssignLane,
   describeEvent,
   groupByClient,
   isOverdue,
@@ -13,6 +15,7 @@ import {
   todayIn,
   workerLanes,
   WORKER_ACTOR,
+  WORKER_LANE_ASSIGN_ERROR,
 } from "../src/lib/tasks.ts";
 
 const form = (o) => (k) => (k in o ? o[k] : null);
@@ -40,8 +43,30 @@ test("overdue means open with a due date before today", () => {
   assert.equal(isOverdue({ status: "open", due_date: null }, today), false);
 });
 
-test("unassigned leaves out the worker's lanes only", () => {
-  assert.deepEqual([...workerLanes].sort(), ["CLAUDE", "CLAUDE_APPROVAL"]);
+test("the worker's lane is CLAUDE only; CLAUDE_APPROVAL (hold) is a person's decision", () => {
+  assert.deepEqual(workerLanes, ["CLAUDE"]);
+  assert.equal(canAssignLane("CLAUDE"), false);
+  for (const lane of ["TOM", "CLAUDE_APPROVAL", "DELEGATED", "WAITING"]) assert.equal(canAssignLane(lane), true, lane);
+});
+
+test("a CLAUDE task refuses an assignee; clearing one is always allowed", () => {
+  assert.equal(assignmentError("CLAUDE", A), WORKER_LANE_ASSIGN_ERROR);
+  assert.equal(assignmentError("CLAUDE", null), null);
+  assert.equal(assignmentError("CLAUDE", undefined), null);
+  assert.equal(assignmentError("CLAUDE_APPROVAL", A), null);
+  assert.equal(assignmentError("TOM", A), null);
+});
+
+test("the CLAUDE-lane rule is enforced in the action, the list, the edit form and the database", () => {
+  const actions = readFileSync("src/app/task-actions.ts", "utf8");
+  const update = actions.slice(actions.indexOf("export async function updateTaskAction"), actions.indexOf("export async function assignTaskAction"));
+  assert.ok(update.includes('.select("id, client_id, status, owner")'), "reads the lane");
+  assert.ok(update.indexOf("assignmentError(task.owner") < update.indexOf(".update(patch)"), "checks before writing");
+  assert.ok(update.includes("tasks_claude_lane_unassigned"), "maps the constraint error");
+  assert.match(readFileSync("src/components/task-list.tsx", "utf8"), /canAssignLane\(task\.owner\) \?/);
+  assert.match(readFileSync("src/components/task-forms.tsx", "utf8"), /disabled=\{!assignable\}/);
+  assert.match(readFileSync("supabase/migrations/0043_task_assignment.sql", "utf8"),
+    /add constraint tasks_claude_lane_unassigned\s+check \(owner <> 'CLAUDE' or assignee_id is null\)/);
 });
 
 test("task fields: only what the form posts, validated", () => {

@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireTeamMember } from "@/lib/team";
 import {
+  assignmentError,
   isUuid,
   parseComment,
   parseTaskFields,
   statusPatch,
+  WORKER_LANE_ASSIGN_ERROR,
   type TaskStatus,
 } from "@/lib/tasks";
 
@@ -80,10 +82,13 @@ export async function updateTaskAction(
 
   const { data: task } = await supabase
     .from("tasks")
-    .select("id, client_id, status")
+    .select("id, client_id, status, owner")
     .eq("id", taskId)
     .maybeSingle();
   if (!task) return { error: "That task no longer exists." };
+  // A CLAUDE task is the worker's; tasks_claude_lane_unassigned refuses it too.
+  const laneError = assignmentError(task.owner, parsed.value.assignee_id);
+  if (laneError) return { error: laneError };
   if (!(await assigneeIsTeam(supabase, parsed.value.assignee_id))) {
     return { error: "The assignee is not on the team." };
   }
@@ -101,6 +106,9 @@ export async function updateTaskAction(
     .eq("id", taskId)
     .eq("client_id", task.client_id)
     .select("id");
+  // The lane can change between the read above and this write (the worker
+  // hands a step over, or takes one back); the constraint has the last word.
+  if (error?.message.includes("tasks_claude_lane_unassigned")) return { error: WORKER_LANE_ASSIGN_ERROR };
   if (error) return { error: error.message };
   if (!updated?.length) return { error: "Nothing was updated — the task may have been removed." };
 

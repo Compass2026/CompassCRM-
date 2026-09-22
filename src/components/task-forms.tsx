@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { taskStatuses, TITLE_MAX, type TaskStatus } from "@/lib/tasks";
+import { canAssignLane, taskStatuses, TITLE_MAX, type TaskStatus } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
 type Member = { id: string; name: string };
@@ -148,11 +148,15 @@ export function TaskEditForm({
     due_date: string | null;
     assignee_id: string | null;
     notes: string | null;
+    owner: string;
   };
   members: Member[];
   meId: string | null;
 }) {
   const [state, action, pending] = useActionState(updateTaskAction.bind(null, task.id), {});
+  // A disabled select is not submitted, so the action never sees an assignee
+  // for a CLAUDE task from this form.
+  const assignable = canAssignLane(task.owner);
   return (
     <form action={action} className="space-y-3">
       <div className="space-y-1">
@@ -172,9 +176,21 @@ export function TaskEditForm({
         </div>
         <div className="space-y-1">
           <Label htmlFor="task-assignee">Assignee</Label>
-          <select id="task-assignee" name="assignee_id" defaultValue={task.assignee_id ?? ""} className={selectClass}>
+          <select
+            id="task-assignee"
+            name="assignee_id"
+            defaultValue={task.assignee_id ?? ""}
+            disabled={!assignable}
+            aria-describedby={assignable ? undefined : "task-assignee-hint"}
+            className={cn(selectClass, !assignable && "opacity-60")}
+          >
             <AssigneeOptions members={members} meId={meId} />
           </select>
+          {!assignable && (
+            <p id="task-assignee-hint" className="text-xs text-muted-foreground">
+              The worker runs CLAUDE tasks, so they aren&apos;t assigned to a person.
+            </p>
+          )}
         </div>
         <div className="space-y-1">
           <Label htmlFor="task-due">Due</Label>

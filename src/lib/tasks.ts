@@ -19,9 +19,26 @@ export const taskStatusLabels: Record<TaskStatus, string> = {
   done: "Done",
 };
 
-// Lanes the worker runs. Their tasks are unassigned by design, so the
-// "Unassigned" view leaves them out — it is human work nobody has picked up.
-export const workerLanes: OwnerLane[] = ["CLAUDE", "CLAUDE_APPROVAL"];
+// The lane the worker executes. A CLAUDE task never carries a human assignee
+// (the database enforces it: tasks_claude_lane_unassigned), and the
+// "Unassigned" view leaves the lane out — it is human work nobody has picked
+// up. CLAUDE_APPROVAL is deliberately not here: it is the "hold" lane, where
+// the worker has drafted and a person decides, so it can be assigned to the
+// person deciding and shows in Unassigned like TOM / DELEGATED / WAITING.
+export const workerLanes: OwnerLane[] = ["CLAUDE"];
+
+export function canAssignLane(owner: string): boolean {
+  return !workerLanes.includes(owner as OwnerLane);
+}
+
+export const WORKER_LANE_ASSIGN_ERROR =
+  "The worker runs CLAUDE tasks, so they can't be assigned to a person. Move the task to a human lane first.";
+
+// Null when the assignment is allowed; clearing an assignee always is.
+export function assignmentError(owner: string, assigneeId: string | null | undefined): string | null {
+  if (!assigneeId) return null;
+  return canAssignLane(owner) ? null : WORKER_LANE_ASSIGN_ERROR;
+}
 
 export type TaskView = "mine" | "unassigned" | "overdue" | "by_client" | "all";
 

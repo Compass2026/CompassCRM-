@@ -14,7 +14,16 @@
 -- 3. task_events — an append-only history (created, status, assignee, due
 --    date, title, owner) written only by trigger. Not writable over the API.
 -- 4. task_comments — team comments on a task.
--- 5. Belonging-together: comments and events carry (task_id, client_id) with
+-- 5. A CLAUDE task has no human assignee (tasks_claude_lane_unassigned).
+--    CLAUDE means the worker runs it; a name on it would claim a person is
+--    doing work the worker may still do. When the worker hands a step to a
+--    person it moves the lane (owner → TOM, as the skill already does for
+--    Google ops it cannot reach); then it can be assigned. CLAUDE_APPROVAL is
+--    NOT covered: it is the "hold" lane — the worker drafted, a person
+--    decides (the Brief's "needs a decision") — so naming that person is
+--    right. 0 open CLAUDE_APPROVAL tasks exist today (0014 retired them).
+--    Every existing task is unassigned, so the constraint holds for all rows.
+-- 6. Belonging-together: comments and events carry (task_id, client_id) with
 --    a composite FK to tasks, a task's client never changes, and a task's
 --    stage / monthly cycle must be the same client's. Checked live on
 --    Sept 22: no existing task violates this (0 stage, 0 cycle mismatches).
@@ -41,7 +50,9 @@ alter table tasks
   add constraint tasks_updated_by_fkey foreign key (updated_by)
     references team_members(id) on delete set null,
   -- Target for the composite FKs below.
-  add constraint tasks_id_client_key unique (id, client_id);
+  add constraint tasks_id_client_key unique (id, client_id),
+  add constraint tasks_claude_lane_unassigned
+    check (owner <> 'CLAUDE' or assignee_id is null);
 
 comment on column tasks.assignee_id is
   'The team member doing this task. Independent of owner (the worker lane) and autonomy_level.';
@@ -230,6 +241,11 @@ begin
      or has_table_privilege('authenticated', 'public.task_events', 'insert,update,delete')
      or has_table_privilege('authenticated', 'public.task_comments', 'update,delete') then
     raise exception '0043: grants on task_events / task_comments are wider than intended';
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'tasks_claude_lane_unassigned'
+                 and conrelid = 'public.tasks'::regclass and convalidated) then
+    raise exception '0043: tasks_claude_lane_unassigned is missing or not validated';
   end if;
 
   if exists (

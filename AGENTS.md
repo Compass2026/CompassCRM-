@@ -793,7 +793,11 @@ Tasks can be assigned to actual team members. Details, rollout and rollback:
 
 - **Two different things:** `tasks.owner` / `autonomy_level` are the worker's
   lane and stay exactly as they were; `tasks.assignee_id` (nullable →
-  `team_members`) is the person doing it. Existing tasks stay unassigned.
+  `team_members`) is the person responsible. Existing tasks stay unassigned,
+  and assigning never changes the lane.
+- **A `CLAUDE` task has no assignee** (`tasks_claude_lane_unassigned`): the
+  worker runs it. Hand a step to a person by moving `owner` to a human lane
+  first. `CLAUDE_APPROVAL` (hold: a person decides) is assignable.
 - **Who changed what:** `created_by` / `updated_by` / `updated_at` are stamped
   by trigger from `auth.uid()` (callers cannot forge them); `task_events` is an
   append-only history written only by trigger; NULL actor = worker / system.
@@ -805,11 +809,11 @@ Tasks can be assigned to actual team members. Details, rollout and rollback:
   portal users reach none of it (no portal view references tasks). Every task
   server action (`src/app/task-actions.ts`, plus `addTaskAction` /
   `toggleTaskAction`) calls `requireTeamMember` first.
-- **Screens:** `/tasks` views My work / Unassigned (human lanes only) /
+- **Screens:** `/tasks` views My work / Unassigned (all but CLAUDE) /
   Overdue (Central-time today) / By client / All open (default, unchanged);
   `/tasks/[id]` edit + history + comments; client **Tasks** tab.
 - **Tests:** `npm test`, `npm run test:sandbox` (Postgres replay; 316 portal +
-  65 task checks), `npm run test:tasks-ui` (PostgREST + Chrome over the
+  79 task checks), `npm run test:tasks-ui` (PostgREST + Chrome over the
   replay; screenshots with `SCREENSHOTS=dir`).
 
 ## Client portal (Phase 5, Sept 17 2026)
