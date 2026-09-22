@@ -30,7 +30,11 @@ set to exactly `true`** in the deployment's environment. With the flag off:
 - `invitePortalUserAction` refuses before reading the form or calling
   `portal-invite`, so a hand-crafted POST of the action sends nothing
   (`src/lib/portal-invites.ts`; `tests/portal-invites.test.mjs`);
-- Revoke is not gated: taking access away always works.
+- Revoke is not gated: taking access away always works. Until the rewritten
+  `portal-invite` is deployed, Revoke is served by the running v1, which
+  deactivates by email and ignores the `client_id` the app now sends.
+  `portal_users.email` is unique, so the effect is the same: that one
+  contact is deactivated.
 
 The flag isn't `NEXT_PUBLIC_`, so it's never in the browser bundle.
 Vercel applies environment variable changes only to **new** deployments, so
@@ -302,13 +306,21 @@ enforces 0037 + 0042 and records every email instead of sending it):
 4. **Turn invites on, last:**
    1. Vercel → project `compass-crm` → Settings → Environment Variables.
       Add `PORTAL_INVITES_ENABLED` with the value `true` (lowercase, no
-      spaces), scoped to **Production**. Add **Preview** too only if you
-      want invites from preview deployments, which invite with a redirect
-      back to that preview URL.
+      spaces), scoped to **Production only**. Don't add it to Preview. The
+      invite link returns to the host it was sent from, and preview
+      deployments sit behind Vercel Authentication, so a client couldn't
+      open a link sent from one. (Checked Sept 22: `*.vercel.app` preview
+      and branch URLs redirect to `vercel.com/sso-api`.)
    2. Deployments → the current production deployment → **Redeploy**.
       The variable takes effect only in a new deployment.
-   3. Open any client's Overview tab. The Client portal card now shows the
-      **Send invite** form instead of the "switched off" notice.
+   3. Open any client's Overview tab **at https://compass-crm-ten.vercel.app**.
+      The Client portal card now shows the **Send invite** form instead of
+      the "switched off" notice. Always send invites from that host. It's
+      the only one of the project's URLs that is publicly reachable
+      (`compass-crm-compassmarketin.vercel.app` and
+      `compass-crm-git-main-compassmarketin.vercel.app` also redirect to
+      Vercel's SSO), and the link in the email points back to the host it
+      was sent from.
    4. Invite a Compass-controlled test address first, sign in through the
       email, and confirm it lands on `/portal` with only that client's data.
       Then revoke it.
