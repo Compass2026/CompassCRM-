@@ -28,7 +28,15 @@ export default async function AppLayout({
     .select("id")
     .eq("auth_user_id", user.id)
     .maybeSingle();
-  if (!member) redirect("/auth/signout");
+  if (!member) {
+    // A client contact who signed in at /login lands here first; their home
+    // is the portal. portal_client is empty for anyone who is neither.
+    const { data: portalClient } = await supabase
+      .from("portal_client")
+      .select("id")
+      .maybeSingle();
+    redirect(portalClient ? "/portal" : "/auth/signout");
+  }
 
   return (
     <div className="min-h-screen">
