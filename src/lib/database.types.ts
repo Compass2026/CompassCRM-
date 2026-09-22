@@ -1715,6 +1715,53 @@ export type Database = {
           },
         ]
       }
+      portal_users: {
+        Row: {
+          auth_user_id: string | null
+          client_id: string
+          created_at: string
+          email: string
+          id: string
+          invited_at: string | null
+          invited_by: string | null
+          is_active: boolean
+          last_seen_at: string | null
+          name: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          client_id: string
+          created_at?: string
+          email: string
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_active?: boolean
+          last_seen_at?: string | null
+          name?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          client_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_active?: boolean
+          last_seen_at?: string | null
+          name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rank_runs: {
         Row: {
           checks_count: number | null
@@ -2481,7 +2528,101 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      portal_client: {
+        Row: {
+          city: string | null
+          id: string | null
+          launched_at: string | null
+          name: string | null
+          state: string | null
+          status: string | null
+          website_url: string | null
+        }
+        Relationships: []
+      }
+      portal_progress: {
+        Row: {
+          client_id: string | null
+          completed_at: string | null
+          pipeline: string | null
+          pipeline_order: number | null
+          stage: string | null
+          stage_order: number | null
+          status: string | null
+        }
+        Relationships: []
+      }
+      portal_rankings: {
+        Row: {
+          checked_at: string | null
+          city: string | null
+          client_id: string | null
+          is_money: boolean | null
+          keyword: string | null
+          position: number | null
+          previous_position: number | null
+          result_type: string | null
+        }
+        Relationships: []
+      }
+      portal_reports: {
+        Row: {
+          client_id: string | null
+          completed_at: string | null
+          period: string | null
+          report_url: string | null
+          status: string | null
+          summary: Json | null
+        }
+        Relationships: []
+      }
+      portal_search_performance: {
+        Row: {
+          avg_position: number | null
+          clicks: number | null
+          client_id: string | null
+          impressions: number | null
+          period_end: string | null
+          period_start: string | null
+          queries: number | null
+        }
+        Relationships: []
+      }
+      portal_search_queries: {
+        Row: {
+          avg_position: number | null
+          clicks: number | null
+          client_id: string | null
+          ctr: number | null
+          impressions: number | null
+          page: string | null
+          period_end: string | null
+          period_start: string | null
+          query: string | null
+        }
+        Relationships: []
+      }
+      portal_site: {
+        Row: {
+          client_id: string | null
+          last_pushed_at: string | null
+          launched_at: string | null
+          staging_url: string | null
+          url: string | null
+        }
+        Relationships: []
+      }
+      portal_work_log: {
+        Row: {
+          at: string | null
+          client_id: string | null
+          detail: string | null
+          kind: string | null
+          label: string | null
+          url: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       compute_location_index: {
@@ -2497,6 +2638,7 @@ export type Database = {
       get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
       secret_present: { Args: { secret_name: string }; Returns: boolean }
+      portal_seen: { Args: never; Returns: undefined }
       set_secret: { Args: { secret_name: string; secret_value: string }; Returns: undefined }
       mark_past_due_subscriptions: { Args: never; Returns: undefined }
       recompute_location_indexes: {
