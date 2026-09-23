@@ -867,14 +867,22 @@ gate; rules in the migration header and `docs/client-intelligence.md` step
 in_review → approved | rejected) and `publish_status` (not_scheduled →
 scheduled → publishing → published | failed; nothing past not_scheduled
 without an approval), plus `post_claims`, `post_assets` and append-only
-`post_events`. Only a signed-in teammate through PostgREST approves,
-rejects or reopens (`session_user = 'authenticator'` + role
+`post_events`; the legacy `asset_url` / `storage_path` columns are dropped
+(`post_assets` is the only media model) and `post_type` is `standard` or
+`offer` (no Event posts yet). Only a signed-in teammate through PostgREST
+approves, rejects or reopens (`session_user = 'authenticator'` + role
 `authenticated` + a `team_members` row) — never the worker's SQL, the
 service role or a trigger. Grounding (usable claims, `crm_facts_only` for
-claimless navigational posts, confirmed current offers, approved services)
-is checked at submit, approval and publishing; approved content is frozen
-with a sha256 snapshot; a lapse sends an approved post back to review with
-a new `post_review` task. The worker does not write posts yet and never
+claimless navigational posts, an approved service for standard
+informational / commercial / transactional posts, confirmed current
+offers) is checked at submit, approval and publishing; approved content is
+frozen with a sha256 snapshot; a lapse sends an approved post back to
+review. Review tasks are one `post_review` task per post in the
+`CLAUDE_APPROVAL` lane, unassigned (the Brief's "needs a decision"). A
+teammate may mark an approved facebook / instagram / linkedin / x / tiktok
+post published by hand (hash and grounding re-checked, `published_at` +
+https `published_url` required, `external_post_id` optional); a Business
+Profile post only ever goes out through the publisher. The worker does not write posts yet and never
 calls `gbp_posts` / `gbp_qa` (PRs #57, #58). UI: Social tab + post page.
 Tests: `tests/social-post-review-migration.test.mjs`, the sandbox's
 `social_post_review.test.sql`, `npm run test:posts-ui`. The sandbox

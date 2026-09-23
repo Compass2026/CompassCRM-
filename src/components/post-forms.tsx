@@ -4,7 +4,9 @@ import { useActionState, useState } from "react";
 import {
   approvePostAction,
   createPostAction,
+  linkAssetAction,
   linkClaimAction,
+  markPublishedAction,
   rejectPostAction,
   schedulePostAction,
   updatePostAction,
@@ -52,7 +54,6 @@ export type DraftValues = {
   service_id: string | null;
   offer_id: string | null;
   keyword_id: string | null;
-  asset_url: string | null;
   notes: string | null;
 };
 
@@ -115,7 +116,7 @@ export function PostDraftForm({
           >
             {POST_TYPES.filter((t) => gbp || t === "standard").map((t) => (
               <option key={t} value={t}>
-                {t === "standard" ? "Standard" : t === "offer" ? "Offer" : "Event"}
+                {t === "standard" ? "Standard" : "Offer"}
               </option>
             ))}
           </select>
@@ -209,16 +210,13 @@ export function PostDraftForm({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label htmlFor="asset_url">Image link</Label>
-          <Input id="asset_url" name="asset_url" placeholder="Drive or Canva link" defaultValue={post?.asset_url ?? ""} />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="notes">Notes</Label>
-          <Input id="notes" name="notes" defaultValue={post?.notes ?? ""} />
-        </div>
+      <div className="space-y-1">
+        <Label htmlFor="notes">Notes</Label>
+        <Input id="notes" name="notes" defaultValue={post?.notes ?? ""} />
       </div>
+      <p className="text-xs text-muted-foreground">
+        Images come from the client&apos;s brand assets; add them on the post page once the draft exists.
+      </p>
 
       <FormMessage state={state} />
       <div className="flex items-center gap-3">
@@ -361,6 +359,76 @@ export function ScheduleForm({
       <p className="text-xs text-muted-foreground">
         Scheduling keeps the approval as it is. Nothing publishes yet: the publisher is not built.
       </p>
+      <FormMessage state={state} />
+    </form>
+  );
+}
+
+export function LinkAssetForm({ clientId, postId, assets }: { clientId: string; postId: string; assets: Option[] }) {
+  const [state, action, pending] = useActionState(linkAssetAction.bind(null, clientId, postId), {});
+  if (assets.length === 0) {
+    return <p className="text-xs text-muted-foreground">No other brand assets on file. Add them on the Brand tab.</p>;
+  }
+  return (
+    <form action={action} className="space-y-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <Label htmlFor="brand_asset_id">Add a brand asset</Label>
+          <select id="brand_asset_id" name="brand_asset_id" className={selectClass} defaultValue="">
+            <option value="" disabled>
+              Photos, logos, graphics…
+            </option>
+            {assets.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Button type="submit" variant="outline" disabled={pending}>
+          Add
+        </Button>
+      </div>
+      <FormMessage state={state} />
+    </form>
+  );
+}
+
+// A social post a person published natively: record where and when. Not
+// offered for Business Profile posts (the publisher's alone).
+export function MarkPublishedForm({
+  clientId,
+  postId,
+  fromPublish,
+}: {
+  clientId: string;
+  postId: string;
+  fromPublish: string;
+}) {
+  const [state, action, pending] = useActionState(markPublishedAction.bind(null, clientId, postId, fromPublish), {});
+  return (
+    <form action={action} className="space-y-2 rounded-md border p-3">
+      <p className="text-sm font-medium">Published it by hand?</p>
+      <div className="grid gap-2 sm:grid-cols-[1fr_14rem]">
+        <div className="space-y-1">
+          <Label htmlFor="published_url">Post link</Label>
+          <Input id="published_url" name="published_url" type="url" placeholder="https://" required />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="published_at">Published at (Central)</Label>
+          <Input id="published_at" name="published_at" type="datetime-local" required />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="external_post_id">Platform post id (optional)</Label>
+        <Input id="external_post_id" name="external_post_id" />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Only after it is live. The approval is checked again and stays as it is.
+      </p>
+      <Button type="submit" variant="outline" disabled={pending}>
+        Mark published
+      </Button>
       <FormMessage state={state} />
     </form>
   );

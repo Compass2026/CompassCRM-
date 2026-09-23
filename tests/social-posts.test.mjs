@@ -5,6 +5,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   availableActions,
+  canPublishByHand,
+  topicProblem,
   describePostEvent,
   displayState,
   parsePostFields,
@@ -22,6 +24,15 @@ test("a person sees only the steps the workflow allows", () => {
   assert.deepEqual(a("approved", "not_scheduled"), ["schedule", "reopen"]);
   assert.deepEqual(a("approved", "scheduled"), ["unschedule", "reopen"]);
   assert.deepEqual(a("approved", "failed"), ["schedule", "reopen"]);
+  // Manual publication: social platforms only, never Business Profile.
+  const on = (platform, p) => availableActions({ review_status: "approved", publish_status: p, platform });
+  assert.ok(on("instagram", "not_scheduled").includes("mark_published"));
+  assert.ok(on("facebook", "scheduled").includes("mark_published"));
+  assert.ok(on("x", "failed").includes("mark_published"));
+  assert.ok(!on("google_business", "not_scheduled").includes("mark_published"));
+  assert.ok(!on("instagram", "publishing").includes("mark_published"));
+  assert.ok(!availableActions({ review_status: "in_review", publish_status: "not_scheduled", platform: "instagram" }).includes("mark_published"));
+  assert.deepEqual(["facebook", "instagram", "linkedin", "x", "tiktok", "google_business"].map(canPublishByHand), [true, true, true, true, true, false]);
   assert.deepEqual(a("approved", "publishing"), [], "nothing while the publisher works");
   assert.deepEqual(a("approved", "published"), [], "a published post is on record");
 });
@@ -47,6 +58,7 @@ test("the draft form mirrors the table rules in plain words", () => {
   assert.match(parsePostFields(form({ ...base, copy: "x".repeat(3001) })).error, /under 3000/);
   assert.match(parsePostFields(form({ ...base, platform: "facebook", post_type: "offer" })).error, /Business Profile posts/);
   assert.match(parsePostFields(form({ ...base, post_type: "offer" })).error, /needs one of the client's offers/);
+  assert.match(parsePostFields(form({ ...base, post_type: "event" })).error, /post type/, "Event posts are not in 0045");
   assert.match(parsePostFields(form({ ...base, crm_facts_only: "on" })).error, /navigational posts/);
   assert.match(parsePostFields(form({ ...base, cta_url: "http://a.example.test" })).error, /https/);
   assert.match(parsePostFields(form({ ...base, service_id: "not-a-uuid" })).error, /not valid/);
@@ -59,6 +71,17 @@ test("the draft form mirrors the table rules in plain words", () => {
   assert.equal(ok.value.post_type, "standard");
   assert.equal(ok.value.notes, null);
   assert.equal(ok.value.service_id, null);
+  assert.ok(!("asset_url" in ok.value), "media is post_assets only");
+});
+
+test("the topic a post needs before it leaves draft", () => {
+  const t = (o) => topicProblem({ post_type: "standard", search_intent: "informational", service_id: null, offer_id: null, ...o });
+  assert.match(t({}), /informational post needs an approved service/);
+  assert.match(t({ search_intent: "commercial" }), /commercial post needs/);
+  assert.equal(t({ service_id: "svc" }), null);
+  assert.equal(t({ search_intent: "navigational" }), null, "brand-level navigational post");
+  assert.match(t({ post_type: "offer" }), /offer post needs/);
+  assert.equal(t({ post_type: "offer", offer_id: "o", search_intent: "transactional" }), null, "business-wide offer");
 });
 
 test("history names people by name and never shows an Auth UUID", () => {

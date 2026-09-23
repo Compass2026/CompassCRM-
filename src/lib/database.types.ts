@@ -2612,7 +2612,6 @@ export type Database = {
         Row: {
           approved_hash: string | null
           approved_snapshot: Json | null
-          asset_url: string | null
           author_kind: string
           client_id: string
           copy: string | null
@@ -2644,7 +2643,6 @@ export type Database = {
           search_intent: string
           service_id: string | null
           social_account_id: string | null
-          storage_path: string | null
           submitted_at: string | null
           updated_at: string | null
           updated_by: string | null
@@ -2652,7 +2650,6 @@ export type Database = {
         Insert: {
           approved_hash?: string | null
           approved_snapshot?: Json | null
-          asset_url?: string | null
           author_kind?: string
           client_id: string
           copy?: string | null
@@ -2684,7 +2681,6 @@ export type Database = {
           search_intent: string
           service_id?: string | null
           social_account_id?: string | null
-          storage_path?: string | null
           submitted_at?: string | null
           updated_at?: string | null
           updated_by?: string | null
@@ -2692,7 +2688,6 @@ export type Database = {
         Update: {
           approved_hash?: string | null
           approved_snapshot?: Json | null
-          asset_url?: string | null
           author_kind?: string
           client_id?: string
           copy?: string | null
@@ -2724,7 +2719,6 @@ export type Database = {
           search_intent?: string
           service_id?: string | null
           social_account_id?: string | null
-          storage_path?: string | null
           submitted_at?: string | null
           updated_at?: string | null
           updated_by?: string | null

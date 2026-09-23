@@ -18,6 +18,10 @@ insert into claims (id, client_id, claim, status, source, confirmed_by, confirme
 insert into offers (id, client_id, title, terms, source, status, confirmed_by, confirmed_on) values
   ('00000000-0000-4000-f100-00000000000a', '00000000-0000-4000-b000-00000000000a', 'Free estimates', 'Free estimates on any drain job.', 'Client email, Sept 2', 'confirmed', 'Owner', now());
 
+insert into brand_assets (id, client_id, kind, label, storage_path) values
+  ('00000000-0000-4000-f200-00000000000a', '00000000-0000-4000-b000-00000000000a', 'photo', 'Drain job, Nixa', '00000000-0000-4000-b000-00000000000a/photos/drain.jpg'),
+  ('00000000-0000-4000-f200-00000000001a', '00000000-0000-4000-b000-00000000000a', 'logo_primary', 'Harbor Lane logo', '00000000-0000-4000-b000-00000000000a/logo.png');
+
 -- The worker's drafts (no JWT → author_kind worker).
 insert into social_posts (id, client_id, platform, search_intent, service_id, copy, cta_type, cta_url) values
   ('00000000-0000-4000-f300-00000000000a', '00000000-0000-4000-b000-00000000000a', 'google_business', 'commercial',
@@ -32,3 +36,13 @@ insert into post_claims (post_id, claim_id) values
   ('00000000-0000-4000-f300-00000000001a', '00000000-0000-4000-f000-00000000000a');
 -- The offer post goes to review as the worker would send it.
 update social_posts set review_status = 'in_review' where id = '00000000-0000-4000-f300-00000000001a';
+
+-- A Facebook post the team will publish by hand once approved.
+insert into social_posts (id, client_id, platform, search_intent, service_id, copy, cta_type, cta_url) values
+  ('00000000-0000-4000-f300-00000000002a', '00000000-0000-4000-b000-00000000000a', 'facebook', 'informational',
+   '00000000-0000-4000-e000-00000000001a',
+   'Is your water heater more than ten years old? A licensed master plumber on every job can tell you in one visit.',
+   'LEARN_MORE', 'https://a.example.test/water-heaters');
+insert into post_claims (post_id, claim_id) values
+  ('00000000-0000-4000-f300-00000000002a', '00000000-0000-4000-f000-00000000001a');
+update social_posts set review_status = 'in_review' where id = '00000000-0000-4000-f300-00000000002a';

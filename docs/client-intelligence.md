@@ -80,6 +80,21 @@ go-live (`docs/portal-reconciliation.md`).
      usable claim; a claimless navigational post must be marked
      `crm_facts_only` (directly stored CRM facts only); a linked offer must
      be confirmed and not ended; a linked service approved.
+   - Topic before leaving draft: a standard informational / commercial /
+     transactional post needs an approved `service_id`; a navigational
+     post may be brand-level; an offer post needs `offer_id` (service
+     optional for a business-wide offer); `keyword_id` is optional.
+     `post_type` is `standard` or `offer` — GBP Event posts come later
+     with their own fields and adapter.
+   - Media is `post_assets` only (brand assets, ordered, with content
+     hashes); the legacy `asset_url` / `storage_path` columns are dropped.
+     Generated graphics become brand assets and are linked the same way.
+   - Manual publication: a teammate may mark an approved facebook /
+     instagram / linkedin / x / tiktok post published after posting it
+     natively; the approval hash and grounding are re-checked,
+     `published_at` and an https `published_url` are required,
+     `external_post_id` may be null, and the event names the person.
+     Business Profile posts go out only through the publisher.
    - Submitted content is frozen; approval stores a snapshot (content,
      claim text, offer terms, assets) and its sha256; publishing starts
      only if the live content still hashes the same.
@@ -87,8 +102,10 @@ go-live (`docs/portal-reconciliation.md`).
      changed, or an asset changed sends an approved, unpublished post back
      to review (unscheduled, new review task, `grounding_lapsed` event); a
      daily job catches offers that end by date.
-   - Submitting opens an unassigned TOM `post_review` task; approving,
-     rejecting or withdrawing closes it.
+   - Submitting opens one unassigned `post_review` task per post in the
+     `CLAUDE_APPROVAL` (hold) lane, which the Brief lists under "needs a
+     decision"; approving, rejecting or withdrawing closes it. No batching
+     in 0045.
    Covered by `tests/social-post-review-migration.test.mjs` (PGlite),
    `supabase/tests/sandbox/social_post_review.test.sql` (full replay, real
    authenticator sessions) and `npm run test:posts-ui` (PostgREST +

@@ -12,7 +12,8 @@ export type PublishStatus = (typeof PUBLISH_STATUSES)[number];
 export const POST_PLATFORMS = ["google_business", "facebook", "instagram", "linkedin", "x", "tiktok"] as const;
 export type PostPlatform = (typeof POST_PLATFORMS)[number];
 
-export const POST_TYPES = ["standard", "offer", "event"] as const;
+// Event posts come later, with their own fields and publishing adapter.
+export const POST_TYPES = ["standard", "offer"] as const;
 export type PostType = (typeof POST_TYPES)[number];
 
 export const POST_INTENTS = ["navigational", "informational", "commercial", "transactional"] as const;
@@ -51,6 +52,21 @@ export const intentHelp: Record<PostIntent, string> = {
   transactional: "Ready to act: book, call, claim an offer.",
 };
 
+// Platforms a person may publish by hand and then record. Business Profile
+// posts go out only through the publisher (0045 refuses a manual flip).
+export const MANUAL_PUBLISH_PLATFORMS = ["facebook", "instagram", "linkedin", "x", "tiktok"] as const;
+export const canPublishByHand = (platform: string): boolean =>
+  (MANUAL_PUBLISH_PLATFORMS as readonly string[]).includes(platform);
+
+// The topic a post needs before it leaves draft (checked again by 0045).
+export function topicProblem(post: { post_type: string; search_intent: string; service_id: string | null; offer_id: string | null }): string | null {
+  if (post.post_type === "offer") return post.offer_id ? null : "An offer post needs one of the client's offers.";
+  if (post.search_intent !== "navigational" && !post.service_id) {
+    return `${post.search_intent === "informational" ? "An" : "A"} ${post.search_intent} post needs an approved service as its topic.`;
+  }
+  return null;
+}
+
 export const CRM_FACTS_HELP =
   "Only facts stored in the CRM: business name, phone, website, approved services, locations and service area, other explicit client fields. Anything else needs a claim.";
 
@@ -77,7 +93,6 @@ export type PostFields = {
   service_id: string | null;
   offer_id: string | null;
   keyword_id: string | null;
-  asset_url: string | null;
   notes: string | null;
 };
 
@@ -102,7 +117,7 @@ export function parsePostFields(
   if (!copy) return { ok: false, error: "Write the post copy." };
   if (copy.length > COPY_MAX) return { ok: false, error: `Keep the copy under ${COPY_MAX} characters.` };
   if (postType !== "standard" && platform !== "google_business") {
-    return { ok: false, error: "Offer and event posts are Business Profile posts." };
+    return { ok: false, error: "Offer posts are Business Profile posts." };
   }
   const crmFactsOnly = get("crm_facts_only") === "on" || get("crm_facts_only") === "true";
   if (crmFactsOnly && intent !== "navigational") {
@@ -132,7 +147,6 @@ export function parsePostFields(
       service_id: serviceId,
       offer_id: offerId,
       keyword_id: keywordId,
-      asset_url: text("asset_url"),
       notes: text("notes"),
     },
   };
@@ -142,6 +156,7 @@ export function parsePostFields(
 export type PostState = {
   review_status: string;
   publish_status: string;
+  platform?: string;
 };
 
 export type PostAction =
@@ -154,6 +169,7 @@ export type PostAction =
   | "reopen"
   | "schedule"
   | "unschedule"
+  | "mark_published"
   | "delete";
 
 // What a signed-in team member may do next. Approve / reject / reopen are
@@ -167,7 +183,10 @@ export function availableActions(post: PostState): PostAction[] {
   if (r === "rejected") out.push("revise");
   if (r === "approved" && (p === "not_scheduled" || p === "failed")) out.push("schedule");
   if (r === "approved" && p === "scheduled") out.push("unschedule");
-  if (r === "approved" && (p === "not_scheduled" || p === "scheduled" || p === "failed")) out.push("reopen");
+  if (r === "approved" && (p === "not_scheduled" || p === "scheduled" || p === "failed")) {
+    if (post.platform && canPublishByHand(post.platform)) out.push("mark_published");
+    out.push("reopen");
+  }
   if ((r === "draft" || r === "rejected") && p === "not_scheduled") out.push("delete");
   return out;
 }
@@ -231,6 +250,8 @@ export function describePostEvent(e: PostEvent, names: Map<string, string>): str
     extra.push(e.to_value === "in_review" && e.from_value === "approved" ? "Sent back to review." : "Recorded only; the post was not moved.");
   }
   if (e.kind === "failed" && typeof d.error === "string") extra.push(d.error);
+  if (e.kind === "published" && d.manual === true) extra.push("by hand");
+  if (e.kind === "published" && typeof d.published_url === "string") extra.push(d.published_url);
   if (e.kind === "edited" && Array.isArray(d.fields)) extra.push(`(${d.fields.join(", ")})`);
   return [`${who}: ${base}`, ...extra].join(" — ");
 }
@@ -243,7 +264,9 @@ export function postErrorMessage(message: string | undefined): string {
     [/social_posts_execution_needs_approval/, "Only an approved post can be scheduled."],
     [/social_posts_scheduled_has_time/, "Pick a date and time to schedule it."],
     [/social_posts_rejection_explained/, "Say why the post is rejected."],
-    [/social_posts_gbp_types/, "Offer and event posts are Business Profile posts."],
+    [/social_posts_gbp_types/, "Offer posts are Business Profile posts."],
+    [/social_posts_post_type_known/, "A post is a standard or an offer post."],
+    [/social_posts_published_complete/, "Say where and when it was published."],
     [/social_posts_offer_post_has_offer/, "An offer post needs one of the client's offers."],
     [/social_posts_crm_facts_navigational/, "“CRM facts only” is for navigational posts."],
     [/violates foreign key constraint/, "That belongs to another client or no longer exists."],

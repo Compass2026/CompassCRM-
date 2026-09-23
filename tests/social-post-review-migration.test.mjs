@@ -25,6 +25,7 @@ const ID = {
   svcApproved: "00000000-0000-4000-8000-000000000501",
   svcProposed: "00000000-0000-4000-8000-000000000502",
   svcOther: "00000000-0000-4000-8000-000000000503",
+  svcSecond: "00000000-0000-4000-8000-000000000504",
   claimConfirmed: "00000000-0000-4000-8000-000000000601",
   claimSourced: "00000000-0000-4000-8000-000000000602",
   claimNoSource: "00000000-0000-4000-8000-000000000603",
@@ -154,7 +155,8 @@ const FIXTURES = `
   insert into services (id, client_id, name, status) values
     ('${ID.svcApproved}', '${CA}', 'Chimney repair', 'approved'),
     ('${ID.svcProposed}', '${CA}', 'Outdoor kitchens', 'proposed'),
-    ('${ID.svcOther}', '${CB}', 'Roof replacement', 'approved');
+    ('${ID.svcOther}', '${CB}', 'Roof replacement', 'approved'),
+    ('${ID.svcSecond}', '${CA}', 'Tuckpointing', 'approved');
   insert into keywords (id, client_id, keyword, intent, service_id) values
     ('${ID.keyword}', '${CA}', 'chimney repair springfield mo', 'transactional', '${ID.svcApproved}');
   insert into claims (id, client_id, claim, status, source, confirmed_by, confirmed_on) values
@@ -232,7 +234,7 @@ const events = async (db, id) =>
 
 async function draft(db, fields = {}) {
   const f = {
-    client_id: CA, platform: "facebook", search_intent: "informational",
+    client_id: CA, platform: "facebook", search_intent: "informational", service_id: ID.svcApproved,
     copy: "Family owned since 1998, we rebuild chimneys across Greene County.", ...fields,
   };
   const cols = Object.keys(f);
@@ -365,7 +367,8 @@ test("an unverified or source-less claim blocks submission even next to a good o
 test("a claimless navigational post needs crm_facts_only; other intents cannot set it", async (t) => {
   const db = await migrated(t);
   await asWorker(db);
-  const nav = await draft(db, { search_intent: "navigational", copy: "Fictional Brothers Masonry — call (417) 555-0100 or visit a.example.test." });
+  // Brand-level: no service.
+  const nav = await draft(db, { search_intent: "navigational", service_id: null, copy: "Fictional Brothers Masonry — call (417) 555-0100 or visit a.example.test." });
   await refused(db, `update social_posts set review_status = 'in_review' where id = $1`, [nav], /CRM facts only/);
   await db.query(`update social_posts set crm_facts_only = true where id = $1`, [nav]);
   await setReview(db, nav, "in_review");
@@ -419,7 +422,7 @@ test("only a human team member through the API approves; the review task opens a
   await setReview(db, id, "in_review");
   const task = (await db.query(`select t.* from tasks t join social_posts p on p.review_task_id = t.id where p.id = $1`, [id])).rows[0];
   assert.equal(task.key, "post_review");
-  assert.equal(task.owner, "TOM");
+  assert.equal(task.owner, "CLAUDE_APPROVAL", "the hold lane: drafted, a person decides");
   assert.equal(task.status, "open");
   assert.equal(task.assignee_id, null);
   assert.equal(task.client_id, CA);
@@ -683,7 +686,7 @@ test("editing a linked claim's text, retiring the offer or service, or deleting 
   assert.equal((await row(db, c)).review_status, "in_review");
 
   await asWorker(db);
-  const d = await draft(db);
+  const d = await draft(db, { service_id: ID.svcSecond });
   await link(db, d, ID.claimSourced);
   await setReview(db, d, "in_review");
   await asHuman(db);
@@ -769,4 +772,136 @@ test("social_post_readiness lists what blocks a draft", async (t) => {
   const r = (await db.query(`select social_post_readiness($1) as r`, [id])).rows[0].r;
   assert.ok(r.some((m) => /no copy/.test(m)));
   assert.ok(r.some((m) => /informational post needs/.test(m)));
+});
+
+// ── Topic architecture ───────────────────────────────────────────────────────
+test("a standard non-navigational post needs an approved service; navigational may be brand-level; offers may be business-wide", async (t) => {
+  const db = await migrated(t);
+  await asWorker(db);
+  for (const intent of ["informational", "commercial", "transactional"]) {
+    const id = await draft(db, { search_intent: intent, service_id: null });
+    await link(db, id, ID.claimConfirmed);
+    await refused(db, `update social_posts set review_status = 'in_review' where id = $1`, [id], new RegExp(`${intent} post needs an approved service`));
+  }
+  const brand = await draft(db, { search_intent: "navigational", service_id: null, crm_facts_only: true });
+  await setReview(db, brand, "in_review");
+  // A business-wide offer: no service, still submittable.
+  const offer = await draft(db, { platform: "google_business", post_type: "offer", offer_id: ID.offerStanding, search_intent: "transactional", service_id: null });
+  await link(db, offer, ID.claimConfirmed);
+  await setReview(db, offer, "in_review");
+  // keyword_id stays optional either way.
+  assert.equal((await row(db, offer)).keyword_id, null);
+  // Event posts are not supported in 0045.
+  await refused(db, `insert into social_posts (client_id, platform, post_type, search_intent, copy) values ($1, 'google_business', 'event', 'informational', 'x')`, [CA], /post_type_known/);
+});
+
+// ── Media ────────────────────────────────────────────────────────────────────
+test("post_assets is the only media model: legacy columns are gone, assets are in the snapshot and frozen", async (t) => {
+  const db = await migrated(t);
+  const cols = (await db.query(`select column_name from information_schema.columns where table_name = 'social_posts' and column_name in ('asset_url', 'storage_path')`)).rows;
+  assert.deepEqual(cols, []);
+  await asWorker(db);
+  const id = await draft(db);
+  await link(db, id, ID.claimConfirmed);
+  await db.query(`insert into post_assets (post_id, brand_asset_id, sort_order, content_hash) values ($1, $2, 1, 'sha256:abc')`, [id, ID.asset]);
+  await setReview(db, id, "in_review");
+  await asHuman(db);
+  await setReview(db, id, "approved");
+  await asWorker(db);
+  const snap = (await row(db, id)).approved_snapshot;
+  assert.deepEqual(snap.assets.map((a) => [a.id, a.sort_order, a.content_hash, a.storage_path]), [[ID.asset, 1, "sha256:abc", `${CA}/photos/chimney.jpg`]]);
+  assert.ok(!("asset_url" in snap) && !("storage_path" in snap));
+  await refused(db, `delete from post_assets where post_id = $1`, [id], /frozen/);
+  // The asset file changing sends the post back to review.
+  await db.query(`update brand_assets set storage_path = $2 where id = $1`, [ID.asset, `${CA}/photos/chimney-v2.jpg`]);
+  assert.equal((await row(db, id)).review_status, "in_review");
+});
+
+// ── Manual publishing ────────────────────────────────────────────────────────
+async function approvedSocial(db, fields = {}) {
+  return approvedPost(db, { platform: "instagram", ...fields });
+}
+const markPublished = (db, id, extra = `, published_at = now() - interval '1 minute', published_url = 'https://instagram.example/p/1'`) =>
+  db.query(`update social_posts set publish_status = 'published' ${extra} where id = $1`, [id]);
+
+test("a person marks an approved social post published by hand; the approval is untouched", async (t) => {
+  const db = await migrated(t);
+  const id = await approvedSocial(db);
+  const before = await row(db, id);
+  await asHuman(db, TEAM2_AUTH);
+  await refused(db, `update social_posts set publish_status = 'published', published_url = 'https://instagram.example/p/1' where id = $1`, [id], /where and when/);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now() where id = $1`, [id], /where and when/);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now() + interval '1 day', published_url = 'https://instagram.example/p/1' where id = $1`, [id], /in the future/);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'http://instagram.example/p/1' where id = $1`, [id], /https/);
+  await markPublished(db, id);
+  await asWorker(db);
+  const p = await row(db, id);
+  assert.equal(p.publish_status, "published");
+  assert.equal(p.external_post_id, null, "no external id needed for a hand-published social post");
+  assert.equal(p.published_url, "https://instagram.example/p/1");
+  assert.equal(p.publish_attempts, 0);
+  for (const k of ["review_status", "reviewed_by", "reviewed_at", "approved_hash", "approved_snapshot"]) assert.deepEqual(p[k], before[k], k);
+  const ev = (await events(db, id)).at(-1);
+  assert.equal(ev.kind, "published");
+  assert.equal(ev.actor_kind, "team");
+  assert.equal(ev.actor_id, TEAM2_ID);
+  assert.equal(ev.detail.manual, true);
+  // And it is on record for good.
+  await refused(db, `delete from social_posts where id = $1`, [id], /stays on record/);
+});
+
+test("manual publication works from scheduled and failed too, and never for the wrong caller or state", async (t) => {
+  const db = await migrated(t);
+  const scheduled = await approvedSocial(db, { platform: "linkedin" });
+  await db.query(`update social_posts set scheduled_at = now() where id = $1`, [scheduled]);
+  await setPublish(db, scheduled, "scheduled");
+  // The worker, the publisher's key and an impersonating postgres session cannot.
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://linkedin.example/1' where id = $1`, [scheduled], /Only a signed-in Compass team member can mark/);
+  await asPublisher(db);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://linkedin.example/1' where id = $1`, [scheduled], /Only a signed-in Compass team member can mark/);
+  await asImpersonator(db);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://linkedin.example/1' where id = $1`, [scheduled], /Only a signed-in Compass team member can mark/);
+  await asHuman(db);
+  await markPublished(db, scheduled, `, published_at = now(), published_url = 'https://linkedin.example/1'`);
+  await asWorker(db);
+  assert.equal((await row(db, scheduled)).publish_status, "published");
+
+  // A draft or an in-review post cannot be marked published.
+  const d = await draft(db, { platform: "x" });
+  await asHuman(db);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://x.example/1' where id = $1`, [d], /not approved|execution_needs_approval/);
+  // Not from publishing: that is the publisher's.
+  await asWorker(db);
+  const pub = await approvedSocial(db, { platform: "facebook" });
+  await db.query(`update social_posts set scheduled_at = now() where id = $1`, [pub]);
+  await setPublish(db, pub, "scheduled");
+  await asPublisher(db);
+  await setPublish(db, pub, "publishing");
+  await asHuman(db);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://facebook.example/1' where id = $1`, [pub], /Only the publisher records the result/);
+});
+
+test("a Business Profile post is never marked published by hand", async (t) => {
+  const db = await migrated(t);
+  const id = await approvedPost(db, { platform: "google_business", search_intent: "commercial" });
+  await asHuman(db);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://business.google.example/1', external_post_id = 'x' where id = $1`, [id], /published by the publisher, not by hand/);
+  assert.equal((await row(db, id)).publish_status, "not_scheduled");
+});
+
+test("manual publication re-checks the approval hash and the grounding", async (t) => {
+  const db = await migrated(t);
+  // Grounding: the offer ends with nobody noticing (lapse trigger off).
+  const a = await approvedSocial(db, { platform: "facebook", search_intent: "transactional" });
+  await db.exec(`alter table offers disable trigger offers_zz_recheck_posts;`);
+  await db.exec(`alter table claims disable trigger claims_zz_recheck_posts; update claims set status = 'unverified' where id = '${ID.claimConfirmed}'; alter table claims enable trigger claims_zz_recheck_posts;`);
+  await asHuman(db);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://facebook.example/1' where id = $1`, [a], /is unverified|changed since it was approved/);
+  await asWorker(db);
+  await db.exec(`update claims set status = 'confirmed' where id = '${ID.claimConfirmed}';`);
+  // Hash: claim text edited with the lapse trigger off.
+  const b = await approvedSocial(db, { platform: "facebook", service_id: ID.svcSecond });
+  await db.exec(`alter table claims disable trigger claims_zz_recheck_posts; update claims set claim = 'Family owned since 1988' where id = '${ID.claimConfirmed}'; alter table claims enable trigger claims_zz_recheck_posts;`);
+  await asHuman(db);
+  await refused(db, `update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://facebook.example/2' where id = $1`, [b], /changed since it was approved/);
 });

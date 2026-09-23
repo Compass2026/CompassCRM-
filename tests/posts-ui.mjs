@@ -116,6 +116,7 @@ const sqlFails = (q) => {
 };
 const POST_A = "00000000-0000-4000-f300-00000000000a"; // worker draft, commercial, no claim yet
 const POST_OFFER = "00000000-0000-4000-f300-00000000001a"; // worker offer post, in review
+const POST_FB = "00000000-0000-4000-f300-00000000002a"; // worker Facebook post, in review
 try {
   for (let i = 0; i < 120; i++) {
     if (app.exitCode !== null) throw new Error(`next dev stopped:\n${logs}`);
@@ -160,12 +161,17 @@ try {
   await page.getByLabel("Link a claim").selectOption({ label: "Licensed master plumber on every job (sourced)" });
   await page.getByRole("button", { name: "Link", exact: true }).click();
   await page.getByText("Grounding checks pass.").waitFor();
+  // Media comes from the client's brand assets (post_assets), in order.
+  await page.getByLabel("Add a brand asset").selectOption({ label: "Drain job, Nixa (photo)" });
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Remove" }).waitFor();
+  assert.equal(sql(`select string_agg(brand_asset_id || ':' || sort_order, ',') from post_assets where post_id = '${POST_A}'`), "00000000-0000-4000-f200-00000000000a:1");
   await shot("post-draft-grounded-desktop");
   await page.getByRole("button", { name: "Submit for review" }).click();
   await page.getByRole("button", { name: "Approve" }).waitFor();
   const task = sql(`select t.key || '|' || t.owner || '|' || t.status || '|' || coalesce(t.assignee_id::text, '-') from social_posts p join tasks t on t.id = p.review_task_id where p.id = '${POST_A}'`);
-  assert.equal(task, "post_review|TOM|open|-");
-  ok("Linking a sourced claim makes it ready; submitting opens an unassigned TOM post_review task");
+  assert.equal(task, "post_review|CLAUDE_APPROVAL|open|-");
+  ok("Linking a claim and a brand asset makes it ready; submitting opens an unassigned CLAUDE_APPROVAL post_review task");
 
   // The frozen copy: no edit form while in review.
   assert.equal(await page.getByRole("button", { name: "Save draft" }).count(), 0);
@@ -186,6 +192,7 @@ try {
   await page.getByText(/Approved by Sam Team/).waitFor();
   const approved = sql(`select review_status || '|' || reviewed_by || '|' || (approved_hash is not null) from social_posts where id = '${POST_A}'`);
   assert.equal(approved, `approved|${sam}|true`);
+  assert.equal(sql(`select approved_snapshot -> 'assets' -> 0 ->> 'id' from social_posts where id = '${POST_A}'`), "00000000-0000-4000-f200-00000000000a");
   assert.notEqual(sam, TEAM.id, "team_members id, not the Auth UUID");
   assert.equal(sql(`select t.status from social_posts p join tasks t on t.id = p.review_task_id where p.id = '${POST_A}'`), "done");
   ok("Approval records the team_members id and closes the review task");
@@ -198,6 +205,9 @@ try {
   assert.equal(sql(`select publish_status || '|' || to_char(scheduled_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') from social_posts where id = '${POST_A}'`), "scheduled|2026-10-06 09:30");
   assert.equal(sql(`select reviewed_by || '|' || reviewed_at || '|' || approved_hash from social_posts where id = '${POST_A}'`), before);
   ok("Scheduling (Central time) leaves the approval exactly as it was");
+  assert.equal(await page.getByRole("button", { name: "Mark published" }).count(), 0, "no manual publish for a Business Profile post");
+  assert.ok(await page.getByText("Business Profile posts are published by the publisher only").isVisible());
+  ok("A Business Profile post offers no manual publication");
   await shot("post-approved-scheduled-desktop");
 
   // A claim losing its source sends it back to review (the lapse).
@@ -220,6 +230,28 @@ try {
   assert.equal(sql(`select review_status || '|' || reviewed_by from social_posts where id = '${POST_OFFER}'`), `rejected|${sam}`);
   ok("Rejecting needs a reason and records who rejected");
   await shot("post-rejected-desktop");
+
+  // The Facebook post: approve, then record a manual publication.
+  await page.goto(postUrl(POST_FB), { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Approve" }).click();
+  await page.getByText(/Approved by Sam Team/).waitFor();
+  const fbApproval = sql(`select reviewed_by || '|' || reviewed_at || '|' || approved_hash from social_posts where id = '${POST_FB}'`);
+  const minuteAgo = sql(`select to_char((now() - interval '2 minutes') at time zone 'America/Chicago', 'YYYY-MM-DD"T"HH24:MI')`);
+  await page.getByLabel("Post link").fill("https://facebook.example/harborlane/posts/1");
+  await page.getByLabel("Published at (Central)").fill(minuteAgo);
+  await shot("post-mark-published-desktop");
+  await page.getByRole("button", { name: "Mark published" }).click();
+  await page.getByText(/^Published .* · view$/).waitFor({ timeout: 15000 }).catch(async (e) => {
+    console.log("alerts:", await page.getByRole("alert").allTextContents());
+    throw e;
+  });
+  assert.equal(
+    sql(`select publish_status || '|' || coalesce(external_post_id, '-') || '|' || published_url || '|' || (reviewed_by || '|' || reviewed_at || '|' || approved_hash) from social_posts where id = '${POST_FB}'`),
+    `published|-|https://facebook.example/harborlane/posts/1|${fbApproval}`
+  );
+  assert.equal(sql(`select actor_kind || '|' || actor_id || '|' || (detail ->> 'manual') from post_events where post_id = '${POST_FB}' and kind = 'published'`), `team|${sam}|true`);
+  ok("A person marks an approved Facebook post published by hand; approval unchanged; event names them");
+  await shot("post-published-by-hand-desktop");
 
   // A person's own navigational post, CRM facts only, approved by its author.
   await page.goto(`${base}/clients/${CLIENT_A}/social?view=new`, { waitUntil: "networkidle" });

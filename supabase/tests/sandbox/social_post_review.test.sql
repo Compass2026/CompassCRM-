@@ -143,24 +143,39 @@ begin
   insert into pr.ids values ('offer', v);
   insert into post_claims (post_id, claim_id) values (v, '00000000-0000-4000-f000-00000000000a');
 
+  -- A Facebook post the team will publish by hand.
+  insert into social_posts (client_id, platform, search_intent, service_id, copy, cta_type, cta_url)
+  values ('00000000-0000-4000-b000-00000000000a', 'facebook', 'informational', '00000000-0000-4000-e000-00000000000a',
+          'How often should drains be cleared? Family owned since 1998, here is what we tell customers.',
+          'LEARN_MORE', 'https://a.example.test/drains')
+  returning id into v;
+  insert into pr.ids values ('social', v);
+  insert into post_claims (post_id, claim_id) values (v, '00000000-0000-4000-f000-00000000000a');
+
   perform pr.ok('W1 worker drafts carry no human author',
     not exists (select 1 from social_posts where author_kind <> 'worker' or created_by is not null));
   perform pr.ok('W2 each draft has a created event with no actor',
-    (select count(*) from post_events where kind = 'created' and actor_kind = 'worker' and actor_id is null) = 4);
+    (select count(*) from post_events where kind = 'created' and actor_kind = 'worker' and actor_id is null) = 5);
 
-  update social_posts set review_status = 'in_review' where id in (pr.id('what_we_do'), pr.id('spotlight'), pr.id('offer'));
-  perform pr.ok('W3 three grounded drafts submit',
-    (select count(*) from social_posts where review_status = 'in_review') = 3);
+  update social_posts set review_status = 'in_review'
+  where id in (pr.id('what_we_do'), pr.id('spotlight'), pr.id('offer'), pr.id('social'));
+  perform pr.ok('W3 four grounded drafts submit (a brand-level navigational post and a business-wide offer need no service)',
+    (select count(*) from social_posts where review_status = 'in_review') = 4);
   st := pr.try(format($q$update social_posts set review_status = 'in_review' where id = %L$q$, pr.id('city')));
   perform pr.ok('W4 the city post with an unverified claim cannot be submitted', st like '23514:%unverified%', st);
+  perform pr.ok('W4b ...nor without an approved service as its topic', st like '%needs an approved service%', st);
+  perform pr.ok('W4c an Event post type is not accepted',
+    pr.try($q$insert into social_posts (client_id, platform, post_type, search_intent, copy)
+             values ('00000000-0000-4000-b000-00000000000a', 'google_business', 'event', 'informational', 'x')$q$) like '23514:%');
 
-  perform pr.ok('W5 each submission opened an unassigned TOM post_review task on the post''s client',
+  perform pr.ok('W5 each submission opened one unassigned CLAUDE_APPROVAL post_review task on the post''s client',
     (select count(*) from social_posts p join tasks t on t.id = p.review_task_id and t.client_id = p.client_id
-     where p.review_status = 'in_review' and t.key = 'post_review' and t.owner = 'TOM'
-       and t.status = 'open' and t.assignee_id is null) = 3);
+     where p.review_status = 'in_review' and t.key = 'post_review' and t.owner = 'CLAUDE_APPROVAL'
+       and t.status = 'open' and t.assignee_id is null) = 4
+    and (select count(*) from tasks where key = 'post_review') = 4);
   perform pr.ok('W6 the review tasks carry the 0043 history (created, no actor)',
     (select count(*) from task_events e join social_posts p on p.review_task_id = e.task_id
-     where e.kind = 'created' and e.actor_id is null) = 3);
+     where e.kind = 'created' and e.actor_id is null) = 4);
 
   st := pr.try(format($q$update social_posts set review_status = 'approved' where id = %L$q$, pr.id('spotlight')));
   perform pr.ok('W7 the worker cannot approve', st like '42501:%', st);
@@ -191,15 +206,16 @@ select pr.as_user('authenticated', :'rvw');
 do $$
 declare r text[]; n bigint; st text;
 begin
-  perform pr.ok('H1 the reviewer sees the client''s posts', pr.cnt('select 1 from social_posts') = 4);
+  perform pr.ok('H1 the reviewer sees the client''s posts', pr.cnt('select 1 from social_posts') = 5);
   r := social_post_readiness(pr.id('city'));
   perform pr.ok('H2 readiness names the unverified claim', array_to_string(r, ' ') like '%unverified%', array_to_string(r, ' | '));
   perform pr.ok('H3 a grounded post is ready', cardinality(social_post_readiness(pr.id('spotlight'))) = 0);
 
   update social_posts set review_status = 'approved' where id = pr.id('spotlight');
   update social_posts set review_status = 'approved', review_note = 'Good; standing offer checked.' where id = pr.id('offer');
-  perform pr.ok('H4 two posts approved',
-    (select count(*) from social_posts where review_status = 'approved') = 2);
+  update social_posts set review_status = 'approved' where id = pr.id('social');
+  perform pr.ok('H4 three posts approved',
+    (select count(*) from social_posts where review_status = 'approved') = 3);
   perform pr.ok('H5 reviewed_by is the reviewer''s team_members id, not the Auth UUID',
     (select bool_and(reviewed_by = pr.id('reviewer') and reviewed_by <> '00000000-0000-4000-a000-000000000031'::uuid)
      from social_posts where review_status = 'approved'));
@@ -211,9 +227,9 @@ begin
     (select approved_snapshot -> 'offer' ->> 'terms' from social_posts where id = pr.id('offer')) = '$79 drain clearing');
   perform pr.ok('H8 approving closed the review tasks, recorded as the reviewer (0043 history)',
     (select count(*) from task_events e join social_posts p on p.review_task_id = e.task_id
-     where p.review_status = 'approved' and e.kind = 'status' and e.to_value = 'done' and e.actor_id = pr.id('reviewer')) = 2);
+     where p.review_status = 'approved' and e.kind = 'status' and e.to_value = 'done' and e.actor_id = pr.id('reviewer')) = 3);
   perform pr.ok('H9 the approved events name the reviewer',
-    (select count(*) from post_events where kind = 'approved' and actor_kind = 'team' and actor_id = pr.id('reviewer')) = 2);
+    (select count(*) from post_events where kind = 'approved' and actor_kind = 'team' and actor_id = pr.id('reviewer')) = 3);
 
   st := pr.try(format($q$update social_posts set review_status = 'rejected' where id = %L$q$, pr.id('what_we_do')));
   perform pr.ok('H10 a rejection needs a reason', st like '23514:%', st);
@@ -229,6 +245,22 @@ begin
      from social_posts where id in (pr.id('spotlight'), pr.id('offer'))));
   st := pr.try(format($q$update social_posts set publish_status = 'publishing' where id = %L$q$, pr.id('spotlight')));
   perform pr.ok('H13 a person cannot start publishing', st like '42501:%', st);
+
+  -- Published by hand: social yes, Business Profile never.
+  st := pr.try(format($q$update social_posts set publish_status = 'published', published_at = now(),
+                          published_url = 'https://business.google.example/1', external_post_id = 'x' where id = %L$q$, pr.id('offer')));
+  perform pr.ok('H13b a person cannot mark a Business Profile post published', st like '42501:%by the publisher%', st);
+  st := pr.try(format($q$update social_posts set publish_status = 'published', published_url = 'https://facebook.example/1' where id = %L$q$, pr.id('social')));
+  perform pr.ok('H13c manual publication needs published_at', st like '23514:%where and when%', st);
+  update social_posts set publish_status = 'published', published_at = now() - interval '10 minutes',
+         published_url = 'https://facebook.example/posts/1' where id = pr.id('social');
+  perform pr.ok('H13d a person marks the approved Facebook post published; no external id needed; approval kept',
+    (select publish_status = 'published' and external_post_id is null and review_status = 'approved'
+            and reviewed_by = pr.id('reviewer') and publish_attempts = 0
+     from social_posts where id = pr.id('social')));
+  perform pr.ok('H13e the published event names the person and says it was manual',
+    exists (select 1 from post_events where post_id = pr.id('social') and kind = 'published'
+            and actor_kind = 'team' and actor_id = pr.id('reviewer') and (detail ->> 'manual')::boolean));
 end $$;
 
 -- A person edits the claim the spotlight stands on (removes its source). The

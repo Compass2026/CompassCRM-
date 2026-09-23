@@ -16,6 +16,10 @@
 --      review_status   draft → in_review → approved | rejected
 --      publish_status  not_scheduled → scheduled → publishing → published | failed
 --    Anything past not_scheduled requires review_status = 'approved'.
+--    The legacy single-asset columns (asset_url, storage_path) are dropped
+--    too: post_assets is the one media relationship. post_type is
+--    'standard' or 'offer' (Business Profile only); Event posts come later
+--    with their own fields and adapter.
 -- 2. Human approval. Only a signed-in team member reaching the database
 --    through the API may approve, reject or reopen: session_user =
 --    'authenticator' (PostgREST), role 'authenticated', and auth.uid()
@@ -38,7 +42,11 @@
 --    - a linked offer must be confirmed and not past its end date (dates
 --      stay optional; channel rules such as what Google requires for an
 --      OFFER post are the publishing adapter's);
---    - a linked service must be approved.
+--    - a linked service must be approved;
+--    - topic: a standard informational / commercial / transactional post
+--      needs an approved service_id; a navigational post may be
+--      brand-level; an offer post needs its offer_id (service optional for
+--      a business-wide offer); keyword_id is always optional.
 -- 4. Approved content is frozen: content columns change only while a post is
 --    a draft, and claims / assets are linked only to drafts. Approval stores
 --    approved_snapshot (content + claim text + offer terms + assets) and its
@@ -57,8 +65,17 @@
 --    A publishing change may not touch any review column, so scheduling,
 --    publishing and retries never alter a valid approval. publish_key is a
 --    per-post idempotency key; (platform, external_post_id) is unique.
--- 7. Review tasks stay in the task system: submitting opens a TOM-lane
---    `post_review` task (unassigned) linked by review_task_id; approving,
+--    Manual publication: a signed-in team member may mark an approved
+--    facebook / instagram / linkedin / x / tiktok post published after
+--    posting it natively (from not_scheduled, scheduled or failed). The
+--    approval hash and grounding are re-checked, published_at and an https
+--    published_url are required, external_post_id may be null, and the
+--    event names the person (detail.manual = true). A Business Profile post
+--    is never marked published by hand: only the publisher can.
+-- 7. Review tasks stay in the task system: submitting opens one
+--    `post_review` task per post in the CLAUDE_APPROVAL lane (the hold lane:
+--    the work is drafted, a person decides; the Brief lists it under "needs
+--    a decision"), unassigned, linked by review_task_id; approving,
 --    rejecting or withdrawing closes it; a lapse opens a new one.
 -- 8. post_claims, post_assets and the append-only post_events (written only
 --    by trigger) all carry (post_id, client_id) with composite FKs, as do
@@ -114,6 +131,10 @@ end $$;
 drop index if exists social_posts_client_id_status_idx;
 alter table social_posts drop column status;   -- no CASCADE: anything else depending on it fails the migration
 drop type social_post_status;
+-- post_assets is the one media relationship (brand assets, ordered, with
+-- content hashes). The legacy single-asset columns go while the table is
+-- empty rather than living on as a second media model.
+alter table social_posts drop column asset_url, drop column storage_path;
 
 -- Business Profile posts are social posts too. Added in this transaction, so
 -- it is only compared as text below (a new enum value cannot be used as a
@@ -174,7 +195,8 @@ alter table social_posts
     references offers (id, client_id),
   add constraint social_posts_review_task_fkey foreign key (review_task_id, client_id)
     references tasks (id, client_id) on delete set null (review_task_id),
-  add constraint social_posts_post_type_known check (post_type in ('standard', 'offer', 'event')),
+  -- Event posts come later, with their own fields and publishing adapter.
+  add constraint social_posts_post_type_known check (post_type in ('standard', 'offer')),
   add constraint social_posts_intent_known
     check (search_intent in ('navigational', 'informational', 'commercial', 'transactional')),
   add constraint social_posts_author_kind_known check (author_kind in ('human', 'worker')),
@@ -183,7 +205,7 @@ alter table social_posts
     check (review_status in ('draft', 'in_review', 'approved', 'rejected')),
   add constraint social_posts_publish_status_known
     check (publish_status in ('not_scheduled', 'scheduled', 'publishing', 'published', 'failed')),
-  -- Offer and event posts are Business Profile post types.
+  -- Offer posts are a Business Profile post type.
   add constraint social_posts_gbp_types check (post_type = 'standard' or platform::text = 'google_business'),
   add constraint social_posts_offer_post_has_offer check (post_type <> 'offer' or offer_id is not null),
   add constraint social_posts_crm_facts_navigational check (not crm_facts_only or search_intent = 'navigational'),
@@ -197,9 +219,13 @@ alter table social_posts
     review_status <> 'rejected'
     or (reviewed_by is not null and reviewed_at is not null and nullif(btrim(review_note), '') is not null)),
   add constraint social_posts_scheduled_has_time check (publish_status <> 'scheduled' or scheduled_at is not null),
+  -- A published post always says where and when. Google's id is required
+  -- for a Business Profile post (only the publisher publishes those); a
+  -- social post a person published by hand may have none.
   add constraint social_posts_published_complete check (
     publish_status <> 'published'
-    or (external_post_id is not null and published_url is not null and published_at is not null)),
+    or (published_url is not null and published_at is not null
+        and (external_post_id is not null or platform::text <> 'google_business'))),
   add constraint social_posts_failed_explained check (publish_status <> 'failed' or nullif(btrim(error), '') is not null),
   add constraint social_posts_attempts_nonnegative check (publish_attempts >= 0);
 
@@ -215,7 +241,7 @@ comment on table social_posts is
 comment on column social_posts.crm_facts_only is
   'Navigational posts only: the copy states nothing beyond directly stored CRM facts (name, phone, website, approved services, locations / service area, explicit client fields), so it needs no claim. Confirmed by the reviewer on approval.';
 comment on column social_posts.approved_snapshot is
-  'What was approved: content, claim text, offer terms, assets. Publishing sends this, and starts only if the live content still hashes to approved_hash.';
+  'What was approved: content, claim text, offer terms, linked assets. Publishing sends this, and starts only if the live content still hashes to approved_hash.';
 comment on column social_posts.reviewed_by is 'team_members.id of the person who approved or rejected. Never an Auth UUID.';
 
 -- ── 3. Links and history ─────────────────────────────────────────────────────
@@ -244,7 +270,7 @@ create table post_assets (
   foreign key (brand_asset_id, client_id) references brand_assets (id, client_id) on delete cascade
 );
 create index post_assets_asset_idx on post_assets (brand_asset_id);
-comment on table post_assets is 'Brand assets a post uses. Linked only while the post is a draft.';
+comment on table post_assets is 'The media a post uses: brand assets in sort_order, with an optional content hash. Linked only while the post is a draft. The only media relationship for posts.';
 
 create table post_events (
   id bigint generated always as identity primary key,
@@ -321,11 +347,22 @@ begin
   end loop;
 
   if p.search_intent <> 'navigational' and v_usable = 0 then
-    v_problems := v_problems || format('A %s post needs at least one confirmed or sourced claim.', p.search_intent);
+    v_problems := v_problems || format('%s %s post needs at least one confirmed or sourced claim.', case when p.search_intent = 'informational' then 'An' else 'A' end, p.search_intent);
   end if;
   if p.search_intent = 'navigational' and v_linked = 0 and not p.crm_facts_only then
     v_problems := v_problems ||
       'A navigational post with no claims must be marked "CRM facts only" (name, phone, website, approved services, service area); otherwise link a claim.'::text;
+  end if;
+
+  -- Topic: a standard informational / commercial / transactional post is
+  -- about an approved service; a navigational post may be brand-level; an
+  -- offer post is about its offer (the service may be null when the offer
+  -- is business-wide). keyword_id is always optional.
+  if p.post_type = 'standard' and p.search_intent <> 'navigational' and p.service_id is null then
+    v_problems := v_problems || format('%s %s post needs an approved service as its topic.', case when p.search_intent = 'informational' then 'An' else 'A' end, p.search_intent);
+  end if;
+  if p.post_type = 'offer' and p.offer_id is null then
+    v_problems := v_problems || 'An offer post needs one of the client''s offers.'::text;
   end if;
 
   if p.offer_id is not null then
@@ -359,8 +396,6 @@ language sql stable security definer set search_path = public as $$
     'copy', p.copy,
     'cta_type', p.cta_type,
     'cta_url', p.cta_url,
-    'asset_url', p.asset_url,
-    'storage_path', p.storage_path,
     'crm_facts_only', p.crm_facts_only,
     'service_id', p.service_id,
     'claims', coalesce((
@@ -413,7 +448,7 @@ begin
   values (
     p.client_id,
     left(format('Review %s post: %s', v_platform, coalesce(nullif(btrim(p.copy), ''), '(no copy)')), 120),
-    'TOM', 'open', 'post_review',
+    'CLAUDE_APPROVAL', 'open', 'post_review',
     format('%s Open /clients/%s/social/%s to approve or reject it. post_id=%s', p_reason, p.client_id, p.id, p.id))
   returning id into v_id;
   return v_id;
@@ -489,18 +524,18 @@ begin
 
   -- Content changes only while the post is (or becomes) a draft.
   if (new.platform, new.social_account_id, new.post_type, new.search_intent, new.service_id, new.offer_id,
-      new.copy, new.cta_type, new.cta_url, new.asset_url, new.storage_path, new.crm_facts_only)
+      new.copy, new.cta_type, new.cta_url, new.crm_facts_only)
      is distinct from
      (old.platform, old.social_account_id, old.post_type, old.search_intent, old.service_id, old.offer_id,
-      old.copy, old.cta_type, old.cta_url, old.asset_url, old.storage_path, old.crm_facts_only)
+      old.copy, old.cta_type, old.cta_url, old.crm_facts_only)
      and new.review_status <> 'draft'
      -- An account deleted under a post is the one change allowed later (FK SET NULL).
      and not (new.social_account_id is null and old.social_account_id is not null
               and (new.platform, new.post_type, new.search_intent, new.service_id, new.offer_id, new.copy,
-                   new.cta_type, new.cta_url, new.asset_url, new.storage_path, new.crm_facts_only)
+                   new.cta_type, new.cta_url, new.crm_facts_only)
                   is not distinct from
                   (old.platform, old.post_type, old.search_intent, old.service_id, old.offer_id, old.copy,
-                   old.cta_type, old.cta_url, old.asset_url, old.storage_path, old.crm_facts_only)) then
+                   old.cta_type, old.cta_url, old.crm_facts_only)) then
     raise exception 'The post is %; its content is frozen. Withdraw or reopen it to edit.', old.review_status
       using errcode = 'check_violation';
   end if;
@@ -530,8 +565,11 @@ begin
       raise exception 'Publishing results are recorded by the publisher with a publishing transition'
         using errcode = 'check_violation';
     end if;
-  elsif v_kind <> 'publisher' then
+  elsif v_kind <> 'publisher'
+        and not (new.publish_status = 'published' and old.publish_status in ('not_scheduled', 'scheduled', 'failed')) then
     -- Scheduling, unscheduling and retrying keep the last attempt's record.
+    -- (A person marking a hand-published social post records its own
+    -- result; that step is checked below.)
     new.publish_attempts := old.publish_attempts;
     new.last_attempt_at := old.last_attempt_at;
     new.external_post_id := old.external_post_id;
@@ -665,6 +703,41 @@ begin
         if v_kind <> 'publisher' then
           raise exception 'Only the publisher records the result' using errcode = 'insufficient_privilege';
         end if;
+      -- Published by hand: a person posted an approved social post natively
+      -- and records where. Business Profile posts are the publisher's alone.
+      when 'not_scheduled>published', 'scheduled>published', 'failed>published' then
+        if not v_human then
+          raise exception 'Only a signed-in Compass team member can mark a post published by hand'
+            using errcode = 'insufficient_privilege';
+        end if;
+        if new.platform::text not in ('facebook', 'instagram', 'linkedin', 'x', 'tiktok') then
+          raise exception 'A % post is published by the publisher, not by hand', new.platform
+            using errcode = 'insufficient_privilege';
+        end if;
+        if new.review_status <> 'approved' then
+          raise exception 'The post is not approved' using errcode = 'check_violation';
+        end if;
+        if social_post_hash(social_post_snapshot(new)) is distinct from new.approved_hash then
+          raise exception 'The post changed since it was approved; it goes back to review' using errcode = 'check_violation';
+        end if;
+        v_problems := social_post_grounding_problems(new);
+        if cardinality(v_problems) > 0 then
+          raise exception 'The post cannot be marked published: %', array_to_string(v_problems, ' ')
+            using errcode = 'check_violation';
+        end if;
+        if new.published_at is null or nullif(btrim(coalesce(new.published_url, '')), '') is null then
+          raise exception 'Say where and when it was published' using errcode = 'check_violation';
+        end if;
+        if new.published_at > now() + interval '5 minutes' then
+          raise exception 'The publication time is in the future' using errcode = 'check_violation';
+        end if;
+        if new.published_url !~* '^https://' then
+          raise exception 'The published link must be an https:// address' using errcode = 'check_violation';
+        end if;
+        -- Attempts count the publisher's tries; the last error is history.
+        new.publish_attempts := old.publish_attempts;
+        new.last_attempt_at := old.last_attempt_at;
+        new.error := old.error;
       else
         raise exception 'Publishing cannot go from % to %', old.publish_status, new.publish_status
           using errcode = 'check_violation';
@@ -742,12 +815,17 @@ begin
       when 'scheduled>publishing' then 'publishing'
       when 'publishing>published' then 'published'
       when 'publishing>failed' then 'failed'
+      when 'not_scheduled>published' then 'published'
+      when 'scheduled>published' then 'published'
+      when 'failed>published' then 'published'
     end;
     insert into post_events (post_id, client_id, actor_id, actor_kind, kind, from_value, to_value, detail)
     values (new.id, new.client_id, v_actor, v_kind, v_event, old.publish_status, new.publish_status,
             jsonb_strip_nulls(jsonb_build_object(
               'scheduled_at', new.scheduled_at, 'attempt', case when v_event = 'publishing' then new.publish_attempts end,
               'external_post_id', new.external_post_id, 'published_url', new.published_url,
+              'published_at', case when v_event = 'published' then new.published_at end,
+              'manual', case when v_event = 'published' and old.publish_status <> 'publishing' then true end,
               'error', case when v_event = 'failed' then new.error end)));
   elsif new.scheduled_at is distinct from old.scheduled_at and new.publish_status = old.publish_status
         and old.publish_status = 'scheduled' then
@@ -765,7 +843,6 @@ begin
     ('offer_id', old.offer_id is distinct from new.offer_id),
     ('copy', old.copy is distinct from new.copy),
     ('cta', (old.cta_type, old.cta_url) is distinct from (new.cta_type, new.cta_url)),
-    ('asset', (old.asset_url, old.storage_path) is distinct from (new.asset_url, new.storage_path)),
     ('crm_facts_only', old.crm_facts_only is distinct from new.crm_facts_only),
     ('scheduled_at', old.scheduled_at is distinct from new.scheduled_at and old.publish_status <> 'scheduled'
                      and new.publish_status = old.publish_status),

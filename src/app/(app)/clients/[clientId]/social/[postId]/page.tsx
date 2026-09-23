@@ -6,11 +6,20 @@ import {
   reopenPostAction,
   revisePostAction,
   submitPostAction,
+  unlinkAssetAction,
   unlinkClaimAction,
   unschedulePostAction,
   withdrawPostAction,
 } from "@/app/social-post-actions";
-import { LinkClaimForm, PostDraftForm, PostStepButton, ReviewForms, ScheduleForm } from "@/components/post-forms";
+import {
+  LinkAssetForm,
+  LinkClaimForm,
+  MarkPublishedForm,
+  PostDraftForm,
+  PostStepButton,
+  ReviewForms,
+  ScheduleForm,
+} from "@/components/post-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { listTeamMembers } from "@/lib/team";
@@ -19,6 +28,7 @@ import {
   availableActions,
   CRM_FACTS_HELP,
   describePostEvent,
+  topicProblem,
   isPlatform,
   isPublishStatus,
   isReviewStatus,
@@ -60,12 +70,20 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       post.review_task_id
         ? supabase.from("tasks").select("id, title, status").eq("id", post.review_task_id).maybeSingle()
         : Promise.resolve({ data: null }),
-      supabase.from("post_assets").select("brand_asset_id, brand_assets(label, storage_path, url)").eq("post_id", postId).order("sort_order"),
+      supabase.from("post_assets").select("brand_asset_id, sort_order, brand_assets(label, kind, storage_path, url)").eq("post_id", postId).order("sort_order"),
     ]);
+  const { data: brandAssets } = await supabase
+    .from("brand_assets")
+    .select("id, label, kind")
+    .eq("client_id", clientId)
+    .order("kind")
+    .order("sort_order");
 
   const names = new Map(members.map((m) => [m.id, m.name]));
   const problems = readiness.data ?? [];
   const actions = availableActions(post);
+  const topic = topicProblem(post);
+  const linkedAssetIds = new Set((assets ?? []).map((a) => a.brand_asset_id));
   const linkedIds = new Set((linked ?? []).map((l) => l.claim_id));
   const usableToLink = (claims ?? []).filter(
     (c) => !linkedIds.has(c.id) && (c.status === "confirmed" || (c.status === "sourced" && (c.source ?? "").trim() !== ""))
@@ -130,7 +148,6 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
               {service && (<><dt className="text-muted-foreground">Service</dt><dd>{service.name}{service.status !== "approved" && ` (${service.status})`}</dd></>)}
               {offer && (<><dt className="text-muted-foreground">Offer</dt><dd>{offer.title}: “{offer.terms}” ({offer.status}{offer.ends_on ? `, ends ${offer.ends_on}` : ", no end date"})</dd></>)}
               {keyword && (<><dt className="text-muted-foreground">Keyword</dt><dd>{keyword.keyword}</dd></>)}
-              {post.asset_url && (<><dt className="text-muted-foreground">Image</dt><dd className="break-all">{post.asset_url}</dd></>)}
               {post.crm_facts_only && (<><dt className="text-muted-foreground">CRM facts only</dt><dd>{CRM_FACTS_HELP}</dd></>)}
             </dl>
             <p className="text-xs text-muted-foreground">
@@ -175,11 +192,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           </ul>
         )}
         {actions.includes("edit") && <LinkClaimForm clientId={clientId} postId={postId} claims={usableToLink.map((c) => ({ id: c.id, label: `${c.claim} (${c.status})` }))} />}
-        {(assets ?? []).length > 0 && (
-          <div className="text-xs text-muted-foreground">
-            Assets: {(assets ?? []).map((a) => a.brand_assets?.label ?? a.brand_asset_id).join(", ")}
-          </div>
-        )}
+        {topic && problems.length === 0 && <p className="text-sm text-amber-900">{topic}</p>}
         {post.review_status !== "approved" || post.publish_status !== "published" ? (
           problems.length > 0 ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -192,6 +205,38 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
             <p className="text-sm text-green-800">Grounding checks pass.</p>
           )
         ) : null}
+      </section>
+
+      {/* Media: brand assets, in order. */}
+      <section className="surface space-y-3 p-4 sm:p-5">
+        <h3 className="text-sm font-semibold">Media</h3>
+        {(assets ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No brand assets on this post.</p>
+        ) : (
+          <ol className="space-y-1 text-sm">
+            {(assets ?? []).map((a) => (
+              <li key={a.brand_asset_id} className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums">{a.sort_order}.</span>
+                <span className="min-w-0 flex-1">
+                  {a.brand_assets?.label ?? a.brand_asset_id}
+                  {a.brand_assets?.kind && <span className="text-xs text-muted-foreground"> · {a.brand_assets.kind}</span>}
+                </span>
+                {actions.includes("edit") && (
+                  <form action={unlinkAssetAction.bind(null, clientId, postId, a.brand_asset_id)}>
+                    <Button type="submit" variant="ghost" size="sm">Remove</Button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+        {actions.includes("edit") && (
+          <LinkAssetForm
+            clientId={clientId}
+            postId={postId}
+            assets={(brandAssets ?? []).filter((b) => !linkedAssetIds.has(b.id)).map((b) => ({ id: b.id, label: `${b.label} (${b.kind})` }))}
+          />
+        )}
       </section>
 
       {/* Review and scheduling. */}
@@ -242,6 +287,14 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
         )}
         {actions.includes("schedule") && (
           <ScheduleForm clientId={clientId} postId={postId} fromPublish={post.publish_status} />
+        )}
+        {actions.includes("mark_published") && (
+          <MarkPublishedForm clientId={clientId} postId={postId} fromPublish={post.publish_status} />
+        )}
+        {post.review_status === "approved" && post.platform === "google_business" && post.publish_status !== "published" && (
+          <p className="text-xs text-muted-foreground">
+            Business Profile posts are published by the publisher only; they cannot be marked published by hand.
+          </p>
         )}
         {post.publish_status === "scheduled" && post.scheduled_at && (
           <p className="text-sm">Scheduled for {formatStamp(post.scheduled_at)} (Central).</p>

@@ -190,6 +190,60 @@ export async function unschedulePostAction(clientId: string, postId: string): Pr
   });
 }
 
+// A person posted an approved social post natively and records where.
+// The database re-checks the approval hash and the grounding, and refuses
+// Business Profile posts (only the publisher publishes those).
+export async function markPublishedAction(
+  clientId: string,
+  postId: string,
+  fromPublish: string,
+  _prev: PostFormState,
+  form: FormData
+): Promise<PostFormState> {
+  const url = String(form.get("published_url") ?? "").trim();
+  const local = String(form.get("published_at") ?? "").trim();
+  if (!/^https:\/\/\S+$/i.test(url)) return { error: "Paste the post's https:// link." };
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return { error: "When was it published?" };
+  if (!["not_scheduled", "scheduled", "failed"].includes(fromPublish)) return { error: "The post cannot be marked published now." };
+  const at = centralToIso(local);
+  if (!at) return { error: "That date and time is not valid." };
+  if (Date.parse(at) > Date.now() + 5 * 60_000) return { error: "The publication time is in the future." };
+  const externalId = String(form.get("external_post_id") ?? "").trim();
+  return step(clientId, postId, {
+    from: { review_status: "approved", publish_status: fromPublish },
+    set: { publish_status: "published", published_url: url, published_at: at, external_post_id: externalId || null },
+  });
+}
+
+export async function linkAssetAction(clientId: string, postId: string, _prev: PostFormState, form: FormData): Promise<PostFormState> {
+  const assetId = form.get("brand_asset_id");
+  if (!isUuid(clientId) || !isUuid(postId) || !isUuid(assetId)) return { error: "Pick an asset." };
+  const supabase = await start();
+  const { data: last } = await supabase
+    .from("post_assets")
+    .select("sort_order")
+    .eq("post_id", postId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase
+    .from("post_assets")
+    .insert({ post_id: postId, client_id: clientId, brand_asset_id: assetId, sort_order: (last?.sort_order ?? 0) + 1 });
+  if (error) {
+    return { error: /duplicate key/.test(error.message) ? "That asset is already on the post." : postErrorMessage(error.message) };
+  }
+  revalidatePost(clientId, postId);
+  return { ok: true };
+}
+
+export async function unlinkAssetAction(clientId: string, postId: string, assetId: string): Promise<void> {
+  if (!isUuid(clientId) || !isUuid(postId) || !isUuid(assetId)) return;
+  const supabase = await start();
+  const { error } = await supabase.from("post_assets").delete().eq("post_id", postId).eq("brand_asset_id", assetId);
+  if (error) throw new Error(postErrorMessage(error.message));
+  revalidatePost(clientId, postId);
+}
+
 export async function deletePostAction(clientId: string, postId: string): Promise<void> {
   if (!isUuid(clientId) || !isUuid(postId)) return;
   const supabase = await start();
