@@ -41,11 +41,20 @@ export type IntelligenceInput = {
   > | null;
   board: Pick<Row<"brand_boards">, "status" | "hard_rules" | "standing_cta"> | null;
   services: Pick<Row<"services">, "id" | "name" | "status" | "page_url" | "primary_keyword_id" | "parent_service_id">[];
-  keywords: Pick<Row<"keywords">, "id" | "keyword" | "intent" | "is_active" | "is_tracked" | "is_money" | "service_id" | "target_url" | "priority">[];
+  keywords: Pick<Row<"keywords">, "id" | "keyword" | "intent" | "intent_note" | "is_active" | "is_tracked" | "is_money" | "service_id" | "target_url" | "priority">[];
   claims: Pick<Row<"claims">, "id" | "claim" | "status" | "source">[];
   locations: Pick<Row<"locations">, "name" | "city" | "state" | "is_active">[];
   assets: Pick<Row<"brand_assets">, "kind">[];
+  offers: OfferRow[];
+  // The day offers are judged against (YYYY-MM-DD, Compass's Central day).
+  // Defaults to today in UTC when omitted.
+  asOf?: string;
 };
+
+export type OfferRow = Pick<
+  Row<"offers">,
+  "id" | "title" | "terms" | "source" | "status" | "starts_on" | "ends_on" | "confirmed_by" | "confirmed_on" | "service_id"
+>;
 
 export type AreaStatus = "ready" | "partial" | "missing";
 
@@ -76,14 +85,39 @@ export function intentCounts(keywords: IntelligenceInput["keywords"]) {
   const active = keywords.filter((k) => k.is_active);
   const counts = Object.fromEntries(SEARCH_INTENTS.map((i) => [i, 0])) as Record<SearchIntent, number>;
   let unlabelled = 0;
+  let unlabelledWithNote = 0;
+  // Since 0044 the database refuses anything but the four intents, so this
+  // stays 0; it is kept so rows from before the constraint read honestly.
   let nonStandard = 0;
   for (const k of active) {
     const intent = normalizeIntent(k.intent);
     if (intent) counts[intent] += 1;
     else if (filled(k.intent)) nonStandard += 1;
-    else unlabelled += 1;
+    else {
+      unlabelled += 1;
+      if (filled(k.intent_note)) unlabelledWithNote += 1;
+    }
   }
-  return { active: active.length, counts, unlabelled, nonStandard };
+  return { active: active.length, counts, unlabelled, unlabelledWithNote, nonStandard };
+}
+
+export type OfferState = "current" | "upcoming" | "ended" | "awaiting_confirmation" | "retired";
+
+// Where an offer stands on a given day. Only a confirmed offer can be
+// current; dates are optional (a standing offer has none). Channel rules,
+// such as a GBP Offer post needing a date window, are not decided here.
+export function offerState(offer: OfferRow, asOf: string): OfferState {
+  if (offer.status === "retired") return "retired";
+  if (offer.status !== "confirmed") return "awaiting_confirmation";
+  if (offer.starts_on && offer.starts_on > asOf) return "upcoming";
+  if (offer.ends_on && offer.ends_on < asOf) return "ended";
+  return "current";
+}
+
+// Offers a post may mention today: confirmed, and in their window if they
+// have one.
+export function currentOffers(offers: OfferRow[], asOf: string) {
+  return offers.filter((o) => offerState(o, asOf) === "current");
 }
 
 export type TopicCandidate = {
@@ -210,16 +244,38 @@ export function assessIntelligence(input: IntelligenceInput): AreaReport[] {
     });
   }
 
-  // 6. Offers: not modeled in the CRM yet. Posts can run without one; an
-  //    "offer" post cannot, and must never invent terms.
-  add({
-    key: "offers",
-    label: "Offers",
-    summary: "The CRM has no place to record a current offer yet.",
-    gaps: ["Add offer records (terms, start and end dates, source) before any offer post is drafted."],
-    blocking: false,
-    status: "missing",
-  });
+  // 6. Offers. General posts run without one, so offers never block the
+  //    pilot; content that needs an offer asks pilotReadiness for it.
+  {
+    const asOf = input.asOf ?? new Date().toISOString().slice(0, 10);
+    const by = (state: OfferState) => input.offers.filter((o) => offerState(o, asOf) === state);
+    const current = by("current");
+    const upcoming = by("upcoming").length;
+    const ended = by("ended").length;
+    const drafts = by("awaiting_confirmation").length;
+    const standing = current.filter((o) => !o.starts_on && !o.ends_on).length;
+    const gaps: string[] = [];
+    if (drafts) gaps.push(`Confirm ${plural(drafts, "draft offer")} with the client (who and when) before a post may use it.`);
+    if (!current.length && ended && !drafts && !upcoming) gaps.push("Every confirmed offer has ended; record the current one, if there is one.");
+    if (!current.length && !input.offers.some((o) => o.status !== "retired"))
+      gaps.push("No offers recorded. General posts don't need one; record the exact terms and source before any offer post.");
+    const parts = [
+      current.length
+        ? `${plural(current.length, "current offer")}${standing ? ` (${standing} standing)` : ""}`
+        : "No current offer",
+      upcoming ? `${upcoming} upcoming` : null,
+      drafts ? `${drafts} awaiting confirmation` : null,
+      ended ? `${ended} ended` : null,
+    ].filter(Boolean);
+    add({
+      key: "offers",
+      label: "Offers",
+      summary: `${parts.join("; ")}.`,
+      gaps,
+      blocking: false,
+      status: current.length ? "ready" : input.offers.some((o) => o.status !== "retired") ? "partial" : "missing",
+    });
+  }
 
   // 7. Proof: the facts a post may cite.
   {
@@ -261,10 +317,14 @@ export function assessIntelligence(input: IntelligenceInput): AreaReport[] {
 
   // 9. Keywords and search intent.
   {
-    const { active, unlabelled, nonStandard } = intentCounts(input.keywords);
+    const { active, unlabelled, unlabelledWithNote, nonStandard } = intentCounts(input.keywords);
     const gaps: string[] = [];
     if (active === 0) gaps.push("Run Keyword Research.");
-    if (unlabelled) gaps.push(`Label the search intent of ${plural(unlabelled, "active keyword")}.`);
+    if (unlabelled)
+      gaps.push(
+        `Label the search intent of ${plural(unlabelled, "active keyword")}` +
+          (unlabelledWithNote ? ` (${unlabelledWithNote} ${unlabelledWithNote === 1 ? "has" : "have"} a note that can guide the label).` : ".")
+      );
     if (nonStandard)
       gaps.push(`${plural(nonStandard, "keyword")} carry a note instead of an intent; move the note and set navigational, informational, commercial or transactional.`);
     const topics = topicCandidates(input).length;
@@ -299,9 +359,10 @@ export function assessIntelligence(input: IntelligenceInput): AreaReport[] {
   return areas;
 }
 
-// Ready for a drafting pilot when every blocking area is ready.
-export function pilotReadiness(areas: AreaReport[]) {
-  const blocking = areas.filter((a) => a.blocking);
+// Ready for a drafting pilot when every blocking area is ready. Offers only
+// block content that needs one (an offer post): pass { needsOffer: true }.
+export function pilotReadiness(areas: AreaReport[], { needsOffer = false }: { needsOffer?: boolean } = {}) {
+  const blocking = areas.filter((a) => a.blocking || (needsOffer && a.key === "offers"));
   const ready = blocking.filter((a) => a.status === "ready").length;
   return { ready, total: blocking.length, isReady: ready === blocking.length };
 }

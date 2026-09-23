@@ -16,10 +16,10 @@ go-live (`docs/portal-reconciliation.md`).
 | Services | `services` (taxonomy, `page_url`, `primary_keyword_id`) | 112 approved; several clients have none mapped to a page |
 | Audience | `client_brands.audience` | written |
 | Locations | `locations` (lat/lng, physical flag), `clients.service_area` | at least one per client |
-| Offers | — | **not modeled** |
+| Offers | `offers` (0044: exact terms, source, optional dates, draft / confirmed / retired) | table live, **0 offers recorded**; no editing screen yet |
 | Proof | `claims` (`sourced` / `unverified` / `confirmed`, `source`) | 63 sourced, 31 unverified, **0 client-confirmed** |
 | Assets | `brand_assets` (logos, photos, labels, sizes) | 84 photos, 8 primary logos |
-| Keywords and intent | `keywords` (`intent` text, `service_id`, money / tracked flags), `page_groups`, `money_keywords` | 414 labelled with one of the four intents, 78 blank, **55 carry notes instead of an intent** (all Shewmaker, the blueprint record) |
+| Keywords and intent | `keywords` (`intent`, constrained to the four intents or NULL since 0044; `intent_note`; `service_id`; money / tracked flags), `page_groups`, `money_keywords` | 414 labelled with one of the four intents, 133 without an intent (55 of them Shewmaker rows whose former free-text intent now sits in `intent_note`) |
 | Content rules | `client_brands` (AI guidance, words to use / avoid, pillars), `brand_boards.hard_rules` | written |
 | Posts | `social_posts` (platform, copy, status), `content_posts` (blog) | 0 social rows; **GBP posts have no CRM record** — `google-ops gbp_posts` sends straight to Google |
 
@@ -58,8 +58,9 @@ go-live (`docs/portal-reconciliation.md`).
    programs) have no set expiry; when both are present the end cannot
    precede the start. Verified on production: 547 rows, 414 intents
    unchanged, 133 NULL, 55 notes identical to their pre-apply text, 0
-   nonstandard; types regenerated. Follow-ups: show `intent_note` in the
-   Foundation keyword map, and read `offers` on the Intelligence tab.
+   nonstandard; types regenerated. Reconciled in the app: the Foundation
+   keyword map shows the intent and the note separately, and the
+   Intelligence tab reads `offers` (below).
 4. **The post record (migration 0045).** One table for GBP and social
    drafts: channel, service, keyword, intent, body, CTA, assets, cited
    claim ids, status `draft → in_review → approved → published | rejected`,
@@ -84,6 +85,19 @@ go-live (`docs/portal-reconciliation.md`).
    the scorecard records posts published, profile views and calls as
    measured values. Candidate: **Pensacola Equipment Rentals**, 8 of 9
    areas ready (only its brand board approval is open).
+
+## How the Intelligence tab reads offers
+
+`offerState()` places each offer on the Central-time day: **current**
+(confirmed and inside its window, or a standing offer with no dates),
+**upcoming** (confirmed, starts later), **ended** (confirmed, its end date
+passed), **awaiting confirmation** (draft) or **retired** (ignored). The
+Offers area is ready with at least one current offer, partial with only
+drafts, upcoming or ended ones, and missing with none. It never blocks the
+general pilot: `pilotReadiness(areas)` counts nine areas, and only content
+that needs an offer asks `pilotReadiness(areas, { needsOffer: true })`,
+which makes offers blocking. Channel rules (a GBP Offer post's date window)
+stay with publishing.
 
 ## Readiness in production (Sept 23 2026)
 

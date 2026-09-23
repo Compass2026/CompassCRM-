@@ -851,8 +851,14 @@ needs who confirmed it and when). Channel date rules, such as a GBP Offer
 post's window, belong to the publishing layer. Verified on production after
 applying: 547 keywords, 414 with one of the four intents, 133 NULL, 55
 `intent_note` (all Shewmaker, identical to the pre-apply text), 0 nonstandard;
-`offers` under `is_team()` with no anon grants; types regenerated. The post
-record with a review gate is 0045 (not written).
+`offers` under `is_team()` with no anon grants; types regenerated. In the app,
+the Foundation keyword map shows `intent` and `intent_note` separately (a note
+is never shown as an intent), and the Intelligence tab's Offers area reads
+`offers`: ready with a current confirmed offer (a standing offer with no dates
+counts), partial with drafts / upcoming / ended ones, missing with none; it
+never blocks the general pilot, and `pilotReadiness(areas, { needsOffer: true
+})` makes it blocking for offer content only. There is no offer editing
+screen yet. The post record with a review gate is 0045 (not written).
 
 ## Client portal (Phase 5, Sept 17 2026)
 
