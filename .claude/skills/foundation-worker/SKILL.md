@@ -81,10 +81,19 @@ That means any of:
 
 Recorded means: for **each of the nine areas**, at least one
 `report_measurements` row for this `client_id` with `report_period` null,
-either `measured` with evidence, or an explicit unavailable status
-(`not_connected`, `not_measured`, `not_applicable`) with a plain-English
-`meaning` and a `next_action`. Never zero for missing data. Use
-`context = 'before_work'` only when the evidence really predates any change.
+either `measured` with evidence, or an explicit unavailable status with a
+plain-English `meaning` and a `next_action`. Never zero for missing data.
+Choosing the status:
+- `not_connected`: the access or the tracking doesn't exist (no GBP manager
+  access, no GA4, no call tracking, no social access).
+- `not_measured`: a source exists but wasn't run, or has nothing defined yet
+  (no agreed directory list, no tracked keyword set).
+- `not_applicable`: the metric can't apply to this client.
+
+An unavailable row has no evidence dates: record it as a point on the day you
+assessed it (Compass's day, America/Chicago), with `window_start = window_end`.
+Use `context = 'before_work'` only when the evidence really predates any
+change.
 
 Capture it read-only during the client's first worker run (Brand Build is
 fine) and top it up before the first asset change. Read-only work never
@@ -112,7 +121,8 @@ tracking): record that area with `not_connected` and the next action, and
 don't wait for it. Then open **one** task for Tom and carry on with the asset
 work:
 - `key = 'reporting_baseline_access'`, owner `TOM`, on the stage you're
-  working;
+  working, or with no stage when the work has none (a `blog_post` or
+  `site_updates` task);
 - `notes` listing each unavailable source, why, and exactly what access
   would let you measure it.
 

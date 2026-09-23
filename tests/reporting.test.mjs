@@ -133,3 +133,36 @@ test("the validation workflow is read-only and uses no secrets", () => {
   assert.doesNotMatch(wf, /secrets\./);
   assert.doesNotMatch(wf, /write/);
 });
+import { reportingMonths } from "../src/lib/reporting.ts";
+
+test("month boundary: cycles turn over on the UTC month, the scorecard on Central's", () => {
+  // Oct 1 03:00 UTC = Sept 30 22:00 CDT: the cycle month has turned, the scorecard's has not.
+  assert.deepEqual(reportingMonths(new Date("2026-10-01T03:00:00Z")),
+    { cycleMonthFirst: "2026-10-01", scorecardMonthFirst: "2026-09-01", differ: true });
+  // 06:00 UTC, when pg_cron opens cycles, is 01:00 CDT: both are October.
+  assert.deepEqual(reportingMonths(new Date("2026-10-01T06:00:00Z")),
+    { cycleMonthFirst: "2026-10-01", scorecardMonthFirst: "2026-10-01", differ: false });
+  // Winter (CST, UTC-6): Dec 1 05:30 UTC is still Nov 30 in Chicago; 06:00 UTC is midnight Central.
+  assert.equal(reportingMonths(new Date("2026-12-01T05:30:00Z")).differ, true);
+  assert.equal(reportingMonths(new Date("2026-12-01T06:00:00Z")).differ, false);
+  // Mid-month and the year boundary.
+  assert.equal(reportingMonths(new Date("2026-09-22T15:00:00Z")).differ, false);
+  assert.deepEqual(reportingMonths(new Date("2027-01-01T02:00:00Z")),
+    { cycleMonthFirst: "2027-01-01", scorecardMonthFirst: "2026-12-01", differ: true });
+});
+test("the Reports tab labels both months", () => {
+  const page = readFileSync("src/app/(app)/clients/[clientId]/reports/page.tsx", "utf8");
+  assert.match(page, /const months = reportingMonths\(\);/);
+  assert.match(page, /Cycles are named by their UTC\s+month/);
+  assert.match(page, /cycle \(UTC month\)/);
+  assert.match(page, /\{months\.differ && \(/);
+  const card = readFileSync("src/components/client-scorecard.tsx", "utf8");
+  assert.match(card, /Data month \(Central\)/);
+  assert.match(card, /Data months and dates here use Compass&apos;s day \(Central time\)/);
+});
+test("the worker rule says how to date and label unavailable rows", () => {
+  const skill = readFileSync(".claude/skills/foundation-worker/SKILL.md", "utf8");
+  assert.match(skill, /`not_connected`: the access or the tracking doesn't exist/);
+  assert.match(skill, /record it as a point on the day you\s+assessed it/);
+  assert.match(skill, /or with no stage when the work has none/);
+});

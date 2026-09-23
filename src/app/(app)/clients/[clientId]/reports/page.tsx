@@ -15,7 +15,7 @@ import { ownerLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { ClientScorecard } from "@/components/client-scorecard";
 import { loadReportMeasurements } from "@/lib/reporting-data";
-import { agencyToday, validDate } from "@/lib/reporting";
+import { reportingMonths, validDate } from "@/lib/reporting";
 
 export default async function ReportsPage({
   params,
@@ -52,8 +52,9 @@ export default async function ReportsPage({
   // Monthly cycles are created on UTC months (startCycleAction, pg_cron), so
   // the cycle list keeps that month. The scorecard's default data month uses
   // Compass's day (America/Chicago), like every other user-facing "today".
-  const thisMonthFirst = `${new Date().toISOString().slice(0, 7)}-01`;
-  const scorecardMonthFirst = `${agencyToday().slice(0, 7)}-01`;
+  const months = reportingMonths();
+  const thisMonthFirst = months.cycleMonthFirst;
+  const scorecardMonthFirst = months.scorecardMonthFirst;
   const requestedPeriod = typeof query.scorecard_month === "string" ? `${query.scorecard_month}-01` : "";
   const latestDataMonth = measurements.rows.map((row) => `${row.window_end.slice(0, 7)}-01`).sort().at(-1);
   const period = validDate(requestedPeriod) ? requestedPeriod : latestDataMonth ?? scorecardMonthFirst;
@@ -80,17 +81,26 @@ export default async function ReportsPage({
         </summary>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          One card per monthly Reporting cycle. Cycles are created automatically
-          on the 1st for active clients; the button covers mid-month starts.
+          One card per monthly Reporting cycle. Cycles are named by their UTC
+          month and open automatically on the 1st at 06:00 UTC (1 am Central in
+          summer, midnight in winter) for active clients; each cycle reports the
+          previous month&apos;s data. The button covers mid-month starts.
         </p>
         {!hasCurrentCycle && (
           <form action={startCycle}>
             <Button type="submit" variant="outline" size="sm">
-              Start {thisMonthFirst.slice(0, 7)} cycle
+              Start {thisMonthFirst.slice(0, 7)} cycle (UTC month)
             </Button>
           </form>
         )}
       </div>
+      {months.differ && (
+        <p role="note" className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+          It&apos;s already {thisMonthFirst.slice(0, 7)} in UTC, so the cycle month has
+          turned over, but it&apos;s still {scorecardMonthFirst.slice(0, 7)} in Central
+          time, which the scorecard uses. The two line up again at midnight Central.
+        </p>
+      )}
 
       {(cycles ?? []).length === 0 && (
         <Card>

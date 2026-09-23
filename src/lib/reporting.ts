@@ -5,6 +5,22 @@ import { todayIn } from "./tasks.ts";
 export function agencyToday(now: Date = new Date()): string {
   return todayIn("America/Chicago", now);
 }
+
+/**
+ * The Reports tab shows two different months, read from one clock:
+ * - cycleMonthFirst: the monthly Reporting cycle's month. Cycles are created
+ *   on UTC months (pg_cron on the 1st at 06:00 UTC, and startCycleAction), and
+ *   a cycle reports the previous month's data.
+ * - scorecardMonthFirst: the scorecard's default data month, on Compass's day
+ *   (America/Chicago).
+ * They differ for the first 5–6 hours of each UTC month (Chicago is still in
+ * the previous month); `differ` lets the page say so.
+ */
+export function reportingMonths(now: Date = new Date()) {
+  const cycleMonthFirst = `${now.toISOString().slice(0, 7)}-01`;
+  const scorecardMonthFirst = `${agencyToday(now).slice(0, 7)}-01`;
+  return { cycleMonthFirst, scorecardMonthFirst, differ: cycleMonthFirst !== scorecardMonthFirst };
+}
 export const REPORT_AREAS = [
   { key: "website", label: "Website pages & links", next: "Audit the agreed priority pages and internal links.", metrics: [
     ["pages_live", "Priority pages live", "point"], ["pages_indexed", "Priority pages indexed", "point"], ["broken_links", "Broken internal links", "point"],

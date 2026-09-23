@@ -13,9 +13,10 @@ export function ClientScorecard({ clientId, rows, period, baselineOnly = false }
       <h2 className="text-lg font-semibold">{baselineOnly ? "Starting baseline" : `${period.slice(0, 7)} marketing scorecard`}</h2>
       <p className="text-sm">{measuredAreas} of 9 areas have verified measurements{baselineOnly ? " available by this month" : " for this month"}. Open an area to review its numbers and next actions.</p>
       <p className="text-sm text-muted-foreground">Capture the starting point during onboarding, before improvements. For an existing client, use the first available measurement and its real date. Missing data never counts as zero.</p>
+      <p className="text-sm text-muted-foreground">Data months and dates here use Compass&apos;s day (Central time). Monthly Reporting cycles below are named by UTC month and report the previous month.</p>
       <p className="text-sm text-muted-foreground"><strong className="font-medium text-foreground">Recorded by hand.</strong> Every number here was entered with its source and evidence, by a team member or by the worker. The scorecard does not read the rank-tracking or Search Console snapshots on its own; those stay in their trackers until someone records a verified figure here.</p>
       <form className="flex flex-wrap items-end gap-2 print:hidden">
-        <label className="text-sm">Data month<input aria-label="Data month" name="scorecard_month" type="month" defaultValue={period.slice(0, 7)} className="ml-2 rounded-md border bg-background p-2" required /></label>
+        <label className="text-sm">Data month (Central)<input aria-label="Data month" name="scorecard_month" type="month" defaultValue={period.slice(0, 7)} className="ml-2 rounded-md border bg-background p-2" required /></label>
         <label className="text-sm">View<select name="scorecard_view" defaultValue={baselineOnly ? "baseline" : "monthly"} className="ml-2 rounded-md border bg-background p-2"><option value="monthly">Monthly progress</option><option value="baseline">Starting baseline</option></select></label>
         <button type="submit" className="rounded-md border px-3 py-2 text-sm">Show</button>
       </form>

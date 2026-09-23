@@ -83,6 +83,10 @@ try {
   const workflow = page.locator("summary").filter({ hasText: "Monthly workflow & earlier reports" });
   assert.equal(await workflow.count(), 1);
   assert.match(await workflow.innerText(), /open cycle tasks, including Send report, are here/);
+  // Two months, two meanings: the scorecard uses Central time, cycles use UTC months.
+  assert.ok(await page.getByText("Data months and dates here use Compass's day (Central time).", { exact: false }).isVisible());
+  await workflow.click();
+  assert.ok(await page.getByText("Cycles are named by their UTC", { exact: false }).isVisible());
   assert.equal(await page.locator('section[aria-label="Client marketing scorecard"] > div.grid > details').count(), 9);
   assert.ok(await page.getByText("vs previous: +10", { exact: true }).isVisible());
   assert.ok(await page.getByText("vs baseline: +10", { exact: true }).isVisible());
