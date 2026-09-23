@@ -212,8 +212,19 @@ Goal: the app reports whether each client's subscription is **paid** for the cur
 - In-app publishing (Meta Graph API first) is a later phase — schema already includes `social_accounts` so it can be added without rework
 
 ### 6.8 Reports
-- One card per monthly cycle: month, report Drive link, rank summary, tasks completed, notes
-- Generated report is a Drive file; app stores the link
+- Nine-area scorecard: website pages/links, citations, backlinks, GBP, reviews,
+  rankings, search traffic, leads and social media. Baseline collection starts
+  at intake, before improvements, independently of monthly-cycle enrollment.
+- Dated first measurements are immutable. Each area shows baseline, prior month,
+  current month, compatible deltas, plain-English meaning and next action.
+  Missing sources have explicit availability states; social stays per platform
+  and paid/organic channel. Verified manual evidence is supported first.
+- Existing monthly workflow remains below the scorecard: cycle, Drive link,
+  rank summary, tasks, notes and human-controlled completion/sending.
+- Contract, activation prerequisites, acceptance tests and rollback:
+  [Client scorecards](client-scorecards.md). Measurements are recorded by
+  hand, not read from the rank or Search Console snapshots. Requires migration
+  0041 (applied Sept 23); the app is not yet deployed.
 
 ## 7. Global screens
 

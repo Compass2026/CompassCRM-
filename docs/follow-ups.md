@@ -3,6 +3,17 @@
 Deferred on purpose, in the order to take them up. Each line says what it
 unblocks and what it costs.
 
+## Client scorecard activation
+
+The nine-area baseline/monthly implementation is PR #50, in draft; the app is
+not deployed. 0041 is applied (Sept 23, `20260923015843`) and the types are
+regenerated. Remaining: review, merge (which deploys the Reports tab), a
+read-only smoke test, and a first real new-client run of the worker's
+baseline rule (it was validated locally on fictional clients).
+See [client-scorecards.md](client-scorecards.md). Future provider ingestion for
+GBP performance, GA4, social performance and verified leads remains separate;
+until then use sourced manual entries or explicit unavailable states.
+
 ## Needs Tom's decision or money
 
 1. **BrightLocal spend.** Two things wait on a per-client credit cap:

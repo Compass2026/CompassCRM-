@@ -718,6 +718,21 @@ and the per-site survey in `docs/website-updates.md`.
 
 ## Reporting worker (Sept 13 2026)
 
+**Nine-area scorecard update (PR #50, app not deployed; 0041 applied Sept 23 as `20260923015843`):** see
+`docs/client-scorecards.md` and migration 0041. Measurements are recorded by
+hand; nothing reads the rank or Search Console snapshots automatically. The Reports tab adds early,
+append-only baseline evidence and monthly comparisons for website pages/links,
+citations, backlinks, GBP, reviews, rankings, search traffic, leads and social.
+New intake creates a TOM baseline-review task. For those **new clients
+only**, the worker records the nine areas (measured or explicitly unavailable)
+before its first autonomous asset change. Missing access becomes a
+`reporting_baseline_access` task for Tom, not a pause. Existing clients are not
+gated. The ledger is team-only via `is_team()` (0036, live), never blanket
+authenticated access. Clients with measurements can't be deleted (offboard
+them instead). This is still single-agency access, not organization tenancy.
+No new provider connector is implied. Missing sources stay explicit; original
+baselines cannot be overwritten. Existing cycles and Drive links remain.
+
 Migration 0024 makes the monthly Reporting cycle worker-run (Playbooks 5 and
 6). The month has three beats on the 1st, all pg_cron: 06:00 UTC
 `create_monthly_cycles()` opens a cycle and its keyed tasks per active

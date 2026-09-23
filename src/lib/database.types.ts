@@ -2089,6 +2089,87 @@ export type Database = {
           },
         ]
       }
+      report_measurements: {
+        Row: {
+          channel: string
+          client_id: string
+          context: string
+          created_at: string
+          evidence: string
+          id: string
+          meaning: string
+          metric: string
+          next_action: string
+          platform: string
+          recorded_by: string
+          report_period: string | null
+          scope: string
+          sequence: number
+          source: string
+          status: string
+          value: number | null
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          channel?: string
+          client_id: string
+          context: string
+          created_at?: string
+          evidence?: string
+          id?: string
+          meaning: string
+          metric: string
+          next_action: string
+          platform?: string
+          recorded_by?: string
+          report_period?: string | null
+          scope: string
+          sequence?: number
+          source: string
+          status: string
+          value?: number | null
+          window_end: string
+          window_start: string
+        }
+        Update: {
+          channel?: string
+          client_id?: string
+          context?: string
+          created_at?: string
+          evidence?: string
+          id?: string
+          meaning?: string
+          metric?: string
+          next_action?: string
+          platform?: string
+          recorded_by?: string
+          report_period?: string | null
+          scope?: string
+          sequence?: number
+          source?: string
+          status?: string
+          value?: number | null
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_measurements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_measurements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           client_id: string

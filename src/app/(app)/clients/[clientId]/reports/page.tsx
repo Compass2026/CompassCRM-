@@ -13,16 +13,22 @@ import {
 } from "@/components/ui/card";
 import { ownerLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+import { ClientScorecard } from "@/components/client-scorecard";
+import { loadReportMeasurements } from "@/lib/reporting-data";
+import { reportingMonths, validDate } from "@/lib/reporting";
 
 export default async function ReportsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ clientId: string }>;
+  searchParams: Promise<{ scorecard_month?: string; scorecard_view?: string }>;
 }) {
   const { clientId } = await params;
+  const query = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cycles }, { data: client }, { data: contentPosts }, { data: socialPosts }] =
+  const [{ data: cycles }, { data: client }, { data: contentPosts }, { data: socialPosts }, measurements] =
     await Promise.all([
       supabase
         .from("monthly_cycles")
@@ -40,9 +46,20 @@ export default async function ReportsPage({
         .select("scheduled_at")
         .eq("client_id", clientId)
         .eq("status", "published"),
+      loadReportMeasurements(supabase, clientId),
     ]);
 
-  const thisMonthFirst = `${new Date().toISOString().slice(0, 7)}-01`;
+  // Monthly cycles are created on UTC months (startCycleAction, pg_cron), so
+  // the cycle list keeps that month. The scorecard's default data month uses
+  // Compass's day (America/Chicago), like every other user-facing "today".
+  const months = reportingMonths();
+  const thisMonthFirst = months.cycleMonthFirst;
+  const scorecardMonthFirst = months.scorecardMonthFirst;
+  const requestedPeriod = typeof query.scorecard_month === "string" ? `${query.scorecard_month}-01` : "";
+  const latestDataMonth = measurements.rows.map((row) => `${row.window_end.slice(0, 7)}-01`).sort().at(-1);
+  const period = validDate(requestedPeriod) ? requestedPeriod : latestDataMonth ?? scorecardMonthFirst;
+  const baselineOnly = query.scorecard_view === "baseline" ||
+    (query.scorecard_view !== "monthly" && !measurements.rows.some((row) => row.report_period));
   const hasCurrentCycle = (cycles ?? []).some((c) => c.period === thisMonthFirst);
   const startCycle = startCycleAction.bind(null, clientId);
 
@@ -53,26 +70,44 @@ export default async function ReportsPage({
 
   return (
     <div className="space-y-4">
+      {measurements.error ? <p role="alert" className="rounded-lg border p-4 text-sm">{measurements.error}</p> :
+        <ClientScorecard clientId={clientId} rows={measurements.rows} period={period} baselineOnly={baselineOnly} />}
+      <details className="rounded-lg border p-4 space-y-4">
+        <summary className="cursor-pointer font-medium">
+          Monthly workflow & earlier reports
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {(cycles ?? []).length} cycle{(cycles ?? []).length === 1 ? "" : "s"} · open cycle tasks, including Send report, are here
+          </span>
+        </summary>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          One card per monthly Reporting cycle. Cycles are created automatically
-          on the 1st for active clients; the button covers mid-month starts.
+          One card per monthly Reporting cycle. Cycles are named by their UTC
+          month and open automatically on the 1st at 06:00 UTC (1 am Central in
+          summer, midnight in winter) for active clients; each cycle reports the
+          previous month&apos;s data. The button covers mid-month starts.
         </p>
         {!hasCurrentCycle && (
           <form action={startCycle}>
             <Button type="submit" variant="outline" size="sm">
-              Start {thisMonthFirst.slice(0, 7)} cycle
+              Start {thisMonthFirst.slice(0, 7)} cycle (UTC month)
             </Button>
           </form>
         )}
       </div>
+      {months.differ && (
+        <p role="note" className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+          It&apos;s already {thisMonthFirst.slice(0, 7)} in UTC, so the cycle month has
+          turned over, but it&apos;s still {scorecardMonthFirst.slice(0, 7)} in Central
+          time, which the scorecard uses. The two line up again at midnight Central.
+        </p>
+      )}
 
       {(cycles ?? []).length === 0 && (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
             No monthly cycles yet
             {client?.status !== "active" &&
-              " — cycles begin once the client converges to active/Reporting"}
+              ". Cycles begin once the client converges to active/Reporting"}
             .
           </CardContent>
         </Card>
@@ -117,7 +152,7 @@ export default async function ReportsPage({
                   {countInMonth(contentPosts?.map((p) => p.published_at) ?? [], cycle.period)}{" "}
                   blog ·{" "}
                   {countInMonth(socialPosts?.map((p) => p.scheduled_at) ?? [], cycle.period)}{" "}
-                  social
+                  social marked published (scheduled month)
                 </span>
               </div>
             </CardHeader>
@@ -131,10 +166,11 @@ export default async function ReportsPage({
               )}
               {summary && (
                 <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+                  <p className="font-medium">Earlier summary. These figures have not been verified as baseline measurements.</p>
                   <p className="text-muted-foreground">
                     {summary.ranks && (
                       <>
-                        Ranks: {summary.ranks.up ?? 0} up · {summary.ranks.down ?? 0} down · top 3 {summary.ranks.top3 ?? 0} · top 10 {summary.ranks.top10 ?? 0}
+                        Ranks: {summary.ranks.up ?? "Not measured"} up · {summary.ranks.down ?? "Not measured"} down · top 3 {summary.ranks.top3 ?? "Not measured"} · top 10 {summary.ranks.top10 ?? "Not measured"}
                         {" · "}
                       </>
                     )}
@@ -166,12 +202,12 @@ export default async function ReportsPage({
                   {summary.next_month && summary.next_month.length > 0 && (
                     <p className="text-muted-foreground">Next: {summary.next_month.join(" · ")}</p>
                   )}
-                  {cycle.report_url && (
-                    <a href={cycle.report_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                      Monthly report (Drive)
-                    </a>
-                  )}
                 </div>
+              )}
+              {cycle.report_url && (
+                <a href={cycle.report_url} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
+                  Monthly report (Drive)
+                </a>
               )}
 
               <ul className="space-y-1">
@@ -241,6 +277,7 @@ export default async function ReportsPage({
           </Card>
         );
       })}
+      </details>
     </div>
   );
 }
