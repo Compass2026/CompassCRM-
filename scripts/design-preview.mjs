@@ -209,10 +209,12 @@ const pages = [
   ["clients", "/clients"],
   ["tasks", "/tasks"],
   ["brief", "/brief"],
-  ["client-overview", `/clients/${C(0).id}`],
-  ["client-tasks", `/clients/${C(0).id}/tasks`],
-  ["client-reports", `/clients/${C(0).id}/reports`],
   ["settings", "/settings"],
+  ["login", "/login"],
+  ["task-detail", `/tasks/${uid(401)}`],
+  ["client-overview", `/clients/${C(0).id}`],
+  ...["plan", "brand", "documents", "pipelines", "tasks", "foundation", "services", "keywords", "content", "social", "reports", "billing"]
+    .map((tab) => [`client-${tab}`, `/clients/${C(0).id}/${tab}`]),
 ];
 const wanted = process.env.PAGES?.split(",");
 const viewports = [
@@ -231,21 +233,25 @@ try {
   }
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : { channel: "chrome" }) });
   for (const [vpName, viewport] of viewports) {
-    const context = await browser.newContext({ viewport, deviceScaleFactor: vpName === "phone" ? 2 : 1 });
+    const context = await browser.newContext({ viewport, deviceScaleFactor: vpName === "phone" ? 1.5 : 1 });
     const session = { access_token: "preview", refresh_token: "preview", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer", user: USER };
-    await context.addCookies([{ name: "sb-127-auth-token", value: `base64-${b64(session)}`, domain: "127.0.0.1", path: "/" }]);
+    const signIn = () => context.addCookies([{ name: "sb-127-auth-token", value: `base64-${b64(session)}`, domain: "127.0.0.1", path: "/" }]);
+    await signIn();
     const page = await context.newPage();
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     for (const [name, path] of pages) {
       if (wanted && !wanted.includes(name)) continue;
+      // The login page redirects a signed-in user, so shoot it signed out.
+      if (name === "login") await context.clearCookies();
       const resp = await page.goto(`${base}${path}`, { waitUntil: "networkidle", timeout: 120_000 });
       // The dev-mode badge is not part of the design.
       await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
       await page.waitForTimeout(700);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-      await page.screenshot({ path: `${OUT}/${name}-${vpName}.png`, fullPage: true });
+      await page.screenshot({ path: `${OUT}/${name}-${vpName}.jpg`, fullPage: true, type: "jpeg", quality: 85 });
       const note = [resp?.status() !== 200 && `HTTP ${resp?.status()}`, wide && "horizontal scroll"].filter(Boolean);
+      if (name === "login") await signIn();
       if (note.length) failed = true;
       console.log(`${note.length ? "✘" : "✔"} ${name} (${vpName})${note.length ? ` — ${note.join(", ")}` : ""}`);
     }

@@ -22,7 +22,7 @@ import { GridConfigCard } from "@/components/grid-config-card";
 import { cn } from "@/lib/utils";
 
 const selectClass =
-  "h-8 rounded-md border border-input bg-transparent px-2 text-xs";
+  "field-sm";
 
 function heat(position: number | null | undefined): string {
   if (position == null) return "text-muted-foreground";

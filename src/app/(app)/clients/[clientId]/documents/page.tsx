@@ -18,7 +18,7 @@ import {
 import { documentCategories } from "@/lib/labels";
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs";
+  "field";
 
 export default async function DocumentsPage({
   params,

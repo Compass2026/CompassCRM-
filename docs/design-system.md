@@ -20,7 +20,7 @@ Screenshots (fictional data): `docs/screenshots/design-refresh/`, made by
 | royal-50 / royal-100 | `#edf3fd` / `#dce8fa` | the nav rail, icon chips, table headers, hover rows |
 | `--border` / `--input` | `#d3deee` / `#c8d5e8` | hairlines, field borders |
 | `--ring` | orange-500 `#e85d04` | focus ring |
-| orange | | the logo needle, the page-title mark, "needs attention" icons |
+| orange | | the header strip, the dot on the active nav item, the page-title mark, the tip of progress bars, attention counts, the `accent` button (orange-600 base, so white text passes AA) |
 
 Orange is never body text or a button fill: white on `#e85d04` and
 `#e85d04` on white are about 3.4:1, which fails WCAG AA for normal text.
@@ -55,10 +55,16 @@ label above a heading or a figure.
   white and raised and carries `aria-current="page"`. It scrolls sideways
   on phones. Used by the header, the client tabs and the Tasks views.
 - Filter chips: `chip(active)`, royal blue when on.
+- `accent` button: orange, one per page at most, for the headline action
+  (New client).
+- Native `<select>` and date / month inputs use the `field` (36 px) or
+  `field-sm` (32 px) utility instead of their own class strings.
+- `callout`: the shape for amber / red / green notes inside a page.
 
 ## Status
 
-Finished in this slice: tokens and primitives (which reach every page), the
-app header, the Dashboard, the client header and tabs, and the Tasks page
-(views, chips, task list). Still pending: a page-by-page pass over the other
-screens (see the PR).
+Every team CRM screen is on the system: Dashboard, Clients, Tasks, task
+detail, Brief, Settings, login, and all thirteen client tabs, desktop and
+phone. The client portal only inherits the tokens (its header is
+unchanged). The brand board page (`/clients/[id]/brand-board`, print) is
+the client's own document and keeps its own look.

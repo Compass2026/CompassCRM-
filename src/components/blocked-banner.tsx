@@ -10,7 +10,7 @@ export function BlockedBanner({
 }) {
   if (!message) return null;
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+    <div className="callout border-amber-200 bg-amber-50 text-sm text-amber-900">
       <p className="font-medium">{message}</p>
       {hint && <p className="text-xs mt-0.5 text-amber-800">{hint}</p>}
     </div>

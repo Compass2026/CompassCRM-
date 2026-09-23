@@ -15,11 +15,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ownerLabels, owners } from "@/lib/labels";
+import { chip } from "@/lib/nav-styles";
 import { cn } from "@/lib/utils";
 
 const CONTENT_STATUSES = ["idea", "brief", "draft", "review", "published"] as const;
 const selectClass =
-  "h-8 rounded-md border border-input bg-transparent px-2 text-xs";
+  "field-sm";
 
 const statusStyles: Record<string, string> = {
   idea: "bg-zinc-100 text-zinc-600",
@@ -75,10 +76,7 @@ export default async function ContentPage({
       <div className="flex items-center gap-2 flex-wrap">
         <Link
           href={`/clients/${clientId}/content`}
-          className={cn(
-            "text-sm px-3 py-1 rounded-full border",
-            !filter ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground"
-          )}
+          className={chip(!filter)}
         >
           All
         </Link>
@@ -86,12 +84,7 @@ export default async function ContentPage({
           <Link
             key={s}
             href={`/clients/${clientId}/content?status=${s}`}
-            className={cn(
-              "text-sm px-3 py-1 rounded-full border",
-              filter === s
-                ? "bg-primary text-primary-foreground border-primary"
-                : "text-muted-foreground"
-            )}
+            className={chip(filter === s)}
           >
             {s}
           </Link>

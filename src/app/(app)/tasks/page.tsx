@@ -74,7 +74,10 @@ export default async function TasksPage({
       <h1 className="page-title kicker">Tasks</h1>
 
       <details className="surface p-4 group">
-        <summary className="cursor-pointer text-sm font-semibold">New task</summary>
+        <summary className="flex cursor-pointer list-none items-center gap-2.5 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+          <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-orange-100 text-base leading-none text-orange-600 transition-transform group-open:rotate-45">+</span>
+          New task
+        </summary>
         <div className="pt-3">
           <NewTaskForm members={members} meId={meId} clients={clients ?? []} />
         </div>

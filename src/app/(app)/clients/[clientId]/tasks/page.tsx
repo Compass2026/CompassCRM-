@@ -5,7 +5,7 @@ import { TaskList } from "@/components/task-list";
 import { fetchTaskList, fetchViewCounts } from "@/lib/task-queries";
 import { getCurrentTeamMember, listTeamMembers } from "@/lib/team";
 import { parseTaskView, taskViews, todayIn } from "@/lib/tasks";
-import { cn } from "@/lib/utils";
+import { chip } from "@/lib/nav-styles";
 
 // The client's work in one place: pipeline checklists, monthly-cycle tasks
 // and anything the team adds by hand. "By client" makes no sense here.
@@ -35,7 +35,7 @@ export default async function ClientTasksPage({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-md border bg-card p-4">
+      <section className="surface p-4 sm:p-5">
         <h2 className="text-sm font-semibold mb-3">New task</h2>
         <NewTaskForm members={members} meId={meId} clientId={clientId} />
       </section>
@@ -47,10 +47,7 @@ export default async function ClientTasksPage({
             href={v.value === "all" ? base : `${base}?view=${v.value}`}
             title={v.hint}
             aria-current={view === v.value ? "page" : undefined}
-            className={cn(
-              "text-sm px-3 py-1 rounded-full border",
-              view === v.value ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground"
-            )}
+            className={chip(view === v.value)}
           >
             {v.label}
             {badge[v.value] ? ` · ${badge[v.value]}` : ""}

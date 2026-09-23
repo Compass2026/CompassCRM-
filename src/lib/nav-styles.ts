@@ -5,18 +5,18 @@ import { cn } from "@/lib/utils";
 // sit on; the active item is a raised white pill on it.
 
 export const navTrack =
-  "flex w-full items-center gap-1 overflow-x-auto rounded-full bg-royal-50 p-1 ring-1 ring-royal-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "relative flex w-full items-center gap-1 overflow-x-auto rounded-full bg-royal-50 p-1 ring-1 ring-royal-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 export function navItem(active: boolean): string {
   return cn(
     "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
     active
-      ? "bg-card font-semibold text-navy-900 shadow-[0_1px_2px_rgba(11,22,42,0.08),0_2px_8px_-2px_rgba(26,63,132,0.18)] ring-1 ring-royal-100"
+      ? "bg-card font-semibold text-navy-900 before:size-1.5 before:shrink-0 before:rounded-full before:bg-orange-500 before:content-[''] shadow-[0_1px_2px_rgba(11,22,42,0.08),0_2px_8px_-2px_rgba(26,63,132,0.18)] ring-1 ring-royal-100"
       : "font-medium text-navy-700/75 hover:bg-card/70 hover:text-navy-900"
   );
 }
 
-// Filter chips (owner lane, autonomy, content filters): navy when on.
+// Filter chips (owner lane, autonomy, content filters): royal blue when on.
 export function chip(active: boolean): string {
   return cn(
     "inline-flex h-8 items-center rounded-full border px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",

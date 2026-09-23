@@ -19,7 +19,7 @@ type Member = { id: string; name: string };
 type ClientOption = { id: string; name: string };
 
 const selectClass =
-  "h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "field w-full";
 
 function FormMessage({ state }: { state: TaskFormState }) {
   if (state.error) {

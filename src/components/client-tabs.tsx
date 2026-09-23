@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItem, navTrack } from "@/lib/nav-styles";
+import { useActiveInView } from "@/components/use-active-in-view";
 
 const tabs = [
   { label: "Overview", segment: "" },
@@ -23,9 +24,10 @@ const tabs = [
 export function ClientTabs({ clientId }: { clientId: string }) {
   const pathname = usePathname();
   const base = `/clients/${clientId}`;
+  const railRef = useActiveInView<HTMLElement>(pathname);
 
   return (
-    <nav aria-label="Client sections" className={navTrack}>
+    <nav ref={railRef} aria-label="Client sections" className={navTrack}>
       {tabs.map((tab) => {
         const href = tab.segment ? `${base}/${tab.segment}` : base;
         const active = tab.segment

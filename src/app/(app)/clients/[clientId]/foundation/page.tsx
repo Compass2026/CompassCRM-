@@ -58,7 +58,7 @@ import { RevertButton } from "@/components/revert-button";
 import { parseAudit, parseQuality, scoreTone, shortDate } from "@/lib/site-status";
 
 const selectClass =
-  "h-8 rounded-md border border-input bg-transparent px-2 text-xs";
+  "field-sm";
 
 const claimStatuses: ClaimStatus[] = ["sourced", "unverified", "confirmed"];
 

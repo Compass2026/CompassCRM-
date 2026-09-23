@@ -76,7 +76,7 @@ export default async function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div className="space-y-1">
           <p className="eyebrow">Compass Client Platform</p>
-          <h1 className="page-title">Dashboard</h1>
+          <h1 className="page-title kicker">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             Every client, what is blocked, and what is waiting on a person.
           </p>
@@ -291,7 +291,7 @@ export default async function DashboardPage() {
                               aria-valuenow={done}
                             >
                               <div
-                                className="h-full rounded-full bg-gradient-to-r from-royal-700 to-royal-500"
+                                className="h-full rounded-full bg-gradient-to-r from-royal-700 via-royal-500 to-orange-400"
                                 style={{
                                   width: total ? `${(done / total) * 100}%` : 0,
                                 }}
@@ -339,7 +339,14 @@ function StatTile({
   href?: string;
 }) {
   const body = (
-    <div className="surface flex h-full flex-col gap-2 bg-[radial-gradient(160px_90px_at_100%_100%,rgba(42,92,184,0.08),transparent_70%)] p-4 transition-all duration-200 sm:p-5 [a:hover>&]:-translate-y-0.5 [a:hover>&]:shadow-card-hover">
+    <div className="surface relative flex overflow-hidden h-full flex-col gap-2 bg-[radial-gradient(160px_90px_at_100%_100%,rgba(42,92,184,0.08),transparent_70%)] p-4 transition-all duration-200 sm:p-5 [a:hover>&]:-translate-y-0.5 [a:hover>&]:shadow-card-hover">
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-x-0 top-0 h-1",
+          tone === "alert" ? "bg-red-500" : tone === "warn" ? "bg-gradient-to-r from-orange-500 to-orange-300" : "bg-gradient-to-r from-royal-600 to-royal-500"
+        )}
+      />
       <div className="flex items-center justify-between gap-2">
         <span className="eyebrow">{label}</span>
         <span
@@ -399,7 +406,12 @@ function PanelTitle({
         {icon}
       </span>
       <CardTitle className="text-sm">{children}</CardTitle>
-      <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
+      <span
+        className={cn(
+          "ml-auto rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+          count ? "bg-orange-100 text-orange-600" : "bg-muted text-muted-foreground"
+        )}
+      >
         {count}
       </span>
     </div>

@@ -224,3 +224,17 @@
     radial-gradient(600px 260px at 100% 0%, rgba(42, 92, 184, 0.10), transparent 70%),
     linear-gradient(135deg, #f4f8fe 0%, #ffffff 55%, #eef4fd 100%);
 }
+/* Native form controls (<select>, date and month inputs) that don't use
+   the Input / Select primitives. `field` matches the 36 px primitives,
+   `field-sm` the dense 32 px rows in tables. */
+@utility field {
+  @apply h-9 rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-[0_1px_2px_rgba(11,22,42,0.04)] transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility field-sm {
+  @apply h-8 rounded-lg border border-input bg-card px-2.5 text-xs text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50;
+}
+/* A note or callout inside a page (amber / red / green variants keep their
+   own colors; this sets the shape). */
+@utility callout {
+  @apply rounded-xl border px-3.5 py-2.5 text-sm;
+}

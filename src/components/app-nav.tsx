@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItem, navTrack } from "@/lib/nav-styles";
 import { cn } from "@/lib/utils";
+import { useActiveInView } from "@/components/use-active-in-view";
 
 const links = [
   { href: "/", label: "Dashboard" },
@@ -15,8 +16,9 @@ const links = [
 
 export function AppNav({ className }: { className?: string }) {
   const pathname = usePathname();
+  const railRef = useActiveInView<HTMLElement>(pathname);
   return (
-    <nav aria-label="Main" className={cn(navTrack, "sm:w-auto", className)}>
+    <nav ref={railRef} aria-label="Main" className={cn(navTrack, "sm:w-auto", className)}>
       {links.map((link) => {
         const active =
           link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
