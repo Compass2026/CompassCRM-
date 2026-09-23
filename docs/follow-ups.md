@@ -5,11 +5,11 @@ unblocks and what it costs.
 
 ## Client scorecard activation
 
-The nine-area baseline/monthly implementation is PR #50, in draft and not
-deployed; 0041 is not applied. The team-access prerequisites (0036–0038) are
-live. Remaining: the rollback-only dry run and apply of 0041, regenerated
-types, then a review of the worker's new-client baseline capture and report
-draft on a fictional client. Production migration/deployment needs explicit approval.
+The nine-area baseline/monthly implementation is PR #50, in draft; the app is
+not deployed. 0041 is applied (Sept 23, `20260923015843`) and the types are
+regenerated. Remaining: review, merge (which deploys the Reports tab), a
+read-only smoke test, and a first real new-client run of the worker's
+baseline rule (it was validated locally on fictional clients).
 See [client-scorecards.md](client-scorecards.md). Future provider ingestion for
 GBP performance, GA4, social performance and verified leads remains separate;
 until then use sourced manual entries or explicit unavailable states.

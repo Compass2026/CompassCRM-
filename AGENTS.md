@@ -718,7 +718,7 @@ and the per-site survey in `docs/website-updates.md`.
 
 ## Reporting worker (Sept 13 2026)
 
-**Nine-area scorecard update (PR #50, not deployed; 0041 not applied):** see
+**Nine-area scorecard update (PR #50, app not deployed; 0041 applied Sept 23 as `20260923015843`):** see
 `docs/client-scorecards.md` and migration 0041. Measurements are recorded by
 hand; nothing reads the rank or Search Console snapshots automatically. The Reports tab adds early,
 append-only baseline evidence and monthly comparisons for website pages/links,

@@ -1,9 +1,13 @@
 # Client baseline and monthly scorecards
 
-Implementation status: PR #50, draft, **not activated**. Migration 0041 is
-**not applied**. Production already has 0036–0040 and 0043 (0042 is on `main`
-but unapplied). No BHG Safety data has been collected or populated by this
-change.
+Implementation status: PR #50, draft, app **not yet deployed**. Migration
+0041 **is applied to production** (Sept 23, version `20260923015843`,
+`0041_client_report_measurements`, after a rollback-only dry run). The recorded
+SQL is byte-identical to the committed file, and the types were regenerated
+from the live schema. Production now has 0036–0041 and 0043; 0042 is on `main`
+but unapplied. The ledger is empty, and no existing client got a baseline task
+(the trigger only fires for new clients). No BHG Safety data has been
+collected or populated by this change.
 
 **Measurements are recorded by hand.** Every scorecard number is entered, with
 its source and evidence, by a team member on the Reports tab or appended by the
