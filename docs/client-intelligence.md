@@ -44,12 +44,22 @@ go-live (`docs/portal-reconciliation.md`).
    and `src/lib/client-intelligence.ts`: ten areas scored ready / partial
    / missing with the exact fix, the intent mix, and post topics. Read-only.
 2. **Close the gaps (data, not code).** Tom approves the brand boards;
-   label the blank intents; map approved services to page URLs. Moving
-   Shewmaker's intent notes needs Tom's say-so (blueprint record).
-3. **Schema for intent and offers (migration 0044).** `keywords.intent_note`
-   for the notes, then a check constraint limiting `intent` to the four
-   values; an `offers` table (terms, start / end, source) under
-   `is_team()`.
+   label the blank intents; map approved services to page URLs.
+   Shewmaker's intent notes (blueprint record) move in 0044 at Tom's request
+   (Sept 23), verbatim, with no intent guessed.
+3. **Schema for intent and offers (migration 0044 — applied Sept 23 2026, `20260923164846`).**
+   `keywords.intent_note`; the 55 Shewmaker notes move there verbatim with
+   `intent` set to NULL (never guessed); `intent` normalized on write and
+   constrained to the four values or NULL; `offers` (title, exact terms,
+   source, optional start / end, optional same-client service, `draft` /
+   `confirmed` / `retired`; confirmed needs who confirmed it and when) under
+   `is_team()`. Dates stay optional because standing offers (free
+   estimates, free inspections, military discounts, financing, referral
+   programs) have no set expiry; when both are present the end cannot
+   precede the start. Verified on production: 547 rows, 414 intents
+   unchanged, 133 NULL, 55 notes identical to their pre-apply text, 0
+   nonstandard; types regenerated. Follow-ups: show `intent_note` in the
+   Foundation keyword map, and read `offers` on the Intelligence tab.
 4. **The post record (migration 0045).** One table for GBP and social
    drafts: channel, service, keyword, intent, body, CTA, assets, cited
    claim ids, status `draft → in_review → approved → published | rejected`,
@@ -67,6 +77,9 @@ go-live (`docs/portal-reconciliation.md`).
    recording the Google post id; social published by hand first (mark
    published with the URL). Needs **Connect Google** (Settings) and the
    client's Business Profile manager grant.
+   Channel rules live here, not on the Client Intelligence record: a GBP
+   Offer post needs a start and end date, and that is checked when an
+   offer post is published, not when the offer is recorded.
 8. **Pilot and feedback.** One client, four GBP posts a month for a month;
    the scorecard records posts published, profile views and calls as
    measured values. Candidate: **Pensacola Equipment Rentals**, 8 of 9

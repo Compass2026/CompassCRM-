@@ -480,7 +480,11 @@ volume > 0 or clear commercial intent. Insert into `keywords`: `keyword`,
 `department = 'seo'`, `service_id` (the service it serves; null for brand /
 generic), `city` when the term carries one, `volume`, `cpc`, `competition`,
 `intent`, `source = 'dataforseo'`, `last_checked = now()`, `is_active = true`,
-`priority = 'p3'`. Dedupe on `(client_id, lower(keyword))` — when a keyword
+`priority = 'p3'`. **`intent` is exactly one of `navigational`,
+`informational`, `commercial`, `transactional` (DataForSEO's label) or null**
+— since 0044 the database refuses anything else. Never guess one; a note
+about the term (why it matters, which page it folds into) goes in
+`intent_note`. Dedupe on `(client_id, lower(keyword))` — when a keyword
 already exists (earlier trackers seeded terms without demand data), **update**
 it: fill `volume`, `cpc`, `competition`, `intent`, `service_id` and
 `last_checked` where they are null, and leave `priority`, `is_tracked` and
@@ -1678,8 +1682,8 @@ One post per client per week. **Each post serves one long-tail keyword and
 one service page**, in the brand voice (`get_brand_profile`), sourced facts
 only.
 
-1. **Pick the keyword:** a tracked P2 / P3 keyword with informational or
-   commercial-investigation intent (`keywords.intent`), no post yet
+1. **Pick the keyword:** a tracked P2 / P3 keyword with `informational` or
+   `commercial` intent (`keywords.intent`), no post yet
    (`content_posts.keyword_id`), preferring Search Console queries with
    impressions and a `gsc_snapshots` position past 10, then volume. Note
    the service page it supports (`service_id` → the service's page group
