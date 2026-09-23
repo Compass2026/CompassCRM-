@@ -52,7 +52,7 @@ export function TaskList({
         return (
           <div
             key={task.id}
-            className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_10rem] gap-x-3 gap-y-2 px-4 py-3.5 text-sm transition-colors hover:bg-mist-50"
+            className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_10rem] gap-x-3 gap-y-2 px-4 py-3.5 text-sm transition-colors hover:bg-royal-50/60"
           >
             <form action={toggle} className="pt-0.5">
               <button

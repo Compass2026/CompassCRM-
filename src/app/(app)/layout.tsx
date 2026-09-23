@@ -53,7 +53,7 @@ export default async function AppLayout({
           phones the nav drops to its own row and scrolls sideways instead
           of pushing the page wider than the screen. */}
       <header className="px-3 pt-3 sm:sticky sm:top-0 sm:z-40 sm:px-4">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-card/90 px-3 py-2.5 shadow-float ring-1 ring-border backdrop-blur-md sm:h-16 sm:flex-nowrap sm:px-4 sm:py-0">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-card px-3 py-2.5 shadow-float ring-1 ring-border backdrop-blur-md sm:h-16 sm:flex-nowrap sm:px-4 sm:py-0">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2.5 rounded-lg font-heading font-semibold tracking-tight text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"

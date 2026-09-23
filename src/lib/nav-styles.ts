@@ -5,14 +5,14 @@ import { cn } from "@/lib/utils";
 // sit on; the active item is a raised white pill on it.
 
 export const navTrack =
-  "flex w-full items-center gap-1 overflow-x-auto rounded-full bg-muted p-1 ring-1 ring-border/70 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "flex w-full items-center gap-1 overflow-x-auto rounded-full bg-royal-50 p-1 ring-1 ring-royal-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 export function navItem(active: boolean): string {
   return cn(
     "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
     active
-      ? "bg-card font-semibold text-foreground shadow-[0_1px_2px_rgba(11,22,42,0.08),0_2px_8px_-2px_rgba(11,22,42,0.12)] ring-1 ring-border"
-      : "font-medium text-muted-foreground hover:bg-card/70 hover:text-foreground"
+      ? "bg-card font-semibold text-navy-900 shadow-[0_1px_2px_rgba(11,22,42,0.08),0_2px_8px_-2px_rgba(26,63,132,0.18)] ring-1 ring-royal-100"
+      : "font-medium text-navy-700/75 hover:bg-card/70 hover:text-navy-900"
   );
 }
 
@@ -22,7 +22,7 @@ export function chip(active: boolean): string {
     "inline-flex h-8 items-center rounded-full border px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
     active
       ? "border-primary bg-primary font-medium text-primary-foreground"
-      : "border-border bg-card text-muted-foreground hover:border-input hover:text-foreground"
+      : "border-royal-100 bg-card text-navy-700/80 hover:border-royal-500/40 hover:bg-royal-50 hover:text-navy-900"
   );
 }
 
@@ -30,6 +30,6 @@ export function chip(active: boolean): string {
 export function navCount(tone: "default" | "alert" = "default"): string {
   return cn(
     "rounded-full px-1.5 text-xs font-semibold tabular-nums",
-    tone === "alert" ? "bg-red-100 text-red-800" : "bg-mist-200 text-navy-700"
+    tone === "alert" ? "bg-red-100 text-red-800" : "bg-royal-100 text-royal-700"
   );
 }

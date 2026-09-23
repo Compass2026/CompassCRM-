@@ -33,7 +33,7 @@ export default async function ClientLayout({
         </Link>
         <div className="flex items-center gap-4">
           <span
-            className="grid size-12 shrink-0 place-items-center rounded-2xl bg-navy-900 font-heading text-lg font-semibold text-white shadow-[0_6px_16px_-6px_rgba(11,22,42,0.55)]"
+            className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-royal-500 to-navy-800 text-lg font-bold text-white shadow-[0_6px_16px_-6px_rgba(11,22,42,0.55)]"
             aria-hidden="true"
           >
             {client.name.trim().charAt(0).toUpperCase()}

@@ -72,14 +72,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <div className="surface-tint space-y-5 p-4 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div className="space-y-1">
-          <h1 className="page-title kicker">Dashboard</h1>
+          <p className="eyebrow">Compass Client Platform</p>
+          <h1 className="page-title">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             Every client, what is blocked, and what is waiting on a person.
           </p>
         </div>
-        <p className="text-sm font-medium text-muted-foreground">{today}</p>
+        <p className="rounded-full bg-card px-3 py-1 text-sm font-medium text-navy-700 ring-1 ring-royal-100">{today}</p>
       </div>
 
       <section aria-label="At a glance" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -114,6 +116,7 @@ export default async function DashboardPage() {
           href="#needs-attention"
         />
       </section>
+      </div>
 
       <section id="needs-attention" className="scroll-mt-24 space-y-3">
         <SectionHeading title="Needs attention" />
@@ -214,7 +217,7 @@ export default async function DashboardPage() {
         <SectionHeading
           title="Clients"
           action={
-            <Link href="/clients" className="text-sm font-medium text-navy-600 hover:underline">
+            <Link href="/clients" className="text-sm font-semibold text-royal-600 hover:underline">
               View all
             </Link>
           }
@@ -235,7 +238,7 @@ export default async function DashboardPage() {
                   <CardHeader>
                     <div className="flex items-center gap-3">
                       <span
-                        className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent font-heading text-sm font-semibold text-navy-700"
+                        className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-royal-500 to-navy-700 text-sm font-semibold text-white shadow-[0_4px_10px_-4px_rgba(26,63,132,0.6)]"
                         aria-hidden="true"
                       >
                         {client.name.trim().charAt(0).toUpperCase()}
@@ -280,7 +283,7 @@ export default async function DashboardPage() {
                               {cp.pipelines?.name}
                             </span>
                             <div
-                              className="h-2 flex-1 overflow-hidden rounded-full bg-mist-200"
+                              className="h-2 flex-1 overflow-hidden rounded-full bg-royal-50 ring-1 ring-royal-100"
                               role="progressbar"
                               aria-label={`${cp.pipelines?.name} stages complete`}
                               aria-valuemin={0}
@@ -288,7 +291,7 @@ export default async function DashboardPage() {
                               aria-valuenow={done}
                             >
                               <div
-                                className="h-full rounded-full bg-gradient-to-r from-orange-500 to-orange-400"
+                                className="h-full rounded-full bg-gradient-to-r from-royal-700 to-royal-500"
                                 style={{
                                   width: total ? `${(done / total) * 100}%` : 0,
                                 }}
@@ -315,8 +318,8 @@ export default async function DashboardPage() {
 type Tone = "calm" | "warn" | "alert";
 
 const toneStyles: Record<Tone, { chip: string; value: string }> = {
-  calm: { chip: "bg-accent text-navy-700", value: "text-foreground" },
-  warn: { chip: "bg-orange-50 text-orange-600", value: "text-foreground" },
+  calm: { chip: "bg-royal-50 text-royal-600 ring-1 ring-royal-100", value: "text-navy-900" },
+  warn: { chip: "bg-orange-50 text-orange-600 ring-1 ring-orange-100", value: "text-navy-900" },
   alert: { chip: "bg-red-50 text-red-700", value: "text-red-800" },
 };
 
@@ -336,7 +339,7 @@ function StatTile({
   href?: string;
 }) {
   const body = (
-    <div className="surface flex h-full flex-col gap-2 p-4 transition-all duration-200 sm:p-5 [a:hover>&]:-translate-y-0.5 [a:hover>&]:shadow-card-hover">
+    <div className="surface flex h-full flex-col gap-2 bg-[radial-gradient(160px_90px_at_100%_100%,rgba(42,92,184,0.08),transparent_70%)] p-4 transition-all duration-200 sm:p-5 [a:hover>&]:-translate-y-0.5 [a:hover>&]:shadow-card-hover">
       <div className="flex items-center justify-between gap-2">
         <span className="eyebrow">{label}</span>
         <span
@@ -349,7 +352,7 @@ function StatTile({
           {icon}
         </span>
       </div>
-      <p className={cn("font-heading text-3xl font-semibold tabular-nums tracking-tight", toneStyles[tone].value)}>
+      <p className={cn("text-3xl font-bold tabular-nums tracking-tight", toneStyles[tone].value)}>
         {value}
       </p>
       <p className="text-xs text-muted-foreground">{caption}</p>
@@ -367,7 +370,7 @@ function StatTile({
 function SectionHeading({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <h2 className="font-heading text-lg font-semibold tracking-tight">{title}</h2>
+      <h2 className="text-lg font-bold tracking-tight">{title}</h2>
       {action}
     </div>
   );
