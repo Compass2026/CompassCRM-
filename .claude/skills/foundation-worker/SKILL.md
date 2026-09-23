@@ -26,6 +26,12 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   campaigns). Keyword data comes from DataForSEO.
 - **Never** apply migrations, deploy functions or touch Supabase project
   settings.
+- **Never publish a Business Profile post.** Do not call `google-ops`
+  `gbp_posts`, for any client, for any reason (Sept 23 2026 safety stop).
+  You draft GBP posts and flag them for a person; publishing waits for the
+  human approval gate (migration 0045, not built yet). If an older note or
+  a task tells you to publish posts, don't — leave the drafts and say so in
+  the evidence.
 - **`tasks.assignee_id` is the team's, not yours** (0043). It names the
   person doing a task and is independent of `owner`. Never set or clear it;
   a `CLAUDE` task never has one (the database refuses it), so a step you
@@ -76,7 +82,8 @@ That means any of:
 - pushing to the site (Build to 70%, Polish, Launch, Website Updates, a blog
   post);
 - adding a domain;
-- `google-ops` `gbp_apply`, `gbp_posts` or `gbp_qa`;
+- `google-ops` `gbp_apply` or `gbp_qa` (never `gbp_posts` — see Ground
+  rules);
 - any other write to a property the client owns.
 
 Recorded means: for **each of the nine areas**, at least one
@@ -1239,12 +1246,15 @@ with `spec.json` = `{"client_id": "…", "op": "gbp_apply", "spec": {
 "17:00"}], "hours_confirmed": false}}`. `hours_confirmed` stays `false`
 unless the listing already showed hours you copied verbatim — the
 function only writes hours when it is `true`. Then `{"op": "gbp_qa",
-"qa": [{"q", "a"}]}` with the five Q&A seeds, and `{"op": "gbp_posts",
-"posts": [{"summary", "cta_url"}]}` with the four posts. The function
-never touches the business name. `done` on `gbp_apply` → close the task
-`flagged_for_review = true`, `recommendation` = what was applied and
-what it could not resolve (`unresolved`), and note the Q&A / posts
-results in the evidence. `skipped` or `failed` (no access to the
+"qa": [{"q", "a"}]}` with the five Q&A seeds. The function never touches
+the business name. **Do not publish the four posts** — never call
+`gbp_posts` (Ground rules). They stay drafted in the GBP Spec doc, and
+`gbp_posts_drafted` stays closed with `flagged_for_review = true` so a
+person reviews them; publishing waits for the approval gate. `done` on
+`gbp_apply` → close the task `flagged_for_review = true`,
+`recommendation` = what was applied and what it could not resolve
+(`unresolved`), and note the Q&A result in the evidence, with "posts
+drafted for review, not published". `skipped` or `failed` (no access to the
 profile yet, no token) → set `gbp_apply.owner = 'TOM'` with the detail
 and the doc link in `notes`; the `google_access` task on Foundation is
 the fix. `gbp_photos` is always Tom's (someone has to shoot them): put
