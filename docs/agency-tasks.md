@@ -10,11 +10,12 @@ working as before.
 | | |
 | --- | --- |
 | Branch | `claude/agency-tasks-assignment` |
-| Based on | PR #51's head `claude/gallant-lamport-ilg6id` @ `65f7259`. It reconciles 0036–0038, adds 0007a and 0042, and puts portal invites behind `PORTAL_INVITES_ENABLED`, off by default. PR #52's base is that branch, so its diff shows only this slice. |
-| Migration | `0043_task_assignment.sql`: **new, not applied** |
-| Needs applied first | 0036 (`is_team()`, linked `team_members`), which is live. 0043 does not touch 0041 (PR #50) or 0042 (PR #51) and applies on top of either or both. |
-| Merge order | #51, then this PR. After #51 merges, retarget this PR to `main` (GitHub does it automatically if #51's branch is deleted on merge). If #50 lands first, nothing conflicts except `src/lib/database.types.ts`: regenerate it. |
-| Deploys | **Merging to `main` deploys the CRM to production through Vercel.** There's no separate deploy step for either PR. Migrations and Edge Functions are never deployed by a merge. |
+| Based on | `main` @ `568644a`, the merge of PR #51 (Sept 22). #51 is **merged and live in production**: it reconciles 0036–0038, adds the 0007a and 0042 files, and keeps portal invites off behind `PORTAL_INVITES_ENABLED`, which is unset. PR #52 targets `main`, and its diff is only this slice. |
+| Migration | `0043_task_assignment.sql`: **new, still not applied.** The rollback-only dry run against the project passed on Sept 22 (below). |
+| Needs applied first | 0036 (`is_team()`, linked `team_members`), which is live. 0043 does not touch 0041 (PR #50, still an open draft) or 0042 (on `main`, still unapplied) and applies with or without either. |
+| Merge order | #51 is done. This PR is next and independent of portal go-live. If #50 lands first, nothing conflicts except `src/lib/database.types.ts`: regenerate it. |
+| Deploys | **Merging to `main` deploys the CRM to production through Vercel.** There's no separate deploy step. Migrations and Edge Functions are never deployed by a merge. |
+| Portal | **Separate.** This PR doesn't touch the invite flag, the invite form, `portal-invite` or 0042. Portal activation follows `docs/portal-reconciliation.md`, "To go live", on its own schedule. |
 
 Live state on Sept 22, checked read-only: last recorded migration 0040; 510
 tasks, 183 open (66 TOM, 117 CLAUDE), 0 overdue. One team member. No task
@@ -106,7 +107,7 @@ These are local, fictional data (`docs/screenshots/agency-tasks/`):
 
 | Command | What | Result |
 | --- | --- | --- |
-| `npm test` | Unit and contract tests: view parsing, Central-time "today", overdue, form validation (worker fields never read from a form), `completed_at` rules, history sentences, grouping, a static check that every task action calls `requireTeamMember` before writing, and the lane rule (`canAssignLane`, `assignmentError`, plus a static check that the action, list, edit form and migration all enforce it) | 107 / 107 on the rebased branch: 101 for this slice, plus the 6 invite-flag tests from #51 |
+| `npm test` | Unit and contract tests: view parsing, Central-time "today", overdue, form validation (worker fields never read from a form), `completed_at` rules, history sentences, grouping, a static check that every task action calls `requireTeamMember` before writing, and the lane rule (`canAssignLane`, `assignmentError`, plus a static check that the action, list, edit form and migration all enforce it) | 107 / 107 on the branch rebased onto `main` @ `568644a`: 101 for this slice, plus the 6 invite-flag tests from #51 |
 | `npm run test:sandbox` | Every migration replayed into local Postgres 16, then `portal_access.test.sql` (unchanged) and the new `task_assignment.test.sql`. The new checks cover shape; team create / assign / reassign / unassign; attempts to forge `created_by` / `updated_by` / comment author; history; comment rules; attempts to move a task or point it at another client's stage or cycle; assignees that aren't team members (a portal user id, a random id); worker-created tasks (no author, worker closes them, the assignment survives, the worker still creates unassigned tasks); the `client_review` fire; portal, stranger and anon getting nothing. The CLAUDE lane (L1–L14):<br>• assigning is refused for the team and the worker, and a refused attempt writes no history<br>• a CLAUDE task can't be created with an assignee, but its other fields stay editable<br>• CLAUDE_APPROVAL, WAITING and DELEGATED stay assignable<br>• an assigned task can't move into the CLAUDE lane<br>• the worker's handover to TOM, then an assignment, both land in the history<br>Negative control: with the constraint removed, 7 of the L checks fail | 316 + 79 pass, 0 fail |
 | `npm run test:tasks-ui` | The same replay behind PostgREST, a stand-in for Supabase Auth's `/user`, `next dev` and headless Chrome. Real RLS, triggers and server actions: every view, create, inline assign, edit, comment, history names, the existing done toggle firing the worker, 390px layouts with no horizontal scroll, and a portal contact redirected to `/portal` who reads and changes nothing through the API. For the CLAUDE lane: no picker in lists, the picker disabled on the task, and a forged submit (select re-enabled in the DOM) refused by the server action with the database unchanged. A CLAUDE_APPROVAL task shows in Unassigned with a picker | 11 / 11 |
 | `tsc --noEmit`, `eslint`, `next build` | | clean (12 existing lint warnings in other files) |
@@ -127,45 +128,54 @@ Merging to `main` is the deploy: Vercel builds and ships production from
 `main` on every merge. So each step below that changes the database has to
 happen **before** the merge that needs it.
 
-1. **Merge #51 when it's ready.** That deploys the reconciled app, including
-   the read-only `/portal` routes. **Portal invites stay off**:
-   `PORTAL_INVITES_ENABLED` is unset, so the Client portal card shows
-   "Invites are switched off for now" and the invite action refuses.
-   Nothing in this slice needs 0042, the new `portal-invite` or the flag.
-   Portal go-live stays its own decision (`docs/portal-reconciliation.md`,
-   "To go live"). Don't set the flag as part of this rollout.
-2. **Retarget #52 to `main`** if GitHub hasn't done it already. Confirm the
-   diff is still only this slice.
-3. **Dry-run 0043** against the project the way earlier migrations were: one
+Already done: #51 merged as `568644a` and deployed to production (Vercel
+deployment `dpl_GNbs9u2vmqXAvzM9G2TmWZSC8NB6`, Ready). The CRM loads, and
+the Client portal card says "Invites are switched off for now". #52 was
+retargeted to `main` and rebased onto `568644a`.
+
+1. **Dry-run 0043** against the project the way earlier migrations were: one
    `execute_sql` batch ending in `raise` so it rolls back. Its verify block
    fails loudly if a policy, grant, function privilege or the CLAUDE-lane
-   constraint isn't as intended.
-4. **Apply 0043** (`apply_migration`, name `0043_task_assignment`) **before
-   merging #52.** The #51 app already in production keeps working with 0043
+   constraint isn't as intended. **Done Sept 22, passed:**
+   - All of 0043 ran against the live schema and its verify block passed.
+   - A no-op `update tasks set due_date = due_date` then ran both new
+     triggers and the existing `tasks_zz_fire_worker` on all 510 live
+     tasks: 510 updated, 0 history rows written, every `updated_by` NULL
+     (no signed-in user, so "Worker / system").
+   - The constraints validated, including the CLAUDE lane (0 assigned
+     CLAUDE tasks), with 3 policies and no `anon` access.
+   - The final `raise` rolled it all back. Afterwards: 41 recorded
+     migrations, the latest still 0040, no 0043 record, no new tables,
+     columns, indexes, functions or policies, `tasks` back to one trigger
+     and four constraints, and no worker fire.
+   - Re-run it just before applying if the schema has changed since.
+2. **Apply 0043** (`apply_migration`, name `0043_task_assignment`) **before
+   merging #52.** The app already in production (#51) keeps working with 0043
    applied. The change is additive and every existing task is unassigned,
    so the new triggers and the CLAUDE-lane constraint accept everything the
    old app writes (done toggles, stage tasks, worker updates). The old app
    simply doesn't show assignees or history yet.
-5. **Regenerate `src/lib/database.types.ts`** from the project, commit it to
+3. **Regenerate `src/lib/database.types.ts`** from the project, commit it to
    #52, and confirm the diff contains only the 0043 additions.
-6. **Merge #52.** That deploys the task screens. If this merge happened
+4. **Merge #52.** That deploys the task screens. If this merge happened
    before 0043 was applied, the new pages would error, because the columns
    they read wouldn't exist yet.
-7. Smoke test as a team member:
+5. Smoke test as a team member:
    - Assign a task to yourself, check that My work shows it, add a comment,
      and check that the history names you.
    - Check that a worker-closed task shows "Worker / system", and that a
      CLAUDE task shows "Worker runs this" with no assignee picker.
    - Check that a client's Overview card still says invites are switched
      off.
-8. Add teammates as `AGENTS.md` describes (invite in Supabase Auth, then
+6. Add teammates as `AGENTS.md` describes (invite in Supabase Auth, then
    insert a `team_members` row). They appear in every assignee picker.
 
 ## Rollback
 
 - **App (#52):** revert the #52 merge on `main` (`git revert -m 1 <merge
-  commit>`). The revert is itself a deploy. The #51 app it goes back to
-  ignores the extra columns and tables, and the worker never reads them.
+  commit>`). The revert is itself a deploy, back to the current production
+  app (`568644a`), which ignores the extra columns and tables. The worker
+  never reads them.
   Portal invites are unaffected either way: this PR doesn't touch the flag,
   the invite form or `portal-invite`.
 - **Database (0043):** revert the app first, since #52's pages read these
@@ -188,11 +198,8 @@ happen **before** the merge that needs it.
   Then remove the recorded 0043 version from
   `supabase_migrations.schema_migrations`, or add a 0044 containing the
   rollback. Nothing else depends on these objects.
-- **Reverting #51 as well:** revert #52 first, because it's built on #51.
-  Reverting #51 redeploys the older `main` app, which has no portal routes
-  or invite form at all, so invites stay unreachable. See
-  `docs/portal-reconciliation.md`, "Rollback", for what else that reopens:
-  Edge Function sources without the team check.
+- **#51 is not part of this rollback.** It's already live and independent;
+  reverting #52 leaves it, and the invites-off state, as they are.
 
 ## Decisions (Tom, Sept 22)
 
