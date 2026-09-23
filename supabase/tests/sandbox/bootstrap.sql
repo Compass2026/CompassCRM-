@@ -17,6 +17,11 @@ create role anon nologin noinherit;
 create role authenticated nologin noinherit;
 create role service_role nologin noinherit bypassrls;
 grant anon, authenticated, service_role to postgres;
+-- PostgREST's login: connects, then switches to the JWT's role. 0045 tells a
+-- person apart from the worker by session_user = 'authenticator'.
+create role authenticator login noinherit;
+grant anon, authenticated, service_role to authenticator;
+grant authenticator to postgres;
 
 grant all on database sandbox to postgres;
 grant all on schema public to postgres;

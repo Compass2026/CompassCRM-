@@ -73,55 +73,7 @@ export async function deleteContentPostAction(clientId: string, postId: string) 
   revalidatePath(`/clients/${clientId}/content`);
 }
 
-// ── Social posts ───────────────────────────────────────────────────────────
-export async function addSocialPostAction(clientId: string, form: FormData) {
-  const supabase = await createClient();
-  const { error } = await supabase.from("social_posts").insert({
-    client_id: clientId,
-    platform: (str(form, "platform") as Enums["social_platform"]) ?? "facebook",
-    copy: str(form, "copy"),
-    asset_url: str(form, "asset_url"),
-    scheduled_at: str(form, "scheduled_at"),
-    status: (str(form, "status") as Enums["social_post_status"]) ?? "idea",
-    notes: str(form, "notes"),
-  });
-  if (error) throw new Error(error.message);
-  revalidatePath(`/clients/${clientId}/social`);
-}
-
-export async function updateSocialPostAction(
-  clientId: string,
-  postId: string,
-  form: FormData
-) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("social_posts")
-    .update({
-      platform: (str(form, "platform") as Enums["social_platform"]) ?? undefined,
-      copy: str(form, "copy"),
-      asset_url: str(form, "asset_url"),
-      scheduled_at: str(form, "scheduled_at"),
-      status:
-        (str(form, "status") as Enums["social_post_status"]) ?? undefined,
-      published_url: str(form, "published_url"),
-      notes: str(form, "notes"),
-    })
-    .eq("id", postId);
-  if (error) throw new Error(error.message);
-  revalidatePath(`/clients/${clientId}/social`);
-  revalidatePath(`/clients/${clientId}/reports`);
-}
-
-export async function deleteSocialPostAction(clientId: string, postId: string) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("social_posts")
-    .delete()
-    .eq("id", postId);
-  if (error) throw new Error(error.message);
-  revalidatePath(`/clients/${clientId}/social`);
-}
+// Social posts moved to social-post-actions.ts with the review gate (0045).
 
 // ── Monthly cycles (Reports tab) ───────────────────────────────────────────
 export async function updateCycleAction(

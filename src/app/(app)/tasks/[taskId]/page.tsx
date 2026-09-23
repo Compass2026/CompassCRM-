@@ -49,6 +49,8 @@ export default async function TaskPage({ params }: { params: Promise<{ taskId: s
   if (!task) notFound();
 
   const names = new Map(members.map((m) => [m.id, m.name]));
+  // A post_review task (0045) names its post in the notes.
+  const reviewedPost = task.notes?.match(/post_id=([0-9a-f-]{36})/)?.[1] ?? null;
   const today = todayIn();
   const where = task.client_stages?.stages?.name
     ? `${task.client_stages.stages.name} (pipeline stage)`
@@ -96,6 +98,15 @@ export default async function TaskPage({ params }: { params: Promise<{ taskId: s
           {isOverdue(task, today) && <span className="text-red-700 font-medium">Overdue</span>}
         </div>
       </div>
+
+      {reviewedPost && task.clients && (
+        <Link
+          href={`/clients/${task.clients.id}/social/${reviewedPost}`}
+          className="surface block p-4 text-sm font-medium text-primary hover:underline"
+        >
+          Open the post to approve or reject it &rarr;
+        </Link>
+      )}
 
       <section className="surface p-4 sm:p-5 space-y-3">
         <TaskEditForm task={task} members={members} meId={me?.id ?? null} />

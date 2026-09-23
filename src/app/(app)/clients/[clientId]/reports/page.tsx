@@ -41,11 +41,12 @@ export default async function ReportsPage({
         .select("published_at")
         .eq("client_id", clientId)
         .eq("status", "published"),
+      // 0045: published is a publishing state, dated by when it went out.
       supabase
         .from("social_posts")
-        .select("scheduled_at")
+        .select("published_at")
         .eq("client_id", clientId)
-        .eq("status", "published"),
+        .eq("publish_status", "published"),
       loadReportMeasurements(supabase, clientId),
     ]);
 
@@ -151,8 +152,8 @@ export default async function ReportsPage({
                   {doneTasks}/{cycle.tasks.length} tasks ·{" "}
                   {countInMonth(contentPosts?.map((p) => p.published_at) ?? [], cycle.period)}{" "}
                   blog ·{" "}
-                  {countInMonth(socialPosts?.map((p) => p.scheduled_at) ?? [], cycle.period)}{" "}
-                  social marked published (scheduled month)
+                  {countInMonth(socialPosts?.map((p) => p.published_at) ?? [], cycle.period)}{" "}
+                  social published
                 </span>
               </div>
             </CardHeader>
