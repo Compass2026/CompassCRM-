@@ -44,12 +44,19 @@ go-live (`docs/portal-reconciliation.md`).
    and `src/lib/client-intelligence.ts`: ten areas scored ready / partial
    / missing with the exact fix, the intent mix, and post topics. Read-only.
 2. **Close the gaps (data, not code).** Tom approves the brand boards;
-   label the blank intents; map approved services to page URLs. Moving
-   Shewmaker's intent notes needs Tom's say-so (blueprint record).
-3. **Schema for intent and offers (migration 0044).** `keywords.intent_note`
-   for the notes, then a check constraint limiting `intent` to the four
-   values; an `offers` table (terms, start / end, source) under
-   `is_team()`.
+   label the blank intents; map approved services to page URLs.
+   Shewmaker's intent notes (blueprint record) move in 0044 at Tom's request
+   (Sept 23), verbatim, with no intent guessed.
+3. **Schema for intent and offers (migration 0044 — written, not applied).**
+   `keywords.intent_note`; the 55 Shewmaker notes move there verbatim with
+   `intent` set to NULL (never guessed); `intent` normalized on write and
+   constrained to the four values or NULL; `offers` (title, exact terms,
+   source, start / end, optional same-client service, `draft` / `confirmed`
+   / `retired`; confirmed needs both dates and a confirmer) under
+   `is_team()`. Expected on production: 547 rows, 414 intents unchanged,
+   133 NULL, 55 notes. After it is applied: regenerate types, show
+   `intent_note` in the Foundation keyword map, and count offers on the
+   Intelligence tab.
 4. **The post record (migration 0045).** One table for GBP and social
    drafts: channel, service, keyword, intent, body, CTA, assets, cited
    claim ids, status `draft → in_review → approved → published | rejected`,

@@ -24,8 +24,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   `0001_initial_schema.sql`. Supabase records each migration under a
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
-  migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**). `scripts/test-portal-sandbox.sh` replays all migrations into
+  migration that was missing a file — never apply it; `0042` and `0044` are
+  written but **not yet applied**). `scripts/test-portal-sandbox.sh` replays all migrations into
   a local Postgres shaped like the project and runs the team / anon / portal
   access tests — run it after any migration that touches policies, grants,
   security-definer functions or `portal_*` views.
@@ -841,8 +841,13 @@ intent (navigational / informational / commercial / transactional), and lists
 post topics (approved service + page + intent). A post may cite only
 `sourced`-with-a-source or `confirmed` claims, never `unverified`; a person
 approves before anything publishes; posts are never sold as an SEO guarantee.
-Offers and a post record with a review gate are the next schema pieces
-(0044, 0045 — not written yet).
+**0044** (written, **not applied**; `tests/keyword-intent-offers-migration.test.mjs`)
+moves notes out of `keywords.intent` into `keywords.intent_note` verbatim (55
+Shewmaker rows), normalizes intent on write and constrains it to the four
+intents or NULL, and adds team-only `offers` (exact terms, source, dates; a
+confirmed offer needs both dates and a confirmer). Apply it before merging its
+PR: the worker skill now writes notes to `intent_note`. The post record with a
+review gate is 0045 (not written).
 
 ## Client portal (Phase 5, Sept 17 2026)
 
