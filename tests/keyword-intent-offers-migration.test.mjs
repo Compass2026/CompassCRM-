@@ -178,7 +178,7 @@ test("0044 is all-or-nothing: a tampered move or a second run changes nothing", 
   assert.deepEqual((await db.query("select intent, intent_note from keywords where id = $1", [noteId])).rows, after.rows, "second run touched nothing");
 });
 
-test("offers: exact terms and a source, confirmed only with dates and a confirmer, same-client service, team-only", async (t) => {
+test("offers: exact terms and a source always; confirmed needs a confirmer, not dates; same-client service; team-only", async (t) => {
   const db = await freshDb(t);
   await db.exec(migration);
   const svc = (await db.query(`insert into services (client_id, name) values ('${OTHER}', 'Roof repair') returning id`)).rows[0].id;
@@ -192,8 +192,21 @@ test("offers: exact terms and a source, confirmed only with dates and a confirme
   await db.exec(`set role authenticated; set request.jwt.claim.sub = '${TEAM}'`);
   const draft = (await offer({ service_id: svc })).rows[0];
   assert.equal(draft.status, "draft");
-  const confirmed = (await offer({ status: "confirmed", starts_on: "2026-10-01", ends_on: "2026-10-31", confirmed_by: "Owner, by email", confirmed_on: "2026-09-21" })).rows[0];
+  const confirmer = { status: "confirmed", confirmed_by: "Owner, by email", confirmed_on: "2026-09-21" };
+  const confirmed = (await offer({ ...confirmer, starts_on: "2026-10-01", ends_on: "2026-10-31" })).rows[0];
   assert.equal(confirmed.status, "confirmed");
+  // Standing offers have no set expiry: confirmed with no dates, or with
+  // only one of them, is a legitimate record. Channel date rules (a GBP
+  // Offer post's window) belong to the publishing layer, not here.
+  for (const [patch, why] of [
+    [{ title: "Free estimates", terms: "Free estimates on every roof replacement" }, "no dates"],
+    [{ title: "Military discount", terms: "10% off labor for active-duty military and veterans", starts_on: "2026-01-01" }, "start only"],
+    [{ title: "Financing", terms: "0% financing for 12 months on approved credit", ends_on: "2026-12-31" }, "end only"],
+    [{ title: "Same day", terms: "Same-day inspection", starts_on: "2026-10-01", ends_on: "2026-10-01" }, "one-day window"],
+  ]) {
+    const row = (await offer({ ...confirmer, ...patch })).rows[0];
+    assert.equal(row.status, "confirmed", why);
+  }
 
   for (const [patch, why] of [
     [{ terms: "  " }, "blank terms"],
@@ -202,7 +215,12 @@ test("offers: exact terms and a source, confirmed only with dates and a confirme
     [{ status: "live" }, "unknown status"],
     [{ starts_on: "2026-10-31", ends_on: "2026-10-01" }, "ends before it starts"],
     [{ status: "confirmed", starts_on: "2026-10-01", ends_on: "2026-10-31" }, "confirmed without a confirmer"],
-    [{ status: "confirmed", confirmed_by: "Owner", confirmed_on: "2026-09-21", ends_on: "2026-10-31" }, "confirmed without a start"],
+    [{ status: "confirmed" }, "confirmed standing offer without a confirmer"],
+    [{ status: "confirmed", confirmed_by: "Owner" }, "confirmed without a confirmation date"],
+    [{ status: "confirmed", confirmed_by: "  ", confirmed_on: "2026-09-21" }, "confirmed by a blank name"],
+    [{ ...confirmer, terms: " " }, "confirmed with blank terms"],
+    [{ ...confirmer, source: "" }, "confirmed without a source"],
+    [{ ...confirmer, starts_on: "2026-10-31", ends_on: "2026-10-01" }, "confirmed, ends before it starts"],
     [{ service_id: otherSvc }, "another client's service"],
   ]) await assert.rejects(offer(patch), (e) => e.code === "23514", why);
 
@@ -216,5 +234,5 @@ test("offers: exact terms and a source, confirmed only with dates and a confirme
   await db.exec("reset role; set role anon");
   await assert.rejects(db.query("select * from offers"), /permission denied/);
   await db.exec("reset role");
-  assert.equal((await db.query("select count(*)::int n from offers")).rows[0].n, 2);
+  assert.equal((await db.query("select count(*)::int n from offers")).rows[0].n, 6);
 });

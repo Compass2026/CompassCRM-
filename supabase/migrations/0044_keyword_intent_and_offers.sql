@@ -19,10 +19,16 @@
 --    transactional or NULL. The worker's Keyword Research step already
 --    writes DataForSEO's labels, which are exactly these four.
 -- 4. offers — the minimum a post needs before it may mention an offer:
---    the exact terms as the client states them, where they came from, the
---    dates, an optional service, and the client's confirmation. A
---    confirmed offer must carry both dates and who confirmed it; nothing
---    here decides which offers a post may use — that rule lands with 0045.
+--    the exact terms as the client states them, where they came from, an
+--    optional service, optional dates, and the client's confirmation. A
+--    confirmed offer must carry who confirmed it and when (terms and
+--    source are required on every offer). Dates stay optional: standing
+--    offers — free estimates, free inspections, military discounts,
+--    financing, referral programs — have no set expiry. When both dates are
+--    present the end cannot precede the start. Channel rules such as a GBP
+--    Offer post needing a date window belong to the publishing layer
+--    (0045 and later), not to this record; nothing here decides which
+--    offers a post may use.
 --
 -- Access is team-only (is_team(), 0036). The portal (0037) reads neither
 -- column nor table: no portal_* view references keywords.intent_note or
@@ -98,6 +104,8 @@ create table offers (
   terms text not null,
   -- Where the offer comes from: a client email, their website URL, a flyer.
   source text not null,
+  -- Optional: a standing offer has no window. Channel-specific date rules
+  -- (a GBP Offer post needs one) are enforced where publishing happens.
   starts_on date,
   ends_on date,
   status text not null default 'draft',
@@ -111,17 +119,16 @@ create table offers (
   constraint offers_source_present check (btrim(source) <> ''),
   constraint offers_status_known check (status in ('draft', 'confirmed', 'retired')),
   constraint offers_dates_ordered check (starts_on is null or ends_on is null or ends_on >= starts_on),
-  -- A confirmed offer is one a post could state, so it needs its window and
-  -- who confirmed it (Google's offer posts need a start and an end too).
+  -- A confirmed offer is one a post could state, so it records who
+  -- confirmed it and when. Terms and source are required on every row.
   constraint offers_confirmed_complete check (
     status <> 'confirmed'
-    or (starts_on is not null and ends_on is not null
-        and confirmed_by is not null and btrim(confirmed_by) <> '' and confirmed_on is not null)
+    or (confirmed_by is not null and btrim(confirmed_by) <> '' and confirmed_on is not null)
   )
 );
 create index offers_client_status on offers (client_id, status);
 comment on table offers is
-  'Client offers a post may mention once confirmed: exact terms, source, dates. Team-only.';
+  'Client offers a post may mention once confirmed: exact terms, source, optional dates (standing offers have none). Team-only.';
 
 create trigger offers_updated_at before update on offers
   for each row execute function set_updated_at();

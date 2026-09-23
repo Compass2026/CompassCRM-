@@ -844,8 +844,11 @@ approves before anything publishes; posts are never sold as an SEO guarantee.
 **0044** (written, **not applied**; `tests/keyword-intent-offers-migration.test.mjs`)
 moves notes out of `keywords.intent` into `keywords.intent_note` verbatim (55
 Shewmaker rows), normalizes intent on write and constrains it to the four
-intents or NULL, and adds team-only `offers` (exact terms, source, dates; a
-confirmed offer needs both dates and a confirmer). Apply it before merging its
+intents or NULL, and adds team-only `offers` (exact terms and source always;
+dates optional, since standing offers such as free estimates or military
+discounts have no expiry, and an end never precedes a start; a confirmed offer
+needs who confirmed it and when). Channel date rules, such as a GBP Offer
+post's window, belong to the publishing layer. Apply it before merging its
 PR: the worker skill now writes notes to `intent_note`. The post record with a
 review gate is 0045 (not written).
 

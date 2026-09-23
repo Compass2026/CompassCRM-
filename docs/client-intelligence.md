@@ -51,9 +51,12 @@ go-live (`docs/portal-reconciliation.md`).
    `keywords.intent_note`; the 55 Shewmaker notes move there verbatim with
    `intent` set to NULL (never guessed); `intent` normalized on write and
    constrained to the four values or NULL; `offers` (title, exact terms,
-   source, start / end, optional same-client service, `draft` / `confirmed`
-   / `retired`; confirmed needs both dates and a confirmer) under
-   `is_team()`. Expected on production: 547 rows, 414 intents unchanged,
+   source, optional start / end, optional same-client service, `draft` /
+   `confirmed` / `retired`; confirmed needs who confirmed it and when) under
+   `is_team()`. Dates stay optional because standing offers (free
+   estimates, free inspections, military discounts, financing, referral
+   programs) have no set expiry; when both are present the end cannot
+   precede the start. Expected on production: 547 rows, 414 intents unchanged,
    133 NULL, 55 notes. After it is applied: regenerate types, show
    `intent_note` in the Foundation keyword map, and count offers on the
    Intelligence tab.
@@ -74,6 +77,9 @@ go-live (`docs/portal-reconciliation.md`).
    recording the Google post id; social published by hand first (mark
    published with the URL). Needs **Connect Google** (Settings) and the
    client's Business Profile manager grant.
+   Channel rules live here, not on the Client Intelligence record: a GBP
+   Offer post needs a start and end date, and that is checked when an
+   offer post is published, not when the offer is recorded.
 8. **Pilot and feedback.** One client, four GBP posts a month for a month;
    the scorecard records posts published, profile views and calls as
    measured values. Candidate: **Pensacola Equipment Rentals**, 8 of 9
