@@ -63,6 +63,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "alerts_keyword_id_fkey"
             columns: ["keyword_id"]
             isOneToOne: false
@@ -162,6 +169,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "brand_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       brand_boards: {
@@ -218,6 +232,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "brand_boards_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       brand_colors: {
@@ -257,6 +278,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_colors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -304,6 +332,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_fonts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -362,6 +397,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "change_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       claims: {
@@ -403,6 +445,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "claims_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       client_access: {
@@ -436,6 +485,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_access_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -506,6 +562,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_brands_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       client_contacts: {
@@ -544,6 +607,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       client_pipelines: {
@@ -577,6 +647,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
           {
@@ -625,6 +702,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -695,10 +779,10 @@ export type Database = {
           dba: string | null
           drive_folders: Json | null
           drive_root_url: string | null
-          gsc_property: string | null
+          ga4_property: string | null
           gbp_location: string | null
           gbp_spec: Json | null
-          ga4_property: string | null
+          gsc_property: string | null
           id: string
           industry: string | null
           kickoff_at: string | null
@@ -724,10 +808,10 @@ export type Database = {
           dba?: string | null
           drive_folders?: Json | null
           drive_root_url?: string | null
-          gsc_property?: string | null
+          ga4_property?: string | null
           gbp_location?: string | null
           gbp_spec?: Json | null
-          ga4_property?: string | null
+          gsc_property?: string | null
           id?: string
           industry?: string | null
           kickoff_at?: string | null
@@ -753,10 +837,10 @@ export type Database = {
           dba?: string | null
           drive_folders?: Json | null
           drive_root_url?: string | null
-          gsc_property?: string | null
+          ga4_property?: string | null
           gbp_location?: string | null
           gbp_spec?: Json | null
-          ga4_property?: string | null
+          gsc_property?: string | null
           id?: string
           industry?: string | null
           kickoff_at?: string | null
@@ -825,6 +909,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "content_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "content_posts_keyword_id_fkey"
             columns: ["keyword_id"]
             isOneToOne: false
@@ -876,6 +967,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "decisions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "decisions_task_id_fkey"
             columns: ["task_id"]
             isOneToOne: false
@@ -918,6 +1016,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliverables_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
           {
@@ -987,7 +1092,53 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      foundation_releases: {
+        Row: {
+          accepted_on: string | null
+          created_at: string
+          documents: Json
+          handoff_url: string | null
+          id: string
+          is_current: boolean
+          notes: string | null
+          source_repo: string
+          source_sha: string
+          version: string
+        }
+        Insert: {
+          accepted_on?: string | null
+          created_at?: string
+          documents?: Json
+          handoff_url?: string | null
+          id?: string
+          is_current?: boolean
+          notes?: string | null
+          source_repo: string
+          source_sha: string
+          version: string
+        }
+        Update: {
+          accepted_on?: string | null
+          created_at?: string
+          documents?: Json
+          handoff_url?: string | null
+          id?: string
+          is_current?: boolean
+          notes?: string | null
+          source_repo?: string
+          source_sha?: string
+          version?: string
+        }
+        Relationships: []
       }
       grid_configs: {
         Row: {
@@ -1146,6 +1297,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "gsc_snapshots_keyword_id_fkey"
             columns: ["keyword_id"]
             isOneToOne: false
@@ -1260,6 +1418,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "keywords_service_id_fkey"
             columns: ["service_id"]
             isOneToOne: false
@@ -1360,6 +1525,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "locations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       money_keywords: {
@@ -1402,6 +1574,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "money_keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "money_keywords_keyword_id_fkey"
             columns: ["keyword_id"]
             isOneToOne: true
@@ -1418,9 +1597,9 @@ export type Database = {
           notes: string | null
           period: string
           rank_summary: Json | null
-          summary: Json | null
           report_url: string | null
           status: Database["public"]["Enums"]["cycle_status"]
+          summary: Json | null
         }
         Insert: {
           client_id: string
@@ -1429,9 +1608,9 @@ export type Database = {
           notes?: string | null
           period: string
           rank_summary?: Json | null
-          summary?: Json | null
           report_url?: string | null
           status?: Database["public"]["Enums"]["cycle_status"]
+          summary?: Json | null
         }
         Update: {
           client_id?: string
@@ -1440,9 +1619,9 @@ export type Database = {
           notes?: string | null
           period?: string
           rank_summary?: Json | null
-          summary?: Json | null
           report_url?: string | null
           status?: Database["public"]["Enums"]["cycle_status"]
+          summary?: Json | null
         }
         Relationships: [
           {
@@ -1450,6 +1629,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -1500,6 +1686,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "page_groups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
           {
@@ -1566,6 +1759,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
           {
@@ -1647,6 +1847,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "placeholders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "placeholders_client_request_id_fkey"
             columns: ["client_request_id"]
             isOneToOne: false
@@ -1713,6 +1920,67 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_users: {
+        Row: {
+          auth_user_id: string | null
+          client_id: string
+          created_at: string
+          email: string
+          id: string
+          invited_at: string | null
+          invited_by: string | null
+          is_active: boolean
+          last_seen_at: string | null
+          name: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          client_id: string
+          created_at?: string
+          email: string
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_active?: boolean
+          last_seen_at?: string | null
+          name?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          client_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_active?: boolean
+          last_seen_at?: string | null
+          name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       rank_runs: {
@@ -1752,6 +2020,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rank_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -1866,6 +2141,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "services_parent_service_id_fkey"
             columns: ["parent_service_id"]
             isOneToOne: false
@@ -1881,132 +2163,93 @@ export type Database = {
           },
         ]
       }
-      foundation_releases: {
-        Row: {
-          id: string
-          version: string
-          source_repo: string
-          source_sha: string
-          accepted_on: string | null
-          handoff_url: string | null
-          documents: Json
-          is_current: boolean
-          notes: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          version: string
-          source_repo: string
-          source_sha: string
-          accepted_on?: string | null
-          handoff_url?: string | null
-          documents?: Json
-          is_current?: boolean
-          notes?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          version?: string
-          source_repo?: string
-          source_sha?: string
-          accepted_on?: string | null
-          handoff_url?: string | null
-          documents?: Json
-          is_current?: boolean
-          notes?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
       sites: {
         Row: {
+          audit: Json | null
+          audit_checked_at: string | null
+          branch: string | null
+          build_brief: Json | null
+          build_brief_at: string | null
           client_id: string
+          content_adapter: string | null
+          content_paths: Json | null
           controlled_by_compass: boolean
           created_at: string
           domain_constant: string | null
+          foundation_sha: string | null
+          foundation_version: string | null
+          ga4_measurement_id: string | null
           id: string
+          last_commit_url: string | null
+          last_pushed_at: string | null
           launched_at: string | null
+          preview_branch: string | null
+          quality: Json | null
+          quality_checked_at: string | null
           repo_url: string | null
           stack: Database["public"]["Enums"]["site_stack"]
           staging_url: string | null
           url: string | null
           vercel_project: string | null
-          quality: Json | null
-          quality_checked_at: string | null
-          last_pushed_at: string | null
-          last_commit_url: string | null
-          branch: string | null
-          content_paths: Json | null
-          audit: Json | null
-          audit_checked_at: string | null
-          ga4_measurement_id: string | null
           work_mode: Database["public"]["Enums"]["website_work_mode"] | null
-          preview_branch: string | null
-          content_adapter: string | null
-          foundation_version: string | null
-          foundation_sha: string | null
-          build_brief: Json | null
-          build_brief_at: string | null
         }
         Insert: {
+          audit?: Json | null
+          audit_checked_at?: string | null
+          branch?: string | null
+          build_brief?: Json | null
+          build_brief_at?: string | null
           client_id: string
+          content_adapter?: string | null
+          content_paths?: Json | null
           controlled_by_compass?: boolean
           created_at?: string
           domain_constant?: string | null
+          foundation_sha?: string | null
+          foundation_version?: string | null
+          ga4_measurement_id?: string | null
           id?: string
+          last_commit_url?: string | null
+          last_pushed_at?: string | null
           launched_at?: string | null
+          preview_branch?: string | null
+          quality?: Json | null
+          quality_checked_at?: string | null
           repo_url?: string | null
           stack?: Database["public"]["Enums"]["site_stack"]
           staging_url?: string | null
           url?: string | null
           vercel_project?: string | null
-          quality?: Json | null
-          quality_checked_at?: string | null
-          last_pushed_at?: string | null
-          last_commit_url?: string | null
-          branch?: string | null
-          content_paths?: Json | null
-          audit?: Json | null
-          audit_checked_at?: string | null
-          ga4_measurement_id?: string | null
           work_mode?: Database["public"]["Enums"]["website_work_mode"] | null
-          preview_branch?: string | null
-          content_adapter?: string | null
-          foundation_version?: string | null
-          foundation_sha?: string | null
-          build_brief?: Json | null
-          build_brief_at?: string | null
         }
         Update: {
+          audit?: Json | null
+          audit_checked_at?: string | null
+          branch?: string | null
+          build_brief?: Json | null
+          build_brief_at?: string | null
           client_id?: string
+          content_adapter?: string | null
+          content_paths?: Json | null
           controlled_by_compass?: boolean
           created_at?: string
           domain_constant?: string | null
+          foundation_sha?: string | null
+          foundation_version?: string | null
+          ga4_measurement_id?: string | null
           id?: string
+          last_commit_url?: string | null
+          last_pushed_at?: string | null
           launched_at?: string | null
+          preview_branch?: string | null
+          quality?: Json | null
+          quality_checked_at?: string | null
           repo_url?: string | null
           stack?: Database["public"]["Enums"]["site_stack"]
           staging_url?: string | null
           url?: string | null
           vercel_project?: string | null
-          quality?: Json | null
-          quality_checked_at?: string | null
-          last_pushed_at?: string | null
-          last_commit_url?: string | null
-          branch?: string | null
-          content_paths?: Json | null
-          audit?: Json | null
-          audit_checked_at?: string | null
-          ga4_measurement_id?: string | null
           work_mode?: Database["public"]["Enums"]["website_work_mode"] | null
-          preview_branch?: string | null
-          content_adapter?: string | null
-          foundation_version?: string | null
-          foundation_sha?: string | null
-          build_brief?: Json | null
-          build_brief_at?: string | null
         }
         Relationships: [
           {
@@ -2014,6 +2257,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -2058,6 +2308,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -2114,6 +2371,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
           {
@@ -2211,6 +2475,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "stripe_customers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
         ]
       }
       stripe_events: {
@@ -2283,6 +2554,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -2408,6 +2686,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tasks_client_stage_id_fkey"
             columns: ["client_stage_id"]
             isOneToOne: false
@@ -2449,25 +2734,31 @@ export type Database = {
       }
       worker_fires: {
         Row: {
+          attempt: number
           client_id: string | null
           created_at: string
           id: number
           reason: string
           request_id: number | null
+          retry_of: number | null
         }
         Insert: {
+          attempt?: number
           client_id?: string | null
           created_at?: string
-          id?: number
+          id?: never
           reason: string
           request_id?: number | null
+          retry_of?: number | null
         }
         Update: {
+          attempt?: number
           client_id?: string | null
           created_at?: string
-          id?: number
+          id?: never
           reason?: string
           request_id?: number | null
+          retry_of?: number | null
         }
         Relationships: [
           {
@@ -2477,31 +2768,318 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "worker_fires_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "worker_fires_retry_of_fkey"
+            columns: ["retry_of"]
+            isOneToOne: false
+            referencedRelation: "worker_fires"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
     Views: {
-      [_ in never]: never
+      portal_client: {
+        Row: {
+          city: string | null
+          id: string | null
+          launched_at: string | null
+          name: string | null
+          state: string | null
+          status: string | null
+          website_url: string | null
+        }
+        Insert: {
+          city?: string | null
+          id?: string | null
+          launched_at?: string | null
+          name?: string | null
+          state?: string | null
+          status?: never
+          website_url?: string | null
+        }
+        Update: {
+          city?: string | null
+          id?: string | null
+          launched_at?: string | null
+          name?: string | null
+          state?: string | null
+          status?: never
+          website_url?: string | null
+        }
+        Relationships: []
+      }
+      portal_progress: {
+        Row: {
+          client_id: string | null
+          completed_at: string | null
+          pipeline: string | null
+          pipeline_order: number | null
+          stage: string | null
+          stage_order: number | null
+          status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_rankings: {
+        Row: {
+          checked_at: string | null
+          city: string | null
+          client_id: string | null
+          is_money: boolean | null
+          keyword: string | null
+          position: number | null
+          previous_position: number | null
+          result_type: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_reports: {
+        Row: {
+          client_id: string | null
+          completed_at: string | null
+          period: string | null
+          report_url: string | null
+          status: string | null
+          summary: Json | null
+        }
+        Insert: {
+          client_id?: string | null
+          completed_at?: string | null
+          period?: string | null
+          report_url?: string | null
+          status?: never
+          summary?: Json | null
+        }
+        Update: {
+          client_id?: string | null
+          completed_at?: string | null
+          period?: string | null
+          report_url?: string | null
+          status?: never
+          summary?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_search_performance: {
+        Row: {
+          avg_position: number | null
+          clicks: number | null
+          client_id: string | null
+          impressions: number | null
+          period_end: string | null
+          period_start: string | null
+          queries: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_search_queries: {
+        Row: {
+          avg_position: number | null
+          clicks: number | null
+          client_id: string | null
+          ctr: number | null
+          impressions: number | null
+          page: string | null
+          period_end: string | null
+          period_start: string | null
+          query: string | null
+        }
+        Insert: {
+          avg_position?: number | null
+          clicks?: number | null
+          client_id?: string | null
+          ctr?: number | null
+          impressions?: number | null
+          page?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          query?: string | null
+        }
+        Update: {
+          avg_position?: number | null
+          clicks?: number | null
+          client_id?: string | null
+          ctr?: number | null
+          impressions?: number | null
+          page?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          query?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_site: {
+        Row: {
+          client_id: string | null
+          last_pushed_at: string | null
+          launched_at: string | null
+          staging_url: string | null
+          url: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          last_pushed_at?: string | null
+          launched_at?: string | null
+          staging_url?: string | null
+          url?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          last_pushed_at?: string | null
+          launched_at?: string | null
+          staging_url?: string | null
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_work_log: {
+        Row: {
+          at: string | null
+          client_id: string | null
+          detail: string | null
+          kind: string | null
+          label: string | null
+          url: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined
       }
+      converge_client: { Args: { p_client_id: string }; Returns: boolean }
       create_monthly_cycles: { Args: { p_period?: string }; Returns: number }
       create_stage_tasks: {
         Args: { p_client_pipeline_id: string }
         Returns: number
       }
+      create_weekly_blog_tasks: { Args: never; Returns: number }
+      fire_foundation_worker: {
+        Args: { p_client_id: string; p_reason: string }
+        Returns: undefined
+      }
+      fire_monthly_reporting: { Args: { p_period?: string }; Returns: number }
+      fire_website_updates: { Args: { p_period?: string }; Returns: number }
       foundation_complete: { Args: { p_client_id: string }; Returns: boolean }
       get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
-      secret_present: { Args: { secret_name: string }; Returns: boolean }
-      set_secret: { Args: { secret_name: string; secret_value: string }; Returns: undefined }
+      is_team: { Args: never; Returns: boolean }
       mark_past_due_subscriptions: { Args: never; Returns: undefined }
+      normalize_tracked_keywords: {
+        Args: { p_client_id: string; p_target?: number }
+        Returns: number
+      }
+      portal_client_id: { Args: never; Returns: string }
+      portal_seen: { Args: never; Returns: undefined }
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }
         Returns: number
+      }
+      retry_failed_fires: { Args: never; Returns: number }
+      secret_present: { Args: { secret_name: string }; Returns: boolean }
+      set_secret: {
+        Args: { secret_name: string; secret_value: string }
+        Returns: undefined
       }
     }
     Enums: {
@@ -2581,12 +3159,16 @@ export type Database = {
         | "reporting"
       placeholder_type: "image" | "claim" | "fact" | "project"
       rank_result_type: "organic" | "map_pack"
-      rank_source: "brightlocal_report" | "brightlocal_live" | "csv" | "manual"
+      rank_source:
+        | "brightlocal_report"
+        | "brightlocal_live"
+        | "csv"
+        | "manual"
+        | "dataforseo"
       run_status: "pending" | "running" | "complete" | "failed"
       run_trigger: "cron" | "manual"
       service_page_type: "service" | "hub"
       site_stack: "astro" | "nextjs" | "other"
-      website_work_mode: "new_build" | "upgrade_existing" | "client_retains"
       social_account_status: "connected" | "expired" | "manual_only"
       social_platform: "facebook" | "instagram" | "linkedin" | "x" | "tiktok"
       social_post_status:
@@ -2605,6 +3187,7 @@ export type Database = {
       task_status: "open" | "in_progress" | "blocked" | "done"
       taxonomy_status: "proposed" | "approved" | "retired"
       team_role: "admin" | "member"
+      website_work_mode: "new_build" | "upgrade_existing" | "client_retains"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2813,7 +3396,13 @@ export const Constants = {
       ],
       placeholder_type: ["image", "claim", "fact", "project"],
       rank_result_type: ["organic", "map_pack"],
-      rank_source: ["brightlocal_report", "brightlocal_live", "csv", "manual"],
+      rank_source: [
+        "brightlocal_report",
+        "brightlocal_live",
+        "csv",
+        "manual",
+        "dataforseo",
+      ],
       run_status: ["pending", "running", "complete", "failed"],
       run_trigger: ["cron", "manual"],
       service_page_type: ["service", "hub"],
@@ -2838,6 +3427,7 @@ export const Constants = {
       task_status: ["open", "in_progress", "blocked", "done"],
       taxonomy_status: ["proposed", "approved", "retired"],
       team_role: ["admin", "member"],
+      website_work_mode: ["new_build", "upgrade_existing", "client_retains"],
     },
   },
 } as const

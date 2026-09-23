@@ -96,6 +96,9 @@ Deno.serve(async (req) => {
     const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
     const { data: userData } = await supabase.auth.getUser(jwt);
     if (!userData?.user) return Response.json({ error: "unauthorized" }, { status: 401 });
+    // Signed in is not enough once clients have portal logins: team only.
+    const { data: member } = await supabase.from("team_members").select("id").eq("auth_user_id", userData.user.id).maybeSingle();
+    if (!member) return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
   const body = await req.json().catch(() => ({}));
@@ -170,7 +173,7 @@ Deno.serve(async (req) => {
     };
   };
 
-  // ── post ────────────────────────────────────────────────────────────────
+  // ── post ────────────────────────────────────────────────────────────────────
   if (mode === "post") {
     let clientQuery = supabase
       .from("clients")
@@ -247,7 +250,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true, mode, posted }, { status: 200 });
   }
 
-  // ── collect ─────────────────────────────────────────────────────────────
+  // ── collect ─────────────────────────────────────────────────────────────────
   const { ok, status, json } = await dfs("/tasks_ready");
   if (!ok || !json) return Response.json({ error: `tasks_ready ${status}` }, { status: 502 });
   const ready: { id: string; tag?: string }[] = json.tasks?.[0]?.result ?? [];

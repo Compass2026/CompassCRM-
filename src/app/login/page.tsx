@@ -50,6 +50,8 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
+        // Existing accounts only: the link must never create a sign-in.
+        shouldCreateUser: false,
         emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });

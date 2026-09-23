@@ -21,12 +21,31 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 - **Schema:** `supabase/migrations/` mirrors what is applied to the remote
   project via the Supabase MCP. Enrollment / convergence / monthly-cycle
   automations live in Postgres triggers and functions — see
-  `0001_initial_schema.sql`.
+  `0001_initial_schema.sql`. Supabase records each migration under a
+  timestamp version; `docs/portal-reconciliation.md` maps every file to its
+  recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
+  migration that was missing a file — never apply it; `0042` is written but
+  **not yet applied**). `scripts/test-portal-sandbox.sh` replays all migrations into
+  a local Postgres shaped like the project and runs the team / anon / portal
+  access tests — run it after any migration that touches policies, grants,
+  security-definer functions or `portal_*` views.
 - **Auth:** internal team only. Password sign-in is the primary path with a
   magic-link fallback (`src/app/login/page.tsx`); the built-in Supabase mailer
   rate-limits aggressively, so custom SMTP via Resend is the intended fix.
-  RLS is enabled everywhere with a blanket authenticated policy; the Phase 5
-  client portal only adds client-scoped policies.
+  Magic links never create accounts (`shouldCreateUser: false`). RLS is
+  enabled everywhere and every team policy reads `is_team()` (migration
+  0036) — a sign-in whose `auth.uid()` is not on `team_members` sees
+  nothing; the app layout sends a portal contact to `/portal` and signs
+  anyone else out via `/auth/signout`. Sign-ups are
+  disabled in Supabase Auth; to add a teammate, invite them in Supabase Auth,
+  then insert a `team_members` row with that email (a trigger links
+  `auth_user_id`). **New tables
+  must use `using ((select is_team())) with check ((select is_team()))`,
+  never `using (true)`**, and new security-definer functions must be revoked
+  from `public, anon, authenticated`. Edge Functions that accept a JWT also
+  require the user to be on `team_members` (403 otherwise); `x-cron-secret`
+  callers are unaffected. The Phase 5 client portal adds client-scoped
+  policies alongside these.
 - **Secrets** live in Supabase Vault, never in the repo, and are read by Edge
   Functions through the service-role-only `get_secret()` function:
   `BRIGHTLOCAL_API_KEY`, `GSC_CLIENT_ID` / `GSC_CLIENT_SECRET` /
@@ -766,6 +785,56 @@ GitHub connectors). To turn it on, add to Vault:
 Verified on Sept 11 2026 with no secrets (both steps `skipped`, 200) and with
 deliberately bad ones (both `failed` with the upstream error, 502, no tasks
 closed).
+
+## Client portal (Phase 5, Sept 17 2026)
+
+Migrations 0037 + 0038, routes under `src/app/portal/`. Read-only in v1:
+rankings, search traffic, a work log, monthly reports and where the work
+stands. No billing, no approvals, no uploads yet.
+
+- **The boundary is views, not policies.** RLS cannot hide a column, so the
+  portal never touches a base table: it reads `portal_client`,
+  `portal_progress`, `portal_rankings`, `portal_search_performance`,
+  `portal_search_queries`, `portal_work_log`, `portal_reports` and
+  `portal_site`, each filtered by `portal_client_id()` and carrying only
+  client-safe columns. The views run as their owner, so **the WHERE clause in
+  each view is the security boundary** — a new portal view must filter by
+  `portal_client_id()`, and 0037's verify block refuses the migration if one
+  does not. Base tables stay team-only (0036), so anything not named here is
+  unreachable: tasks, worker fires, billing, brand internals, other clients.
+- **Grants matter as much as the filter.** Supabase grants ALL on new objects
+  in `public` to anon and authenticated; a simple view is auto-updatable and a
+  write through it runs as the view's owner, bypassing RLS. Every portal view
+  is `revoke all … from public, anon, authenticated` then `grant select to
+  authenticated`, and the verify block fails on anything else.
+- **`portal_users`** is one row per client contact (unique by email), linked to
+  `auth.users` by a trigger, with a second trigger refusing any address that
+  belongs to a team member. `portal_client_id()` reads it. The work log shows
+  approved `change_log` rows and published `content_posts` only — never
+  `reasoning`, `evidence` or anything still `proposed`.
+- **Routing:** the CRM layout sends a non-team sign-in to `/portal` (or to
+  `/auth/signout` if they are neither), and the portal layout sends a team
+  member back to `/`. `portal_seen()` (0038) stamps `last_seen_at` — the one
+  write a portal user may make.
+- **Invites are off by default:** the server-side flag
+  `PORTAL_INVITES_ENABLED` must be exactly `true` in the Vercel deployment's
+  environment, or the Send invite form is replaced by a notice and
+  `invitePortalUserAction` refuses before calling anything
+  (`src/lib/portal-invites.ts`). Merging to `main` deploys the app, so this
+  is what keeps invites closed until the go-live steps in
+  `docs/portal-reconciliation.md` are done. Revoke is never gated.
+- **Invites:** `portal-invite` Edge Function (team JWT only) saves the
+  `portal_users` row, sends the email (first invite, re-sent invite, or a
+  magic link for a returning contact) and links `auth_user_id` on that row,
+  reporting success only once the link is saved; the Overview tab's **Client
+  portal** card invites and revokes. A contact belongs to one client: an
+  address or sign-in already on another client is refused (409), and 0042
+  enforces one active client per sign-in in the database. The handler is
+  `handler.ts`, tested by `tests/portal-invite-handler.test.mjs`. **The
+  deployed v1 predates this** (it never linked first-time invitees and its
+  re-invites sent nothing) — deploy it before inviting anyone. Supabase's built-in mailer allows a couple of messages
+  an hour, so **custom SMTP (Resend, `send.compassmarketing.ai` is verified)
+  must be set in Auth → Emails before inviting real clients.**
 
 ## Known state / open items (as of Sept 13 2026)
 
