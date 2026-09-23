@@ -70,7 +70,7 @@ type Enrollment = {
 };
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs w-full";
+  "field w-full";
 
 export function PipelineBoard({
   clientId,
@@ -124,7 +124,7 @@ export function PipelineBoard({
           (a, b) => (a.stages?.sort_order ?? 0) - (b.stages?.sort_order ?? 0)
         );
         return (
-          <div key={enrollment.id} className="space-y-2">
+          <div key={enrollment.id} className="surface p-4 sm:p-5 space-y-3">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold">{enrollment.pipelines?.name}</h2>
               {enrollment.status === "complete" && (
@@ -309,7 +309,7 @@ export function PipelineBoard({
                     className="flex gap-2 pt-1"
                   >
                     <Input name="title" placeholder="New task" required className="h-8" />
-                    <select name="owner" defaultValue="TOM" className="h-8 rounded-md border border-input bg-transparent px-2 text-xs">
+                    <select name="owner" defaultValue="TOM" className="field-sm">
                       {owners.map((o) => (
                         <option key={o} value={o}>
                           {ownerLabels[o]}

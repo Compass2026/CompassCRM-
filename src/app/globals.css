@@ -9,7 +9,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-heading);
+  /* One typeface: headings are Inter too, just heavier. */
+  --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,85 +48,113 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* Compass brand palette (compasswebsite-topaz.vercel.app) */
+  /* Compass brand palette (compasswebsite-topaz.vercel.app): navy carries
+     structure and actions, orange is the accent. */
   --color-navy-950: #060d1a;
   --color-navy-900: #0b162a;
   --color-navy-800: #101f3c;
   --color-navy-700: #16294e;
+  --color-navy-600: #213d70;
+  --color-navy-500: #2f5597;
   --color-orange-600: #c83803;
   --color-orange-500: #e85d04;
   --color-orange-400: #ff6b1a;
   --color-orange-300: #ff8a3d;
+  --color-orange-100: #ffeadb;
+  --color-orange-50: #fff5ee;
+  /* Cool neutrals for the app ground and quiet fills. */
+  --color-mist-50: #f5f8fd;
+  --color-mist-100: #edf3fb;
+  --color-mist-200: #dfe8f5;
+  --color-mist-300: #cbd8ec;
+  /* Brand blue: the brighter partner to the logo navy, for actions,
+     labels and progress. */
+  --color-royal-700: #1a3f84;
+  --color-royal-600: #1f4b9c;
+  --color-royal-500: #2a5cb8;
+  --color-royal-100: #dce8fa;
+  --color-royal-50: #edf3fd;
+  /* Legacy: light text on the navy portal and login headers only. The
+     portal is not part of this restyle; retire this with it. */
   --color-cream: #f7f4ef;
+
+  /* Surfaces: one soft shadow scale so every card lifts the same way. */
+  --shadow-card: 0 1px 2px rgba(11, 22, 42, 0.07), 0 10px 28px -12px rgba(26, 63, 132, 0.26);
+  --shadow-card-hover: 0 2px 4px rgba(11, 22, 42, 0.08), 0 18px 40px -16px rgba(26, 63, 132, 0.38);
+  --shadow-float: 0 1px 2px rgba(11, 22, 42, 0.08), 0 14px 34px -12px rgba(26, 63, 132, 0.3);
 }
 
-/* Compass brand theme — navy & orange from the marketing site,
-   cream ground with white cards for the light app shell. */
+/* Compass theme: a cool, light ground with white surfaces. Navy is the
+   primary (actions, active states — white on navy passes AA at every size);
+   orange is the brand accent (focus ring, progress, the title mark), never
+   body text, where it would fall below AA contrast. */
 :root {
-  --background: #f7f4ef;
+  --background: #dfe8f5;
   --foreground: #0b162a;
   --card: #ffffff;
   --card-foreground: #0b162a;
   --popover: #ffffff;
   --popover-foreground: #0b162a;
-  --primary: #e85d04;
+  --primary: #1a3f84;
   --primary-foreground: #ffffff;
-  --secondary: #e9e4da;
+  --secondary: #e6eefa;
   --secondary-foreground: #0b162a;
-  --muted: #efebe3;
-  --muted-foreground: rgba(11, 22, 42, 0.66);
-  --accent: #f7e5d6;
+  --muted: #edf3fb;
+  --muted-foreground: #4a5a74;
+  --accent: #e3ecfa;
   --accent-foreground: #0b162a;
+  --brand-accent: #e85d04;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: rgba(11, 22, 42, 0.14);
-  --input: rgba(11, 22, 42, 0.18);
+  --border: #d3deee;
+  --input: #c8d5e8;
   --ring: #e85d04;
-  --chart-1: #e85d04;
-  --chart-2: #16294e;
-  --chart-3: #ff8a3d;
-  --chart-4: #0b162a;
-  --chart-5: #c83803;
-  --radius: 0.625rem;
+  --chart-1: #1f4b9c;
+  --chart-2: #e85d04;
+  --chart-3: #16294e;
+  --chart-4: #ff8a3d;
+  --chart-5: #94a3b8;
+  --radius: 0.75rem;
   --sidebar: #0b162a;
-  --sidebar-foreground: #f7f4ef;
+  --sidebar-foreground: #f1f4f9;
   --sidebar-primary: #e85d04;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #101f3c;
-  --sidebar-accent-foreground: #f7f4ef;
+  --sidebar-accent-foreground: #f1f4f9;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #ff6b1a;
 }
 
 .dark {
   --background: #0b162a;
-  --foreground: #f7f4ef;
+  --foreground: #eef2f8;
   --card: #101f3c;
-  --card-foreground: #f7f4ef;
+  --card-foreground: #eef2f8;
   --popover: #101f3c;
-  --popover-foreground: #f7f4ef;
-  --primary: #e85d04;
-  --primary-foreground: #ffffff;
+  --popover-foreground: #eef2f8;
+  --primary: #eef2f8;
+  --primary-foreground: #0b162a;
   --secondary: #16294e;
-  --secondary-foreground: #f7f4ef;
+  --secondary-foreground: #eef2f8;
   --muted: #101f3c;
-  --muted-foreground: rgba(247, 244, 239, 0.68);
+  --muted-foreground: #a3b0c4;
   --accent: #16294e;
-  --accent-foreground: #f7f4ef;
+  --accent-foreground: #eef2f8;
+  --brand-accent: #ff6b1a;
   --destructive: oklch(0.704 0.191 22.216);
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.12);
   --ring: #ff6b1a;
-  --chart-1: #ff6b1a;
-  --chart-2: #ff8a3d;
-  --chart-3: #f7f4ef;
-  --chart-4: #e85d04;
-  --chart-5: #c83803;
+  --chart-1: #eef2f8;
+  --chart-2: #ff6b1a;
+  --chart-3: #7ea3e0;
+  --chart-4: #ff8a3d;
+  --chart-5: #64748b;
   --sidebar: #060d1a;
-  --sidebar-foreground: #f7f4ef;
+  --sidebar-foreground: #eef2f8;
   --sidebar-primary: #e85d04;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #101f3c;
-  --sidebar-accent-foreground: #f7f4ef;
+  --sidebar-accent-foreground: #eef2f8;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #ff6b1a;
 }
@@ -136,6 +165,13 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* A light-blue ground, deep enough that white cards stand off it, with
+       two soft glows at the top. */
+    background-image:
+      radial-gradient(1100px 560px at 0% -8%, rgba(42, 92, 184, 0.20), transparent 62%),
+      radial-gradient(900px 520px at 100% -12%, rgba(31, 75, 156, 0.16), transparent 60%),
+      linear-gradient(to bottom, #e4ecf8, #d9e3f2);
+    background-repeat: no-repeat;
   }
   html {
     @apply font-sans;
@@ -144,17 +180,17 @@
   h2,
   h3,
   h4 {
-    @apply font-heading tracking-tight;
+    @apply font-heading tracking-tight text-navy-900;
   }
   h1 {
     @apply text-balance;
   }
 }
 
-/* Orange kicker mark ahead of top-level page titles, echoing the
-   marketing site's directional accent. */
+/* Page titles carry an orange mark, echoing the marketing site's
+   directional accent. */
 @utility page-title {
-  @apply font-heading text-3xl font-semibold tracking-tight;
+  @apply font-heading text-2xl font-bold tracking-tight text-navy-900 sm:text-[1.75rem];
 }
 @utility kicker {
   display: flex;
@@ -162,6 +198,7 @@
   gap: 0.75rem;
   &::before {
     content: "";
+    flex-shrink: 0;
     width: 4px;
     height: 1.5rem;
     border-radius: 9999px;
@@ -171,4 +208,33 @@
       var(--color-orange-600)
     );
   }
+}
+/* Small uppercase label above a heading or a figure. */
+@utility eyebrow {
+  @apply text-xs font-semibold tracking-[0.06em] uppercase text-royal-600;
+}
+/* The white card surface for containers that aren't a <Card>. */
+@utility surface {
+  @apply rounded-2xl bg-card text-card-foreground shadow-card ring-1 ring-border;
+}
+/* A light-blue wash for featured panels (the dashboard summary). */
+@utility surface-tint {
+  @apply rounded-2xl text-card-foreground shadow-card ring-1 ring-royal-100;
+  background:
+    radial-gradient(600px 260px at 100% 0%, rgba(42, 92, 184, 0.10), transparent 70%),
+    linear-gradient(135deg, #f4f8fe 0%, #ffffff 55%, #eef4fd 100%);
+}
+/* Native form controls (<select>, date and month inputs) that don't use
+   the Input / Select primitives. `field` matches the 36 px primitives,
+   `field-sm` the dense 32 px rows in tables. */
+@utility field {
+  @apply h-9 rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-[0_1px_2px_rgba(11,22,42,0.04)] transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility field-sm {
+  @apply h-8 rounded-lg border border-input bg-card px-2.5 text-xs text-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50;
+}
+/* A note or callout inside a page (amber / red / green variants keep their
+   own colors; this sets the shape). */
+@utility callout {
+  @apply rounded-xl border px-3.5 py-2.5 text-sm;
 }

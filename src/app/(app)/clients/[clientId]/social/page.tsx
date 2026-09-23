@@ -15,12 +15,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { chip } from "@/lib/nav-styles";
 import { cn } from "@/lib/utils";
 
 const PLATFORMS = ["facebook", "instagram", "linkedin", "x", "tiktok"] as const;
 const SOCIAL_STATUSES = ["idea", "drafted", "approved", "scheduled", "published", "failed"] as const;
 const selectClass =
-  "h-8 rounded-md border border-input bg-transparent px-2 text-xs";
+  "field-sm";
 
 const platformIcons: Record<string, string> = {
   facebook: "FB",
@@ -100,19 +101,13 @@ export default async function SocialPage({
       <div className="flex items-center gap-2 flex-wrap">
         <Link
           href={`/clients/${clientId}/social?view=list`}
-          className={cn(
-            "text-sm px-3 py-1 rounded-full border",
-            view === "list" ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground"
-          )}
+          className={chip(view === "list")}
         >
           List
         </Link>
         <Link
           href={`/clients/${clientId}/social?view=calendar&month=${monthStr}`}
-          className={cn(
-            "text-sm px-3 py-1 rounded-full border",
-            view === "calendar" ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground"
-          )}
+          className={chip(view === "calendar")}
         >
           Calendar
         </Link>

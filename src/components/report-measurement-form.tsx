@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-const selectClass = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
+const selectClass = "field w-full";
 
 export function ReportMeasurementForm({ clientId, period, series }: { clientId: string; period: string; series: Measurement[] }) {
   const [entryId, setEntryId] = useState<string | null>(null);
   return (
-    <details className="rounded-lg border p-4">
+    <details className="surface p-4 sm:p-5">
       <summary className="cursor-pointer font-medium">Record a measurement</summary>
       <p className="my-3 text-sm text-muted-foreground">Add verified data one metric at a time. The first measured value becomes its permanent baseline. Later entries preserve the original and its evidence.</p>
       {entryId ? <Entry key={entryId} entryId={entryId} clientId={clientId} period={period} series={series} onNew={() => setEntryId(crypto.randomUUID())} /> :

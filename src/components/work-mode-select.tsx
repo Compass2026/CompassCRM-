@@ -23,7 +23,7 @@ export function WorkModeSelect({ clientId, value }: { clientId: string; value: s
         name="work_mode"
         defaultValue={value ?? ""}
         disabled={pending}
-        className="h-7 rounded-md border border-input bg-transparent px-2 text-xs"
+        className="field-sm h-7"
         aria-label="Website work mode"
       >
         <option value="">work mode not set</option>

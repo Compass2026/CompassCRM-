@@ -94,7 +94,7 @@ export function GridConfigCard({
             name="grid_size"
             value={gridSize}
             onChange={(e) => setGridSize(e.target.value)}
-            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+            className="field-sm text-sm"
           >
             <option value="5">5×5</option>
             <option value="7">7×7</option>

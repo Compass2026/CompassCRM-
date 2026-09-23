@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs";
+  "field";
 
 type Progress = { name: string; state: "uploading" | "done" | "error"; detail?: string };
 

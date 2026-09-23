@@ -310,7 +310,7 @@ export function BrandBoard({
 
       {brand.ai_guidance && (
         <Section title="Guidance for AI-generated content">
-          <div className="rounded-xl bg-cream p-4">
+          <div className="rounded-xl bg-muted p-4">
             <Prose text={brand.ai_guidance} />
           </div>
         </Section>

@@ -61,12 +61,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-navy-900 bg-gradient-to-b from-navy-950 to-navy-800">
-      <Card className="w-full max-w-sm border-t-4 border-t-orange-500">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="relative w-full max-w-sm shadow-float">
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-300"
+        />
         <CardHeader>
+          <span className="mb-2 grid size-11 place-items-center rounded-xl bg-navy-900 shadow-[0_6px_16px_-6px_rgba(11,22,42,0.55)]">
           <svg
             viewBox="0 0 24 24"
-            className="size-8 text-orange-500 mb-1"
+            className="size-6 text-orange-400"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
@@ -77,7 +82,8 @@ export default function LoginPage() {
             <circle cx="12" cy="12" r="10" />
             <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88" fill="currentColor" stroke="none" />
           </svg>
-          <CardTitle className="text-lg">Compass Client Platform</CardTitle>
+          </span>
+          <CardTitle className="text-xl font-bold">Compass Client Platform</CardTitle>
           <CardDescription>Team sign-in</CardDescription>
         </CardHeader>
         <CardContent>

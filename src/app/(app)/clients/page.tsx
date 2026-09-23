@@ -36,7 +36,7 @@ export default async function ClientsPage() {
       <div className="flex items-center justify-between">
         <h1 className="page-title kicker">Clients</h1>
         <Dialog>
-          <DialogTrigger render={<Button>New client</Button>} />
+          <DialogTrigger render={<Button variant="accent">New client</Button>} />
           <DialogContent>
             <DialogHeader>
               <DialogTitle>New client</DialogTitle>
@@ -63,7 +63,7 @@ export default async function ClientsPage() {
                     id="business_type"
                     name="business_type"
                     defaultValue="service_area"
-                    className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+                    className="field w-full"
                   >
                     <option value="service_area">Service area (goes to the customer)</option>
                     <option value="storefront">Storefront (customers come in)</option>
@@ -148,7 +148,7 @@ export default async function ClientsPage() {
         </Dialog>
       </div>
 
-      <div className="rounded-md border bg-card">
+      <div className="surface overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>

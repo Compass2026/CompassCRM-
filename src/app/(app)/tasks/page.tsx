@@ -7,17 +7,10 @@ import { fetchTaskList, fetchViewCounts } from "@/lib/task-queries";
 import { getCurrentTeamMember, listTeamMembers } from "@/lib/team";
 import { groupByClient, parseTaskView, taskViews, todayIn } from "@/lib/tasks";
 import type { Database } from "@/lib/database.types";
-import { cn } from "@/lib/utils";
+import { chip, navCount, navItem, navTrack } from "@/lib/nav-styles";
 
 type Autonomy = Database["public"]["Enums"]["autonomy_level"];
 const autonomyLevels = Object.keys(autonomyLabels) as Autonomy[];
-
-function chip(active: boolean): string {
-  return cn(
-    "text-sm px-3 py-1 rounded-full border",
-    active ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground"
-  );
-}
 
 function href(params: Record<string, string | undefined>): string {
   const qs = Object.entries(params)
@@ -80,35 +73,28 @@ export default async function TasksPage({
     <div className="space-y-4">
       <h1 className="page-title kicker">Tasks</h1>
 
-      <details className="rounded-md border bg-card p-4 group">
-        <summary className="cursor-pointer text-sm font-medium">New task</summary>
+      <details className="surface p-4 group">
+        <summary className="flex cursor-pointer list-none items-center gap-2.5 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+          <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-orange-100 text-base leading-none text-orange-600 transition-transform group-open:rotate-45">+</span>
+          New task
+        </summary>
         <div className="pt-3">
           <NewTaskForm members={members} meId={meId} clients={clients ?? []} />
         </div>
       </details>
 
-      <nav aria-label="Work views" className="flex gap-1 border-b overflow-x-auto">
+      <nav aria-label="Work views" className={navTrack}>
         {taskViews.map((v) => (
           <Link
             key={v.value}
             href={href({ ...current, view: v.value === "all" ? undefined : v.value })}
             title={v.hint}
             aria-current={view === v.value ? "page" : undefined}
-            className={cn(
-              "px-3 py-2 font-heading text-sm whitespace-nowrap border-b-2 -mb-px transition-colors",
-              view === v.value
-                ? "border-primary font-semibold text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
+            className={navItem(view === v.value)}
           >
             {v.label}
             {badge[v.value] ? (
-              <span
-                className={cn(
-                  "ml-1.5 rounded-full px-1.5 text-xs",
-                  v.value === "overdue" ? "bg-red-100 text-red-800" : "bg-muted text-muted-foreground"
-                )}
-              >
+              <span className={navCount(v.value === "overdue" ? "alert" : "default")}>
                 {badge[v.value]}
               </span>
             ) : null}
@@ -156,7 +142,7 @@ export default async function TasksPage({
           {tasks.length === 0 && <TaskList tasks={[]} members={members} meId={meId} today={today} empty={emptyText} />}
           {groupByClient(tasks).map((g) => (
             <section key={g.clientId} className="space-y-2">
-              <h2 className="text-sm font-semibold">
+              <h2 className="font-heading text-sm font-semibold">
                 <Link href={`/clients/${g.clientId}/tasks`} className="hover:underline">
                   {g.name}
                 </Link>{" "}

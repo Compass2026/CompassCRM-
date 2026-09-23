@@ -97,11 +97,11 @@ export default async function TaskPage({ params }: { params: Promise<{ taskId: s
         </div>
       </div>
 
-      <section className="rounded-md border bg-card p-4 space-y-3">
+      <section className="surface p-4 sm:p-5 space-y-3">
         <TaskEditForm task={task} members={members} meId={me?.id ?? null} />
       </section>
 
-      <section className="rounded-md border bg-card p-4 text-sm space-y-2">
+      <section className="surface p-4 sm:p-5 text-sm space-y-2">
         <h2 className="font-semibold">Worker fields</h2>
         <p className="text-xs text-muted-foreground">
           Set by the pipelines and the worker. The assignee above is separate and never changes these.
@@ -140,7 +140,7 @@ export default async function TaskPage({ params }: { params: Promise<{ taskId: s
         </dl>
       </section>
 
-      <section className="space-y-3">
+      <section className="surface p-4 sm:p-5 space-y-3">
         <h2 className="text-sm font-semibold">Activity</h2>
         <ol className="space-y-3 border-l pl-4">
           {entries.map((e) =>
@@ -149,7 +149,7 @@ export default async function TaskPage({ params }: { params: Promise<{ taskId: s
                 <span>{e.text}</span> · <time dateTime={e.at}>{formatStamp(e.at)}</time>
               </li>
             ) : (
-              <li key={`c-${e.id}`} className="rounded-md border bg-card p-3 text-sm">
+              <li key={`c-${e.id}`} className="surface p-3.5 text-sm">
                 <div className="text-xs text-muted-foreground mb-1">
                   <span className="font-medium text-foreground">{e.author}</span> ·{" "}
                   <time dateTime={e.at}>{formatStamp(e.at)}</time>

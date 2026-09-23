@@ -69,7 +69,7 @@ export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, 
   return (
     <div className="space-y-4 text-sm">
       {banner && (
-        <div className={cn("rounded-md border px-3 py-2 text-xs", banner.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-destructive/40 bg-destructive/5 text-destructive")}>
+        <div className={cn("callout text-xs", banner.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-destructive/40 bg-destructive/5 text-destructive")}>
           {banner.text}
         </div>
       )}

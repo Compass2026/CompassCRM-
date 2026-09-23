@@ -30,7 +30,7 @@ import {
 } from "@/lib/labels";
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs";
+  "field";
 
 export default async function OverviewPage({
   params,
@@ -246,9 +246,9 @@ export default async function OverviewPage({
                 <form
                   key={system}
                   action={saveAccess}
-                  className="flex items-center gap-2"
+                  className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-2 last:border-0 last:pb-0 sm:flex-nowrap sm:border-0 sm:pb-0"
                 >
-                  <span className="text-sm w-44 shrink-0">
+                  <span className="w-full text-sm font-medium sm:w-44 sm:shrink-0 sm:font-normal">
                     {accessSystemLabels[system]}
                   </span>
                   <select
@@ -264,7 +264,7 @@ export default async function OverviewPage({
                     name="notes"
                     defaultValue={row?.notes ?? ""}
                     placeholder="Notes"
-                    className="h-9"
+                    className="h-9 min-w-0 flex-1 basis-28"
                   />
                   <Button type="submit" variant="outline" size="sm">
                     Save
@@ -370,7 +370,7 @@ export default async function OverviewPage({
           ) : (
             <div
               role="note"
-              className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+              className="callout border-amber-200 bg-amber-50 text-sm text-amber-900"
             >
               <p className="font-medium">Invites are switched off for now.</p>
               <p className="mt-1">

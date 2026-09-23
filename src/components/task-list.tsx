@@ -42,7 +42,7 @@ export function TaskList({
   empty?: string;
 }) {
   return (
-    <div className="rounded-md border bg-card divide-y">
+    <div className="surface divide-y overflow-hidden">
       {tasks.length === 0 && <p className="p-4 text-sm text-muted-foreground">{empty}</p>}
       {tasks.map((task) => {
         const done = task.status === "done";
@@ -52,12 +52,12 @@ export function TaskList({
         return (
           <div
             key={task.id}
-            className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_10rem] gap-x-3 gap-y-2 px-4 py-3 text-sm"
+            className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_10rem] gap-x-3 gap-y-2 px-4 py-3.5 text-sm transition-colors hover:bg-royal-50/60"
           >
             <form action={toggle} className="pt-0.5">
               <button
                 type="submit"
-                className={cn("size-4 rounded border border-input hover:bg-muted", done && "bg-primary")}
+                className={cn("size-4 rounded-[5px] border border-input bg-card hover:border-navy-500", done && "border-primary bg-primary")}
                 title={done ? "Reopen" : "Mark done"}
                 aria-label={done ? `Reopen “${task.title}”` : `Mark “${task.title}” done`}
               />

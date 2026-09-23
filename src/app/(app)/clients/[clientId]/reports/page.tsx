@@ -70,10 +70,10 @@ export default async function ReportsPage({
 
   return (
     <div className="space-y-4">
-      {measurements.error ? <p role="alert" className="rounded-lg border p-4 text-sm">{measurements.error}</p> :
+      {measurements.error ? <p role="alert" className="surface p-4 text-sm">{measurements.error}</p> :
         <ClientScorecard clientId={clientId} rows={measurements.rows} period={period} baselineOnly={baselineOnly} />}
-      <details className="rounded-lg border p-4 space-y-4">
-        <summary className="cursor-pointer font-medium">
+      <details className="surface p-4 sm:p-5 space-y-4">
+        <summary className="cursor-pointer font-semibold text-navy-900">
           Monthly workflow & earlier reports
           <span className="ml-2 text-xs font-normal text-muted-foreground">
             {(cycles ?? []).length} cycle{(cycles ?? []).length === 1 ? "" : "s"} · open cycle tasks, including Send report, are here
@@ -95,7 +95,7 @@ export default async function ReportsPage({
         )}
       </div>
       {months.differ && (
-        <p role="note" className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+        <p role="note" className="callout border-amber-200 bg-amber-50 text-xs text-amber-900">
           It&apos;s already {thisMonthFirst.slice(0, 7)} in UTC, so the cycle month has
           turned over, but it&apos;s still {scorecardMonthFirst.slice(0, 7)} in Central
           time, which the scorecard uses. The two line up again at midnight Central.
@@ -264,7 +264,7 @@ export default async function ReportsPage({
                 <select
                   name="status"
                   defaultValue={cycle.status}
-                  className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+                  className="field-sm"
                 >
                   <option value="open">open</option>
                   <option value="complete">complete</option>
