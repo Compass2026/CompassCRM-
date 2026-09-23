@@ -831,6 +831,19 @@ Tasks can be assigned to actual team members. Details, rollout and rollback:
   79 task checks), `npm run test:tasks-ui` (PostgREST + Chrome over the
   replay; screenshots with `SCREENSHOTS=dir`).
 
+## Client Intelligence (five-layer plan, layer 1; Sept 23 2026)
+
+The facts AI-drafted social and Business Profile posts may stand on. Plan,
+inventory and rules: `docs/client-intelligence.md`. The client
+**Intelligence** tab (`src/lib/client-intelligence.ts`, read-only) scores ten
+areas ready / partial / missing with the exact fix, counts keywords by search
+intent (navigational / informational / commercial / transactional), and lists
+post topics (approved service + page + intent). A post may cite only
+`sourced`-with-a-source or `confirmed` claims, never `unverified`; a person
+approves before anything publishes; posts are never sold as an SEO guarantee.
+Offers and a post record with a review gate are the next schema pieces
+(0044, 0045 — not written yet).
+
 ## Client portal (Phase 5, Sept 17 2026)
 
 Migrations 0037 + 0038, routes under `src/app/portal/`. Read-only in v1:

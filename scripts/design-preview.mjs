@@ -130,7 +130,32 @@ const monthlyCycles = [
   },
 ];
 
+// Client Intelligence rows for the first client (the Intelligence tab).
+const svc = (n, name, page, kwN) => ({ id: uid(800 + n), client_id: C(0).id, name, status: "approved", page_url: page, primary_keyword_id: kwN ? uid(850 + kwN) : null, parent_service_id: null, sort_order: n });
+const kwr = (n, keyword, intent, serviceN, o = {}) => ({ id: uid(850 + n), client_id: C(0).id, keyword, intent, is_active: true, is_tracked: true, is_money: false, service_id: serviceN ? uid(800 + serviceN) : null, target_url: null, priority: "p2", ...o });
+const intelligence = {
+  client_brands: [{ client_id: C(0).id, positioning: "Roofs done once, by a crew that answers the phone.", voice_tone: "Plain-spoken and neighborly.", audience: "Homeowners in Boone County with storm damage or an aging roof.", differentiators: null, ai_guidance: "Name the service area; never promise a timeline.", words_we_use: ["free inspection"], words_we_avoid: ["cheap"], content_pillars: [] }],
+  brand_boards: [{ client_id: C(0).id, status: "draft", hard_rules: ["No invented warranties"], standing_cta: "Book a free inspection", version: 1 }],
+  services: [svc(1, "Roof replacement", "/roof-replacement", 1), svc(2, "Storm damage repair", "/storm-damage", 3), svc(3, "Gutters", null, null)],
+  keywords: [
+    kwr(1, "roof replacement columbia mo", "transactional", 1, { is_money: true, priority: "p1" }),
+    kwr(2, "how much does a new roof cost", "informational", 1),
+    kwr(3, "hail damage roof repair", "commercial", 2, { is_money: true, priority: "p1" }),
+    kwr(4, "does insurance cover hail damage", "informational", 2),
+    kwr(5, "ridgeline roofing reviews", "navigational", null),
+    kwr(6, "seamless gutters columbia", null, 3),
+  ],
+  claims: [
+    { id: uid(870), client_id: C(0).id, claim: "Family-owned since 2009", status: "sourced", source: "About page" },
+    { id: uid(871), client_id: C(0).id, claim: "GAF certified installer", status: "sourced", source: "Footer badge" },
+    { id: uid(872), client_id: C(0).id, claim: "Over 1,200 roofs", status: "unverified", source: null },
+  ],
+  locations: [{ client_id: C(0).id, name: "Columbia", city: "Columbia", state: "MO", is_active: true }],
+  brand_assets: [{ client_id: C(0).id, kind: "logo_primary" }, ...Array.from({ length: 4 }, () => ({ client_id: C(0).id, kind: "photo" }))],
+};
+
 const tables = {
+  ...intelligence,
   clients,
   client_pipelines: clients.flatMap((c) => c.client_pipelines),
   client_stages: blockedStages,
@@ -213,7 +238,7 @@ const pages = [
   ["login", "/login"],
   ["task-detail", `/tasks/${uid(401)}`],
   ["client-overview", `/clients/${C(0).id}`],
-  ...["plan", "brand", "documents", "pipelines", "tasks", "foundation", "services", "keywords", "content", "social", "reports", "billing"]
+  ...["plan", "brand", "documents", "pipelines", "tasks", "foundation", "intelligence", "services", "keywords", "content", "social", "reports", "billing"]
     .map((tab) => [`client-${tab}`, `/clients/${C(0).id}/${tab}`]),
 ];
 const wanted = process.env.PAGES?.split(",");
