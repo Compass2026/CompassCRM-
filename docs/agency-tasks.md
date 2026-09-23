@@ -11,7 +11,7 @@ working as before.
 | --- | --- |
 | Branch | `claude/agency-tasks-assignment` |
 | Based on | `main` @ `568644a`, the merge of PR #51 (Sept 22). #51 is **merged and live in production**: it reconciles 0036–0038, adds the 0007a and 0042 files, and keeps portal invites off behind `PORTAL_INVITES_ENABLED`, which is unset. PR #52 targets `main`, and its diff is only this slice. |
-| Migration | `0043_task_assignment.sql`: **new, still not applied.** The rollback-only dry run against the project passed on Sept 22 (below). |
+| Migration | `0043_task_assignment.sql`: **applied to production on Sept 23 as version `20260923005221`** (`apply_migration`, name `0043_task_assignment`), after the rollback-only dry run passed (below). The recorded SQL is byte-identical to the file. |
 | Needs applied first | 0036 (`is_team()`, linked `team_members`), which is live. 0043 does not touch 0041 (PR #50, still an open draft) or 0042 (on `main`, still unapplied) and applies with or without either. |
 | Merge order | #51 is done. This PR is next and independent of portal go-live. If #50 lands first, nothing conflicts except `src/lib/database.types.ts`: regenerate it. |
 | Deploys | **Merging to `main` deploys the CRM to production through Vercel.** There's no separate deploy step. Migrations and Edge Functions are never deployed by a merge. |
@@ -117,10 +117,13 @@ postgresql@16 postgrest`; `PG_BIN=$(brew --prefix postgresql@16)/bin`). The
 UI check also needs Google Chrome. `test-portal-sandbox.sh` gained a macOS
 fix: Bash 3.2's empty-array handling and a locale for Homebrew's Postgres.
 
-**Not tested against the live project.** 0043 has not been applied anywhere
-but the local replay. `database.types.ts` was edited by hand in the
-generator's format for the two new tables and four new columns. Regenerate
-it after applying.
+**Against the live project:** the dry run and the apply are recorded under
+Rollout, steps 1–3. `database.types.ts` is now the generator's output for
+the live schema with 0043 applied. Against `main` it only adds lines: the
+two new tables, the four `tasks` columns and their three relationships, and
+the internal `task_actor()` function. The generator lists every function in
+the schema, but `task_actor()` can't be executed by `anon` or
+`authenticated`.
 
 ## Rollout
 
@@ -150,13 +153,27 @@ retargeted to `main` and rebased onto `568644a`.
      and four constraints, and no worker fire.
    - Re-run it just before applying if the schema has changed since.
 2. **Apply 0043** (`apply_migration`, name `0043_task_assignment`) **before
-   merging #52.** The app already in production (#51) keeps working with 0043
+   merging #52.** **Done Sept 23: version `20260923005221`.**
+   - Checked afterwards: recorded once; 510 tasks (183 open), all
+     unassigned, with no author or edit stamps; 0 history rows, 0 comments.
+   - Columns, constraints (all validated), triggers
+     (`tasks_aa_stamp`, `tasks_history`, `tasks_zz_fire_worker`), composite
+     FKs, indexes, RLS and the three `is_team()` policies match 0043.
+     Grants: `authenticated` has SELECT on `task_events` and
+     INSERT/SELECT on `task_comments`; `anon` has nothing; the four
+     functions aren't executable by `anon` or `authenticated`.
+   - The security advisor raised nothing new, and there was no worker
+     fire.
+   - The production app (#51) still loads every CRM page, and the portal
+     card still says invites are off. The app already in production (#51) keeps working with 0043
    applied. The change is additive and every existing task is unassigned,
    so the new triggers and the CLAUDE-lane constraint accept everything the
    old app writes (done toggles, stage tasks, worker updates). The old app
    simply doesn't show assignees or history yet.
 3. **Regenerate `src/lib/database.types.ts`** from the project, commit it to
-   #52, and confirm the diff contains only the 0043 additions.
+   #52, and confirm the diff contains only the 0043 additions. **Done
+   Sept 23:** 124 added lines and 0 removed against `main`. Against the
+   earlier hand-edited version, the only new line is `task_actor`.
 4. **Merge #52.** That deploys the task screens. If this merge happened
    before 0043 was applied, the new pages would error, because the columns
    they read wouldn't exist yet.

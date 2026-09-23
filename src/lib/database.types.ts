@@ -3204,6 +3204,7 @@ export type Database = {
         Args: { secret_name: string; secret_value: string }
         Returns: undefined
       }
+      task_actor: { Args: never; Returns: string }
     }
     Enums: {
       access_status: "not_needed" | "requested" | "granted"

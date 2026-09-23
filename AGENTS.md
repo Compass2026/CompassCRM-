@@ -786,7 +786,7 @@ Verified on Sept 11 2026 with no secrets (both steps `skipped`, 200) and with
 deliberately bad ones (both `failed` with the upstream error, 502, no tasks
 closed).
 
-## Team work management (Sept 22 2026, migration 0043 — not applied)
+## Team work management (Sept 22 2026, migration 0043 applied Sept 23)
 
 Tasks can be assigned to actual team members. Details, rollout and rollback:
 `docs/agency-tasks.md`.
