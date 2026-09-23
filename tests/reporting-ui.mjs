@@ -25,6 +25,8 @@ const upstream = http.createServer(async (req, res) => {
   const reply = (data, status = 200) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(data)); };
   if (url.pathname === "/auth/v1/user") return reply(user);
   if (url.pathname === "/rest/v1/rpc/is_team") return reply(true);
+  // The app layout (PR #51) signs out anyone without a team_members row.
+  if (url.pathname === "/rest/v1/team_members") return reply([{ id: "00000000-0000-4000-8000-000000000031" }]);
   if (url.pathname === "/rest/v1/clients") {
     assert.equal(url.searchParams.get("id"), `eq.${clientId}`);
     return reply({ id: clientId, name: "Fictional scorecard sandbox", status: "launching", dba: null, website_url: null });
@@ -75,6 +77,12 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/reports?scorecard_month=2026-08`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "2026-08 marketing scorecard" }).waitFor();
+  // Tom's decisions (Sept 22): say the numbers are recorded by hand, and keep
+  // the monthly cycle cards and report_send reachable in the collapsible.
+  assert.ok(await page.getByText("Recorded by hand.", { exact: true }).isVisible());
+  const workflow = page.locator("summary").filter({ hasText: "Monthly workflow & earlier reports" });
+  assert.equal(await workflow.count(), 1);
+  assert.match(await workflow.innerText(), /open cycle tasks, including Send report, are here/);
   assert.equal(await page.locator('section[aria-label="Client marketing scorecard"] > div.grid > details').count(), 9);
   assert.ok(await page.getByText("vs previous: +10", { exact: true }).isVisible());
   assert.ok(await page.getByText("vs baseline: +10", { exact: true }).isVisible());

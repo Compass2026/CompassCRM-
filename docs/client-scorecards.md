@@ -1,8 +1,15 @@
 # Client baseline and monthly scorecards
 
-Implementation status: review branch, not activated in production. Migration
-0041 and the worker instructions must be reviewed before rollout. No BHG Safety
-data has been collected or populated by this change.
+Implementation status: PR #50, draft, **not activated**. Migration 0041 is
+**not applied**. Production already has 0036–0040 and 0043 (0042 is on `main`
+but unapplied). No BHG Safety data has been collected or populated by this
+change.
+
+**Measurements are recorded by hand.** Every scorecard number is entered, with
+its source and evidence, by a team member on the Reports tab or appended by the
+worker. The scorecard does not read `rank_snapshots`, `gsc_snapshots` or any
+other tracker table on its own, and nothing imports them. Those stay in their
+trackers until someone records a verified figure.
 
 ## Process
 
@@ -26,8 +33,26 @@ data has been collected or populated by this change.
 6. **Repeat:** append the next month's evidence. Preserve all earlier records.
 
 The initial task is a review reminder, not a new database gate on all pipelines.
-The worker's documented pre-change capture step is procedural. It must be
-validated in the controlled worker sandbox before activation.
+
+**Baseline-before-improvements applies to new clients only** (Tom, Sept 22),
+meaning clients created after 0041 is applied. They carry a
+`reporting_baseline` task from the intake trigger.
+- **Existing clients** are not paused or gated. Their first measurements are
+  recorded as `existing_client` whenever they become available.
+- **A new client** gets all nine areas recorded before the worker's first
+  autonomous change to a client asset. Each area is either measured, or has
+  an explicit unavailable status with a next action. Read-only work never
+  waits.
+- **An unavailable source** is recorded as such, and the worker opens one
+  `reporting_baseline_access` task for Tom listing what access is missing,
+  then continues.
+- **Only a failure to write the ledger at all** blocks the asset-changing
+  stage. It uses the usual blocked-stage process: `next_action` plus a
+  WAITING task. There's never a silent pause.
+
+The worker's rule is in `.claude/skills/foundation-worker/SKILL.md`, section 1.
+It's procedural and must be validated on a fictional client before
+activation.
 
 ## Client-facing areas
 
@@ -136,14 +161,28 @@ sandbox rollout. A worker with missing access records missing data, not zero.
   auth/team membership and client existence; all UI reads filter `client_id`.
 - Update/delete are denied by grants, RLS and an immutable-history trigger.
   Even service-role accidental updates/deletes are blocked. Truncate is not
-  granted. Client deletion is restricted while reporting evidence exists.
+  granted. Client deletion is restricted while reporting evidence exists
+  (`on delete restrict`). **Operational consequence:** once a client has any
+  measurement, `delete from clients` fails with a foreign-key error. That
+  includes fictional test clients. Offboard such a client by setting its
+  status to `offboarded`; its evidence stays. Removing one for good needs a
+  deliberate, reviewed data migration that first exports and then removes its
+  measurement rows (the immutability trigger blocks `delete`, so it has to be
+  dropped and restored inside that migration).
 - This retains the current single-agency team model. It is **not** multi-tenant
   organization isolation: Compass team members can access all Compass clients.
   Future agency tenancy needs organization ownership and membership policies.
-- `main` lacks migrations 0036-0038, although 0039 and deployment documentation
-  reference them. Verify/reconcile the authoritative deployed team-access
-  migrations before applying 0041. It fails closed if `is_team()` is absent.
-  Never substitute a permissive implementation to make the migration pass.
+- The team-access prerequisites are live: 0036–0038 were reconciled into
+  `main` by PR #51 and have been applied since Sept 15/17, so `is_team()`
+  exists. 0041 still fails closed if it's absent. Never substitute a
+  permissive implementation to make the migration pass.
+- 0041 has no `BEGIN`/`COMMIT`. `apply_migration` runs it in one transaction
+  together with its version record.
+- It will be applied after 0043, which is already live. It only adds objects
+  and replays cleanly in both file order and that order.
+- "Today" and the no-future-dates rule use America/Chicago (the app and the
+  0041 trigger), as on the Tasks pages. `created_at` stays a UTC
+  `timestamptz`. Monthly cycles keep their existing UTC-month creation.
 - Apply first in an isolated database/preview with test identities and fictional
   clients. Review the full migration and its new-intake task trigger. Do not point
   a writable preview at production for the acceptance test.
@@ -158,12 +197,16 @@ on one fictional client and verify it drafts the same nine-area report, preserve
 actual windows and makes no client-asset changes during capture.
 
 Automated tests use PGlite (real PostgreSQL in-process) with minimal dependencies
-to exercise 0041, constraints, history protection, intake tasks and RLS. This is
-not a full replay of the incomplete existing migration chain or live Supabase
-Auth testing. Separate unit tests cover comparisons, first baselines and input.
+to exercise 0041, constraints, history protection, intake tasks and RLS.
+Separate unit tests cover comparisons, first baselines and input. The full
+migration chain is replayed by `scripts/test-portal-sandbox.sh` (every file in
+order, including 0041). The release check also replays 0041 last, after 0043,
+the order production will see.
 
 Validation commands: `npm test`, `npm run lint`, `npx tsc --noEmit`, and
-`npm run build`. The PR workflow runs these without production credentials.
+`npm run build`. `.github/workflows/validate.yml` runs them on every pull
+request with `permissions: contents: read` and no secrets or production
+credentials.
 `npm run test:reporting-ui` starts the actual Next.js app against a local fake
 auth/REST server and fictional records. Install Playwright Chromium first, or
 set `REPORT_UI_CHROMIUM_PATH` to an available Chromium executable. It verifies

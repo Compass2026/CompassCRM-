@@ -5,10 +5,11 @@ unblocks and what it costs.
 
 ## Client scorecard activation
 
-The nine-area baseline/monthly implementation is prepared for review, not
-deployed. Reconcile missing security migrations 0036-0038, validate 0041 with
-isolated test identities, then review the worker's baseline capture and report
-draft in a sandbox. Production migration/deployment needs explicit approval.
+The nine-area baseline/monthly implementation is PR #50, in draft and not
+deployed; 0041 is not applied. The team-access prerequisites (0036–0038) are
+live. Remaining: the rollback-only dry run and apply of 0041, regenerated
+types, then a review of the worker's new-client baseline capture and report
+draft on a fictional client. Production migration/deployment needs explicit approval.
 See [client-scorecards.md](client-scorecards.md). Future provider ingestion for
 GBP performance, GA4, social performance and verified leads remains separate;
 until then use sourced manual entries or explicit unavailable states.

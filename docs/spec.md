@@ -222,8 +222,9 @@ Goal: the app reports whether each client's subscription is **paid** for the cur
 - Existing monthly workflow remains below the scorecard: cycle, Drive link,
   rank summary, tasks, notes and human-controlled completion/sending.
 - Contract, activation prerequisites, acceptance tests and rollback:
-  [Client scorecards](client-scorecards.md). Requires reviewed migration 0041;
-  not yet activated in production.
+  [Client scorecards](client-scorecards.md). Measurements are recorded by
+  hand, not read from the rank or Search Console snapshots. Requires migration
+  0041 (not yet applied); not yet activated in production.
 
 ## 7. Global screens
 

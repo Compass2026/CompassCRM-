@@ -1,4 +1,10 @@
 /** Shared reporting contract. No provider calls, estimates, or customer data. */
+import { todayIn } from "./tasks.ts";
+
+/** Compass's "today" (America/Chicago), as on the Tasks pages. Timestamps stay UTC. */
+export function agencyToday(now: Date = new Date()): string {
+  return todayIn("America/Chicago", now);
+}
 export const REPORT_AREAS = [
   { key: "website", label: "Website pages & links", next: "Audit the agreed priority pages and internal links.", metrics: [
     ["pages_live", "Priority pages live", "point"], ["pages_indexed", "Priority pages indexed", "point"], ["broken_links", "Broken internal links", "point"],
@@ -62,7 +68,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export function validDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 }
-export function parseMeasurement(clientId: string, form: FormData, today = new Date().toISOString().slice(0, 10)): MeasurementInput {
+export function parseMeasurement(clientId: string, form: FormData, today = agencyToday()): MeasurementInput {
   const text = (key: string, max = 1000) => {
     const value = form.get(key);
     if (typeof value !== "string" || value.trim().length > max) throw new Error(`Check ${key.replaceAll("_", " ")}.`);

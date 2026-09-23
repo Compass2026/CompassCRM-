@@ -15,7 +15,7 @@ import { ownerLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { ClientScorecard } from "@/components/client-scorecard";
 import { loadReportMeasurements } from "@/lib/reporting-data";
-import { validDate } from "@/lib/reporting";
+import { agencyToday, validDate } from "@/lib/reporting";
 
 export default async function ReportsPage({
   params,
@@ -49,10 +49,14 @@ export default async function ReportsPage({
       loadReportMeasurements(supabase, clientId),
     ]);
 
+  // Monthly cycles are created on UTC months (startCycleAction, pg_cron), so
+  // the cycle list keeps that month. The scorecard's default data month uses
+  // Compass's day (America/Chicago), like every other user-facing "today".
   const thisMonthFirst = `${new Date().toISOString().slice(0, 7)}-01`;
+  const scorecardMonthFirst = `${agencyToday().slice(0, 7)}-01`;
   const requestedPeriod = typeof query.scorecard_month === "string" ? `${query.scorecard_month}-01` : "";
   const latestDataMonth = measurements.rows.map((row) => `${row.window_end.slice(0, 7)}-01`).sort().at(-1);
-  const period = validDate(requestedPeriod) ? requestedPeriod : latestDataMonth ?? thisMonthFirst;
+  const period = validDate(requestedPeriod) ? requestedPeriod : latestDataMonth ?? scorecardMonthFirst;
   const baselineOnly = query.scorecard_view === "baseline" ||
     (query.scorecard_view !== "monthly" && !measurements.rows.some((row) => row.report_period));
   const hasCurrentCycle = (cycles ?? []).some((c) => c.period === thisMonthFirst);
@@ -68,7 +72,12 @@ export default async function ReportsPage({
       {measurements.error ? <p role="alert" className="rounded-lg border p-4 text-sm">{measurements.error}</p> :
         <ClientScorecard clientId={clientId} rows={measurements.rows} period={period} baselineOnly={baselineOnly} />}
       <details className="rounded-lg border p-4 space-y-4">
-        <summary className="cursor-pointer font-medium">Monthly workflow & earlier reports</summary>
+        <summary className="cursor-pointer font-medium">
+          Monthly workflow & earlier reports
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {(cycles ?? []).length} cycle{(cycles ?? []).length === 1 ? "" : "s"} · open cycle tasks, including Send report, are here
+          </span>
+        </summary>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           One card per monthly Reporting cycle. Cycles are created automatically

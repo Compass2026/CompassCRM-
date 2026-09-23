@@ -1,7 +1,10 @@
 -- Nine-area client scorecards. Additive, no external calls, no client backfill.
 -- Requires the reviewed team-access migration 0036 (also required by 0039).
 -- This file does NOT grant portal access or introduce an organization model.
-begin;
+-- No BEGIN/COMMIT here: apply_migration runs the file in one transaction with
+-- its version record, and an inner COMMIT would end that transaction early.
+-- Applied after 0043 in production (0041 was held back for review); it only
+-- adds objects and does not depend on 0042 or 0043.
 do $$ begin
   if to_regprocedure('public.is_team()') is null then
     raise exception 'Apply and verify the reviewed team-access prerequisites before 0041';
@@ -11,7 +14,10 @@ end $$;
 create sequence public.report_measurement_sequence;
 create table public.report_measurements (
   id uuid primary key default gen_random_uuid(), -- stable submission/import id
-  sequence bigint not null unique, -- assigned inside the serialized insert trigger
+  -- sequence / created_at / recorded_by are always stamped by the insert
+  -- trigger. The inert defaults only let callers omit them (and make the
+  -- generated Insert type mark them optional); a caller's value is overwritten.
+  sequence bigint not null unique default 0, -- assigned inside the serialized insert trigger
   client_id uuid not null references public.clients(id) on delete restrict,
   metric text not null check (metric in (
     'pages_live','pages_indexed','broken_links',
@@ -37,8 +43,8 @@ create table public.report_measurements (
   evidence text not null default '' check (length(evidence) <= 1000),
   meaning text not null check (length(btrim(meaning)) between 1 and 1000),
   next_action text not null check (length(btrim(next_action)) between 1 and 1000),
-  created_at timestamptz not null,
-  recorded_by text not null,
+  created_at timestamptz not null default now(),
+  recorded_by text not null default '',
   check (window_start <= window_end),
   check (report_period is null or date_trunc('month', window_end)::date = report_period),
   check ((metric like 'social_%' and platform <> 'none' and channel <> 'none') or
@@ -62,7 +68,9 @@ begin
   if tg_op <> 'INSERT' then
     raise exception 'Report history is immutable. Append a correction instead.' using errcode = '23514';
   end if;
-  if new.window_end > (current_timestamp at time zone 'UTC')::date then
+  -- "Today" is Compass's day (America/Chicago), as in the app; created_at
+  -- stays a UTC timestamptz.
+  if new.window_end > (current_timestamp at time zone 'America/Chicago')::date then
     raise exception 'Measurement dates cannot be in the future' using errcode = '23514';
   end if;
   new.scope := btrim(new.scope);
@@ -106,4 +114,3 @@ end $$;
 revoke all on function public.create_reporting_baseline_task() from public, anon, authenticated;
 create trigger clients_reporting_baseline after insert on public.clients
   for each row execute function public.create_reporting_baseline_task();
-commit;

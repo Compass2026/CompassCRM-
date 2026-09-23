@@ -82,3 +82,54 @@ test("missing previous month is not substituted with an older result; clients st
   assert.equal(scorecardRows([current], client, "2026-08-01")[0].baseline, undefined);
   assert.equal(previousMonth("2026-01-01"), "2025-12-01");
 });
+
+// ── Release fixes (Sept 22): Central-time "today", 0041 transaction shape ──
+import { readFileSync } from "node:fs";
+import { agencyToday } from "../src/lib/reporting.ts";
+
+test("today is Compass's day (America/Chicago), not UTC's", () => {
+  // 03:30 UTC on Sept 23 is still Sept 22 in Chicago.
+  assert.equal(agencyToday(new Date("2026-09-23T03:30:00Z")), "2026-09-22");
+  assert.equal(agencyToday(new Date("2026-09-23T15:00:00Z")), "2026-09-23");
+});
+test("a measurement ending on Chicago's today is accepted; Chicago's tomorrow is not", () => {
+  const today = "2026-09-22";
+  const point = { metric: "pages_live", window_start: today, window_end: today, report_period: "2026-09" };
+  assert.equal(parseMeasurement(client, form(point), today).window_end, today);
+  assert.throws(() => parseMeasurement(client, form({ ...point, window_start: "2026-09-23", window_end: "2026-09-23" }), today));
+});
+test("0041 leaves the transaction to apply_migration and stamps its own audit columns", () => {
+  const sql = readFileSync("supabase/migrations/0041_client_report_measurements.sql", "utf8");
+  const code = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+  assert.doesNotMatch(code, /^\s*(begin|commit|rollback)\s*;/im, "no BEGIN/COMMIT in the migration");
+  assert.match(code, /at time zone 'America\/Chicago'/, "future-date check uses Compass's day");
+  for (const col of ["sequence bigint not null unique default 0", "created_at timestamptz not null default now()", "recorded_by text not null default ''"]) {
+    assert.ok(code.includes(col), col);
+  }
+  assert.match(code, /new\.sequence := nextval/);
+  assert.match(code, /new\.created_at := clock_timestamp\(\)/);
+  assert.match(code, /new\.recorded_by := coalesce\(auth\.uid\(\)::text/);
+  assert.match(code, /references public\.clients\(id\) on delete restrict/, "clients with history cannot be deleted");
+});
+test("the scorecard says its numbers are recorded by hand", () => {
+  const ui = readFileSync("src/components/client-scorecard.tsx", "utf8");
+  assert.match(ui, /Recorded by hand\./);
+  assert.match(ui, /does not read the rank-tracking or Search Console snapshots/);
+});
+test("the worker's baseline rule applies to new clients only and never pauses silently", () => {
+  const skill = readFileSync(".claude/skills/foundation-worker/SKILL.md", "utf8");
+  const rule = skill.slice(skill.indexOf("**Baseline before improvements: new clients only"), skill.indexOf("with fnd as ("));
+  assert.ok(rule.length > 0, "rule present");
+  assert.match(rule, /tasks\.key = 'reporting_baseline'/, "new = has the intake task");
+  assert.match(rule, /Every other client is existing: nothing here pauses or gates their work\./);
+  assert.match(rule, /reporting_baseline_access/, "missing access becomes a task for Tom");
+  assert.match(rule, /never a\s+reason to stop|is never a\s+reason to stop/);
+  assert.match(rule, /Block \*\*only the asset-changing stage\*\*/);
+  assert.doesNotMatch(skill, /Pause client-asset improvements/);
+});
+test("the validation workflow is read-only and uses no secrets", () => {
+  const wf = readFileSync(".github/workflows/validate.yml", "utf8");
+  assert.match(wf, /permissions:\s*\n\s*contents: read\s*\n/);
+  assert.doesNotMatch(wf, /secrets\./);
+  assert.doesNotMatch(wf, /write/);
+});

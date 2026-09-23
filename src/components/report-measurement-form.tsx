@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useState } from "react";
 import { recordMeasurementAction } from "@/app/report-actions";
-import { METRICS, REPORT_AREAS, STATUS_LABELS, PLATFORMS, type Measurement } from "@/lib/reporting";
+import { METRICS, REPORT_AREAS, STATUS_LABELS, PLATFORMS, agencyToday, type Measurement } from "@/lib/reporting";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,7 +28,7 @@ function Entry({ entryId, clientId, period, series, onNew }: { entryId: string; 
   const [status, setStatus] = useState("measured");
   const existing = series.find((r) => r.id === selected);
   const metric = METRICS.find((m) => m.key === (existing?.metric ?? metricKey))!;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = agencyToday();
   if (state.savedId) return <div role="status" className="space-y-3"><p className="text-sm">Measurement saved with its source and history.</p><Button variant="outline" onClick={onNew}>Record another measurement</Button></div>;
   return (
     <form action={action} onSubmit={(event) => {

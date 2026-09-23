@@ -58,27 +58,87 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
 
 ## 1. Find work
 
-**Baseline before improvements (once migration 0041 is approved and active).**
+**Baseline before improvements: new clients only (once 0041 is applied).**
 Read `docs/client-scorecards.md` before collecting or reporting measurements.
-At a client's first Foundation run, capture available read-only evidence in
-`report_measurements` before any Website/SEO changes to client assets. Read-only
-research may continue while access is missing. For each of the nine areas,
-record supported measurements or a primary metric with an explicit unavailable
-status, explanation and next action. Do not use zero for missing data. The
-`reporting_baseline` task belongs to TOM for review; do not close it for him.
-This task is independent of monthly-cycle enrollment. Existing clients get
-`context = 'existing_client'` unless dated evidence actually proves pre-work
-capture. Baseline capture does not authorize any external write or new spend.
 
-If the ledger is absent or inaccessible, record the setup problem in the stage
-evidence and next action. Pause client-asset improvements until the initial
-available/missing evidence is recorded; do not apply migrations yourself.
-Use a stable submission UUID per source record/version, and verify an existing
-row's payload before treating a duplicate as a successful retry. Corrections
-append a new ID and explain the correction. Never update/delete ledger rows.
-Reuse the exact metric/scope/source/platform/channel definition for subsequent
-measurements. If coverage, filters, provider or keyword set changes, start a
-separate series and explain it. Query only the current `client_id`.
+*Which clients.* A client is **new** for this rule when it has a
+`tasks.key = 'reporting_baseline'` task. 0041's intake trigger creates one for
+every client inserted after 0041 is applied, and for no client before it.
+**Every other client is existing: nothing here pauses or gates their work.**
+Their Website Updates, weekly blog posts, SEO stages and monthly reports run
+as before. When you record their first measurements (normally in the monthly
+report), use `context = 'existing_client'`. There is no database gate across
+pipelines; this is a rule you follow.
+
+*What must exist first, for a new client.* Before the first **autonomous
+change to a client asset**, the client's starting baseline must be recorded.
+That means any of:
+- pushing to the site (Build to 70%, Polish, Launch, Website Updates, a blog
+  post);
+- adding a domain;
+- `google-ops` `gbp_apply`, `gbp_posts` or `gbp_qa`;
+- any other write to a property the client owns.
+
+Recorded means: for **each of the nine areas**, at least one
+`report_measurements` row for this `client_id` with `report_period` null,
+either `measured` with evidence, or an explicit unavailable status
+(`not_connected`, `not_measured`, `not_applicable`) with a plain-English
+`meaning` and a `next_action`. Never zero for missing data. Use
+`context = 'before_work'` only when the evidence really predates any change.
+
+Capture it read-only during the client's first worker run (Brand Build is
+fine) and top it up before the first asset change. Read-only work never
+waits: Foundation, the SEO audit, research, and drafts filed in Drive.
+
+```sql
+-- The nine areas' initial rows for this client (all nine must be present).
+select m.area, count(*) from (values
+  ('website', array['pages_live','pages_indexed','broken_links']),
+  ('citations', array['citations_correct','citations_incorrect','citations_missing']),
+  ('backlinks', array['referring_domains','links_new','links_lost']),
+  ('gbp', array['gbp_views','gbp_clicks','gbp_call_clicks']),
+  ('reviews', array['reviews_total','reviews_rating','reviews_new','reviews_unanswered']),
+  ('rankings', array['organic_top3','organic_top10','maps_top3']),
+  ('search', array['search_impressions','search_clicks','organic_sessions']),
+  ('leads', array['forms','calls','qualified_leads']),
+  ('social', array['social_posts','social_plan','social_reach','social_engagements','social_clicks','social_followers'])
+) as m(area, metrics)
+join report_measurements r on r.client_id = '<client_id>' and r.report_period is null and r.metric = any(m.metrics)
+group by m.area;
+```
+
+*When a source is unavailable* (no GBP manager access, no GA4, no call
+tracking): record that area with `not_connected` and the next action, and
+don't wait for it. Then open **one** task for Tom and carry on with the asset
+work:
+- `key = 'reporting_baseline_access'`, owner `TOM`, on the stage you're
+  working;
+- `notes` listing each unavailable source, why, and exactly what access
+  would let you measure it.
+
+Unavailable-but-recorded counts as recorded. A missing source is never a
+reason to stop.
+
+*When you cannot write the ledger at all* (the insert fails, or the table is
+missing on a client that has the task): that's an exception, not a silent
+pause. Block **only the asset-changing stage** the way section 2 describes:
+- `next_action` = "Record the starting baseline for <client>: <error>";
+- the WAITING task says what failed.
+
+Read-only stages continue. Don't apply migrations yourself.
+
+*Review.* The `reporting_baseline` task belongs to TOM for review; don't close
+it. Recording the baseline doesn't authorize any external write or new spend.
+
+*Ledger rules.*
+- Use a stable submission UUID per source record/version, and check an
+  existing row's payload before treating a duplicate as a successful retry.
+- Corrections append a new ID and explain the correction. Never update or
+  delete ledger rows.
+- Reuse the exact metric / scope / source / platform / channel definition for
+  later measurements. If coverage, filters, provider or keyword set changes,
+  start a separate series and explain it.
+- Query only the current `client_id`.
 
 ```sql
 with fnd as (
