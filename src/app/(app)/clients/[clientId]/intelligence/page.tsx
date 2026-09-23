@@ -11,6 +11,7 @@ import {
   topicCandidates,
   type AreaStatus,
 } from "@/lib/client-intelligence";
+import { todayIn } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<AreaStatus, string> = {
@@ -33,6 +34,11 @@ const fixTab: Record<string, { label: string; segment: string } | null> = {
   rules: { label: "Brand", segment: "brand" },
 };
 
+// Areas with no tab to fix them in yet.
+const noFixTab: Record<string, string> = {
+  offers: "Offers live in the CRM's offers table (exact terms, source, optional dates); there is no editing screen yet.",
+};
+
 export default async function IntelligencePage({
   params,
 }: {
@@ -41,7 +47,7 @@ export default async function IntelligencePage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [client, brand, board, services, keywords, claims, locations, assets] = await Promise.all([
+  const [client, brand, board, services, keywords, claims, locations, assets, offers] = await Promise.all([
     supabase
       .from("clients")
       .select("name, phone, website_url, city, state, service_area, business_type, address_line1")
@@ -66,14 +72,18 @@ export default async function IntelligencePage({
       .order("sort_order"),
     supabase
       .from("keywords")
-      .select("id, keyword, intent, is_active, is_tracked, is_money, service_id, target_url, priority")
+      .select("id, keyword, intent, intent_note, is_active, is_tracked, is_money, service_id, target_url, priority")
       .eq("client_id", clientId),
     supabase.from("claims").select("id, claim, status, source").eq("client_id", clientId),
     supabase.from("locations").select("name, city, state, is_active").eq("client_id", clientId),
     supabase.from("brand_assets").select("kind").eq("client_id", clientId),
+    supabase
+      .from("offers")
+      .select("id, title, terms, source, status, starts_on, ends_on, confirmed_by, confirmed_on, service_id")
+      .eq("client_id", clientId),
   ]);
 
-  const error = [client, brand, board, services, keywords, claims, locations, assets].find((r) => r.error)?.error;
+  const error = [client, brand, board, services, keywords, claims, locations, assets, offers].find((r) => r.error)?.error;
   if (error || !client.data) {
     return (
       <p role="alert" className="callout border-red-200 bg-red-50 text-red-900">
@@ -91,6 +101,8 @@ export default async function IntelligencePage({
     claims: claims.data ?? [],
     locations: locations.data ?? [],
     assets: assets.data ?? [],
+    offers: offers.data ?? [],
+    asOf: todayIn(),
   };
   const areas = assessIntelligence(input);
   const pilot = pilotReadiness(areas);
@@ -144,7 +156,7 @@ export default async function IntelligencePage({
                     </ul>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    {!a.blocking && "Does not block a pilot. "}
+                    {!a.blocking && "Does not block general posts; only content that needs it. "}
                     {fix ? (
                       <>
                         Fix on the{" "}
@@ -157,7 +169,7 @@ export default async function IntelligencePage({
                         .
                       </>
                     ) : (
-                      "Not modeled in the CRM yet."
+                      noFixTab[a.key] ?? null
                     )}
                   </p>
                 </CardContent>
@@ -173,6 +185,7 @@ export default async function IntelligencePage({
           <p className="text-sm text-muted-foreground">
             {intents.active} active keywords
             {intents.unlabelled ? ` · ${intents.unlabelled} without an intent` : ""}
+            {intents.unlabelledWithNote ? ` (${intents.unlabelledWithNote} with a note)` : ""}
             {intents.nonStandard ? ` · ${intents.nonStandard} with a note instead of an intent` : ""}
           </p>
         </CardHeader>

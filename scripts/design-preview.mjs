@@ -132,7 +132,7 @@ const monthlyCycles = [
 
 // Client Intelligence rows for the first client (the Intelligence tab).
 const svc = (n, name, page, kwN) => ({ id: uid(800 + n), client_id: C(0).id, name, status: "approved", page_url: page, primary_keyword_id: kwN ? uid(850 + kwN) : null, parent_service_id: null, sort_order: n });
-const kwr = (n, keyword, intent, serviceN, o = {}) => ({ id: uid(850 + n), client_id: C(0).id, keyword, intent, is_active: true, is_tracked: true, is_money: false, service_id: serviceN ? uid(800 + serviceN) : null, target_url: null, priority: "p2", ...o });
+const kwr = (n, keyword, intent, serviceN, o = {}) => ({ id: uid(850 + n), client_id: C(0).id, keyword, intent, intent_note: null, is_active: true, is_tracked: true, is_money: false, service_id: serviceN ? uid(800 + serviceN) : null, target_url: null, priority: "p2", ...o });
 const intelligence = {
   client_brands: [{ client_id: C(0).id, positioning: "Roofs done once, by a crew that answers the phone.", voice_tone: "Plain-spoken and neighborly.", audience: "Homeowners in Boone County with storm damage or an aging roof.", differentiators: null, ai_guidance: "Name the service area; never promise a timeline.", words_we_use: ["free inspection"], words_we_avoid: ["cheap"], content_pillars: [] }],
   brand_boards: [{ client_id: C(0).id, status: "draft", hard_rules: ["No invented warranties"], standing_cta: "Book a free inspection", version: 1 }],
@@ -143,7 +143,11 @@ const intelligence = {
     kwr(3, "hail damage roof repair", "commercial", 2, { is_money: true, priority: "p1" }),
     kwr(4, "does insurance cover hail damage", "informational", 2),
     kwr(5, "ridgeline roofing reviews", "navigational", null),
-    kwr(6, "seamless gutters columbia", null, 3),
+    kwr(6, "seamless gutters columbia", null, 3, { intent_note: "Fold into the gutters page; spring spike" }),
+  ],
+  offers: [
+    { id: uid(880), client_id: C(0).id, title: "Free roof inspection", terms: "Free roof inspection for homeowners in Boone County", source: "Website, /inspections", status: "confirmed", starts_on: null, ends_on: null, confirmed_by: "Owner, by email", confirmed_on: "2026-09-20T00:00:00Z", service_id: null },
+    { id: uid(881), client_id: C(0).id, title: "Fall gutter special", terms: "15% off gutter guards installed by Nov 30", source: "Client email, Sept 18", status: "draft", starts_on: "2026-10-01", ends_on: "2026-11-30", confirmed_by: null, confirmed_on: null, service_id: uid(803) },
   ],
   claims: [
     { id: uid(870), client_id: C(0).id, claim: "Family-owned since 2009", status: "sourced", source: "About page" },

@@ -122,7 +122,7 @@ export default async function FoundationPage({
     supabase
       .from("keywords")
       .select(
-        "id, keyword, priority, volume, cpc, competition, intent, city, is_tracked, is_money, is_active, target_url"
+        "id, keyword, priority, volume, cpc, competition, intent, intent_note, city, is_tracked, is_money, is_active, target_url"
       )
       .eq("client_id", clientId)
       .order("is_money", { ascending: false })
@@ -1177,8 +1177,20 @@ export default async function FoundationPage({
                             <Badge variant="outline" className="text-[10px]">tracked</Badge>
                           )}
                         </td>
-                        <td className="py-1 pr-2 max-w-72 truncate text-muted-foreground" title={k.intent ?? undefined}>
-                          {k.intent ?? ""}
+                        {/* The search intent (one of four, or none) and the
+                            free-text note (0044) stay separate: a note is
+                            never shown as if it were an intent. */}
+                        <td className="py-1 pr-2 max-w-72 text-muted-foreground">
+                          {k.intent ? (
+                            <span className="font-medium text-navy-700">{k.intent}</span>
+                          ) : (
+                            <span className="italic">no intent</span>
+                          )}
+                          {k.intent_note && (
+                            <span className="block truncate text-xs" title={k.intent_note}>
+                              {k.intent_note}
+                            </span>
+                          )}
                         </td>
                         <td className="py-1 pr-2 max-w-48 truncate text-muted-foreground">{k.target_url ?? ""}</td>
                       </tr>
