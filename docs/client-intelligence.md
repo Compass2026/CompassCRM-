@@ -47,7 +47,7 @@ go-live (`docs/portal-reconciliation.md`).
    label the blank intents; map approved services to page URLs.
    Shewmaker's intent notes (blueprint record) move in 0044 at Tom's request
    (Sept 23), verbatim, with no intent guessed.
-3. **Schema for intent and offers (migration 0044 — written, not applied).**
+3. **Schema for intent and offers (migration 0044 — applied Sept 23 2026, `20260923164846`).**
    `keywords.intent_note`; the 55 Shewmaker notes move there verbatim with
    `intent` set to NULL (never guessed); `intent` normalized on write and
    constrained to the four values or NULL; `offers` (title, exact terms,
@@ -56,10 +56,10 @@ go-live (`docs/portal-reconciliation.md`).
    `is_team()`. Dates stay optional because standing offers (free
    estimates, free inspections, military discounts, financing, referral
    programs) have no set expiry; when both are present the end cannot
-   precede the start. Expected on production: 547 rows, 414 intents unchanged,
-   133 NULL, 55 notes. After it is applied: regenerate types, show
-   `intent_note` in the Foundation keyword map, and count offers on the
-   Intelligence tab.
+   precede the start. Verified on production: 547 rows, 414 intents
+   unchanged, 133 NULL, 55 notes identical to their pre-apply text, 0
+   nonstandard; types regenerated. Follow-ups: show `intent_note` in the
+   Foundation keyword map, and read `offers` on the Intelligence tab.
 4. **The post record (migration 0045).** One table for GBP and social
    drafts: channel, service, keyword, intent, body, CTA, assets, cited
    claim ids, status `draft → in_review → approved → published | rejected`,

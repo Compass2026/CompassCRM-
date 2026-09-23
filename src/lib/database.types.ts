@@ -1358,6 +1358,7 @@ export type Database = {
           department: Database["public"]["Enums"]["department"]
           id: string
           intent: string | null
+          intent_note: string | null
           is_active: boolean
           is_money: boolean
           is_tracked: boolean
@@ -1378,6 +1379,7 @@ export type Database = {
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
+          intent_note?: string | null
           is_active?: boolean
           is_money?: boolean
           is_tracked?: boolean
@@ -1398,6 +1400,7 @@ export type Database = {
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
+          intent_note?: string | null
           is_active?: boolean
           is_money?: boolean
           is_tracked?: boolean
@@ -1636,6 +1639,79 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offers: {
+        Row: {
+          client_id: string
+          confirmed_by: string | null
+          confirmed_on: string | null
+          created_at: string
+          ends_on: string | null
+          id: string
+          notes: string | null
+          service_id: string | null
+          source: string
+          starts_on: string | null
+          status: string
+          terms: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          confirmed_by?: string | null
+          confirmed_on?: string | null
+          created_at?: string
+          ends_on?: string | null
+          id?: string
+          notes?: string | null
+          service_id?: string | null
+          source: string
+          starts_on?: string | null
+          status?: string
+          terms: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          confirmed_by?: string | null
+          confirmed_on?: string | null
+          created_at?: string
+          ends_on?: string | null
+          id?: string
+          notes?: string | null
+          service_id?: string | null
+          source?: string
+          starts_on?: string | null
+          status?: string
+          terms?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offers_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
