@@ -32,6 +32,12 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   human approval gate (migration 0045, not built yet). If an older note or
   a task tells you to publish posts, don't — leave the drafts and say so in
   the evidence.
+- **Never publish Business Profile Q&A.** Do not call `google-ops`
+  `gbp_qa`, for any client, for any reason (Sept 23 2026 safety stop, same
+  as posts). You draft the five Q&A seeds in the GBP Spec doc and leave them
+  for a person to review; nothing is posted to the profile. The `gbp_apply`
+  task title still mentions "Q&A, first posts" — that wording predates the
+  stop; applying the spec never includes them.
 - **`tasks.assignee_id` is the team's, not yours** (0043). It names the
   person doing a task and is independent of `owner`. Never set or clear it;
   a `CLAUDE` task never has one (the database refuses it), so a step you
@@ -82,7 +88,7 @@ That means any of:
 - pushing to the site (Build to 70%, Polish, Launch, Website Updates, a blog
   post);
 - adding a domain;
-- `google-ops` `gbp_apply` or `gbp_qa` (never `gbp_posts` — see Ground
+- `google-ops` `gbp_apply` (never `gbp_posts` or `gbp_qa` — see Ground
   rules);
 - any other write to a property the client owns.
 
@@ -1245,16 +1251,15 @@ with `spec.json` = `{"client_id": "…", "op": "gbp_apply", "spec": {
 "website": "<url>", "hours": [{"day": "monday", "open": "08:00", "close":
 "17:00"}], "hours_confirmed": false}}`. `hours_confirmed` stays `false`
 unless the listing already showed hours you copied verbatim — the
-function only writes hours when it is `true`. Then `{"op": "gbp_qa",
-"qa": [{"q", "a"}]}` with the five Q&A seeds. The function never touches
-the business name. **Do not publish the four posts** — never call
-`gbp_posts` (Ground rules). They stay drafted in the GBP Spec doc, and
-`gbp_posts_drafted` stays closed with `flagged_for_review = true` so a
-person reviews them; publishing waits for the approval gate. `done` on
-`gbp_apply` → close the task `flagged_for_review = true`,
-`recommendation` = what was applied and what it could not resolve
-(`unresolved`), and note the Q&A result in the evidence, with "posts
-drafted for review, not published". `skipped` or `failed` (no access to the
+function only writes hours when it is `true`. The function never touches
+the business name. **Do not publish the five Q&A seeds or the four
+posts** — never call `gbp_qa` or `gbp_posts` (Ground rules). Both stay
+drafted in the GBP Spec doc for a person to review, and
+`gbp_posts_drafted` stays closed with `flagged_for_review = true`;
+publishing waits for the approval gate. `done` on `gbp_apply` → close the
+task `flagged_for_review = true`, `recommendation` = what was applied,
+what it could not resolve (`unresolved`), and "Q&A and posts drafted in
+the GBP Spec for review, not published"; say the same in the evidence. `skipped` or `failed` (no access to the
 profile yet, no token) → set `gbp_apply.owner = 'TOM'` with the detail
 and the doc link in `notes`; the `google_access` task on Foundation is
 the fix. `gbp_photos` is always Tom's (someone has to shoot them): put
