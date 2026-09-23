@@ -41,7 +41,9 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen">
       <header className="bg-navy-900 text-cream">
-        <div className="mx-auto max-w-6xl px-4 flex h-14 items-center gap-6">
+        {/* On phones the nav drops to its own row and scrolls sideways
+            instead of pushing the page wider than the screen. */}
+        <div className="mx-auto max-w-6xl px-4 flex flex-wrap items-center gap-x-6 gap-y-1 py-2 sm:h-14 sm:flex-nowrap sm:py-0">
           <Link
             href="/"
             className="flex items-center gap-2 font-heading font-semibold tracking-tight text-white"
@@ -59,9 +61,9 @@ export default async function AppLayout({
               <circle cx="12" cy="12" r="10" />
               <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88" fill="currentColor" stroke="none" />
             </svg>
-            Compass<span className="text-cream/60 font-normal">&nbsp;Client Platform</span>
+            Compass<span className="hidden sm:inline text-cream/60 font-normal">&nbsp;Client Platform</span>
           </Link>
-          <nav className="flex items-center gap-4 text-sm">
+          <nav className="order-last flex w-full items-center gap-4 overflow-x-auto text-sm whitespace-nowrap sm:order-none sm:w-auto">
             <Link href="/" className="text-cream/70 transition-colors hover:text-white">
               Dashboard
             </Link>

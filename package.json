@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --no-warnings --test \"tests/**/*.test.mjs\"",
-    "build-brief": "node --no-warnings scripts/build-brief.mjs"
+    "build-brief": "node --no-warnings scripts/build-brief.mjs",
+    "test:sandbox": "scripts/test-portal-sandbox.sh",
+    "test:tasks-ui": "scripts/test-tasks-ui.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -2565,6 +2565,96 @@ export type Database = {
           },
         ]
       }
+      task_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          client_id: string
+          created_at: string
+          id: string
+          task_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          client_id: string
+          created_at?: string
+          id?: string
+          task_id: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comments_task_id_client_id_fkey"
+            columns: ["task_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      task_events: {
+        Row: {
+          actor_id: string | null
+          client_id: string
+          created_at: string
+          from_value: string | null
+          id: string
+          kind: string
+          task_id: string
+          to_value: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          client_id: string
+          created_at?: string
+          from_value?: string | null
+          id?: string
+          kind: string
+          task_id: string
+          to_value?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          client_id?: string
+          created_at?: string
+          from_value?: string | null
+          id?: string
+          kind?: string
+          task_id?: string
+          to_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_events_task_id_client_id_fkey"
+            columns: ["task_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
       task_templates: {
         Row: {
           autonomy_level: Database["public"]["Enums"]["autonomy_level"] | null
@@ -2621,11 +2711,13 @@ export type Database = {
       }
       tasks: {
         Row: {
+          assignee_id: string | null
           autonomy_level: Database["public"]["Enums"]["autonomy_level"] | null
           client_id: string
           client_stage_id: string | null
           completed_at: string | null
           created_at: string
+          created_by: string | null
           default_if_approved: string | null
           due_date: string | null
           flagged_for_review: boolean
@@ -2638,13 +2730,17 @@ export type Database = {
           recommendation: string | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
+          updated_at: string | null
+          updated_by: string | null
         }
         Insert: {
+          assignee_id?: string | null
           autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           client_id: string
           client_stage_id?: string | null
           completed_at?: string | null
           created_at?: string
+          created_by?: string | null
           default_if_approved?: string | null
           due_date?: string | null
           flagged_for_review?: boolean
@@ -2657,13 +2753,17 @@ export type Database = {
           recommendation?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Update: {
+          assignee_id?: string | null
           autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
           client_id?: string
           client_stage_id?: string | null
           completed_at?: string | null
           created_at?: string
+          created_by?: string | null
           default_if_approved?: string | null
           due_date?: string | null
           flagged_for_review?: boolean
@@ -2676,8 +2776,17 @@ export type Database = {
           recommendation?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_client_id_fkey"
             columns: ["client_id"]
@@ -2700,10 +2809,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tasks_monthly_cycle_id_fkey"
             columns: ["monthly_cycle_id"]
             isOneToOne: false
             referencedRelation: "monthly_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -3081,6 +3204,7 @@ export type Database = {
         Args: { secret_name: string; secret_value: string }
         Returns: undefined
       }
+      task_actor: { Args: never; Returns: string }
     }
     Enums: {
       access_status: "not_needed" | "requested" | "granted"

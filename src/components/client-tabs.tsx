@@ -10,6 +10,7 @@ const tabs = [
   { label: "Brand", segment: "brand" },
   { label: "Documents", segment: "documents" },
   { label: "Pipelines", segment: "pipelines" },
+  { label: "Tasks", segment: "tasks" },
   { label: "Foundation", segment: "foundation" },
   { label: "Services", segment: "services" },
   { label: "Keywords", segment: "keywords" },

@@ -26,6 +26,14 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   campaigns). Keyword data comes from DataForSEO.
 - **Never** apply migrations, deploy functions or touch Supabase project
   settings.
+- **`tasks.assignee_id` is the team's, not yours** (0043). It names the
+  person doing a task and is independent of `owner`. Never set or clear it;
+  a `CLAUDE` task never has one (the database refuses it), so a step you
+  hand to a person is handed over by moving `owner` to `TOM` as before;
+  keep using `owner`, `status`, `notes`, `flagged_for_review` and
+  `recommendation` as before. Your writes show in the task history as
+  "Worker / system". A task's client never changes, and its stage / cycle
+  must be the same client's — the database refuses anything else.
 - **Approvals are not your job.** Tom reviews a whole pipeline when it
   completes (`Review Foundation` task). You draft, you mark `approved` where a
   status enum needs it for downstream steps, and you say so in the evidence.
