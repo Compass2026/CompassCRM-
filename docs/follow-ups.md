@@ -31,9 +31,12 @@ until then use sourced manual entries or explicit unavailable states.
    enable the Business Profile, Analytics Admin and Gmail APIs on the Google
    Cloud project (and request Business Profile API access once). Then one
    `google_access` grant per client that shows *no*. Until then GBP apply,
-   GA4 and drafts fall back to Tom's tasks. Once connected, set each
-   client's GBP Setup and Tracking Setup stages to *Not started* on the
-   Foundation tab so the worker applies the specs it already wrote.
+   GA4 and drafts fall back to Tom's tasks. Connecting stores the
+   credential only: the worker writes to Google (GBP apply, GA4, Gmail
+   drafts, Q&A, sitemaps) only once Settings › **Worker Google operations**
+   is switched on, which is off by default. With it on, set each client's
+   GBP Setup and Tracking Setup stages to *Not started* on the Foundation
+   tab so the worker applies the specs it already wrote.
 2b. **Keyword lists to the 50-keyword shape.** DataForSEO credentials are
    in Vault (Sept 14) and `rank-sync` runs weekly. Lucas, Show Me
    Electrical and Ginger Huff have no city-tagged keywords, so their checks

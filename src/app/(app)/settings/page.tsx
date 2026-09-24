@@ -14,6 +14,8 @@ import {
 } from "@/components/google-connect-card";
 import type { AccessCheck } from "@/app/settings-actions";
 import { PublisherSettingsForm } from "@/components/publisher-settings-form";
+import { WorkerGoogleOpsForm } from "@/components/worker-google-ops-form";
+import { parseWorkerGoogleSetting } from "../../../../supabase/functions/_shared/worker-google.ts";
 import { parsePublisherSettings } from "@/lib/publisher";
 
 export default async function SettingsPage({
@@ -50,7 +52,7 @@ export default async function SettingsPage({
       supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", ["google_ops", "ga4_account", "google_access"]),
+        .in("key", ["google_ops", "ga4_account", "google_access", "worker_google_ops"]),
       supabase.rpc("secret_present", { secret_name: "GOOGLE_OPS_REFRESH_TOKEN" }),
       supabase.rpc("secret_present", { secret_name: "GA4_ACCOUNT_ID" }),
       supabase.from("app_settings").select("value").eq("key", "publisher").maybeSingle(),
@@ -63,6 +65,7 @@ export default async function SettingsPage({
 
   const settingValue = (key: string) =>
     (googleSettings ?? []).find((s) => s.key === key)?.value ?? null;
+  const workerGoogle = parseWorkerGoogleSetting(settingValue("worker_google_ops"));
   const redirectUri = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/google-connect`;
 
   const recurringTemplates = (taskTemplates ?? []).filter((t) => t.pipeline_id);
@@ -85,9 +88,9 @@ export default async function SettingsPage({
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Google hands</CardTitle>
           <p className="text-xs text-muted-foreground">
-            One Compass Google account does the worker&apos;s Business Profile
-            updates, GA4 setup and Gmail drafts. Without it those steps fall
-            back to your task list.
+            One Compass Google account, connected here, is a credential only:
+            it stores the token and reports what the account can reach. Whether
+            the worker may write with it is the separate switch below.
           </p>
         </CardHeader>
         <CardContent>
@@ -99,6 +102,24 @@ export default async function SettingsPage({
             access={settingValue("google_access") as AccessCheck | null}
             redirectUri={redirectUri}
             flash={flash}
+          />
+        </CardContent>
+      </Card>
+
+      <Card id="worker-google">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Worker Google operations</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Whether the unattended worker may change clients&apos; Google
+            properties. Off unless someone here turns it on.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <WorkerGoogleOpsForm
+            enabled={workerGoogle.enabled}
+            changedBy={workerGoogle.changed_by}
+            changedAt={workerGoogle.changed_at}
+            googleConnected={tokenPresent === true}
           />
         </CardContent>
       </Card>

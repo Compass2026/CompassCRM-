@@ -61,7 +61,7 @@ export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, 
   const [checkState, check, checking] = useActionState<ActionState, FormData>(checkGoogleAccessAction, null);
 
   const banner =
-    flash.google === "connected" ? { ok: true, text: "Google connected. The worker now applies GBP specs, provisions GA4 and writes Gmail drafts itself." } :
+    flash.google === "connected" ? { ok: true, text: "Google connected. This stores the credential only: the worker writes to Google only if Worker Google operations is switched on below, and Business Profile posts only through the Publisher switch." } :
     flash.google === "partial" ? { ok: false, text: `Connected, but some permissions were not granted (${flash.reason ?? "unknown"}). Press Connect Google again and tick every box.` } :
     flash.google === "error" ? { ok: false, text: `Google connection failed: ${flash.reason ?? "unknown error"}.` } :
     null;
@@ -189,7 +189,8 @@ export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, 
         <p className="text-xs text-muted-foreground">
           A client marked <em>no</em> under Business Profile needs the one grant on its Foundation checklist: add the
           Compass account as a manager on their profile (and an owner on Search Console). Then set the client&apos;s GBP
-          Setup and Tracking Setup stages to <em>Not started</em> so the worker applies what it already drafted.
+          Setup and Tracking Setup stages to <em>Not started</em> so the worker applies what it already drafted (only
+          with Worker Google operations switched on; otherwise those steps stay on your list).
         </p>
       </section>
     </div>

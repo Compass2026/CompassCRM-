@@ -618,6 +618,21 @@ Function change that:
   Business Profile APIs (Account Management, Business Information, Q&A,
   and the v4 API for posts — Business Profile API access is requested
   once per project), the Analytics Admin API and the Gmail API enabled.
+- **Worker Google operations switch** (Sept 24 2026; `app_settings`
+  `worker_google_ops`, **off** unless it is exactly `{"enabled": true}`; a
+  missing row is off). Connect Google only stores the credential and
+  reports what it can reach; it grants the worker nothing. While the switch
+  is off, an automated caller (the `x-cron-secret` door the worker uses) is
+  refused every `google-ops` op except the read-only `gbp_locate`, and
+  `gsc-sync` `{submit_sitemap}`, with 403 `status: skipped`, `reason:
+  worker_google_ops_off`, before any token is fetched. An op added later is
+  a write until it is put on `READ_ONLY_GOOGLE_OPS`. A team member acting in
+  person is not gated. Shared rule in
+  `supabase/functions/_shared/worker-google.ts`; both functions are
+  `handler.ts` factories wired by `index.ts`; tests in
+  `tests/worker-google-ops.test.mjs`. Settings › **Worker Google
+  operations** (below Google hands) switches it and records who and when.
+  It is separate from, and never combined with, the post publisher's switch.
 - **Per client, Tom does one grant:** the Foundation task `google_access` —
   make the Compass Workspace account a manager on the Business Profile, an
   owner on Search Console, an editor on GA4.
