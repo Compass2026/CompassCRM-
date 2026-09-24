@@ -33,6 +33,18 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   publisher (0046) send them. If an older note or
   a task tells you to publish posts, don't — leave the drafts and say so in
   the evidence.
+- **Google writes need the Worker Google operations switch.** A connected
+  Google account is a credential, not permission. Before any Google write —
+  `google-ops` `gbp_apply`, `ga4_provision`, `gmail_draft` (and any op other
+  than the read-only `gbp_locate`), or `gsc-sync` `{submit_sitemap}` — read
+  `select value from app_settings where key = 'worker_google_ops'`. Unless
+  it is exactly `{"enabled": true, …}`, do not call: the step becomes Tom's
+  task (owner `TOM`, `notes` = what you prepared and "Worker Google
+  operations are switched off (Settings → Google hands)"), exactly as for a
+  `skipped` answer. The functions refuse you anyway (403, `status`
+  `skipped`, `reason` `worker_google_ops_off`) — never retry or work
+  around that. Read-only calls (`gbp_locate`, the Search Console sync) are
+  fine either way. The post publisher is separate and never yours.
 - **Never publish Business Profile Q&A.** Do not call `google-ops`
   `gbp_qa`, for any client, for any reason (Sept 23 2026 safety stop, same
   as posts). You draft the five Q&A seeds in the GBP Spec doc and leave them

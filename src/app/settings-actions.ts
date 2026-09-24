@@ -127,3 +127,26 @@ export async function savePublisherSettingsAction(_prev: ActionState, form: Form
       : "Publisher switched off. Nothing goes to Business Profiles.",
   };
 }
+
+// Worker Google operations (app_settings 'worker_google_ops'): whether the
+// unattended worker may write to Google — Business Profile edits, GA4
+// properties, Gmail drafts, Q&A, sitemap submissions. Separate from Connect
+// Google (credentials only) and from the post publisher's own switch.
+// google-ops and gsc-sync read it and refuse the worker while it is off.
+export async function saveWorkerGoogleOpsAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  const member = await requireTeamMember(supabase);
+  const enabled = form.get("enabled") === "on";
+  const { error } = await supabase.from("app_settings").upsert(
+    { key: "worker_google_ops", value: { enabled, changed_by: member.name, changed_at: new Date().toISOString() } },
+    { onConflict: "key" }
+  );
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/settings");
+  return {
+    ok: true,
+    message: enabled
+      ? "Worker Google operations on: the worker may now write to clients' Google properties."
+      : "Worker Google operations off: the worker cannot write to Google. Read-only checks still run.",
+  };
+}
