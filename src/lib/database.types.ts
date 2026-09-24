@@ -3657,6 +3657,16 @@ export type Database = {
       portal_seen: { Args: never; Returns: undefined }
       post_caller_is_human: { Args: never; Returns: boolean }
       post_caller_kind: { Args: never; Returns: string }
+      publisher_reminder_state: {
+        Args: { p_post_ids?: string[] }
+        Returns: {
+          client_id: string
+          created_at: string
+          outcome: string
+          post_id: string
+          task_id: string
+        }[]
+      }
       recheck_social_posts: { Args: { p_post_ids?: string[] }; Returns: number }
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }
