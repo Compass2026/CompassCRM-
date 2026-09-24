@@ -2157,7 +2157,7 @@ export type Database = {
           created_at?: string
           detail?: Json | null
           from_value?: string | null
-          id?: number
+          id?: never
           kind: string
           post_id: string
           to_value?: string | null
@@ -2169,7 +2169,7 @@ export type Database = {
           created_at?: string
           detail?: Json | null
           from_value?: string | null
-          id?: number
+          id?: never
           kind?: string
           post_id?: string
           to_value?: string | null
@@ -3603,20 +3603,37 @@ export type Database = {
       portal_seen: { Args: never; Returns: undefined }
       post_caller_is_human: { Args: never; Returns: boolean }
       post_caller_kind: { Args: never; Returns: string }
-      recheck_social_posts: {
-        Args: { p_post_ids?: string[] }
-        Returns: number
-      }
+      recheck_social_posts: { Args: { p_post_ids?: string[] }; Returns: number }
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }
         Returns: number
       }
       retry_failed_fires: { Args: never; Returns: number }
       secret_present: { Args: { secret_name: string }; Returns: boolean }
-      social_post_readiness: { Args: { p_post_id: string }; Returns: string[] }
       set_secret: {
         Args: { secret_name: string; secret_value: string }
         Returns: undefined
+      }
+      social_post_close_review_task: {
+        Args: { p_outcome: string; p_task_id: string }
+        Returns: undefined
+      }
+      social_post_grounding_problems: {
+        Args: { p: Database["public"]["Tables"]["social_posts"]["Row"] }
+        Returns: string[]
+      }
+      social_post_hash: { Args: { p_snapshot: Json }; Returns: string }
+      social_post_open_review_task: {
+        Args: {
+          p: Database["public"]["Tables"]["social_posts"]["Row"]
+          p_reason: string
+        }
+        Returns: string
+      }
+      social_post_readiness: { Args: { p_post_id: string }; Returns: string[] }
+      social_post_snapshot: {
+        Args: { p: Database["public"]["Tables"]["social_posts"]["Row"] }
+        Returns: Json
       }
       task_actor: { Args: never; Returns: string }
     }

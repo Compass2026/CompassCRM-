@@ -61,7 +61,7 @@ go-live (`docs/portal-reconciliation.md`).
    nonstandard; types regenerated. Reconciled in the app: the Foundation
    keyword map shows the intent and the note separately, and the
    Intelligence tab reads `offers` (below).
-4. **The post record (migration 0045 — written and tested, NOT applied).**
+4. **The post record (migration 0045 — applied Sept 24 2026, `20260924004839`).**
    `social_posts` evolved in place (0 rows on production; `content_posts`
    stays separate), with `post_claims`, `post_assets` and append-only
    `post_events`. Read the migration header for the full rules; in short:
