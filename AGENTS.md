@@ -585,8 +585,9 @@ Function change that:
   view. Nothing waits on it.
 - **`google-ops`** (`{client_id, op}`; team JWT or cron secret) is the CRM's
   hands on Google with one refresh token, `GOOGLE_OPS_REFRESH_TOKEN`
-  (scopes `business.manage`, `analytics.edit`, `gmail.compose`, minted for
-  the GSC OAuth app), plus `GA4_ACCOUNT_ID`. Ops: `gbp_locate`, `gbp_apply`
+  (minted for the GSC OAuth app; since Sept 24 it carries
+  `business.manage` only — see *Business Profile-only connection* below),
+  plus `GA4_ACCOUNT_ID`. Ops: `gbp_locate`, `gbp_apply`
   (categories, description, services, website, confirmed hours — never the
   name — from `clients.gbp_spec`), `gbp_qa`, `ga4_provision`
   (property + web stream + `phone_click` / `form_submit` key events →
@@ -615,9 +616,30 @@ Function change that:
   OAuth app (`GSC_CLIENT_ID`) must list
   `https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/google-connect`
   as an authorized redirect URI, and the Google Cloud project needs the
-  Business Profile APIs (Account Management, Business Information, Q&A,
-  and the v4 API for posts — Business Profile API access is requested
-  once per project), the Analytics Admin API and the Gmail API enabled.
+  Business Profile APIs (Account Management, Business Information, and
+  the v4 API for posts — Business Profile API access is requested once
+  per project).
+- **Business Profile-only connection** (Sept 24 2026, PR for the Lucas
+  pilot; `google-connect` is now `handler.ts` + `index.ts`, tests in
+  `tests/google-connect.test.mjs`). Connect Business Profile requests
+  `openid email business.manage` only, with `include_granted_scopes=false`,
+  so the token never inherits the Search Console / Analytics / Gmail /
+  Drive grants the same user gave the shared OAuth app; a callback that
+  comes back with anything more is **not stored**. The secret name stays
+  `GOOGLE_OPS_REFRESH_TOKEN`, so google-ops' GA4 and Gmail ops now fail on
+  scope and stay Tom's (separate per-purpose credentials are the later
+  architecture). `GSC_REFRESH_TOKEN` is never written here. Two team-JWT
+  modes: `gbp_locations` (read-only; every page of accounts and locations
+  with title, phone, website, address / service area, Maps link, and
+  phone / website / exact-name hints for a client — hints never select)
+  and `gbp_select` (`{client_id, location: "accounts/{a}/locations/{l}",
+  title, confirm: true}`: re-reads that location and its account's
+  listing from Google, refuses a changed name, then sets
+  `clients.gbp_location` only while it is NULL — never overwrites — and
+  reads the v4 posts list without creating anything). Settings › Google
+  hands › *Business Profile location per client* is the UI; the granted
+  scopes are shown there. Check access no longer matches on a partial
+  title and never writes `clients`.
 - **Worker Google operations switch** (Sept 24 2026; `app_settings`
   `worker_google_ops`, **off** unless it is exactly `{"enabled": true}`; a
   missing row is off). Connect Google only stores the credential and

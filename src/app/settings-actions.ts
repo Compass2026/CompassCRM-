@@ -92,6 +92,61 @@ export async function saveGa4AccountAction(_prev: ActionState, form: FormData): 
   return { ok: true, message: `GA4 account ${id} stored. New properties are created under it.` };
 }
 
+// Business Profile locations (google-connect gbp_locations / gbp_select).
+// Listing is read-only; a location is stored on a client only when a person
+// picks it, confirms it, Google re-verifies it, and the client has none yet.
+export type GbpCandidate = {
+  account: string;
+  account_name: string | null;
+  location: string;
+  resource: string;
+  title: string;
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+  service_area: string | null;
+  maps_uri: string | null;
+  has_voice_of_merchant: boolean | null;
+  hints?: { phone: boolean; website: boolean; exact_name: boolean };
+};
+export type GbpListState =
+  | { ok: boolean; message?: string; clientId?: string; candidates?: GbpCandidate[]; complete?: boolean; errors?: string[] }
+  | null;
+
+export async function listGbpLocationsAction(_prev: GbpListState, form: FormData): Promise<GbpListState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const clientId = String(form.get("client_id") ?? "");
+  if (!isUuid(clientId)) return { ok: false, message: "Choose the client first." };
+  const { status, payload } = await callConnect({ mode: "gbp_locations", client_id: clientId });
+  const candidates = payload && Array.isArray(payload.candidates) ? (payload.candidates as GbpCandidate[]) : null;
+  if (!candidates) return { ok: false, message: errorOf(status, payload) };
+  const errors = Array.isArray(payload?.errors) ? (payload.errors as string[]) : [];
+  return {
+    ok: true,
+    clientId,
+    candidates,
+    complete: payload?.complete === true,
+    errors,
+    message: candidates.length ? undefined : "The connected account manages no Business Profile locations.",
+  };
+}
+
+export async function selectGbpLocationAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const clientId = String(form.get("client_id") ?? "");
+  const location = String(form.get("location") ?? "");
+  const title = String(form.get("title") ?? "");
+  if (!isUuid(clientId) || !location) return { ok: false, message: "Pick a listed location." };
+  if (form.get("confirm") !== "on") return { ok: false, message: "Tick the box to confirm this is the client's own profile." };
+  const { status, payload } = await callConnect({ mode: "gbp_select", client_id: clientId, location, title, confirm: true });
+  if (!payload?.ok) return { ok: false, message: errorOf(status, payload) };
+  revalidatePath("/settings");
+  const posts = payload.posts_readable === true ? "posts list readable" : `posts list not readable (${payload.posts_error ?? "unknown"})`;
+  return { ok: true, message: `${String(payload.detail ?? "Saved.")} Verified with Google; ${posts}.` };
+}
+
 export async function checkGoogleAccessAction(_prev: ActionState, _form: FormData): Promise<ActionState> {
   const { status, payload } = await callConnect({ mode: "access" });
   if (!payload || !Array.isArray(payload.clients)) return { ok: false, message: errorOf(status, payload) };

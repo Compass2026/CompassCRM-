@@ -14,14 +14,26 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { GbpLocationPicker } from "@/components/gbp-location-picker";
 
 // The "Google hands" card on Settings: connect the Compass Workspace account
-// (mints GOOGLE_OPS_REFRESH_TOKEN), pick the Analytics account new properties
-// go under (GA4_ACCOUNT_ID), and see which clients' Business Profile / Search
-// Console / GA4 the account can already reach.
+// for Business Profile only (mints GOOGLE_OPS_REFRESH_TOKEN with openid, email,
+// business.manage), pick each client's Business Profile location explicitly,
+// pick the Analytics account new properties go under (GA4_ACCOUNT_ID), and see
+// which clients' Business Profile / Search Console / GA4 the account can reach.
+
+// What the Business Profile connection should hold, as Google reports it.
+const EXPECTED_SCOPES = new Set([
+  "openid",
+  "email",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/business.manage",
+]);
 
 export type GoogleOpsSetting = {
   email: string | null;
+  purpose?: string;
+  requested_scopes?: string[];
   scopes: string[];
   missing_scopes: string[];
   connected_at: string;
@@ -37,6 +49,7 @@ type Props = {
   access: AccessCheck | null;
   redirectUri: string;
   flash: { google?: string; reason?: string };
+  clients: { id: string; name: string; gbp_location: string | null }[];
 };
 
 function Status({ state }: { state: ActionState }) {
@@ -54,15 +67,15 @@ function Mark({ v }: { v: string }) {
   return <Badge variant="outline" className={cn("text-[10px]", tone)}>{v}</Badge>;
 }
 
-export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, redirectUri, flash }: Props) {
+export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, redirectUri, flash, clients }: Props) {
   const [connectState, connect, connecting] = useActionState<ActionState, FormData>(async () => connectGoogleAction(), null);
   const [listState, list, listing] = useActionState<Ga4AccountsState, FormData>(listGa4AccountsAction, null);
   const [saveState, save, saving] = useActionState<ActionState, FormData>(saveGa4AccountAction, null);
   const [checkState, check, checking] = useActionState<ActionState, FormData>(checkGoogleAccessAction, null);
 
   const banner =
-    flash.google === "connected" ? { ok: true, text: "Google connected. This stores the credential only: the worker writes to Google only if Worker Google operations is switched on below, and Business Profile posts only through the Publisher switch." } :
-    flash.google === "partial" ? { ok: false, text: `Connected, but some permissions were not granted (${flash.reason ?? "unknown"}). Press Connect Google again and tick every box.` } :
+    flash.google === "connected" ? { ok: true, text: "Business Profile connected. This stores the credential only: the worker writes to Google only if Worker Google operations is switched on below, and Business Profile posts only through the Publisher switch." } :
+    flash.google === "partial" ? { ok: false, text: `Connected, but Business Profile access was not granted (${flash.reason ?? "unknown"}). Press Connect Business Profile again and allow it.` } :
     flash.google === "error" ? { ok: false, text: `Google connection failed: ${flash.reason ?? "unknown error"}.` } :
     null;
 
@@ -77,7 +90,7 @@ export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, 
       {/* ── 1. Account ─────────────────────────────────────────────── */}
       <section className="space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium">1. Compass Google account</span>
+          <span className="font-medium">1. Compass Google account (Business Profile)</span>
           {tokenPresent ? (
             <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px]">connected</Badge>
           ) : (
@@ -85,31 +98,61 @@ export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, 
           )}
         </div>
         {tokenPresent && ops && (
-          <p className="text-xs text-muted-foreground">
-            {ops.email ?? "Account email not recorded"} · connected {new Date(ops.connected_at).toLocaleDateString()}
-            {ops.missing_scopes?.length ? ` · missing: ${ops.missing_scopes.map((s) => s.split("/").pop()).join(", ")}` : " · Business Profile, Analytics, Gmail drafts"}
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              {ops.email ?? "Account email not recorded"} · connected {new Date(ops.connected_at).toLocaleDateString()}
+              {ops.missing_scopes?.length ? ` · missing: ${ops.missing_scopes.map((s) => s.split("/").pop()).join(", ")}` : ""}
+            </p>
+            <div className="flex items-center gap-1 flex-wrap text-xs">
+              <span className="text-muted-foreground">Granted scopes:</span>
+              {(ops.scopes ?? []).map((s) => (
+                <Badge
+                  key={s}
+                  variant="outline"
+                  className={cn("text-[10px]", EXPECTED_SCOPES.has(s) ? "" : "bg-destructive/10 text-destructive border-destructive/40")}
+                >
+                  {s.replace("https://www.googleapis.com/auth/", "")}
+                </Badge>
+              ))}
+            </div>
+            {(ops.scopes ?? []).some((s) => !EXPECTED_SCOPES.has(s)) && (
+              <p className="text-xs text-destructive">
+                This token carries more than Business Profile (from an earlier connection). Connect Business Profile again to replace it.
+              </p>
+            )}
+          </div>
         )}
         {tokenPresent && !ops && (
           <p className="text-xs text-muted-foreground">Token present in Vault (set by hand); connect here to record the account.</p>
         )}
         <form action={connect} className="flex items-center gap-2 flex-wrap">
           <Button type="submit" size="sm" disabled={connecting}>
-            {connecting ? "Opening Google…" : tokenPresent ? "Reconnect Google" : "Connect Google"}
+            {connecting ? "Opening Google…" : tokenPresent ? "Reconnect Business Profile" : "Connect Business Profile"}
           </Button>
           <Status state={connectState} />
         </form>
         <p className="text-xs text-muted-foreground">
-          Sign in as the Compass Workspace account and allow Business Profile, Analytics and Gmail (drafts only). The
-          token is stored in Vault; it never appears here. The OAuth app must list this redirect URI:
+          Sign in as the Compass Workspace account. Google asks for Business Profile only (openid, email,
+          business.manage), never Search Console, Analytics, Gmail or Drive; a token granted anything more is not
+          stored. It is kept in Vault and never appears here. The OAuth app must list this redirect URI:
         </p>
         <code className="block rounded bg-muted px-2 py-1 text-[11px] break-all">{redirectUri}</code>
       </section>
 
-      {/* ── 2. Analytics account ────────────────────────────────────── */}
+      {/* ── 2. Business Profile location per client ────────────────── */}
+      <section className="space-y-2">
+        <span className="font-medium">2. Business Profile location per client</span>
+        <p className="text-xs text-muted-foreground">
+          Lists what the connected account manages (read-only). Pick the client&apos;s own profile and confirm it; Google
+          re-checks it before it is saved, and a client that already has a location is never changed here.
+        </p>
+        <GbpLocationPicker clients={clients} tokenPresent={tokenPresent} />
+      </section>
+
+      {/* ── 3. Analytics account ────────────────────────────────────── */}
       <section className="space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium">2. Analytics account for new properties</span>
+          <span className="font-medium">3. Analytics account for new properties</span>
           {ga4Present ? (
             <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px]">set</Badge>
           ) : (
@@ -121,6 +164,10 @@ export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, 
             {ga4.name ? `${ga4.name} (${ga4.id})` : ga4.id}
           </p>
         )}
+        <p className="text-xs text-muted-foreground">
+          Needs Analytics permission, which the Business Profile connection does not ask for: listing answers with
+          Google&apos;s scope error until a separate Analytics connection exists.
+        </p>
         <form action={list} className="flex items-center gap-2 flex-wrap">
           <Button type="submit" variant="outline" size="sm" disabled={listing || !tokenPresent}>
             {listing ? "Loading…" : "List accounts the connected user can see"}
@@ -152,7 +199,7 @@ export function GoogleConnectCard({ tokenPresent, ga4Present, ops, ga4, access, 
       {/* ── 3. Per-client access ─────────────────────────────────────── */}
       <section className="space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium">3. What the account can reach per client</span>
+          <span className="font-medium">4. What the account can reach per client</span>
           {access && <span className="text-xs text-muted-foreground">checked {new Date(access.checked_at).toLocaleString()}</span>}
         </div>
         <form action={check} className="flex items-center gap-2 flex-wrap">
