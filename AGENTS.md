@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0044` was applied Sept 23 2026 as `20260923164846`). `scripts/test-portal-sandbox.sh` replays all migrations into
+  **not yet applied**; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
+  Sept 24 2026 as `20260924004839`). `scripts/test-portal-sandbox.sh` replays all migrations into
   a local Postgres shaped like the project and runs the team / anon / portal
   access tests — run it after any migration that touches policies, grants,
   security-definer functions or `portal_*` views.
@@ -858,7 +859,38 @@ is never shown as an intent), and the Intelligence tab's Offers area reads
 counts), partial with drafts / upcoming / ended ones, missing with none; it
 never blocks the general pilot, and `pilotReadiness(areas, { needsOffer: true
 })` makes it blocking for offer content only. There is no offer editing
-screen yet. The post record with a review gate is 0045 (not written).
+screen yet.
+
+**0045** (applied Sept 24 2026 as `20260924004839`; post record + human review
+gate; rules in the migration header and `docs/client-intelligence.md` step
+4): `social_posts` loses its free `status` for `review_status` (draft →
+in_review → approved | rejected) and `publish_status` (not_scheduled →
+scheduled → publishing → published | failed; nothing past not_scheduled
+without an approval), plus `post_claims`, `post_assets` and append-only
+`post_events`; the legacy `asset_url` / `storage_path` columns are dropped
+(`post_assets` is the only media model) and `post_type` is `standard` or
+`offer` (no Event posts yet). Only a signed-in teammate through PostgREST
+approves, rejects or reopens (`session_user = 'authenticator'` + role
+`authenticated` + a `team_members` row) — never the worker's SQL, the
+service role or a trigger. Grounding (usable claims, `crm_facts_only` for
+claimless navigational posts, an approved service for standard
+informational / commercial / transactional posts, confirmed current
+offers) is checked at submit, approval and publishing; approved content is
+frozen with a sha256 snapshot; a lapse sends an approved post back to
+review. Review tasks are one `post_review` task per post in the
+`CLAUDE_APPROVAL` lane, unassigned (the Brief's "needs a decision"). A
+teammate may mark an approved facebook / instagram / linkedin / x / tiktok
+post published by hand (hash and grounding re-checked, `published_at` +
+https `published_url` required, `external_post_id` optional); a Business
+Profile post only ever goes out through the publisher. The worker does not write posts yet and never
+calls `gbp_posts` / `gbp_qa` (PRs #57, #58). UI: Social tab + post page.
+Tests: `tests/social-post-review-migration.test.mjs`, the sandbox's
+`social_post_review.test.sql`, `npm run test:posts-ui`. The sandbox
+bootstrap now creates PostgREST's `authenticator` login, as production has
+it. Verified on production after applying: all 16 function bodies match the
+reviewed file (md5), RLS / grants / cron / portal isolation as designed, a
+rolled-back worker draft opened a `CLAUDE_APPROVAL` review task and could
+not approve; types regenerated from production.
 
 ## Client portal (Phase 5, Sept 17 2026)
 

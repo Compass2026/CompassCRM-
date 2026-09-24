@@ -118,11 +118,13 @@ begin
   where ns.nspname = 'public' and p.prosecdef and has_function_privilege('anon', p.oid, 'execute');
   perform t.ok('A6 anon can execute no security-definer function', n = 0, n || ' executable');
 
-  perform t.ok('A7 authenticated can execute exactly is_team, portal_client_id, portal_seen, secret_present among security-definer functions',
+  -- social_post_readiness (0045) refuses anyone not on the team; a portal
+  -- user's refusal is checked in social_post_review.test.sql (H17).
+  perform t.ok('A7 authenticated can execute exactly is_team, portal_client_id, portal_seen, secret_present, social_post_readiness among security-definer functions',
     (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
      where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
        and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['is_team', 'portal_client_id', 'portal_seen', 'secret_present']);
+    = array['is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness']);
 
   -- portal_client and portal_site are simple views, so Postgres would let a
   -- write through them (as the owner, bypassing RLS) if a grant allowed it.
@@ -264,8 +266,10 @@ begin
   perform t.ok('D11 portal user cannot call any other security-definer function',
     not exists (select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
       where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
-        and p.proname not in ('is_team', 'portal_client_id', 'portal_seen', 'secret_present')
+        and p.proname not in ('is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness')
         and has_function_privilege(p.oid, 'execute')));
+  perform t.ok('D11b social_post_readiness refuses a portal user',
+    t.try('select social_post_readiness(gen_random_uuid())') = '42501');
   perform t.ok('D12 secret_present() answers false for a portal user', not secret_present('SANDBOX_SECRET'));
   perform t.ok('D13 get_brand_profile() (security invoker) reveals nothing to a portal user',
     coalesce(get_brand_profile(cb)::text, '') not like '%Sandbox Client B%'

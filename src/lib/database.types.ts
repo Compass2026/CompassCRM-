@@ -2059,6 +2059,138 @@ export type Database = {
           },
         ]
       }
+      post_assets: {
+        Row: {
+          brand_asset_id: string
+          client_id: string
+          content_hash: string | null
+          created_at: string
+          post_id: string
+          sort_order: number
+        }
+        Insert: {
+          brand_asset_id: string
+          client_id: string
+          content_hash?: string | null
+          created_at?: string
+          post_id: string
+          sort_order?: number
+        }
+        Update: {
+          brand_asset_id?: string
+          client_id?: string
+          content_hash?: string | null
+          created_at?: string
+          post_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_assets_brand_asset_id_client_id_fkey"
+            columns: ["brand_asset_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "brand_assets"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "post_assets_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      post_claims: {
+        Row: {
+          claim_id: string
+          client_id: string
+          created_at: string
+          post_id: string
+        }
+        Insert: {
+          claim_id: string
+          client_id: string
+          created_at?: string
+          post_id: string
+        }
+        Update: {
+          claim_id?: string
+          client_id?: string
+          created_at?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_claims_claim_id_client_id_fkey"
+            columns: ["claim_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "post_claims_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      post_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          created_at: string
+          detail: Json | null
+          from_value: string | null
+          id: number
+          kind: string
+          post_id: string
+          to_value: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          created_at?: string
+          detail?: Json | null
+          from_value?: string | null
+          id?: never
+          kind: string
+          post_id: string
+          to_value?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          created_at?: string
+          detail?: Json | null
+          from_value?: string | null
+          id?: never
+          kind?: string
+          post_id?: string
+          to_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_events_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
       rank_runs: {
         Row: {
           checks_count: number | null
@@ -2478,51 +2610,127 @@ export type Database = {
       }
       social_posts: {
         Row: {
-          asset_url: string | null
+          approved_hash: string | null
+          approved_snapshot: Json | null
+          author_kind: string
           client_id: string
           copy: string | null
+          created_at: string
+          created_by: string | null
+          crm_facts_only: boolean
+          cta_type: string | null
+          cta_url: string | null
           error: string | null
           external_post_id: string | null
           id: string
+          keyword_id: string | null
+          last_attempt_at: string | null
           notes: string | null
+          offer_id: string | null
           platform: Database["public"]["Enums"]["social_platform"]
+          post_type: string
+          publish_attempts: number
+          publish_key: string
+          publish_status: string
+          published_at: string | null
           published_url: string | null
+          review_note: string | null
+          review_status: string
+          review_task_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           scheduled_at: string | null
+          search_intent: string
+          service_id: string | null
           social_account_id: string | null
-          status: Database["public"]["Enums"]["social_post_status"]
-          storage_path: string | null
+          submitted_at: string | null
+          updated_at: string | null
+          updated_by: string | null
         }
         Insert: {
-          asset_url?: string | null
+          approved_hash?: string | null
+          approved_snapshot?: Json | null
+          author_kind?: string
           client_id: string
           copy?: string | null
+          created_at?: string
+          created_by?: string | null
+          crm_facts_only?: boolean
+          cta_type?: string | null
+          cta_url?: string | null
           error?: string | null
           external_post_id?: string | null
           id?: string
+          keyword_id?: string | null
+          last_attempt_at?: string | null
           notes?: string | null
+          offer_id?: string | null
           platform: Database["public"]["Enums"]["social_platform"]
+          post_type?: string
+          publish_attempts?: number
+          publish_key?: string
+          publish_status?: string
+          published_at?: string | null
           published_url?: string | null
+          review_note?: string | null
+          review_status?: string
+          review_task_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           scheduled_at?: string | null
+          search_intent: string
+          service_id?: string | null
           social_account_id?: string | null
-          status?: Database["public"]["Enums"]["social_post_status"]
-          storage_path?: string | null
+          submitted_at?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Update: {
-          asset_url?: string | null
+          approved_hash?: string | null
+          approved_snapshot?: Json | null
+          author_kind?: string
           client_id?: string
           copy?: string | null
+          created_at?: string
+          created_by?: string | null
+          crm_facts_only?: boolean
+          cta_type?: string | null
+          cta_url?: string | null
           error?: string | null
           external_post_id?: string | null
           id?: string
+          keyword_id?: string | null
+          last_attempt_at?: string | null
           notes?: string | null
+          offer_id?: string | null
           platform?: Database["public"]["Enums"]["social_platform"]
+          post_type?: string
+          publish_attempts?: number
+          publish_key?: string
+          publish_status?: string
+          published_at?: string | null
           published_url?: string | null
+          review_note?: string | null
+          review_status?: string
+          review_task_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           scheduled_at?: string | null
+          search_intent?: string
+          service_id?: string | null
           social_account_id?: string | null
-          status?: Database["public"]["Enums"]["social_post_status"]
-          storage_path?: string | null
+          submitted_at?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "social_posts_account_fkey"
+            columns: ["social_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
           {
             foreignKeyName: "social_posts_client_id_fkey"
             columns: ["client_id"]
@@ -2538,10 +2746,52 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "social_posts_social_account_id_fkey"
-            columns: ["social_account_id"]
+            foreignKeyName: "social_posts_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "social_accounts"
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_keyword_fkey"
+            columns: ["keyword_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "keywords"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_posts_offer_fkey"
+            columns: ["offer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_posts_review_task_fkey"
+            columns: ["review_task_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_posts_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_service_fkey"
+            columns: ["service_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_posts_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -3351,6 +3601,9 @@ export type Database = {
       }
       portal_client_id: { Args: never; Returns: string }
       portal_seen: { Args: never; Returns: undefined }
+      post_caller_is_human: { Args: never; Returns: boolean }
+      post_caller_kind: { Args: never; Returns: string }
+      recheck_social_posts: { Args: { p_post_ids?: string[] }; Returns: number }
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }
         Returns: number
@@ -3360,6 +3613,27 @@ export type Database = {
       set_secret: {
         Args: { secret_name: string; secret_value: string }
         Returns: undefined
+      }
+      social_post_close_review_task: {
+        Args: { p_outcome: string; p_task_id: string }
+        Returns: undefined
+      }
+      social_post_grounding_problems: {
+        Args: { p: Database["public"]["Tables"]["social_posts"]["Row"] }
+        Returns: string[]
+      }
+      social_post_hash: { Args: { p_snapshot: Json }; Returns: string }
+      social_post_open_review_task: {
+        Args: {
+          p: Database["public"]["Tables"]["social_posts"]["Row"]
+          p_reason: string
+        }
+        Returns: string
+      }
+      social_post_readiness: { Args: { p_post_id: string }; Returns: string[] }
+      social_post_snapshot: {
+        Args: { p: Database["public"]["Tables"]["social_posts"]["Row"] }
+        Returns: Json
       }
       task_actor: { Args: never; Returns: string }
     }
@@ -3451,14 +3725,13 @@ export type Database = {
       service_page_type: "service" | "hub"
       site_stack: "astro" | "nextjs" | "other"
       social_account_status: "connected" | "expired" | "manual_only"
-      social_platform: "facebook" | "instagram" | "linkedin" | "x" | "tiktok"
-      social_post_status:
-        | "idea"
-        | "drafted"
-        | "approved"
-        | "scheduled"
-        | "published"
-        | "failed"
+      social_platform:
+        | "facebook"
+        | "instagram"
+        | "linkedin"
+        | "x"
+        | "tiktok"
+        | "google_business"
       stage_status:
         | "not_started"
         | "in_progress"
@@ -3689,14 +3962,13 @@ export const Constants = {
       service_page_type: ["service", "hub"],
       site_stack: ["astro", "nextjs", "other"],
       social_account_status: ["connected", "expired", "manual_only"],
-      social_platform: ["facebook", "instagram", "linkedin", "x", "tiktok"],
-      social_post_status: [
-        "idea",
-        "drafted",
-        "approved",
-        "scheduled",
-        "published",
-        "failed",
+      social_platform: [
+        "facebook",
+        "instagram",
+        "linkedin",
+        "x",
+        "tiktok",
+        "google_business",
       ],
       stage_status: [
         "not_started",

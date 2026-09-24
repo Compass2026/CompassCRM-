@@ -12,6 +12,7 @@
     "build-brief": "node --no-warnings scripts/build-brief.mjs",
     "test:sandbox": "scripts/test-portal-sandbox.sh",
     "test:tasks-ui": "scripts/test-tasks-ui.sh",
+    "test:posts-ui": "UI_SPEC=tests/posts-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"
   },
   "dependencies": {

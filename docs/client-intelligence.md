@@ -21,7 +21,7 @@ go-live (`docs/portal-reconciliation.md`).
 | Assets | `brand_assets` (logos, photos, labels, sizes) | 84 photos, 8 primary logos |
 | Keywords and intent | `keywords` (`intent`, constrained to the four intents or NULL since 0044; `intent_note`; `service_id`; money / tracked flags), `page_groups`, `money_keywords` | 414 labelled with one of the four intents, 133 without an intent (55 of them Shewmaker rows whose former free-text intent now sits in `intent_note`) |
 | Content rules | `client_brands` (AI guidance, words to use / avoid, pillars), `brand_boards.hard_rules` | written |
-| Posts | `social_posts` (platform, copy, status), `content_posts` (blog) | 0 social rows; **GBP posts have no CRM record** — `google-ops gbp_posts` sends straight to Google |
+| Posts | `social_posts` (platform, copy; 0045 replaces its free `status` with `review_status` + `publish_status`), `content_posts` (blog) | 0 social rows; GBP posts are drafted in the GBP Spec doc only. The worker no longer calls `gbp_posts` or `gbp_qa` (PRs #57, #58, Sept 23) |
 
 ## Rules the whole post line follows
 
@@ -61,13 +61,56 @@ go-live (`docs/portal-reconciliation.md`).
    nonstandard; types regenerated. Reconciled in the app: the Foundation
    keyword map shows the intent and the note separately, and the
    Intelligence tab reads `offers` (below).
-4. **The post record (migration 0045).** One table for GBP and social
-   drafts: channel, service, keyword, intent, body, CTA, assets, cited
-   claim ids, status `draft → in_review → approved → published | rejected`,
-   reviewer and time. Triggers refuse a draft leaving `draft` without a
-   topic, an intent and at least one usable claim; refuse approval by the
-   worker; refuse publishing anything not approved. Covered by
-   `scripts/test-portal-sandbox.sh`.
+4. **The post record (migration 0045 — applied Sept 24 2026, `20260924004839`).**
+   `social_posts` evolved in place (0 rows on production; `content_posts`
+   stays separate), with `post_claims`, `post_assets` and append-only
+   `post_events`. Read the migration header for the full rules; in short:
+   - `review_status` draft → in_review → approved | rejected, and
+     `publish_status` not_scheduled → scheduled → publishing → published |
+     failed; nothing past not_scheduled without an approval, and a
+     publishing change never touches a review column.
+   - Only a signed-in team member through the API approves, rejects or
+     reopens (`session_user = 'authenticator'`, role `authenticated`,
+     `auth.uid()` → `team_members.id`). The worker (SQL as postgres), the
+     service role, pg_cron and triggers never can. A person may approve
+     their own draft. Actor columns hold `team_members.id`.
+   - Grounding at submit, approval and publishing: a linked claim counts
+     only if confirmed or sourced-with-a-source, and any unverified one
+     blocks; informational / commercial / transactional posts need one
+     usable claim; a claimless navigational post must be marked
+     `crm_facts_only` (directly stored CRM facts only); a linked offer must
+     be confirmed and not ended; a linked service approved.
+   - Topic before leaving draft: a standard informational / commercial /
+     transactional post needs an approved `service_id`; a navigational
+     post may be brand-level; an offer post needs `offer_id` (service
+     optional for a business-wide offer); `keyword_id` is optional.
+     `post_type` is `standard` or `offer` — GBP Event posts come later
+     with their own fields and adapter.
+   - Media is `post_assets` only (brand assets, ordered, with content
+     hashes); the legacy `asset_url` / `storage_path` columns are dropped.
+     Generated graphics become brand assets and are linked the same way.
+   - Manual publication: a teammate may mark an approved facebook /
+     instagram / linkedin / x / tiktok post published after posting it
+     natively; the approval hash and grounding are re-checked,
+     `published_at` and an https `published_url` are required,
+     `external_post_id` may be null, and the event names the person.
+     Business Profile posts go out only through the publisher.
+   - Submitted content is frozen; approval stores a snapshot (content,
+     claim text, offer terms, assets) and its sha256; publishing starts
+     only if the live content still hashes the same.
+   - A claim unverified / edited / deleted, an offer or service retired or
+     changed, or an asset changed sends an approved, unpublished post back
+     to review (unscheduled, new review task, `grounding_lapsed` event); a
+     daily job catches offers that end by date.
+   - Submitting opens one unassigned `post_review` task per post in the
+     `CLAUDE_APPROVAL` (hold) lane, which the Brief lists under "needs a
+     decision"; approving, rejecting or withdrawing closes it. No batching
+     in 0045.
+   Covered by `tests/social-post-review-migration.test.mjs` (PGlite),
+   `supabase/tests/sandbox/social_post_review.test.sql` (full replay, real
+   authenticator sessions) and `npm run test:posts-ui` (PostgREST +
+   Chromium). The Social tab and `/clients/[id]/social/[postId]` are the
+   review UI.
 5. **Grounded drafting.** A `get_client_intelligence(client_id)` packet
    mirroring these rules (the way `get_brand_profile` serves the brand)
    and a worker step that writes drafts only, to the plan's monthly count.
@@ -78,9 +121,12 @@ go-live (`docs/portal-reconciliation.md`).
    recording the Google post id; social published by hand first (mark
    published with the URL). Needs **Connect Google** (Settings) and the
    client's Business Profile manager grant.
-   Channel rules live here, not on the Client Intelligence record: a GBP
-   Offer post needs a start and end date, and that is checked when an
-   offer post is published, not when the offer is recorded.
+   Channel rules live here, not on the Client Intelligence record or the
+   post: the publishing adapter checks what Google actually requires for a
+   post type when it publishes (offer dates stay optional on `offers`).
+   The publisher is the service role; it re-checks the approval hash and
+   the grounding (the database refuses otherwise), sends the approved
+   snapshot, and records `external_post_id` / `published_url`.
 8. **Pilot and feedback.** One client, four GBP posts a month for a month;
    the scorecard records posts published, profile views and calls as
    measured values. Candidate: **Pensacola Equipment Rentals**, 8 of 9
