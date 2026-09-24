@@ -215,6 +215,108 @@ export async function markPublishedAction(
   });
 }
 
+// Publish now (Business Profile, 0046): the same governed path as the
+// 5-minute tick. The post is put in the queue (scheduled, due now) and the
+// post-publisher function is asked, with this person's JWT, to run that one
+// post: switch and pilot list, preflight, claim (0045 re-checks the approval
+// fingerprint and grounding), send from the approved snapshot, record a
+// publisher_runs row. Nothing here talks to Google or writes publish state
+// past scheduled.
+export async function publishNowAction(clientId: string, postId: string): Promise<PostFormState> {
+  if (!isUuid(clientId) || !isUuid(postId)) return { error: "Unknown post." };
+  const supabase = await start();
+  const { data: post } = await supabase
+    .from("social_posts")
+    .select("review_status, publish_status, platform")
+    .eq("id", postId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (!post) return { error: "Unknown post." };
+  if (post.platform !== "google_business") return { error: "Only Business Profile posts go through the publisher." };
+  if (post.review_status !== "approved") return { error: "Only an approved post can be published." };
+  let queuedHere = false;
+  if (post.publish_status === "not_scheduled" || post.publish_status === "failed") {
+    const queued = await step(clientId, postId, {
+      from: { review_status: "approved", publish_status: post.publish_status },
+      set: { scheduled_at: new Date().toISOString(), publish_status: "scheduled" },
+    });
+    if (queued.error) return queued;
+    queuedHere = true;
+  } else if (post.publish_status !== "scheduled") {
+    return { error: `The post is ${post.publish_status}.` };
+  }
+
+  const answer = await callPublisher(supabase, postId);
+  revalidatePost(clientId, postId);
+  if (!answer) {
+    return {
+      error: queuedHere
+        ? "The publisher did not answer. The post is scheduled for now and the next 5-minute run will take it; unschedule it to stop that."
+        : "The publisher did not answer. The post stays scheduled for the next 5-minute run.",
+    };
+  }
+  const result = ((answer as { results?: { post_id: string; outcome: string; detail?: string | null }[] })?.results ?? [])
+    .filter((r) => r.post_id === postId)
+    .at(-1);
+  if (result?.outcome === "published" || result?.outcome === "reconciled") return { ok: true };
+  // A block leaves nothing queued behind a person's back: a post this click
+  // scheduled goes back to not scheduled (the run and any task stay on record).
+  if (result?.outcome === "blocked" && queuedHere) {
+    await supabase
+      .from("social_posts")
+      .update({ publish_status: "not_scheduled" })
+      .eq("id", postId)
+      .eq("client_id", clientId)
+      .eq("publish_status", "scheduled");
+    revalidatePost(clientId, postId);
+  }
+  return { error: publishNowMessage(result?.outcome, result?.detail) };
+}
+
+// The function checks this person's JWT against team_members itself; the
+// anon key is only the gateway's apikey.
+async function callPublisher(supabase: Supabase, postId: string): Promise<unknown | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return null;
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/post-publisher`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: "now", post_id: postId }),
+    });
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+function publishNowMessage(outcome: string | undefined, detail: string | null | undefined): string {
+  const why = detail ? ` ${detail}` : "";
+  switch (outcome) {
+    case "blocked":
+      return `Not published.${why}`;
+    case "lapsed":
+      return `Not published: what the approval stood on changed, so the post went back to review.${why}`;
+    case "failed":
+      return `Google refused or did not answer.${why}`;
+    case "uncertain":
+      return "Google accepted the post without naming it. Nothing is recorded yet: the publisher checks the profile within about 10 minutes.";
+    case "ambiguous":
+      return `Not sent again and not recorded: the profile needs a person's check (see the task).${why}`;
+    case "skipped":
+      return `Nothing was sent.${why}`;
+    default:
+      return "Nothing was sent; see the publisher history below.";
+  }
+}
+
 export async function linkAssetAction(clientId: string, postId: string, _prev: PostFormState, form: FormData): Promise<PostFormState> {
   const assetId = form.get("brand_asset_id");
   if (!isUuid(clientId) || !isUuid(postId) || !isUuid(assetId)) return { error: "Pick an asset." };

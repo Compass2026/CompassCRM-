@@ -117,16 +117,53 @@ go-live (`docs/portal-reconciliation.md`).
 6. **Review.** A review queue on the Brief and the client tab: the draft
    beside the claims it cites; approve, edit or reject; assignable through
    the 0043 task fields.
-7. **Publishing.** Approved GBP posts through `google-ops gbp_posts`,
-   recording the Google post id; social published by hand first (mark
-   published with the URL). Needs **Connect Google** (Settings) and the
-   client's Business Profile manager grant.
-   Channel rules live here, not on the Client Intelligence record or the
-   post: the publishing adapter checks what Google actually requires for a
-   post type when it publishes (offer dates stay optional on `offers`).
-   The publisher is the service role; it re-checks the approval hash and
-   the grounding (the database refuses otherwise), sends the approved
-   snapshot, and records `external_post_id` / `published_url`.
+7. **Publishing.** Migration 0046 and the `post-publisher` Edge Function
+   (applied and deployed Sept 24 2026; the switch is off and no client is
+   on the pilot list). `google-ops gbp_posts` is retired
+   (410); `gbp_qa` is left for later. Needs **Connect Google** (Settings),
+   the client's Business Profile manager grant, and the client on the
+   publisher's pilot list (Settings › Publisher; off by default).
+   - **One governed path.** The 5-minute tick and a person's **Publish
+     now** run the same code: switch and pilot list → preflight → claim
+     (0045 re-checks the approval hash and grounding; a refusal sends the
+     post back to review) → check Google for the post before any re-send →
+     send the approved snapshot → record `external_post_id` /
+     `published_url`. The publisher is the service role through PostgREST;
+     nobody can hand it text.
+   - **Channel rules live in the publisher** (`channel.ts`), not on the
+     Client Intelligence record or the post: summary ≤ 1500 characters, a
+     known button (LEARN_MORE, BOOK, ORDER, SHOP, SIGN_UP, CALL), https
+     links, CALL without a link, a link only with a button; offer posts
+     need their offer's terms and carry the link as the redeem link, with
+     the offer's dates as the event schedule only when both exist (offer
+     dates stay optional on `offers`); one photo per post in v1, sent as
+     a 15-minute signed URL from `brand-assets`.
+   - **No duplicates, no guessed publications.** Google's create answer
+     counts only when it names the LocalPost; a 2xx without a name is
+     *uncertain* and the profile is checked instead. The check before a
+     re-send compares every listed post created since the approval with
+     the approved request (text, topic, button and link, offer terms,
+     redeem link, title and dates, photo count, not rejected). Exactly one
+     full match is recorded; nothing there is sent (unless Google already
+     claimed success, or the list was too long to read in full); anything
+     else is *ambiguous* — not re-sent, not recorded, and a person checks
+     (`publisher_check_post`).
+   - **Blocks are recorded, not silent.** Every outcome is a
+     `publisher_runs` row, shown on the post page and in the Brief's
+     Publishing card. A post Google would refuse is unscheduled with a
+     `publisher_fix_post` task; Google not connected →
+     `publisher_connect_google`; no profile access →
+     `publisher_profile_access`; a final failure → `publisher_failed`.
+     The publisher closes these itself when it verifies the fix (a token
+     refresh works, the profile opens, the post publishes or reconciles);
+     there is never more than one open task per problem.
+   - **Retries:** automatic only for 429, 5xx and timeout / network, three
+     attempts at most (10 / 30 / 120 minutes). At most five posts a tick
+     and one per Business Profile.
+   - **Social is posted by hand.** A scheduled post for any other platform
+     opens a TOM "Post this by hand" task when its time comes; marking it
+     published (URL required), unscheduling it or moving it later closes
+     the task. Scheduling the same post again starts a new reminder.
 8. **Pilot and feedback.** One client, four GBP posts a month for a month;
    the scorecard records posts published, profile views and calls as
    measured values. Candidate: **Pensacola Equipment Rentals**, 8 of 9

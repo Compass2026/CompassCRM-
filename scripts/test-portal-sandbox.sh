@@ -77,3 +77,5 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/report_measurements
 # 0045: post record and human review gate. Switches between the worker
 # (postgres) and PostgREST's authenticator login inside the file.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_post_review.test.sql"
+# 0046: Business Profile publisher schema (runs, outcomes, reminder cycles).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/publisher_runs.test.sql"

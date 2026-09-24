@@ -2191,6 +2191,60 @@ export type Database = {
           },
         ]
       }
+      publisher_runs: {
+        Row: {
+          client_id: string
+          created_at: string
+          detail: string | null
+          http_status: number | null
+          id: number
+          mode: string
+          outcome: string
+          post_id: string
+          task_id: string | null
+          transient: boolean
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          detail?: string | null
+          http_status?: number | null
+          id?: never
+          mode: string
+          outcome: string
+          post_id: string
+          task_id?: string | null
+          transient?: boolean
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          detail?: string | null
+          http_status?: number | null
+          id?: never
+          mode?: string
+          outcome?: string
+          post_id?: string
+          task_id?: string | null
+          transient?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publisher_runs_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "publisher_runs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rank_runs: {
         Row: {
           checks_count: number | null
@@ -3603,6 +3657,16 @@ export type Database = {
       portal_seen: { Args: never; Returns: undefined }
       post_caller_is_human: { Args: never; Returns: boolean }
       post_caller_kind: { Args: never; Returns: string }
+      publisher_reminder_state: {
+        Args: { p_post_ids?: string[] }
+        Returns: {
+          client_id: string
+          created_at: string
+          outcome: string
+          post_id: string
+          task_id: string
+        }[]
+      }
       recheck_social_posts: { Args: { p_post_ids?: string[] }; Returns: number }
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }

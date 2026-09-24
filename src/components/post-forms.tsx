@@ -357,7 +357,7 @@ export function ScheduleForm({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Scheduling keeps the approval as it is. Nothing publishes yet: the publisher is not built.
+        Scheduling keeps the approval as it is. Business Profile posts go out through the publisher (every 5 minutes, when it is switched on for the client); other platforms get a “post this by hand” task at this time.
       </p>
       <FormMessage state={state} />
     </form>

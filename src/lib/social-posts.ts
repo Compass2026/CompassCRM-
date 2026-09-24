@@ -170,6 +170,7 @@ export type PostAction =
   | "schedule"
   | "unschedule"
   | "mark_published"
+  | "publish_now"
   | "delete";
 
 // What a signed-in team member may do next. Approve / reject / reopen are
@@ -185,6 +186,8 @@ export function availableActions(post: PostState): PostAction[] {
   if (r === "approved" && p === "scheduled") out.push("unschedule");
   if (r === "approved" && (p === "not_scheduled" || p === "scheduled" || p === "failed")) {
     if (post.platform && canPublishByHand(post.platform)) out.push("mark_published");
+    // Business Profile: the same governed publisher path as a scheduled post (0046).
+    if (post.platform === "google_business") out.push("publish_now");
     out.push("reopen");
   }
   if ((r === "draft" || r === "rejected") && p === "not_scheduled") out.push("delete");

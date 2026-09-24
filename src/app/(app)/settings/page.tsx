@@ -13,6 +13,8 @@ import {
   type Ga4Setting,
 } from "@/components/google-connect-card";
 import type { AccessCheck } from "@/app/settings-actions";
+import { PublisherSettingsForm } from "@/components/publisher-settings-form";
+import { parsePublisherSettings } from "@/lib/publisher";
 
 export default async function SettingsPage({
   searchParams,
@@ -28,6 +30,8 @@ export default async function SettingsPage({
     { data: googleSettings },
     { data: tokenPresent },
     { data: ga4Present },
+    { data: publisherRow },
+    { data: clients },
   ] =
     await Promise.all([
       supabase
@@ -49,7 +53,13 @@ export default async function SettingsPage({
         .in("key", ["google_ops", "ga4_account", "google_access"]),
       supabase.rpc("secret_present", { secret_name: "GOOGLE_OPS_REFRESH_TOKEN" }),
       supabase.rpc("secret_present", { secret_name: "GA4_ACCOUNT_ID" }),
+      supabase.from("app_settings").select("value").eq("key", "publisher").maybeSingle(),
+      supabase
+        .from("clients")
+        .select("id, name, gbp_location")
+        .order("name"),
     ]);
+  const publisher = parsePublisherSettings(publisherRow?.value);
 
   const settingValue = (key: string) =>
     (googleSettings ?? []).find((s) => s.key === key)?.value ?? null;
@@ -89,6 +99,24 @@ export default async function SettingsPage({
             access={settingValue("google_access") as AccessCheck | null}
             redirectUri={redirectUri}
             flash={flash}
+          />
+        </CardContent>
+      </Card>
+
+      <Card id="publisher">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Publisher</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Sends approved Business Profile posts at their scheduled time, and
+            when someone presses Publish now. Off until switched on here.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <PublisherSettingsForm
+            enabled={publisher.enabled}
+            selected={publisher.clients}
+            clients={(clients ?? []).map((c) => ({ id: c.id, name: c.name, hasLocation: !!c.gbp_location }))}
+            googleConnected={tokenPresent === true}
           />
         </CardContent>
       </Card>

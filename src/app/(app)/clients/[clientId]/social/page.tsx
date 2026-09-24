@@ -17,7 +17,8 @@ import {
 import { cn } from "@/lib/utils";
 
 // Posts and their review gate (0045). Every post is a draft until a person
-// approves it; nothing publishes from here (no publisher is built yet).
+// approves it. Business Profile posts publish only through post-publisher
+// (0046); other platforms are posted by hand and marked published.
 export default async function SocialPage({
   params,
   searchParams,
