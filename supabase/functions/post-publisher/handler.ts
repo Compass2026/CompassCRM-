@@ -137,7 +137,7 @@ export function createPostPublisher(deps: Deps) {
     const postResolved = (p: PostRow, why: string) =>
       resolve({ keys: POST_TASK_KEYS, client_id: p.client_id, post_id: p.id }, why);
 
-    const locations = new Map<string, { loc: Location } | { blocked: string }>();
+    const locations = new Map<string, { loc: Location } | { blocked: string; code?: string }>();
     const locationFor = async (clientId: string) => {
       if (!locations.has(clientId)) {
         const client = await store.client(clientId);
@@ -146,9 +146,8 @@ export function createPostPublisher(deps: Deps) {
           const r = await google!.locate(client);
           if ("blocked" in r) locations.set(clientId, r);
           else {
-            if (r.found) await store.setGbpLocation(clientId, `${r.loc.account}/${r.loc.location}`);
             locations.set(clientId, { loc: r.loc });
-            await resolve({ keys: ["publisher_profile_access"], client_id: clientId }, "the client's Business Profile is reachable.");
+            await resolve({ keys: ["publisher_profile_access", "publisher_select_location"], client_id: clientId }, "the client's Business Profile is selected and reachable.");
           }
         }
       }
@@ -189,6 +188,15 @@ export function createPostPublisher(deps: Deps) {
         return null;
       }
       const l = await locationFor(p.client_id);
+      if ("blocked" in l && l.code === "GBP_LOCATION_REQUIRED") {
+        const task_id = await store.openTask({
+          client_id: p.client_id, key: "publisher_select_location",
+          title: "Select the client's Business Profile location",
+          notes: `${l.blocked} Posts stay scheduled and publish on the next run after it is selected.`,
+        });
+        await blockOnce(p, mode, l.blocked, task_id);
+        return null;
+      }
       if ("blocked" in l) {
         const task_id = await store.openTask({
           client_id: p.client_id, key: "publisher_profile_access",
@@ -251,11 +259,11 @@ export function createPostPublisher(deps: Deps) {
 
     // ── Tasks waiting on a fix the publisher can verify itself ──
     if (opts.mode === "tick") {
-      const waiting = await store.openTasks(["publisher_connect_google", "publisher_profile_access"]);
+      const waiting = await store.openTasks(["publisher_connect_google", "publisher_profile_access", "publisher_select_location"]);
       if (waiting.length) {
         await ensureGoogle();
         if (google) {
-          for (const clientId of new Set(waiting.filter((t) => t.key === "publisher_profile_access").map((t) => t.client_id))) {
+          for (const clientId of new Set(waiting.filter((t) => t.key !== "publisher_connect_google").map((t) => t.client_id))) {
             if (piloted(clientId)) await locationFor(clientId);
           }
         }

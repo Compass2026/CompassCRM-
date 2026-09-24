@@ -55,7 +55,6 @@ function fakeStore({ posts = [], settings = { enabled: true, clients: [CA] }, se
     firstAttemptRunAt: async (id) => s.runs.find((r) => r.post_id === id && ["failed", "uncertain", "ambiguous"].includes(r.outcome))?.created_at ?? null,
     latestRun: async (id) => [...s.runs].reverse().find((r) => r.post_id === id) ?? null,
     client: async (id) => s.clients[id] ?? null,
-    setGbpLocation: async (id, v) => { s.clients[id].gbp_location = v; },
     claim: async (id) => {
       const p = s.posts.get(id);
       if (s.claimErrors[id]) return { ok: false, error: s.claimErrors[id] };
@@ -210,14 +209,38 @@ test("no profile access: blocked with the access task; nothing claimed", async (
   assert.equal(s.tasks[0].key, "publisher_profile_access");
 });
 
-test("the profile is found by phone and remembered", async () => {
+test("no selected location: GBP_LOCATION_REQUIRED; an exact phone + name match is never chosen or stored", async () => {
   const noLoc = { [CA]: { id: CA, name: "Harbor Lane Plumbing", dba: null, phone: "(417) 555-0100", gbp_location: null } };
-  const { pub, s } = setup({ posts: [post("p1")], clients: noLoc }, {
-    accounts: [{ name: "accounts/111", locations: [{ name: "locations/999", title: "Other", phoneNumbers: { primaryPhone: "555" } }, { name: "locations/222", title: "Harbor Lane", phoneNumbers: { primaryPhone: "+1 417-555-0100" } }] }],
+  const { pub, s, g } = setup({ posts: [post("p1")], clients: noLoc }, {
+    accounts: [{ name: "accounts/111", locations: [{ name: "locations/222", title: "Harbor Lane Plumbing", phoneNumbers: { primaryPhone: "+1 417-555-0100" } }] }],
   });
   await pub.tick({ mode: "tick" });
-  assert.equal(s.clients[CA].gbp_location, LOC);
+  assert.equal(s.clients[CA].gbp_location, null, "nothing stored");
+  assert.equal(s.posts.get("p1").publish_status, "scheduled", "not claimed");
+  assert.equal(s.runs[0].outcome, "blocked");
+  assert.match(s.runs[0].detail, /^GBP_LOCATION_REQUIRED/);
+  const task = s.tasks.find((t) => t.key === "publisher_select_location");
+  assert.equal(task.status, "open");
+  assert.equal(g.createBodies.length, 0);
+  assert.ok(!g.calls.some((c) => c.includes("/v1/accounts")), "no discovery: the publisher does not search for a profile");
+
+  // A person selects it (google-connect gbp_select); the next tick publishes and closes the task.
+  s.clients[CA].gbp_location = LOC;
+  await pub.tick({ mode: "tick" });
   assert.equal(s.posts.get("p1").publish_status, "published");
+  assert.equal(task.status, "done");
+  assert.equal(s.clients[CA].gbp_location, LOC);
+});
+
+test("a selected gbp_location is used as is and never replaced", async () => {
+  const { pub, s, g } = setup({ posts: [post("p1")] }, {
+    accounts: [{ name: "accounts/999", locations: [{ name: "locations/1", title: "Harbor Lane Plumbing", phoneNumbers: { primaryPhone: "(417) 555-0100" } }] }],
+  });
+  await pub.tick({ mode: "tick" });
+  assert.equal(s.posts.get("p1").publish_status, "published");
+  assert.equal(s.clients[CA].gbp_location, LOC);
+  assert.ok(g.calls.some((c) => c.includes("/v1/locations/222")), "the selected location is checked");
+  assert.ok(!g.calls.some((c) => c.includes("/v1/accounts")), "no search for another one");
 });
 
 test("a refused claim (support changed) is rechecked and recorded as lapsed", async () => {

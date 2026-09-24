@@ -639,7 +639,16 @@ Function change that:
   reads the v4 posts list without creating anything). Settings › Google
   hands › *Business Profile location per client* is the UI; the granted
   scopes are shown there. Check access no longer matches on a partial
-  title and never writes `clients`.
+  title and never writes `clients`. **`gbp_select` is the only writer of
+  `clients.gbp_location`** (same PR): google-ops `gbp_locate` returns
+  phone / website / exact-name matches as ranked `suggestions` with
+  `status: skipped`, `reason: GBP_LOCATION_REQUIRED` and stores nothing
+  (with a location already selected it reports it); `gbp_apply` / `gbp_qa`
+  stop the same way before any Google call; the publisher never searches.
+  **Return URLs:** `start` accepts, and the callback redirects to, only
+  `https://compass-crm-ten.vercel.app` or `http://localhost:3000`
+  (`ALLOWED_RETURN_ORIGINS`); anything else is refused at start and falls
+  back to the production Settings page on the callback.
 - **Worker Google operations switch** (Sept 24 2026; `app_settings`
   `worker_google_ops`, **off** unless it is exactly `{"enabled": true}`; a
   missing row is off). Connect Google only stores the credential and
@@ -948,8 +957,11 @@ out of scope.
 - **Path:** switch + pilot list (`app_settings.publisher` = `{enabled,
   clients}`, off by default; Settings › Publisher) → preflight (channel
   rules: ≤ 1500 chars, known CTA, https links, CALL without a link, offer
-  terms, one photo; Google connected; the profile located by
-  `clients.gbp_location`, else phone, then name, and stored) → claim
+  terms, one photo; Google connected; the profile is the selected
+  `clients.gbp_location` only — with none, the post stays scheduled, the
+  run is `blocked` with `GBP_LOCATION_REQUIRED` and a TOM
+  `publisher_select_location` task opens, closed by the tick once a
+  location is selected and opens) → claim
   (`scheduled → publishing`; 0045 re-checks the approval hash and
   grounding, a refusal sends the post back to review and records
   `lapsed`) → check Google before any re-send → create → `published` with

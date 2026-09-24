@@ -6,7 +6,9 @@
 //
 //   POST { mode: "start", return_to }      team JWT → { url } for Google's
 //                                          consent screen. State is a signed,
-//                                          10-minute nonce carrying return_to.
+//                                          10-minute nonce carrying return_to,
+//                                          which must be on the Compass app's
+//                                          origin (ALLOWED_RETURN_ORIGINS).
 //   GET  ?code=&state=                     Google's redirect (no JWT — this
 //                                          function is deployed with
 //                                          verify_jwt = false and the state
@@ -61,6 +63,30 @@
 //
 // OAuth app: GSC_CLIENT_ID / GSC_CLIENT_SECRET (GOOGLE_OPS_CLIENT_ID / _SECRET
 // override). Its authorized redirect URIs must include this function's URL.
+
+// Where Google's redirect may send the browser back to: the Compass app in
+// production, and local development. Checked when the flow starts and again
+// on the callback (a bad value falls back to the production Settings page).
+export const CANONICAL_APP_ORIGIN = "https://compass-crm-ten.vercel.app";
+export const ALLOWED_RETURN_ORIGINS: readonly string[] = [CANONICAL_APP_ORIGIN, "http://localhost:3000"];
+const FALLBACK_RETURN = `${CANONICAL_APP_ORIGIN}/settings`;
+
+// An absolute http(s) URL on an allowed origin, with no credentials; else
+// null. Rejects relative and protocol-relative URLs, other schemes, and
+// anything that does not parse.
+export function safeReturnTo(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 2048) return null;
+  if (!/^https?:\/\/[^/\\]/i.test(raw)) return null;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (u.username || u.password) return null;
+  if (!ALLOWED_RETURN_ORIGINS.includes(u.origin)) return null;
+  return u.toString();
+}
 
 export const BUSINESS_MANAGE = "https://www.googleapis.com/auth/business.manage";
 export const GBP_CONNECT_SCOPES = ["openid", "email", BUSINESS_MANAGE] as const;
@@ -196,7 +222,7 @@ export function createGoogleConnect(deps: { supabase: Supabase; fetch: Fetch; se
       return new Response("This sign-in link has expired or was tampered with. Go back to Settings and press Connect Business Profile again.", { status: 400 });
     }
     const back = (params: Record<string, string>) => {
-      const to = new URL(payload!.return_to);
+      const to = new URL(safeReturnTo(payload!.return_to) ?? FALLBACK_RETURN);
       for (const [k, v] of Object.entries(params)) to.searchParams.set(k, v);
       return Response.redirect(to.toString(), 302);
     };
@@ -261,16 +287,13 @@ export function createGoogleConnect(deps: { supabase: Supabase; fetch: Fetch; se
 
   if (mode === "start") {
     if (!clientId) return Response.json({ error: "GSC_CLIENT_ID is not in Vault — the Google OAuth app google-connect reuses." }, { status: 500 });
-    let returnTo: URL;
-    try {
-      returnTo = new URL(body.return_to);
-      if (returnTo.protocol !== "https:" && returnTo.hostname !== "localhost") throw new Error();
-    } catch {
-      return Response.json({ error: "return_to must be an https URL" }, { status: 400 });
+    const returnTo = safeReturnTo(body.return_to);
+    if (!returnTo) {
+      return Response.json({ error: `return_to must be a page of the Compass app (${ALLOWED_RETURN_ORIGINS.join(" or ")}).` }, { status: 400 });
     }
     const payload = b64url(new TextEncoder().encode(JSON.stringify({
       exp: Date.now() + 10 * 60 * 1000,
-      return_to: returnTo.toString(),
+      return_to: returnTo,
       nonce: crypto.randomUUID(),
     })));
     const state = `${payload}.${await hmac(signingKey, payload)}`;

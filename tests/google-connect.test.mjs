@@ -4,7 +4,8 @@
 // and a fake Google that records every call. No network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createGoogleConnect, GBP_CONNECT_SCOPES, BUSINESS_MANAGE } from "../supabase/functions/google-connect/handler.ts";
+import { createHmac } from "node:crypto";
+import { createGoogleConnect, GBP_CONNECT_SCOPES, BUSINESS_MANAGE, safeReturnTo } from "../supabase/functions/google-connect/handler.ts";
 import { createGscSync } from "../supabase/functions/gsc-sync/handler.ts";
 
 globalThis.EdgeRuntime = { waitUntil() {} };
@@ -136,14 +137,14 @@ function setup(opts = {}) {
 }
 
 async function signedState(t) {
-  const { body } = await t.post({ mode: "start", return_to: "https://crm.example.test/settings" });
+  const { body } = await t.post({ mode: "start", return_to: "https://compass-crm-ten.vercel.app/settings" });
   return new URL(body.url).searchParams.get("state");
 }
 
 // ── Connect ───────────────────────────────────────────────────────────────────
 test("Connect requests openid, email and business.manage only, with include_granted_scopes=false", async () => {
   const t = setup();
-  const { status, body } = await t.post({ mode: "start", return_to: "https://crm.example.test/settings" });
+  const { status, body } = await t.post({ mode: "start", return_to: "https://compass-crm-ten.vercel.app/settings" });
   assert.equal(status, 200);
   const q = new URL(body.url).searchParams;
   assert.deepEqual(q.get("scope").split(" "), ["openid", "email", "https://www.googleapis.com/auth/business.manage"]);
@@ -205,6 +206,87 @@ test("every mode needs a team member", async () => {
   assert.equal((await t.post({ mode: "gbp_select", client_id: LUCAS, location: LUCAS_RES, title: "Lucas Construction", confirm: true }, { Authorization: "Bearer client-jwt" })).status, 403);
   assert.deepEqual(t.g.calls, []);
   assert.deepEqual(t.sb.writes, []);
+});
+
+// ── Return URLs ───────────────────────────────────────────────────────────────
+const GOOD = [
+  "https://compass-crm-ten.vercel.app/settings",
+  "https://compass-crm-ten.vercel.app/settings?tab=google#worker-google",
+  "http://localhost:3000/settings",
+];
+const BAD = [
+  "https://evil.example/settings",
+  "https://compass-crm-ten.vercel.app.evil.example/settings",
+  "https://compass-crm-ten.vercel.app@evil.example/settings",
+  "https://user:pw@compass-crm-ten.vercel.app/settings",
+  "http://compass-crm-ten.vercel.app/settings",
+  "https://localhost:3000/settings",
+  "http://localhost:3001/settings",
+  "http://localhost/settings",
+  "https://preview-abc.vercel.app/settings",
+  "//evil.example/settings",
+  "/settings",
+  "https:/\\evil.example",
+  "https:\\\\evil.example",
+  "javascript:alert(1)",
+  "data:text/html,hi",
+  "ftp://compass-crm-ten.vercel.app/settings",
+  "not a url",
+  "",
+  null,
+  42,
+  { href: "https://compass-crm-ten.vercel.app/settings" },
+  "https://compass-crm-ten.vercel.app/" + "x".repeat(3000),
+];
+
+test("return URLs: only the Compass app origin (and local development) are accepted", () => {
+  for (const u of GOOD) assert.equal(new URL(safeReturnTo(u)).origin, new URL(u).origin, u);
+  for (const u of BAD) assert.equal(safeReturnTo(u), null, JSON.stringify(u));
+});
+
+test("start refuses a return URL outside the Compass app, before signing anything", async () => {
+  for (const u of BAD) {
+    const t = setup();
+    const { status, body } = await t.post({ mode: "start", return_to: u });
+    assert.equal(status, 400, JSON.stringify(u));
+    assert.match(body.error, /Compass app/);
+    assert.equal(body.url, undefined);
+  }
+  for (const u of GOOD) {
+    const t = setup();
+    const { status, body } = await t.post({ mode: "start", return_to: u });
+    assert.equal(status, 200, u);
+    assert.ok(body.url.startsWith("https://accounts.google.com/"));
+  }
+});
+
+// A state signed with the real key but carrying a bad return_to (as one
+// minted before this check would): the callback falls back to Settings.
+function forgeSigned(payload, key = "cron-secret") {
+  const b64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${b64}.${createHmac("sha256", key).update(b64).digest("base64url")}`;
+}
+
+test("the callback only ever redirects to the Compass app, and keeps the signature and expiry checks", async () => {
+  const exp = Date.now() + 60_000;
+  const t = setup({ opsToken: null });
+  const res = await t.get(`error=access_denied&state=${encodeURIComponent(forgeSigned({ exp, return_to: "https://evil.example/steal", nonce: "n" }))}`);
+  assert.equal(res.status, 302);
+  const to = new URL(res.headers.get("location"));
+  assert.equal(to.origin, "https://compass-crm-ten.vercel.app");
+  assert.equal(to.pathname, "/settings");
+
+  const ok = setup({ opsToken: null });
+  const good = await ok.get(`code=abc&state=${encodeURIComponent(forgeSigned({ exp, return_to: "http://localhost:3000/settings", nonce: "n" }))}`);
+  assert.equal(new URL(good.headers.get("location")).origin, "http://localhost:3000");
+
+  const expired = setup();
+  assert.equal((await expired.get(`code=abc&state=${encodeURIComponent(forgeSigned({ exp: Date.now() - 1, return_to: "https://compass-crm-ten.vercel.app/settings", nonce: "n" }))}`)).status, 400);
+  const wrongKey = setup();
+  assert.equal((await wrongKey.get(`code=abc&state=${encodeURIComponent(forgeSigned({ exp, return_to: "https://compass-crm-ten.vercel.app/settings", nonce: "n" }, "other-key"))}`)).status, 400);
+  assert.deepEqual(expired.g.calls, []);
+  assert.deepEqual(wrongKey.g.calls, []);
+  assert.deepEqual(wrongKey.sb.writes, []);
 });
 
 // ── Discovery ─────────────────────────────────────────────────────────────────

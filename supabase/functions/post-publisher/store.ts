@@ -146,11 +146,6 @@ export function createStore(supabase: Client) {
       );
     },
 
-    async setGbpLocation(clientId: string, value: string): Promise<void> {
-      const { error } = await supabase.from("clients").update({ gbp_location: value }).eq("id", clientId);
-      if (error) throw new Error(error.message);
-    },
-
     // scheduled → publishing. The 0045 trigger refuses it when the approval
     // fingerprint or grounding no longer holds; the error comes back here.
     async claim(id: string): Promise<{ ok: true; row: PostRow } | { ok: false; error: string | null }> {
