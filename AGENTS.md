@@ -26,7 +26,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
-  Sept 24 2026 as `20260924004839`). `scripts/test-portal-sandbox.sh` replays all migrations into
+  Sept 24 2026 as `20260924004839`; `0046` (the Business Profile publisher)
+  is written but **not yet applied**). `scripts/test-portal-sandbox.sh` replays all migrations into
   a local Postgres shaped like the project and runs the team / anon / portal
   access tests — run it after any migration that touches policies, grants,
   security-definer functions or `portal_*` views.
@@ -587,7 +588,7 @@ Function change that:
   (scopes `business.manage`, `analytics.edit`, `gmail.compose`, minted for
   the GSC OAuth app), plus `GA4_ACCOUNT_ID`. Ops: `gbp_locate`, `gbp_apply`
   (categories, description, services, website, confirmed hours — never the
-  name — from `clients.gbp_spec`), `gbp_posts`, `gbp_qa`, `ga4_provision`
+  name — from `clients.gbp_spec`), `gbp_qa`, `ga4_provision`
   (property + web stream + `phone_click` / `form_submit` key events →
   `sites.ga4_measurement_id`; the Astro layout fires both events when the
   id is set), `gmail_draft` (drafts only; nothing is ever sent). Every op
@@ -883,7 +884,7 @@ teammate may mark an approved facebook / instagram / linkedin / x / tiktok
 post published by hand (hash and grounding re-checked, `published_at` +
 https `published_url` required, `external_post_id` optional); a Business
 Profile post only ever goes out through the publisher. The worker does not write posts yet and never
-calls `gbp_posts` / `gbp_qa` (PRs #57, #58). UI: Social tab + post page.
+calls `gbp_posts` / `gbp_qa` (PRs #57, #58); the publisher is 0046, below. UI: Social tab + post page.
 Tests: `tests/social-post-review-migration.test.mjs`, the sandbox's
 `social_post_review.test.sql`, `npm run test:posts-ui`. The sandbox
 bootstrap now creates PostgREST's `authenticator` login, as production has
@@ -891,6 +892,51 @@ it. Verified on production after applying: all 16 function bodies match the
 reviewed file (md5), RLS / grants / cron / portal isolation as designed, a
 rolled-back worker draft opened a `CLAUDE_APPROVAL` review task and could
 not approve; types regenerated from production.
+
+## Business Profile publisher (0046, written Sept 24 2026, not applied)
+
+The only way a Business Profile post reaches Google. Design approved Sept
+24; rules in `docs/client-intelligence.md` step 7. **`google-ops gbp_posts`
+is retired** (answers 410 before any Google call); `gbp_qa` is untouched and
+out of scope.
+
+- **`post-publisher` Edge Function** (`handler.ts` over an injected store and
+  fetch; `channel.ts` pure rules; `google.ts` v4 localPosts; `store.ts`
+  supabase-js with the service role, so writes reach 0045's triggers as the
+  publisher identity). Callers: the pg_cron tick `post-publisher-tick`
+  (every 5 minutes, `x-cron-secret`, `{mode: "tick"}`) or a team JWT with
+  `{mode: "now", post_id}` — the app's **Publish now**, which schedules the
+  post for now and asks the function to run that one post through the
+  same path. No caller can pass text: it sends only `approved_snapshot`.
+- **Path:** switch + pilot list (`app_settings.publisher` = `{enabled,
+  clients}`, off by default; Settings › Publisher) → preflight (channel
+  rules: ≤ 1500 chars, known CTA, https links, CALL without a link, offer
+  terms, one photo; Google connected; the profile located by
+  `clients.gbp_location`, else phone, then name, and stored) → claim
+  (`scheduled → publishing`; 0045 re-checks the approval hash and
+  grounding, a refusal sends the post back to review and records
+  `lapsed`) → check Google before any re-send → create → `published` with
+  `external_post_id` / `published_url`, or `failed`.
+- **Limits:** ≤ 5 posts a tick, one per Business Profile per tick. Automatic
+  retry only for 429, 5xx and timeout / network, at 10 / 30 / 120 minutes,
+  3 attempts in total; a post stuck in `publishing` over 10 minutes is
+  reconciled against Google or failed as transient.
+- **Records:** every outcome is a `publisher_runs` row (team read, no API
+  writes). A block that needs a person opens one TOM task
+  (`publisher_fix_post` and the post is unscheduled, `publisher_connect_google`,
+  `publisher_profile_access`, `publisher_failed` when final). The Brief's
+  **Publishing** card lists blocked / lapsed / finally failed / stuck posts;
+  the post page shows the run history, attempts and channel problems.
+- **Other platforms are never published:** when a scheduled facebook /
+  instagram / linkedin / x / tiktok post comes due, the tick opens a TOM
+  "Post this by hand" task (`post_by_hand`), closed once someone marks
+  the post published (or unschedules it). This runs even while the switch
+  is off.
+- **Rollout:** apply 0046, deploy `post-publisher` and `google-ops`, connect
+  Google, switch on for one pilot client. Tests: `npm test`
+  (`post-publisher-channel`, `post-publisher-handler`) and
+  `npm run test:publisher` (the real handler and store over the sandbox
+  replay + PostgREST, fake Google).
 
 ## Client portal (Phase 5, Sept 17 2026)
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   deletePostAction,
+  publishNowAction,
   reopenPostAction,
   revisePostAction,
   submitPostAction,
@@ -36,6 +37,7 @@ import {
   publishLabels,
   reviewLabels,
 } from "@/lib/social-posts";
+import { approvedChannelProblems, MAX_ATTEMPTS, modeLabels, outcomeLabels, parsePublisherSettings } from "@/lib/publisher";
 import { cn } from "@/lib/utils";
 
 const claimStyles: Record<string, string> = {
@@ -72,6 +74,15 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
         : Promise.resolve({ data: null }),
       supabase.from("post_assets").select("brand_asset_id, sort_order, brand_assets(label, kind, storage_path, url)").eq("post_id", postId).order("sort_order"),
     ]);
+  const isGbp = post.platform === "google_business";
+  const [{ data: runs }, { data: publisherRow }] = isGbp || post.publish_status !== "not_scheduled"
+    ? await Promise.all([
+        supabase.from("publisher_runs").select("id, mode, outcome, transient, http_status, detail, task_id, created_at").eq("post_id", postId).order("id", { ascending: false }).limit(20),
+        supabase.from("app_settings").select("value").eq("key", "publisher").maybeSingle(),
+      ])
+    : [{ data: null }, { data: null }];
+  const publisher = parsePublisherSettings(publisherRow?.value);
+  const channel = isGbp && post.review_status === "approved" ? approvedChannelProblems(post.approved_snapshot) : [];
   const { data: brandAssets } = await supabase
     .from("brand_assets")
     .select("id, label, kind")
@@ -270,6 +281,13 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           {actions.includes("revise") && (
             <PostStepButton action={revisePostAction.bind(null, clientId, postId)} label="Revise" />
           )}
+          {actions.includes("publish_now") && (
+            <PostStepButton
+              action={publishNowAction.bind(null, clientId, postId)}
+              label="Publish now"
+              confirm="Publish this approved post to the client's Business Profile now?"
+            />
+          )}
           {actions.includes("unschedule") && (
             <PostStepButton action={unschedulePostAction.bind(null, clientId, postId)} label="Unschedule" variant="outline" />
           )}
@@ -291,9 +309,31 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
         {actions.includes("mark_published") && (
           <MarkPublishedForm clientId={clientId} postId={postId} fromPublish={post.publish_status} />
         )}
-        {post.review_status === "approved" && post.platform === "google_business" && post.publish_status !== "published" && (
+        {post.review_status === "approved" && isGbp && post.publish_status !== "published" && (
           <p className="text-xs text-muted-foreground">
-            Business Profile posts are published by the publisher only; they cannot be marked published by hand.
+            Business Profile posts are published by the publisher only, scheduled or with Publish now; they cannot be
+            marked published by hand.{" "}
+            {!publisher.enabled
+              ? "The publisher is switched off (Settings → Publisher)."
+              : !publisher.clients.includes(clientId)
+                ? "This client is not on the publisher's pilot list (Settings → Publisher)."
+                : null}
+          </p>
+        )}
+        {channel.length > 0 && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-medium">Google would refuse the approved content:</p>
+            <ul className="mt-1 list-disc pl-5">
+              {channel.map((m) => (<li key={m}>{m}</li>))}
+            </ul>
+            <p className="mt-1 text-xs">Reopen the post, fix it and approve it again.</p>
+          </div>
+        )}
+        {isGbp && post.publish_attempts > 0 && post.publish_status !== "published" && (
+          <p className="text-xs text-muted-foreground">
+            Attempt {post.publish_attempts} of {MAX_ATTEMPTS}
+            {post.last_attempt_at && `, last ${formatStamp(post.last_attempt_at)}`}. Only 429, 5xx and network errors are retried
+            automatically.
           </p>
         )}
         {post.publish_status === "scheduled" && post.scheduled_at && (
@@ -314,6 +354,30 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           </form>
         )}
       </section>
+
+      {(runs ?? []).length > 0 && (
+        <section className="surface space-y-3 p-4 sm:p-5">
+          <h3 className="text-sm font-semibold">Publisher</h3>
+          <ol className="space-y-2 text-sm">
+            {(runs ?? []).map((r) => {
+              const o = outcomeLabels[r.outcome] ?? { label: r.outcome, className: "" };
+              return (
+                <li key={r.id} className="flex flex-wrap items-start gap-2">
+                  <Badge variant="outline" className={cn("text-[10px]", o.className)}>{o.label}</Badge>
+                  <span className="min-w-0 flex-1">
+                    {r.detail}
+                    {r.http_status ? <span className="text-xs text-muted-foreground"> (HTTP {r.http_status}{r.transient ? ", transient" : ""})</span> : null}
+                    <span className="block text-xs text-muted-foreground">
+                      {modeLabels[r.mode] ?? r.mode} · <time dateTime={r.created_at}>{formatStamp(r.created_at)}</time>
+                      {r.task_id && (<> · <Link href={`/tasks/${r.task_id}`} className="underline">task</Link></>)}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
 
       <section className="surface space-y-3 p-4 sm:p-5">
         <h3 className="text-sm font-semibold">History</h3>

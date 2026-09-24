@@ -24,7 +24,9 @@
 //   gbp_apply    { spec? }           patch categories, description, services,
 //                                    hours, website from clients.gbp_spec (body.spec
 //                                    is stored first when given). Never the title.
-//   gbp_posts    { posts: [{ summary, cta_url? }] }   create local posts
+//   gbp_posts    retired (0046): answers 410. Business Profile posts are
+//                published only by the post-publisher function, from an
+//                approved post's snapshot (0045).
 //   gbp_qa       { qa: [{ q, a }] }                   create questions + owner answers
 //   ga4_provision { site_url, display_name?, timezone? }
 //                                    create a GA4 property + web stream + key
@@ -84,6 +86,14 @@ Deno.serve(async (req) => {
   const op: string | undefined = body?.op;
   if (!body?.client_id || !op) {
     return Response.json({ error: "client_id and op are required" }, { status: 400 });
+  }
+  // Retired (0046): arbitrary text straight to Google, with no approval
+  // behind it, is what 0045 / 0046 replace. Refused before any Google call.
+  if (op === "gbp_posts") {
+    return Response.json(
+      { op, status: "failed", detail: "gbp_posts is retired. Business Profile posts are published by the post-publisher function from an approved post (0045 / 0046)." },
+      { status: 410 }
+    );
   }
 
   const { data: client, error: clientError } = await supabase
@@ -261,33 +271,6 @@ Deno.serve(async (req) => {
         });
         if (!res.ok) { result = failed(await gerr("patch location", res), { attempted: applied, unresolved }); break; }
         result = done(`Applied: ${applied.join(", ")}.`, { applied, unresolved, location: `${loc.account}/${loc.location}` });
-        break;
-      }
-
-      // ── gbp_posts ─────────────────────────────────────────────────────
-      case "gbp_posts": {
-        const posts = (body.posts ?? []) as { summary: string; cta_url?: string }[];
-        if (!posts.length) { result = failed("posts[] is empty."); break; }
-        const loc = await locate();
-        if ("op" in loc) { result = loc; break; }
-        const created: string[] = [];
-        const errors: string[] = [];
-        for (const p of posts.slice(0, 8)) {
-          const res = await g(`${V4}/${loc.account}/${loc.location}/localPosts`, {
-            method: "POST",
-            body: JSON.stringify({
-              languageCode: "en-US",
-              topicType: "STANDARD",
-              summary: String(p.summary).slice(0, 1500),
-              ...(p.cta_url ? { callToAction: { actionType: "LEARN_MORE", url: p.cta_url } } : {}),
-            }),
-          });
-          if (res.ok) created.push((await res.json()).name);
-          else errors.push(await gerr("create post", res));
-        }
-        result = created.length
-          ? done(`${created.length} post(s) published${errors.length ? `, ${errors.length} failed` : ""}.`, { created, errors })
-          : failed(errors[0] ?? "no posts created", { errors });
         break;
       }
 

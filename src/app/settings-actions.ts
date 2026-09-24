@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireTeamMember } from "@/lib/team";
+import { isUuid } from "@/lib/tasks";
 
 // Settings-page actions. All of them talk to the google-connect Edge
 // Function with the signed-in team member's JWT; the function does the
@@ -97,4 +99,31 @@ export async function checkGoogleAccessAction(_prev: ActionState, _form: FormDat
   const rows = payload.clients as AccessRow[];
   const have = rows.filter((r) => r.gbp === "yes").length;
   return { ok: true, message: `Checked ${rows.length} clients: ${have} Business Profile${have === 1 ? "" : "s"} reachable.` };
+}
+
+// Business Profile publisher (0046): the switch and the pilot list. Off by
+// default; the tick publishes only for clients named here, and Publish now
+// takes the same check. Stored on app_settings 'publisher'.
+export async function savePublisherSettingsAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const enabled = form.get("enabled") === "on";
+  const picked = form.getAll("clients").map(String).filter(isUuid);
+  const { data: known, error: readError } = picked.length
+    ? await supabase.from("clients").select("id").in("id", picked)
+    : { data: [], error: null };
+  if (readError) return { ok: false, message: readError.message };
+  const clients = (known ?? []).map((c) => c.id).sort();
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert({ key: "publisher", value: { enabled, clients } }, { onConflict: "key" });
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/brief");
+  return {
+    ok: true,
+    message: enabled
+      ? `Publisher on for ${clients.length} client${clients.length === 1 ? "" : "s"}.`
+      : "Publisher switched off. Nothing goes to Business Profiles.",
+  };
 }

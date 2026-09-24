@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ownerLabels, stageStatusLabels, stageStatusStyles } from "@/lib/labels";
+import { latestPerPost, needsAttention, outcomeLabels, parsePublisherSettings, STUCK_AFTER_MINUTES } from "@/lib/publisher";
 import { cn } from "@/lib/utils";
 
 // The brief (reconciliation build-order step 9): the one page Tom reads in
@@ -28,6 +29,8 @@ function windows() {
   return {
     since24h: new Date(now - DAY).toISOString(),
     since7d: new Date(now - 7 * DAY).toISOString(),
+    since14d: new Date(now - 14 * DAY).toISOString(),
+    stuckBefore: new Date(now - STUCK_AFTER_MINUTES * 60 * 1000).toISOString(),
     today: new Date(now).toISOString().slice(0, 10),
   };
 }
@@ -41,7 +44,7 @@ function tail(text: string | null | undefined, n = 240): string {
 
 export default async function BriefPage() {
   const supabase = await createClient();
-  const { since24h, since7d, today } = windows();
+  const { since24h, since7d, since14d, stuckBefore, today } = windows();
 
   const [
     { data: decisions },
@@ -51,6 +54,9 @@ export default async function BriefPage() {
     { data: flagged },
     { data: completed },
     { data: fires },
+    { data: publisherRuns },
+    { data: stuckPosts },
+    { data: publisherRow },
   ] = await Promise.all([
     // Needs a decision: held work and anything waiting on someone.
     supabase
@@ -106,11 +112,32 @@ export default async function BriefPage() {
       .gte("created_at", since24h)
       .order("created_at", { ascending: false })
       .limit(100),
+    // Publishing (0046): Business Profile posts the publisher could not
+    // publish and that need a person, and posts stuck mid-publish.
+    supabase
+      .from("publisher_runs")
+      .select("id, post_id, client_id, outcome, transient, detail, created_at, task_id, social_posts(copy, publish_status, clients(name))")
+      .not("outcome", "in", "(reminder_opened,reminder_closed)")
+      .gte("created_at", since14d)
+      .order("id", { ascending: false })
+      .limit(200),
+    supabase
+      .from("social_posts")
+      .select("id, client_id, copy, last_attempt_at, publish_attempts, clients(name)")
+      .eq("publish_status", "publishing")
+      .lt("last_attempt_at", stuckBefore)
+      .limit(50),
+    supabase.from("app_settings").select("value").eq("key", "publisher").maybeSingle(),
   ]);
 
   const dueNow = (mine ?? []).filter((t) => t.due_date && t.due_date <= today);
   const later = (mine ?? []).filter((t) => !t.due_date || t.due_date > today);
   const decisionCount = (decisions?.length ?? 0) + (blocked?.length ?? 0);
+  // A post published since (by a later run or a retry) drops off.
+  const publishing = needsAttention(latestPerPost(publisherRuns ?? [])).filter(
+    (r) => r.social_posts?.publish_status !== "published"
+  );
+  const publisherSettings = parsePublisherSettings(publisherRow?.value);
 
   return (
     <div className="space-y-4">
@@ -262,6 +289,61 @@ export default async function BriefPage() {
                 {t.recommendation && <p className="text-xs text-muted-foreground">{t.recommendation}</p>}
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        {/* ── Publishing (Business Profile, 0046) ───────────────────── */}
+        <Card className="xl:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              Publishing
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                Business Profile publisher{" "}
+                {publisherSettings.enabled
+                  ? `on for ${publisherSettings.clients.length} client${publisherSettings.clients.length === 1 ? "" : "s"}`
+                  : "switched off"}{" "}
+                · <Link href="/settings#publisher" className="text-primary hover:underline">settings</Link>
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {publishing.length === 0 && (stuckPosts ?? []).length === 0 && (
+              <p className="text-muted-foreground">No post is blocked, failed or stuck.</p>
+            )}
+            {(stuckPosts ?? []).map((p) => (
+              <div key={p.id} className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="text-[10px] bg-red-100 text-red-800">Stuck</Badge>
+                  <Link href={`/clients/${p.client_id}/social/${p.id}`} className="font-medium hover:underline">
+                    {p.clients?.name}
+                  </Link>
+                  <span className="min-w-0 truncate text-muted-foreground">{tail(p.copy, 80)}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{ago(p.last_attempt_at)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Publishing with no answer recorded (attempt {p.publish_attempts}); the next run checks Google before sending again.
+                </p>
+              </div>
+            ))}
+            {publishing.map((r) => {
+              const o = outcomeLabels[r.outcome] ?? { label: r.outcome, className: "" };
+              return (
+                <div key={r.id} className="space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className={cn("text-[10px]", o.className)}>{o.label}</Badge>
+                    <Link href={`/clients/${r.client_id}/social/${r.post_id}`} className="font-medium hover:underline">
+                      {r.social_posts?.clients?.name}
+                    </Link>
+                    <span className="min-w-0 truncate text-muted-foreground">{tail(r.social_posts?.copy, 80)}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">{ago(r.created_at)}</span>
+                  </div>
+                  <p className="text-xs">
+                    {r.detail}
+                    {r.task_id && (<> · <Link href={`/tasks/${r.task_id}`} className="text-primary hover:underline">task</Link></>)}
+                  </p>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 

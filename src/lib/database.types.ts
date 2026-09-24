@@ -2191,6 +2191,60 @@ export type Database = {
           },
         ]
       }
+      publisher_runs: {
+        Row: {
+          client_id: string
+          created_at: string
+          detail: string | null
+          http_status: number | null
+          id: number
+          mode: string
+          outcome: string
+          post_id: string
+          task_id: string | null
+          transient: boolean
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          detail?: string | null
+          http_status?: number | null
+          id?: never
+          mode: string
+          outcome: string
+          post_id: string
+          task_id?: string | null
+          transient?: boolean
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          detail?: string | null
+          http_status?: number | null
+          id?: never
+          mode?: string
+          outcome?: string
+          post_id?: string
+          task_id?: string | null
+          transient?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publisher_runs_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "publisher_runs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rank_runs: {
         Row: {
           checks_count: number | null

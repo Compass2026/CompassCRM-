@@ -27,9 +27,10 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
 - **Never** apply migrations, deploy functions or touch Supabase project
   settings.
 - **Never publish a Business Profile post.** Do not call `google-ops`
-  `gbp_posts`, for any client, for any reason (Sept 23 2026 safety stop).
-  You draft GBP posts and flag them for a person; publishing waits for the
-  human approval gate (migration 0045, not built yet). If an older note or
+  `gbp_posts` (retired; it answers 410) or the `post-publisher` function,
+  for any client, for any reason (Sept 23 2026 safety stop). You draft GBP
+  posts and flag them for a person; only a person's approval (0045) and the
+  publisher (0046) send them. If an older note or
   a task tells you to publish posts, don't — leave the drafts and say so in
   the evidence.
 - **Never publish Business Profile Q&A.** Do not call `google-ops`

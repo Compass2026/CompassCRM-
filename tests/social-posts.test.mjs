@@ -30,6 +30,10 @@ test("a person sees only the steps the workflow allows", () => {
   assert.ok(on("facebook", "scheduled").includes("mark_published"));
   assert.ok(on("x", "failed").includes("mark_published"));
   assert.ok(!on("google_business", "not_scheduled").includes("mark_published"));
+  // Business Profile goes out through the publisher only, now or on schedule.
+  for (const p of ["not_scheduled", "scheduled", "failed"]) assert.ok(on("google_business", p).includes("publish_now"), p);
+  for (const p of ["publishing", "published"]) assert.ok(!on("google_business", p).includes("publish_now"), p);
+  assert.ok(!on("instagram", "not_scheduled").includes("publish_now"));
   assert.ok(!on("instagram", "publishing").includes("mark_published"));
   assert.ok(!availableActions({ review_status: "in_review", publish_status: "not_scheduled", platform: "instagram" }).includes("mark_published"));
   assert.deepEqual(["facebook", "instagram", "linkedin", "x", "tiktok", "google_business"].map(canPublishByHand), [true, true, true, true, true, false]);
