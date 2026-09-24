@@ -118,7 +118,8 @@ go-live (`docs/portal-reconciliation.md`).
    beside the claims it cites; approve, edit or reject; assignable through
    the 0043 task fields.
 7. **Publishing.** Migration 0046 and the `post-publisher` Edge Function
-   (written Sept 24 2026, not applied). `google-ops gbp_posts` is retired
+   (applied and deployed Sept 24 2026; the switch is off and no client is
+   on the pilot list). `google-ops gbp_posts` is retired
    (410); `gbp_qa` is left for later. Needs **Connect Google** (Settings),
    the client's Business Profile manager grant, and the client on the
    publisher's pilot list (Settings › Publisher; off by default).

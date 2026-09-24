@@ -27,7 +27,7 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
   Sept 24 2026 as `20260924004839`; `0046` (the Business Profile publisher)
-  is written but **not yet applied**). `scripts/test-portal-sandbox.sh` replays all migrations into
+  was applied Sept 24 2026 as `20260924015915`). `scripts/test-portal-sandbox.sh` replays all migrations into
   a local Postgres shaped like the project and runs the team / anon / portal
   access tests — run it after any migration that touches policies, grants,
   security-definer functions or `portal_*` views.
@@ -893,7 +893,7 @@ reviewed file (md5), RLS / grants / cron / portal isolation as designed, a
 rolled-back worker draft opened a `CLAUDE_APPROVAL` review task and could
 not approve; types regenerated from production.
 
-## Business Profile publisher (0046, written Sept 24 2026, not applied)
+## Business Profile publisher (0046, applied Sept 24 2026 as `20260924015915`)
 
 The only way a Business Profile post reaches Google. Design approved Sept
 24; rules in `docs/client-intelligence.md` step 7. **`google-ops gbp_posts`
@@ -954,8 +954,11 @@ out of scope.
   (`publisher_reminder_state()`) says whether one is open, so the same post
   scheduled again gets a new reminder and a new task. This runs even while
   the switch is off.
-- **Rollout:** apply 0046, deploy `post-publisher` and `google-ops`, connect
-  Google, switch on for one pilot client. Tests: `npm test`
+- **Rollout (Sept 24 2026):** 0046 applied; `post-publisher` v1 and
+  `google-ops` v3 (`gbp_posts` → 410) deployed and verified with the switch
+  **off** (tick 200 `enabled: false`, non-team Publish now 403, `gbp_posts`
+  410 before any Google call). Still to do, in this order: connect Google,
+  then switch on for one pilot client. Nothing has been published. Tests: `npm test`
   (`post-publisher-channel`, `post-publisher-handler`, `publisher-app`),
   `npm run test:publisher` (the real handler and store over the sandbox
   replay + PostgREST, fake Google) and the sandbox's
