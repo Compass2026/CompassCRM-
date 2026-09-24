@@ -18,6 +18,7 @@ export type PostRow = {
   publish_attempts: number;
   last_attempt_at: string | null;
   approved_snapshot: Record<string, unknown> | null;
+  reviewed_at: string | null;
   external_post_id: string | null;
 };
 
@@ -25,7 +26,7 @@ export type RunRow = {
   post_id: string;
   client_id: string;
   mode: "tick" | "now" | "sweep" | "retry" | "reminder";
-  outcome: "published" | "reconciled" | "failed" | "blocked" | "lapsed" | "retry_scheduled" | "reminder_opened" | "reminder_closed";
+  outcome: "published" | "reconciled" | "uncertain" | "ambiguous" | "failed" | "blocked" | "lapsed" | "retry_scheduled" | "reminder_opened" | "reminder_closed";
   transient?: boolean;
   http_status?: number | null;
   detail?: string | null;
@@ -33,13 +34,22 @@ export type RunRow = {
 };
 
 const POST_COLS =
-  "id, client_id, platform, copy, review_status, publish_status, scheduled_at, publish_attempts, last_attempt_at, approved_snapshot, external_post_id";
+  "id, client_id, platform, copy, review_status, publish_status, scheduled_at, publish_attempts, last_attempt_at, approved_snapshot, reviewed_at, external_post_id";
 
 export function createStore(supabase: Client) {
   const one = async <T>(q: Promise<{ data: T | null; error: { message: string } | null }>): Promise<T | null> => {
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     return data;
+  };
+
+  const closeTask = async (id: string, outcome: string): Promise<void> => {
+    const task = await one<{ status: string; notes: string | null }>(supabase.from("tasks").select("status, notes").eq("id", id).maybeSingle());
+    if (!task || task.status === "done") return;
+    const { error } = await supabase.from("tasks")
+      .update({ status: "done", completed_at: new Date().toISOString(), notes: [task.notes, outcome].filter(Boolean).join("\n") })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
   };
 
   return {
@@ -97,24 +107,20 @@ export function createStore(supabase: Client) {
       )) ?? [];
     },
 
+    // Reminders are cycles: a post's reminder is open when its latest
+    // reminder event is reminder_opened (publisher_reminder_state, 0046).
     async openReminders(): Promise<{ post_id: string; client_id: string; task_id: string | null }[]> {
-      return (await one<{ post_id: string; client_id: string; task_id: string | null }[]>(
-        supabase.from("publisher_runs").select("post_id, client_id, task_id").eq("outcome", "reminder_opened")
-      )) ?? [];
+      const { data, error } = await supabase.rpc("publisher_reminder_state");
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as { post_id: string; client_id: string; outcome: string; task_id: string | null }[])
+        .filter((r) => r.outcome === "reminder_opened")
+        .map(({ post_id, client_id, task_id }) => ({ post_id, client_id, task_id }));
     },
 
-    async hasReminder(postId: string): Promise<boolean> {
-      const rows = await one<{ id: number }[]>(
-        supabase.from("publisher_runs").select("id").eq("post_id", postId).eq("outcome", "reminder_opened").limit(1)
-      );
-      return (rows ?? []).length > 0;
-    },
-
-    async hasClosedReminder(postId: string): Promise<boolean> {
-      const rows = await one<{ id: number }[]>(
-        supabase.from("publisher_runs").select("id").eq("post_id", postId).eq("outcome", "reminder_closed").limit(1)
-      );
-      return (rows ?? []).length > 0;
+    async reminderOpen(postId: string): Promise<boolean> {
+      const { data, error } = await supabase.rpc("publisher_reminder_state", { p_post_ids: [postId] });
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as { outcome: string }[]).some((r) => r.outcome === "reminder_opened");
     },
 
     async latestRun(postId: string): Promise<{ outcome: string; transient: boolean; detail: string | null } | null> {
@@ -122,6 +128,16 @@ export function createStore(supabase: Client) {
         supabase.from("publisher_runs").select("outcome, transient, detail").eq("post_id", postId)
           .order("id", { ascending: false }).limit(1).maybeSingle()
       );
+    },
+
+    // When this post's earliest attempt that may have reached Google was
+    // recorded (failed, uncertain or ambiguous), across approvals.
+    async firstAttemptRunAt(postId: string): Promise<string | null> {
+      const row = await one<{ created_at: string }>(
+        supabase.from("publisher_runs").select("created_at").eq("post_id", postId)
+          .in("outcome", ["failed", "uncertain", "ambiguous"]).order("id", { ascending: true }).limit(1).maybeSingle()
+      );
+      return row?.created_at ?? null;
     },
 
     async client(id: string) {
@@ -195,13 +211,24 @@ export function createStore(supabase: Client) {
       return created!.id;
     },
 
-    async closeTask(id: string, outcome: string): Promise<void> {
-      const task = await one<{ status: string; notes: string | null }>(supabase.from("tasks").select("status, notes").eq("id", id).maybeSingle());
-      if (!task || task.status === "done") return;
-      const { error } = await supabase.from("tasks")
-        .update({ status: "done", completed_at: new Date().toISOString(), notes: [task.notes, outcome].filter(Boolean).join("\n") })
-        .eq("id", id);
-      if (error) throw new Error(error.message);
+    closeTask,
+
+    // Open publisher tasks with these keys (for the checks that resolve them).
+    async openTasks(keys: string[]): Promise<{ id: string; client_id: string; key: string }[]> {
+      return (await one<{ id: string; client_id: string; key: string }[]>(
+        supabase.from("tasks").select("id, client_id, key").in("key", keys).neq("status", "done")
+      )) ?? [];
+    },
+
+    // Closes the open tasks the publisher opened for something now verified
+    // fixed: by key, and by client and / or post marker when given.
+    async closeOpenTasks(f: { keys: string[]; client_id?: string; post_id?: string }, outcome: string): Promise<string[]> {
+      let q = supabase.from("tasks").select("id").in("key", f.keys).neq("status", "done");
+      if (f.client_id) q = q.eq("client_id", f.client_id);
+      if (f.post_id) q = q.ilike("notes", `%post_id=${f.post_id}%`);
+      const rows = (await one<{ id: string }[]>(q)) ?? [];
+      for (const r of rows) await closeTask(r.id, outcome);
+      return rows.map((r) => r.id);
     },
 
     async signPhoto(path: string, seconds: number): Promise<string | null> {

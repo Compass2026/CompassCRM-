@@ -114,6 +114,12 @@ export function buildLocalPost(s: Snapshot, photoUrl: string | null): Record<str
   return body;
 }
 
+// What the post's request looks like for comparison against the profile:
+// the photo's signed URL is irrelevant (Google rehosts it), its count is not.
+export function expectedLocalPost(s: Snapshot): Record<string, unknown> {
+  return buildLocalPost(s, (s.assets ?? []).length ? "photo" : null);
+}
+
 // 429, 5xx and network / timeout failures are worth another automatic try;
 // every other answer is final until a person acts.
 export function isTransient(status: number | null): boolean {
@@ -126,17 +132,144 @@ export function nextRetryAt(lastAttemptAt: string, attempts: number): Date | nul
   return new Date(Date.parse(lastAttemptAt) + minutes * 60_000);
 }
 
-export type GooglePost = { name: string; summary?: string; createTime?: string; searchUrl?: string };
+// A LocalPost as Google returns it (v4). Every field may be absent.
+export type GooglePost = {
+  name?: string;
+  summary?: string;
+  createTime?: string;
+  searchUrl?: string;
+  state?: string;
+  topicType?: string;
+  callToAction?: { actionType?: string; url?: string };
+  offer?: { termsConditions?: string; redeemOnlineUrl?: string; couponCode?: string };
+  event?: { title?: string; schedule?: { startDate?: { year?: number; month?: number; day?: number }; endDate?: { year?: number; month?: number; day?: number } } };
+  media?: { mediaFormat?: string }[];
+};
+
+const LOCAL_POST_NAME = /^accounts\/[^/\s]+\/locations\/[^/\s]+\/localPosts\/[^/\s]+$/;
+
+// A create answer is a publication only when it names the LocalPost it made.
+// A 2xx without a well-formed name is an uncertain attempt, never a record.
+export function createdPostName(json: unknown): string | null {
+  const name = (json as { name?: unknown } | null)?.name;
+  return typeof name === "string" && LOCAL_POST_NAME.test(name.trim()) ? name.trim() : null;
+}
 
 const norm = (s: string | undefined | null) => (s ?? "").replace(/\s+/g, " ").trim();
+const normUrl = (u: string | undefined | null) => {
+  const t = (u ?? "").trim();
+  if (!t) return "";
+  try { return new URL(t).href.replace(/\/$/, ""); } catch { return t.replace(/\/$/, ""); }
+};
+const sameDate = (a?: { year?: number; month?: number; day?: number }, b?: { year?: number; month?: number; day?: number }) =>
+  !!a && !!b && a.year === b.year && a.month === b.month && a.day === b.day;
 
-// The post an earlier attempt may already have created: same text, created
-// after that attempt began (a minute of clock slack).
-export function findExistingPost(posts: GooglePost[], copy: string | null, since: string | null): GooglePost | null {
-  if (!since) return null;
-  const want = norm(copy);
+// How one LocalPost on the profile relates to the request this post sends
+// (buildLocalPost of the approved snapshot):
+//   match   — same text, created inside the window (since the post was
+//             approved), and every
+//             characteristic Google returns agrees (topic, button, offer,
+//             event, photo count, not rejected), with a usable name;
+//   partial — same text inside (or with no) creation time, but something
+//             differs or cannot be confirmed: a person must look;
+//   none    — different text, or created before the window (an earlier,
+//             legitimate post with the same copy).
+export type Candidate = { kind: "match" | "partial" | "none"; post: GooglePost; reasons: string[] };
+
+export function classifyLocalPost(p: GooglePost, expected: Record<string, unknown>, since: string): Candidate {
+  const want = expected as {
+    summary?: string; topicType?: string;
+    callToAction?: { actionType: string; url?: string | null };
+    offer?: { termsConditions?: string; redeemOnlineUrl?: string };
+    event?: { title?: string; schedule?: { startDate: { year: number; month: number; day: number }; endDate: { year: number; month: number; day: number } } };
+    media?: unknown[];
+  };
+  if (norm(p.summary) !== norm(want.summary)) return { kind: "none", post: p, reasons: [] };
   const after = Date.parse(since) - 60_000;
-  return (
-    posts.find((p) => norm(p.summary) === want && (!p.createTime || Date.parse(p.createTime) >= after)) ?? null
-  );
+  const reasons: string[] = [];
+  if (!p.createTime || Number.isNaN(Date.parse(p.createTime))) reasons.push("no creation time");
+  else if (Date.parse(p.createTime) < after) return { kind: "none", post: p, reasons: [] };
+  if (!p.name || !LOCAL_POST_NAME.test(p.name)) reasons.push("no post name");
+  if (p.state === "REJECTED") reasons.push("rejected by Google");
+
+  // Topic.
+  if (!p.topicType) reasons.push("topic not returned");
+  else if (p.topicType !== want.topicType) reasons.push(`topic ${p.topicType}, expected ${want.topicType}`);
+
+  // Button.
+  if (want.callToAction) {
+    if (!p.callToAction) reasons.push("button not returned");
+    else {
+      if (p.callToAction.actionType !== want.callToAction.actionType) reasons.push(`button ${p.callToAction.actionType ?? "none"}, expected ${want.callToAction.actionType}`);
+      if (normUrl(p.callToAction.url) !== normUrl(want.callToAction.url ?? null)) reasons.push("button link differs");
+    }
+  } else if (p.callToAction?.actionType) reasons.push(`has a ${p.callToAction.actionType} button; none was sent`);
+
+  // Offer.
+  if (want.offer) {
+    if (!p.offer) reasons.push("offer not returned");
+    else {
+      if (norm(p.offer.termsConditions) !== norm(want.offer.termsConditions)) reasons.push("offer terms differ");
+      if (normUrl(p.offer.redeemOnlineUrl) !== normUrl(want.offer.redeemOnlineUrl)) reasons.push("redeem link differs");
+    }
+  } else if (p.offer && (p.offer.termsConditions || p.offer.redeemOnlineUrl || p.offer.couponCode)) reasons.push("has an offer; none was sent");
+
+  // Event (offer title and dates).
+  if (want.event) {
+    if (!p.event) reasons.push("event not returned");
+    else {
+      if (norm(p.event.title) !== norm(want.event.title)) reasons.push("offer title differs");
+      if (want.event.schedule) {
+        if (!sameDate(p.event.schedule?.startDate, want.event.schedule.startDate) || !sameDate(p.event.schedule?.endDate, want.event.schedule.endDate)) reasons.push("offer dates differ");
+      } else if (p.event.schedule?.startDate || p.event.schedule?.endDate) reasons.push("has dates; none were sent");
+    }
+  } else if (p.event?.title) reasons.push("has an event; none was sent");
+
+  // Photo count (Google rehosts the image, so only the count is comparable).
+  const wantPhotos = (want.media ?? []).length;
+  if (p.media === undefined) { if (wantPhotos > 0) reasons.push("photo not returned"); }
+  else if (p.media.length !== wantPhotos) reasons.push(`${p.media.length} photo(s), expected ${wantPhotos}`);
+
+  return { kind: reasons.length ? "partial" : "match", post: p, reasons };
+}
+
+// The check before a re-send, and the stuck / uncertain sweep. Prefers a
+// person over a possible duplicate:
+//   reconciled — exactly one match and nothing else that could be it;
+//   absent     — nothing with this text in the window, the listing was
+//                complete, and the attempt is not one Google claimed to
+//                have accepted: safe to send (again);
+//   ambiguous  — anything else. Never re-sent, never recorded published.
+export type Reconciliation =
+  | { kind: "reconciled"; post: GooglePost & { name: string } }
+  | { kind: "absent" }
+  | { kind: "ambiguous"; detail: string };
+
+export function reconcileAttempt(
+  posts: GooglePost[],
+  expected: Record<string, unknown>,
+  since: string,
+  opts: { complete: boolean; acceptedByGoogle: boolean },
+): Reconciliation {
+  const seen = posts.map((p) => classifyLocalPost(p, expected, since));
+  const matches = seen.filter((c) => c.kind === "match");
+  const partials = seen.filter((c) => c.kind === "partial");
+  if (matches.length === 1 && partials.length === 0) {
+    return { kind: "reconciled", post: matches[0].post as GooglePost & { name: string } };
+  }
+  if (matches.length === 0 && partials.length === 0) {
+    if (opts.complete && !opts.acceptedByGoogle) return { kind: "absent" };
+    return {
+      kind: "ambiguous",
+      detail: opts.acceptedByGoogle
+        ? "Google accepted the last attempt without naming the post, and no matching post was found on the profile."
+        : "The profile's post list was too long to check completely, and no matching post was found in what was read.",
+    };
+  }
+  const describe = (c: Candidate) => `${c.post.name ?? "unnamed post"}${c.reasons.length ? ` (${c.reasons.join("; ")})` : ""}`;
+  const parts = [
+    matches.length ? `${matches.length} exact match${matches.length === 1 ? "" : "es"}: ${matches.map(describe).join(", ")}` : "",
+    partials.length ? `${partials.length} post${partials.length === 1 ? "" : "s"} with the same text that could not be confirmed: ${partials.map(describe).join(", ")}` : "",
+  ].filter(Boolean);
+  return { kind: "ambiguous", detail: `Not exactly one safe match on the profile — ${parts.join("; ")}.` };
 }

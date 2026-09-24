@@ -28,7 +28,10 @@ const serviceKey = sign({ role: "service_role", exp: exp() });
 const anonKey = sign({ role: "anon", exp: exp() });
 const teamToken = sign({ sub: TEAM.id, role: "authenticated", aud: "authenticated", email: TEAM.email, exp: exp() });
 
-const sql = (q) => execFileSync("/bin/sh", ["-c", `${PSQL} -c "$Q"`], { env: { ...process.env, Q: q } }).toString().trim();
+const sql = (q) => {
+  try { return execFileSync("/bin/sh", ["-c", `${PSQL} -c "$Q"`], { env: { ...process.env, Q: q }, stdio: ["ignore", "pipe", "pipe"] }).toString().trim(); }
+  catch (e) { const err = new Error(`${String(e.stderr ?? e.message).trim()}\n  in: ${q}`); err.stderr = e.stderr; throw err; }
+};
 const sqlFails = (q) => { try { sql(q); return null; } catch (e) { return String(e.stderr ?? e.message); } };
 
 // Supabase's gateway, reduced to /auth/v1/user and /rest/v1.
@@ -58,18 +61,21 @@ await new Promise((r) => gateway.listen(0, "127.0.0.1", r));
 const gatewayUrl = `http://127.0.0.1:${gateway.address().port}`;
 
 // A fake Google Business Profile API.
-const google = { creates: [], responses: [], existing: [] };
+const google = { creates: [], responses: [], existing: [], tokenOk: true, access: true };
 const fakeFetch = async (url, init = {}) => {
   const u = String(url);
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-  if (u.startsWith("https://oauth2.googleapis.com/token")) return json(200, { access_token: "at" });
-  if (u.includes("mybusinessbusinessinformation") && u.includes("/v1/locations/")) return json(200, { name: "locations/222", metadata: { mapsUri: "https://maps.example/harbor" } });
+  if (u.startsWith("https://oauth2.googleapis.com/token")) return google.tokenOk ? json(200, { access_token: "at" }) : json(400, { error: "invalid_grant" });
+  if (u.includes("mybusinessbusinessinformation") && u.includes("/v1/locations/")) {
+    return google.access ? json(200, { name: "locations/222", metadata: { mapsUri: "https://maps.example/harbor" } }) : json(403, { error: { message: "The caller does not have permission" } });
+  }
   if (u.includes("/localPosts") && (init.method ?? "GET") === "GET") return json(200, { localPosts: google.existing });
   if (u.includes("/localPosts") && init.method === "POST") {
     const body = JSON.parse(init.body);
     google.creates.push(body);
     const next = google.responses.shift() ?? { status: 200 };
     if (next.status !== 200) return json(next.status, { error: { message: next.message ?? "error" } });
+    if (next.body) return json(200, next.body); // e.g. a 2xx that names no post
     const n = google.creates.length;
     return json(200, { name: `${LOC}/localPosts/${n}`, searchUrl: `https://g.example/${n}`, createTime: new Date().toISOString(), summary: body.summary });
   }
@@ -100,6 +106,12 @@ const schedule = async (id, at = new Date(Date.now() - 60_000).toISOString()) =>
   assert.equal(error, null, error?.message);
 };
 const row = (id, cols) => sql(`select ${cols} from social_posts where id = '${id}'`);
+// A LocalPost as Google would list one of `base`'s posts.
+const listed = (id, summary, createTime = new Date().toISOString(), o = {}) => ({
+  name: `${LOC}/localPosts/${id}`, summary, createTime, state: "LIVE", topicType: "STANDARD",
+  callToAction: { actionType: "LEARN_MORE", url: "https://a.example.test/drains" }, searchUrl: `https://g.example/${id}`, ...o,
+});
+const runs = (id) => sql(`select string_agg(outcome, ',' order by id) from publisher_runs where post_id = '${id}'`);
 const base = { client_id: CA, platform: "google_business", search_intent: "commercial", service_id: "00000000-0000-4000-e000-00000000000a", cta_type: "LEARN_MORE", cta_url: "https://a.example.test/drains" };
 
 try {
@@ -183,18 +195,117 @@ try {
   assert.equal(forged.status, 403);
   ok("Publish now: same governed path, recorded as mode now; a non-team caller is refused");
 
-  // 7. A Facebook post due now: a TOM task to post it by hand; closed when marked published.
+  // 7. Hand-post reminders are cycles: schedule → opened → unschedule → closed →
+  //    reschedule the same post → a new reminder → marked published → closed.
   const fb = await approvedPost({ client_id: CA, platform: "facebook", search_intent: "informational", service_id: "00000000-0000-4000-e000-00000000001a", copy: "Is your water heater over ten years old?" });
+  const handTasks = () => sql(`select coalesce(string_agg(status::text, ',' order by created_at, id), '') from tasks where key = 'post_by_hand' and notes like '%post_id=${fb}%'`);
   await schedule(fb);
   await publisher.tick({ mode: "tick" });
   await publisher.tick({ mode: "tick" });
-  assert.equal(sql(`select count(*) from tasks where key = 'post_by_hand' and notes like '%post_id=${fb}%'`), "1");
+  assert.equal(runs(fb), "reminder_opened");
+  assert.equal(handTasks(), "open");
   assert.equal(row(fb, "publish_status"), "scheduled", "the publisher never posts to Facebook");
+  const { error: unsched } = await asTeam.from("social_posts").update({ publish_status: "not_scheduled" }).eq("id", fb);
+  assert.equal(unsched, null, unsched?.message);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(runs(fb), "reminder_opened,reminder_closed");
+  assert.equal(handTasks(), "done");
+  await schedule(fb); // the same post, scheduled again and due
+  await publisher.tick({ mode: "tick" });
+  await publisher.tick({ mode: "tick" });
+  assert.equal(runs(fb), "reminder_opened,reminder_closed,reminder_opened", "a second cycle, opened once");
+  assert.equal(handTasks(), "done,open", "a fresh task for the new cycle");
+  assert.equal(sql(`select outcome from publisher_reminder_state(array['${fb}'::uuid])`), "reminder_opened");
   const { error: manual } = await asTeam.from("social_posts").update({ publish_status: "published", published_at: new Date(Date.now() - 60_000).toISOString(), published_url: "https://facebook.example/p/1" }).eq("id", fb);
   assert.equal(manual, null, manual?.message);
   await publisher.tick({ mode: "tick" });
-  assert.equal(sql(`select status from tasks where key = 'post_by_hand' and notes like '%post_id=${fb}%'`), "done");
-  ok("Facebook post due: one TOM hand-posting task, closed once a person marks it published");
+  assert.equal(runs(fb), "reminder_opened,reminder_closed,reminder_opened,reminder_closed");
+  assert.equal(handTasks(), "done,done");
+  assert.equal(sql(`select outcome from publisher_reminder_state(array['${fb}'::uuid])`), "reminder_closed");
+  ok("Hand-post reminders: unschedule closes, rescheduling the same post opens a new cycle, marking published closes it");
+
+  // 9. A 2xx that names no post: nothing recorded; ten minutes later exactly one safe match is reconciled.
+  const u1copy = "Uncertain answer: same-week drain clearing.";
+  const u1 = await approvedPost({ ...base, copy: u1copy });
+  await schedule(u1);
+  google.responses.push({ status: 200, body: { summary: u1copy } });
+  let before = google.creates.length;
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(u1, "publish_status || '|' || coalesce(external_post_id, '-') || '|' || coalesce(published_url, '-')"), "publishing|-|-");
+  assert.equal(runs(u1), "uncertain");
+  google.existing = [listed("u1", u1copy)];
+  clock = new Date(Date.now() + 11 * 60_000);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(u1, "publish_status || '|' || external_post_id"), `published|${LOC}/localPosts/u1`);
+  assert.equal(runs(u1), "uncertain,reconciled");
+  assert.equal(google.creates.length, before + 1, "sent once");
+  google.existing = []; clock = new Date();
+  ok("2xx without a LocalPost name: uncertain, nothing recorded; reconciled from exactly one safe match");
+
+  // 10. Not exactly one safe match: never re-sent, never recorded; a person checks, then the single match is found.
+  const a1copy = "Ambiguous answer: two posts with this text appeared.";
+  const a1 = await approvedPost({ ...base, copy: a1copy });
+  await schedule(a1);
+  google.responses.push({ status: 200, body: {} });
+  before = google.creates.length;
+  await publisher.tick({ mode: "tick" });
+  google.existing = [listed("a1", a1copy), listed("a1dup", a1copy), listed("a1other", a1copy, undefined, { callToAction: { actionType: "CALL" } })];
+  clock = new Date(Date.now() + 11 * 60_000);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(a1, "publish_status || '|' || coalesce(external_post_id, '-')"), "failed|-");
+  assert.equal(runs(a1), "uncertain,ambiguous");
+  assert.match(sql(`select detail from publisher_runs where post_id = '${a1}' and outcome = 'ambiguous'`), /2 exact matches.*could not be confirmed/);
+  const checkTask = () => sql(`select status from tasks where key = 'publisher_check_post' and notes like '%post_id=${a1}%'`);
+  assert.equal(checkTask(), "open");
+  clock = new Date(Date.now() + 5 * 60 * 60_000);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(runs(a1), "uncertain,ambiguous", "no automatic retry after an ambiguous check");
+  assert.equal(google.creates.length, before + 1);
+  // The person removes the duplicate and the other post, then schedules it again.
+  google.existing = [listed("a1", a1copy)];
+  clock = new Date();
+  await schedule(a1);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(a1, "publish_status || '|' || external_post_id"), `published|${LOC}/localPosts/a1`);
+  assert.equal(runs(a1), "uncertain,ambiguous,reconciled");
+  assert.equal(google.creates.length, before + 1, "never sent a second time");
+  assert.equal(checkTask(), "done");
+  google.existing = [];
+  ok("Ambiguous check: not re-sent or recorded, a TOM task; after the person's fix the one match is reconciled and the task closes");
+
+  // 11. The publisher closes its own tasks once it verifies the fix.
+  google.tokenOk = false;
+  const g1 = await approvedPost({ ...base, copy: "Waiting on Google: drain camera inspections." });
+  await schedule(g1);
+  await publisher.tick({ mode: "tick" });
+  await publisher.tick({ mode: "tick" });
+  assert.equal(sql(`select count(*) from tasks where key = 'publisher_connect_google' and status <> 'done'`), "1", "one open task while it stays broken");
+  google.tokenOk = true;
+  await publisher.tick({ mode: "tick" });
+  assert.equal(sql(`select count(*) from tasks where key = 'publisher_connect_google' and status <> 'done'`), "0");
+  assert.match(sql(`select notes from tasks where key = 'publisher_connect_google' order by created_at desc limit 1`), /Resolved automatically by the publisher: Google sign-in works again/);
+  assert.equal(row(g1, "publish_status"), "published");
+
+  google.access = false;
+  const g2 = await approvedPost({ ...base, copy: "Waiting on access: sewer line repair." });
+  await schedule(g2);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(sql(`select status from tasks where key = 'publisher_profile_access' and client_id = '${CA}' order by created_at desc limit 1`), "open");
+  google.access = true;
+  await publisher.tick({ mode: "tick" });
+  assert.equal(sql(`select status from tasks where key = 'publisher_profile_access' and client_id = '${CA}' order by created_at desc limit 1`), "done");
+  assert.equal(row(g2, "publish_status"), "published");
+
+  // p3 (step 4) was refused for length: a person reopens it, fixes the copy, gets it approved and schedules it.
+  for (const set of [{ review_status: "draft" }, { copy: "Fixed: drain clearing, same week, by a licensed master plumber." }, { review_status: "in_review" }, { review_status: "approved" }]) {
+    const { error } = await asTeam.from("social_posts").update(set).eq("id", p3);
+    assert.equal(error, null, error?.message);
+  }
+  await schedule(p3);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(p3, "publish_status"), "published");
+  assert.equal(sql(`select status from tasks where key = 'publisher_fix_post' and notes like '%post_id=${p3}%'`), "done");
+  ok("Publisher tasks close themselves: Google connected, profile reachable, the repaired post published");
 
   // 8. The worker's SQL login still cannot publish anything itself.
   assert.match(sqlFails(`update social_posts set publish_status = 'publishing' where id = '${p2}'`) ?? "", /Only the publisher|cannot go from published/);

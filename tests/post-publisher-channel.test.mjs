@@ -6,9 +6,12 @@ import assert from "node:assert/strict";
 import {
   buildLocalPost,
   channelProblems,
-  findExistingPost,
+  classifyLocalPost,
+  createdPostName,
+  expectedLocalPost,
   isTransient,
   nextRetryAt,
+  reconcileAttempt,
 } from "../supabase/functions/post-publisher/channel.ts";
 
 const std = (o = {}) => ({ platform: "google_business", post_type: "standard", copy: "Slow drains? We clear them the same week.", cta_type: "LEARN_MORE", cta_url: "https://a.example.test/drains", assets: [], ...o });
@@ -75,13 +78,70 @@ test("only 429, 5xx and network failures are transient; retries back off and sto
   assert.equal(nextRetryAt(t, 3), null, "three attempts, then a person decides");
 });
 
-test("the check before re-sending matches the same text created after the last attempt", () => {
-  const posts = [
-    { name: "accounts/1/locations/2/localPosts/old", summary: "Slow drains? We clear them the same week.", createTime: "2026-09-20T09:00:00Z" },
-    { name: "accounts/1/locations/2/localPosts/new", summary: "Slow drains?  We clear them\nthe same week.", createTime: "2026-09-24T10:00:30Z", searchUrl: "https://g.example/new" },
-  ];
-  assert.equal(findExistingPost(posts, "Slow drains? We clear them the same week.", "2026-09-24T10:00:00Z").name, "accounts/1/locations/2/localPosts/new");
-  assert.equal(findExistingPost(posts, "Different text", "2026-09-24T10:00:00Z"), null);
-  assert.equal(findExistingPost(posts, "Slow drains? We clear them the same week.", "2026-09-25T00:00:00Z"), null, "older than the attempt");
-  assert.equal(findExistingPost(posts, "Slow drains? We clear them the same week.", null), null, "no previous attempt, nothing to find");
+test("a create answer is a publication only when it names the LocalPost", () => {
+  assert.equal(createdPostName({ name: "accounts/1/locations/2/localPosts/3" }), "accounts/1/locations/2/localPosts/3");
+  for (const bad of [null, {}, { name: "" }, { name: "  " }, { name: "localPosts/3" }, { name: 42 }, { name: "accounts/1/locations/2/localPosts/" }]) {
+    assert.equal(createdPostName(bad), null, JSON.stringify(bad));
+  }
+});
+
+const SINCE = "2026-09-24T10:00:00Z";
+const listed = (o = {}) => ({
+  name: "accounts/1/locations/2/localPosts/new", summary: "Slow drains?  We clear them\nthe same week.", createTime: "2026-09-24T10:00:30Z",
+  state: "LIVE", topicType: "STANDARD", callToAction: { actionType: "LEARN_MORE", url: "https://a.example.test/drains/" }, ...o,
+});
+
+test("a listed post matches only when every characteristic Google returns agrees", () => {
+  const want = expectedLocalPost(std());
+  assert.equal(classifyLocalPost(listed(), want, SINCE).kind, "match", "whitespace and a trailing slash are not differences");
+  assert.equal(classifyLocalPost(listed({ summary: "Other text" }), want, SINCE).kind, "none");
+  assert.equal(classifyLocalPost(listed({ createTime: "2026-09-20T09:00:00Z" }), want, SINCE).kind, "none", "before the window: a different, earlier post");
+  const partial = (o) => classifyLocalPost(listed(o), want, SINCE);
+  assert.deepEqual(partial({ createTime: undefined }).reasons, ["no creation time"]);
+  assert.deepEqual(partial({ name: undefined }).reasons, ["no post name"]);
+  assert.deepEqual(partial({ state: "REJECTED" }).reasons, ["rejected by Google"]);
+  assert.deepEqual(partial({ topicType: "EVENT" }).reasons, ["topic EVENT, expected STANDARD"]);
+  assert.deepEqual(partial({ topicType: undefined }).reasons, ["topic not returned"]);
+  assert.deepEqual(partial({ callToAction: undefined }).reasons, ["button not returned"]);
+  assert.deepEqual(partial({ callToAction: { actionType: "BOOK", url: "https://a.example.test/drains" } }).reasons, ["button BOOK, expected LEARN_MORE"]);
+  assert.deepEqual(partial({ callToAction: { actionType: "LEARN_MORE", url: "https://b.example.test/" } }).reasons, ["button link differs"]);
+  assert.deepEqual(partial({ media: [{ mediaFormat: "PHOTO" }] }).reasons, ["1 photo(s), expected 0"]);
+  assert.deepEqual(partial({ offer: { termsConditions: "x" } }).reasons, ["has an offer; none was sent"]);
+  // No button sent, one returned.
+  const bare = expectedLocalPost(std({ cta_type: null, cta_url: null }));
+  assert.deepEqual(classifyLocalPost(listed(), bare, SINCE).reasons, ["has a LEARN_MORE button; none was sent"]);
+  // A photo sent: the count must come back.
+  const photo = expectedLocalPost(std({ assets: [{ id: "a", storage_path: "c/p.jpg", url: null, sort_order: 0 }] }));
+  assert.equal(classifyLocalPost(listed({ media: [{ mediaFormat: "PHOTO", googleUrl: "https://lh3.example/x" }] }), photo, SINCE).kind, "match");
+  assert.deepEqual(classifyLocalPost(listed(), photo, SINCE).reasons, ["photo not returned"]);
+});
+
+test("offer posts compare terms, redeem link, title and dates", () => {
+  const offer = { id: "o1", title: "Fall special", terms: "$79 drain clearing", starts_on: "2026-10-01", ends_on: "2026-10-31" };
+  const want = expectedLocalPost({ ...std(), post_type: "offer", cta_type: null, offer });
+  const onGoogle = (o = {}) => listed({
+    topicType: "OFFER", callToAction: undefined,
+    offer: { termsConditions: "$79 drain clearing", redeemOnlineUrl: "https://a.example.test/drains" },
+    event: { title: "Fall special", schedule: { startDate: { year: 2026, month: 10, day: 1 }, endDate: { year: 2026, month: 10, day: 31 } } }, ...o,
+  });
+  assert.equal(classifyLocalPost(onGoogle(), want, SINCE).kind, "match");
+  assert.deepEqual(classifyLocalPost(onGoogle({ offer: { termsConditions: "$99", redeemOnlineUrl: "https://a.example.test/drains" } }), want, SINCE).reasons, ["offer terms differ"]);
+  assert.deepEqual(classifyLocalPost(onGoogle({ event: { title: "Fall special", schedule: { startDate: { year: 2026, month: 10, day: 2 }, endDate: { year: 2026, month: 10, day: 31 } } } }), want, SINCE).reasons, ["offer dates differ"]);
+  assert.deepEqual(classifyLocalPost(onGoogle({ event: { title: "Winter special" } }), want, SINCE).reasons, ["offer title differs", "offer dates differ"]);
+  assert.deepEqual(classifyLocalPost(onGoogle({ offer: undefined }), want, SINCE).reasons, ["offer not returned"]);
+});
+
+test("reconciliation: exactly one safe match, otherwise a person — never a guess", () => {
+  const want = expectedLocalPost(std());
+  const full = { complete: true, acceptedByGoogle: false };
+  assert.equal(reconcileAttempt([listed()], want, SINCE, full).kind, "reconciled");
+  assert.equal(reconcileAttempt([listed({ summary: "x" }), listed({ createTime: "2026-09-01T00:00:00Z" })], want, SINCE, full).kind, "absent", "nothing that could be it");
+  assert.equal(reconcileAttempt([], want, SINCE, full).kind, "absent");
+  const amb = (posts, opts = full) => reconcileAttempt(posts, want, SINCE, opts);
+  assert.equal(amb([listed(), listed({ name: "accounts/1/locations/2/localPosts/twin" })]).kind, "ambiguous", "two exact matches");
+  assert.equal(amb([listed(), listed({ name: "accounts/1/locations/2/localPosts/twin", topicType: undefined })]).kind, "ambiguous", "a match plus an unconfirmable twin");
+  assert.equal(amb([listed({ topicType: "OFFER" })]).kind, "ambiguous", "same text, different post type");
+  assert.equal(amb([], { complete: false, acceptedByGoogle: false }).kind, "ambiguous", "an incomplete listing proves nothing");
+  assert.equal(amb([], { complete: true, acceptedByGoogle: true }).kind, "ambiguous", "Google said yes but nothing is there");
+  assert.equal(amb([listed()], { complete: false, acceptedByGoogle: true }).kind, "reconciled", "one safe match is enough either way");
 });

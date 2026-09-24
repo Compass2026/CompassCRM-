@@ -25,6 +25,8 @@ export function approvedChannelProblems(snapshot: Json | null | undefined): stri
 export const outcomeLabels: Record<string, { label: string; className: string }> = {
   published: { label: "Published", className: "bg-green-100 text-green-800" },
   reconciled: { label: "Found on Google", className: "bg-green-100 text-green-800" },
+  uncertain: { label: "Unconfirmed", className: "bg-amber-100 text-amber-900" },
+  ambiguous: { label: "Check the profile", className: "bg-red-100 text-red-800" },
   failed: { label: "Failed", className: "bg-red-100 text-red-800" },
   blocked: { label: "Blocked", className: "bg-amber-100 text-amber-900" },
   lapsed: { label: "Back to review", className: "bg-amber-100 text-amber-900" },
@@ -42,15 +44,17 @@ export const modeLabels: Record<string, string> = {
 };
 
 // The Brief's Publishing block: for each post, its latest run, kept when that
-// run needs a person: a block, a lapse, or a final failure (not transient, or
-// out of attempts — the publisher opened a task for it). A transient failure
-// with attempts left is the publisher's to retry. Posts stuck in publishing
-// are read from social_posts, not from runs.
+// run needs a person: a block, a lapse, an ambiguous check (the publisher
+// will not re-send or record it on its own), or a final failure (not
+// transient, or out of attempts — the publisher opened a task for it). A
+// transient failure with attempts left is the publisher's to retry, and an
+// uncertain answer is its to check. Posts stuck in publishing are read from
+// social_posts, not from runs.
 export type RunLite = { post_id: string; client_id: string; outcome: string; transient: boolean; detail: string | null; created_at: string; task_id: string | null };
 
 export function needsAttention<T extends RunLite>(latest: T[]): T[] {
   return latest.filter(
-    (r) => r.outcome === "blocked" || r.outcome === "lapsed" || (r.outcome === "failed" && (!r.transient || r.task_id !== null))
+    (r) => r.outcome === "blocked" || r.outcome === "lapsed" || r.outcome === "ambiguous" || (r.outcome === "failed" && (!r.transient || r.task_id !== null))
   );
 }
 

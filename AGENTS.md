@@ -917,6 +917,19 @@ out of scope.
   grounding, a refusal sends the post back to review and records
   `lapsed`) → check Google before any re-send → create → `published` with
   `external_post_id` / `published_url`, or `failed`.
+- **Never a guessed publication.** A create answer counts only when it
+  names the LocalPost (`accounts/…/locations/…/localPosts/…`); a 2xx
+  without one is `uncertain`, nothing is recorded, and the post stays
+  `publishing` until the stuck sweep checks the profile. Every check
+  (before a re-send, and in the sweep) compares each listed post with the
+  approved request — text, topic, button and link, offer terms / redeem
+  link / title / dates, photo count, not `REJECTED` — created since the
+  post's **approval** (not since the last claim, so a retry after a check
+  still sees the original). Exactly one full match and nothing else with
+  that text → `reconciled`. Nothing with that text, a complete listing and
+  no 2xx claimed → safe to send. Anything else → `ambiguous`: the post is
+  `failed`, never re-sent or recorded automatically, and a
+  `publisher_check_post` task asks a person to look.
 - **Limits:** ≤ 5 posts a tick, one per Business Profile per tick. Automatic
   retry only for 429, 5xx and timeout / network, at 10 / 30 / 120 minutes,
   3 attempts in total; a post stuck in `publishing` over 10 minutes is
@@ -924,19 +937,29 @@ out of scope.
 - **Records:** every outcome is a `publisher_runs` row (team read, no API
   writes). A block that needs a person opens one TOM task
   (`publisher_fix_post` and the post is unscheduled, `publisher_connect_google`,
-  `publisher_profile_access`, `publisher_failed` when final). The Brief's
+  `publisher_profile_access`, `publisher_failed` when final,
+  `publisher_check_post` when ambiguous), and the publisher closes them
+  itself once it verifies the fix: `publisher_connect_google` when a token
+  refresh works, `publisher_profile_access` when the client's profile
+  opens (both checked every tick while such a task is open), and a post's
+  `publisher_fix_post` / `publisher_failed` / `publisher_check_post` when
+  that post publishes or reconciles. The Brief's
   **Publishing** card lists blocked / lapsed / finally failed / stuck posts;
   the post page shows the run history, attempts and channel problems.
 - **Other platforms are never published:** when a scheduled facebook /
   instagram / linkedin / x / tiktok post comes due, the tick opens a TOM
   "Post this by hand" task (`post_by_hand`), closed once someone marks
-  the post published (or unschedules it). This runs even while the switch
-  is off.
+  the post published, unschedules it or moves it later. Reminders are
+  cycles, not a lifetime flag: the post's latest reminder event
+  (`publisher_reminder_state()`) says whether one is open, so the same post
+  scheduled again gets a new reminder and a new task. This runs even while
+  the switch is off.
 - **Rollout:** apply 0046, deploy `post-publisher` and `google-ops`, connect
   Google, switch on for one pilot client. Tests: `npm test`
-  (`post-publisher-channel`, `post-publisher-handler`) and
+  (`post-publisher-channel`, `post-publisher-handler`, `publisher-app`),
   `npm run test:publisher` (the real handler and store over the sandbox
-  replay + PostgREST, fake Google).
+  replay + PostgREST, fake Google) and the sandbox's
+  `publisher_runs.test.sql`.
 
 ## Client portal (Phase 5, Sept 17 2026)
 

@@ -20,8 +20,10 @@ test("the Brief shows a post's latest run only when a person must act", () => {
     r("p4", "failed", "2026-09-24T10:00:00Z", { http_status: 400 }),
     r("p5", "lapsed", "2026-09-24T09:00:00Z"),
     r("p6", "retry_scheduled", "2026-09-24T09:00:00Z"),
+    r("p7", "ambiguous", "2026-09-24T09:00:00Z", { task_id: "t7" }),
+    r("p8", "uncertain", "2026-09-24T09:00:00Z"),
   ]);
-  assert.deepEqual(needsAttention(latest).map((x) => x.post_id).sort(), ["p3", "p4", "p5"]);
+  assert.deepEqual(needsAttention(latest).map((x) => x.post_id).sort(), ["p3", "p4", "p5", "p7"]);
 });
 
 test("the post page shows the publisher's own channel rules on the approved snapshot", () => {

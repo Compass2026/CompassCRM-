@@ -3,7 +3,14 @@
 // "Publish now": preflight → claim (0045 re-checks the approval fingerprint
 // and grounding) → build from the approved snapshot → check Google before any
 // re-send → send → record. Every outcome, including a preflight block, is a
-// publisher_runs row; blocks that need a person open one TOM task.
+// publisher_runs row; blocks that need a person open one TOM task, and the
+// publisher closes that task itself once it verifies the problem is gone.
+//
+// Duplicates: a post is recorded published only from a create answer that
+// names the LocalPost, or from exactly one safe match on the profile. A 2xx
+// without a name is "uncertain" and is checked against the profile; when the
+// check cannot find exactly one safe match the post is not re-sent and not
+// recorded — it is "ambiguous" and a person looks (publisher_check_post).
 //
 // Callers: the cron tick (x-cron-secret), or a signed-in team member with
 // { mode: "now", post_id } (the app's Publish now). Nothing else is accepted,
@@ -12,16 +19,20 @@
 //
 // Also, every tick: a non-Business-Profile post whose scheduled time has come
 // gets a TOM "post this by hand" task (the publisher never posts those), and
-// the task closes itself once the post is marked published.
+// the task closes itself once the post is marked published, unscheduled or
+// moved later. Reminders are cycles: the same post scheduled again gets a
+// new one.
 
 import {
   buildLocalPost,
   channelProblems,
-  findExistingPost,
+  createdPostName,
+  expectedLocalPost,
   isTransient,
   MAX_ATTEMPTS,
   MAX_POSTS_PER_TICK,
   nextRetryAt,
+  reconcileAttempt,
   SIGNED_URL_SECONDS,
   STUCK_AFTER_MINUTES,
   type Snapshot,
@@ -32,7 +43,15 @@ import type { PostRow, RunRow, Store } from "./store.ts";
 type Fetch = typeof fetch;
 export type Deps = { store: Store; fetch: Fetch; now?: () => Date; googleTimeoutMs?: number };
 type Mode = "tick" | "now";
-export type TickReport = { mode: Mode; enabled: boolean; results: { post_id: string; outcome: string; detail?: string | null }[] };
+export type TickReport = {
+  mode: Mode;
+  enabled: boolean;
+  results: { post_id: string; outcome: string; detail?: string | null }[];
+  resolved: string[]; // task ids the publisher closed after verifying the fix
+};
+
+// Tasks about one post; closed when that post publishes or reconciles.
+const POST_TASK_KEYS = ["publisher_fix_post", "publisher_failed", "publisher_check_post"];
 
 const PLATFORM_LABEL: Record<string, string> = {
   facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn", x: "X", tiktok: "TikTok",
@@ -44,7 +63,7 @@ export function createPostPublisher(deps: Deps) {
 
   async function tick(opts: { mode: Mode; postId?: string }): Promise<TickReport> {
     const at = now();
-    const report: TickReport = { mode: opts.mode, enabled: false, results: [] };
+    const report: TickReport = { mode: opts.mode, enabled: false, results: [], resolved: [] };
     const note = (post_id: string, outcome: string, detail?: string | null) => report.results.push({ post_id, outcome, detail });
 
     const run = async (r: RunRow) => {
@@ -62,18 +81,18 @@ export function createPostPublisher(deps: Deps) {
     // ── Hand-publishing reminders (non-Business-Profile posts) ──
     if (opts.mode === "tick") {
       for (const r of await store.openReminders()) {
-        if (await store.hasClosedReminder(r.post_id)) continue;
         const p = await store.post(r.post_id);
-        const done = !p || p.publish_status === "published";
-        const gone = p && p.publish_status !== "scheduled" && p.publish_status !== "published";
-        if (done || gone) {
-          if (r.task_id) await store.closeTask(r.task_id, done ? "Marked published." : "No longer scheduled.");
-          await run({ post_id: r.post_id, client_id: r.client_id, mode: "reminder", outcome: "reminder_closed",
-            detail: done ? "Marked published" : "No longer scheduled", task_id: r.task_id });
-        }
+        if (!p) continue; // deleted: its runs went with it
+        const why = p.publish_status === "published" ? "Marked published"
+          : p.publish_status !== "scheduled" ? "No longer scheduled"
+          : p.scheduled_at && Date.parse(p.scheduled_at) > at.getTime() ? "Rescheduled for later"
+          : null;
+        if (!why) continue;
+        if (r.task_id) await store.closeTask(r.task_id, `${why}.`);
+        await run({ post_id: r.post_id, client_id: r.client_id, mode: "reminder", outcome: "reminder_closed", detail: why, task_id: r.task_id });
       }
       for (const p of await store.dueHandPosts(at.toISOString())) {
-        if (await store.hasReminder(p.id)) continue;
+        if (await store.reminderOpen(p.id)) continue;
         const label = PLATFORM_LABEL[p.platform] ?? p.platform;
         const task_id = await store.openTask({
           client_id: p.client_id, key: "post_by_hand", post_id: p.id,
@@ -106,9 +125,18 @@ export function createPostPublisher(deps: Deps) {
       const clientSecret = (await store.secret("GOOGLE_OPS_CLIENT_SECRET")) ?? (await store.secret("GSC_CLIENT_SECRET"));
       const refresh = await store.secret("GOOGLE_OPS_REFRESH_TOKEN");
       const t = await refreshToken(deps.fetch, { clientId, clientSecret, refreshToken: refresh }, deps.googleTimeoutMs);
-      if ("blocked" in t) googleBlock = t.blocked;
-      else google = googleClient(deps.fetch, t.token, deps.googleTimeoutMs);
+      if ("blocked" in t) { googleBlock = t.blocked; return; }
+      google = googleClient(deps.fetch, t.token, deps.googleTimeoutMs);
+      await resolve({ keys: ["publisher_connect_google"] }, "Google sign-in works again.");
     };
+    // Closes publisher tasks once the publisher itself has verified the fix.
+    const resolve = async (f: { keys: string[]; client_id?: string; post_id?: string }, why: string) => {
+      const closed = await store.closeOpenTasks(f, `Resolved automatically by the publisher: ${why}`);
+      if (closed.length) report.resolved.push(...closed);
+    };
+    const postResolved = (p: PostRow, why: string) =>
+      resolve({ keys: POST_TASK_KEYS, client_id: p.client_id, post_id: p.id }, why);
+
     const locations = new Map<string, { loc: Location } | { blocked: string }>();
     const locationFor = async (clientId: string) => {
       if (!locations.has(clientId)) {
@@ -120,6 +148,7 @@ export function createPostPublisher(deps: Deps) {
           else {
             if (r.found) await store.setGbpLocation(clientId, `${r.loc.account}/${r.loc.location}`);
             locations.set(clientId, { loc: r.loc });
+            await resolve({ keys: ["publisher_profile_access"], client_id: clientId }, "the client's Business Profile is reachable.");
           }
         }
       }
@@ -187,7 +216,53 @@ export function createPostPublisher(deps: Deps) {
       await run({ post_id: p.id, client_id: p.client_id, mode, outcome: "failed", transient, http_status: status, detail, task_id });
     };
 
-    // ── Stuck: publishing with no answer recorded ──
+    // The window a check looks in: since the post was approved, or since its
+    // earliest recorded attempt if that is older (a person may reopen and
+    // re-approve the same copy after an attempt that reached Google).
+    // Nothing could have been sent before either, and every attempt since —
+    // including a claim that only ran a check — falls inside it, so a retry
+    // after an ambiguous check still sees the original post. The minute of
+    // slack in classifyLocalPost covers a run recorded after its request.
+    const checkSince = async (p: PostRow): Promise<string | null> => {
+      const first = await store.firstAttemptRunAt(p.id);
+      const times = [p.reviewed_at, first, p.last_attempt_at].filter((t): t is string => !!t).map(Date.parse);
+      return times.length ? new Date(Math.min(...times)).toISOString() : null;
+    };
+
+    // Not exactly one safe match: never re-sent, never recorded published.
+    const needsPerson = async (p: PostRow, mode: RunRow["mode"], detail: string) => {
+      await store.markFailed(p.id, detail);
+      const task_id = await store.openTask({
+        client_id: p.client_id, key: "publisher_check_post", post_id: p.id,
+        title: "Check the Business Profile before this post is sent again",
+        notes: `${detail} The publisher will not re-send it or record it on its own. Look at the profile: if the post is there once, delete any duplicate, then schedule it again or press Publish now on ${postLink(p)} — the publisher finds it and records it without sending. If it is not there, doing the same sends it. If another post has the same text, reopen this one and change its copy. post_id=${p.id}`,
+      });
+      await run({ post_id: p.id, client_id: p.client_id, mode, outcome: "ambiguous", detail, task_id });
+    };
+    const recordFound = async (p: PostRow, mode: RunRow["mode"], loc: Location, found: { name: string; searchUrl?: string; createTime?: string }, detail: string) => {
+      await store.markPublished(p.id, {
+        external_post_id: found.name,
+        published_url: found.searchUrl ?? loc.mapsUri ?? `https://mybusiness.googleapis.com/v4/${found.name}`,
+        published_at: found.createTime ?? at.toISOString(),
+      });
+      await run({ post_id: p.id, client_id: p.client_id, mode, outcome: "reconciled", detail });
+      await postResolved(p, `found on Google as ${found.name}.`);
+    };
+
+    // ── Tasks waiting on a fix the publisher can verify itself ──
+    if (opts.mode === "tick") {
+      const waiting = await store.openTasks(["publisher_connect_google", "publisher_profile_access"]);
+      if (waiting.length) {
+        await ensureGoogle();
+        if (google) {
+          for (const clientId of new Set(waiting.filter((t) => t.key === "publisher_profile_access").map((t) => t.client_id))) {
+            if (piloted(clientId)) await locationFor(clientId);
+          }
+        }
+      }
+    }
+
+    // ── Stuck: publishing with no answer recorded, or an uncertain 2xx ──
     if (opts.mode === "tick") {
       const before = new Date(at.getTime() - STUCK_AFTER_MINUTES * 60_000).toISOString();
       for (const p of await store.stuckGbpPosts(before)) {
@@ -198,17 +273,14 @@ export function createPostPublisher(deps: Deps) {
         if ("blocked" in l) continue;
         const listed = await google!.listPosts(l.loc);
         if (!listed.ok) continue; // try again next tick
-        const found = findExistingPost(listed.posts, (p.approved_snapshot as Snapshot | null)?.copy ?? p.copy, p.last_attempt_at);
-        if (found) {
-          await store.markPublished(p.id, {
-            external_post_id: found.name,
-            published_url: found.searchUrl ?? l.loc.mapsUri ?? `https://mybusiness.googleapis.com/v4/${found.name}`,
-            published_at: found.createTime ?? at.toISOString(),
-          });
-          await run({ post_id: p.id, client_id: p.client_id, mode: "sweep", outcome: "reconciled", detail: `Found on Google as ${found.name}` });
-        } else {
+        const last = await store.latestRun(p.id);
+        const rec = reconcileAttempt(listed.posts, expectedLocalPost((p.approved_snapshot ?? {}) as Snapshot), (await checkSince(p))!, {
+          complete: listed.complete, acceptedByGoogle: last?.outcome === "uncertain",
+        });
+        if (rec.kind === "reconciled") await recordFound(p, "sweep", l.loc, rec.post, `Found on Google as ${rec.post.name}`);
+        else if (rec.kind === "absent") {
           await finishFailure(p, "sweep", p.publish_attempts, null, "No confirmation from Google for the last attempt; nothing was found on the profile. Safe to retry.");
-        }
+        } else await needsPerson(p, "sweep", rec.detail);
       }
 
       // ── Automatic retries: transient failures, under the cap, after backoff ──
@@ -267,14 +339,13 @@ export function createPostPublisher(deps: Deps) {
           await finishFailure(row, mode, row.publish_attempts, listed.answer.status, `Could not check Google before re-sending: ${googleMessage(listed.answer)}`);
           continue;
         }
-        const found = findExistingPost(listed.posts, snap.copy, previousAttemptAt);
-        if (found) {
-          await store.markPublished(row.id, {
-            external_post_id: found.name,
-            published_url: found.searchUrl ?? loc.mapsUri ?? `https://mybusiness.googleapis.com/v4/${found.name}`,
-            published_at: found.createTime ?? at.toISOString(),
-          });
-          await run({ post_id: row.id, client_id: row.client_id, mode, outcome: "reconciled", detail: `Already on Google as ${found.name}; not sent again` });
+        const rec = reconcileAttempt(listed.posts, expectedLocalPost(snap), (await checkSince(row)) ?? previousAttemptAt, { complete: listed.complete, acceptedByGoogle: false });
+        if (rec.kind === "reconciled") {
+          await recordFound(row, mode, loc, rec.post, `Already on Google as ${rec.post.name}; not sent again`);
+          continue;
+        }
+        if (rec.kind === "ambiguous") {
+          await needsPerson(row, mode, rec.detail);
           continue;
         }
       }
@@ -291,14 +362,22 @@ export function createPostPublisher(deps: Deps) {
 
       const answer = await google!.createPost(loc, buildLocalPost(snap, photoUrl));
       if (answer.ok) {
-        const created = answer.json as { name?: string; searchUrl?: string; createTime?: string } | null;
-        const name = created?.name ?? "";
+        const created = answer.json as { searchUrl?: string; createTime?: string } | null;
+        const name = createdPostName(answer.json);
+        if (!name) {
+          // Accepted, but not identified: nothing is recorded or re-sent. The
+          // post stays publishing and the stuck sweep checks the profile.
+          await run({ post_id: row.id, client_id: row.client_id, mode, outcome: "uncertain", http_status: answer.status,
+            detail: `Google answered ${answer.status} without naming the post; the profile is checked before anything else happens.` });
+          continue;
+        }
         await store.markPublished(row.id, {
           external_post_id: name,
           published_url: created?.searchUrl ?? loc.mapsUri ?? `https://mybusiness.googleapis.com/v4/${name}`,
           published_at: created?.createTime ?? at.toISOString(),
         });
         await run({ post_id: row.id, client_id: row.client_id, mode, outcome: "published", http_status: answer.status, detail: name });
+        await postResolved(row, `published as ${name}.`);
       } else {
         await finishFailure(row, mode, row.publish_attempts, answer.status, googleMessage(answer));
       }

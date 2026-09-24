@@ -321,7 +321,8 @@ export default async function BriefPage() {
                   <span className="ml-auto text-xs text-muted-foreground">{ago(p.last_attempt_at)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Publishing with no answer recorded (attempt {p.publish_attempts}); the next run checks Google before sending again.
+                  Publishing without a confirmed answer from Google (attempt {p.publish_attempts}); the next run checks the
+                  profile and records it only on exactly one safe match.
                 </p>
               </div>
             ))}

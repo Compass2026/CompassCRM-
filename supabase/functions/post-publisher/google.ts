@@ -8,6 +8,7 @@ const ACCT = "https://mybusinessaccountmanagement.googleapis.com/v1";
 const BIZ = "https://mybusinessbusinessinformation.googleapis.com/v1";
 const V4 = "https://mybusiness.googleapis.com/v4";
 export const GOOGLE_TIMEOUT_MS = 20_000;
+const LIST_PAGES = 3;
 
 type Fetch = typeof fetch;
 export type ClientRow = { id: string; name: string; dba: string | null; phone: string | null; gbp_location: string | null };
@@ -105,10 +106,20 @@ export function googleClient(f: Fetch, token: string, timeoutMs = GOOGLE_TIMEOUT
     return { loc: { account, location, mapsUri }, found };
   }
 
-  async function listPosts(loc: Location): Promise<{ ok: true; posts: GooglePost[] } | { ok: false; answer: Answer }> {
-    const a = await g(`${V4}/${loc.account}/${loc.location}/localPosts?pageSize=20`);
-    if (!a.ok) return { ok: false, answer: a };
-    return { ok: true, posts: ((a.json as { localPosts?: GooglePost[] })?.localPosts) ?? [] };
+  // Up to LIST_PAGES pages of 100. complete is false when Google had more,
+  // so a caller never treats "not found in what was read" as "not there".
+  async function listPosts(loc: Location): Promise<{ ok: true; posts: GooglePost[]; complete: boolean } | { ok: false; answer: Answer }> {
+    const posts: GooglePost[] = [];
+    let token: string | null = null;
+    for (let page = 0; page < LIST_PAGES; page++) {
+      const a = await g(`${V4}/${loc.account}/${loc.location}/localPosts?pageSize=100${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`);
+      if (!a.ok) return { ok: false, answer: a };
+      const body = (a.json ?? {}) as { localPosts?: GooglePost[]; nextPageToken?: string };
+      posts.push(...(body.localPosts ?? []));
+      token = body.nextPageToken || null;
+      if (!token) return { ok: true, posts, complete: true };
+    }
+    return { ok: true, posts, complete: false };
   }
 
   async function createPost(loc: Location, body: Record<string, unknown>): Promise<Answer> {

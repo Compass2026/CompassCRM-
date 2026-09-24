@@ -137,18 +137,32 @@ go-live (`docs/portal-reconciliation.md`).
      the offer's dates as the event schedule only when both exist (offer
      dates stay optional on `offers`); one photo per post in v1, sent as
      a 15-minute signed URL from `brand-assets`.
+   - **No duplicates, no guessed publications.** Google's create answer
+     counts only when it names the LocalPost; a 2xx without a name is
+     *uncertain* and the profile is checked instead. The check before a
+     re-send compares every listed post created since the approval with
+     the approved request (text, topic, button and link, offer terms,
+     redeem link, title and dates, photo count, not rejected). Exactly one
+     full match is recorded; nothing there is sent (unless Google already
+     claimed success, or the list was too long to read in full); anything
+     else is *ambiguous* — not re-sent, not recorded, and a person checks
+     (`publisher_check_post`).
    - **Blocks are recorded, not silent.** Every outcome is a
      `publisher_runs` row, shown on the post page and in the Brief's
      Publishing card. A post Google would refuse is unscheduled with a
      `publisher_fix_post` task; Google not connected →
      `publisher_connect_google`; no profile access →
      `publisher_profile_access`; a final failure → `publisher_failed`.
+     The publisher closes these itself when it verifies the fix (a token
+     refresh works, the profile opens, the post publishes or reconciles);
+     there is never more than one open task per problem.
    - **Retries:** automatic only for 429, 5xx and timeout / network, three
      attempts at most (10 / 30 / 120 minutes). At most five posts a tick
      and one per Business Profile.
    - **Social is posted by hand.** A scheduled post for any other platform
      opens a TOM "Post this by hand" task when its time comes; marking it
-     published (URL required) closes the task.
+     published (URL required), unscheduling it or moving it later closes
+     the task. Scheduling the same post again starts a new reminder.
 8. **Pilot and feedback.** One client, four GBP posts a month for a month;
    the scorecard records posts published, profile views and calls as
    measured values. Candidate: **Pensacola Equipment Rentals**, 8 of 9

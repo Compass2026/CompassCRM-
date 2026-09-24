@@ -306,6 +306,10 @@ function publishNowMessage(outcome: string | undefined, detail: string | null | 
       return `Not published: what the approval stood on changed, so the post went back to review.${why}`;
     case "failed":
       return `Google refused or did not answer.${why}`;
+    case "uncertain":
+      return "Google accepted the post without naming it. Nothing is recorded yet: the publisher checks the profile within about 10 minutes.";
+    case "ambiguous":
+      return `Not sent again and not recorded: the profile needs a person's check (see the task).${why}`;
     case "skipped":
       return `Nothing was sent.${why}`;
     default:
