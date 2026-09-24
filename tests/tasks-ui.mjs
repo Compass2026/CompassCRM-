@@ -161,7 +161,9 @@ try {
   await shot("tasks-unassigned-desktop");
 
   // Create an assigned, overdue task.
-  const yesterday = sql(`select to_char(current_date - 1, 'YYYY-MM-DD')`);
+  // The Overdue view is Central-time today (todayIn), so "yesterday" is too;
+  // the database's UTC date runs ahead of it between 00:00 and 05:00 UTC.
+  const yesterday = sql(`select to_char((now() at time zone 'America/Chicago')::date - 1, 'YYYY-MM-DD')`);
   await page.locator("summary", { hasText: "New task" }).click();
   await page.getByLabel("Task", { exact: true }).fill("Send the September report");
   await page.getByLabel("Client", { exact: true }).selectOption({ label: "Harbor Lane Plumbing" });
