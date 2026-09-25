@@ -38,7 +38,10 @@ import { claimCategories, hostOf, normalizeUrl, stableJson, words } from "./rule
 
 export const MAX_CLAIMS = 2;
 export const KEYWORD_MAX_EXACT_USES = 1;
-export const GBP_RULES = { min_chars: 300, max_chars: 900, lead_chars: 100 } as const;
+// Compass's own quality range for a Business Profile post (Sept 25 2026):
+// at least 300, aim for about 450–700, normally no more than 900. Google's
+// limit (GBP_SUMMARY_MAX, 1500) is the channel's hard maximum, separately.
+export const GBP_RULES = { min_chars: 300, preferred_min_chars: 450, preferred_max_chars: 700, max_chars: 900, lead_chars: 100 } as const;
 
 // Claim categories never cited in v1, and categories the hard rules allow
 // only once the client has confirmed them.
@@ -288,6 +291,8 @@ export function buildBrief(input: DrafterInput, target: DraftTarget): BriefResul
     },
     channel_rules: {
       min_chars: GBP_RULES.min_chars,
+      preferred_min_chars: GBP_RULES.preferred_min_chars,
+      preferred_max_chars: GBP_RULES.preferred_max_chars,
       max_chars: GBP_RULES.max_chars,
       hard_max_chars: GBP_SUMMARY_MAX,
       lead_chars: GBP_RULES.lead_chars,

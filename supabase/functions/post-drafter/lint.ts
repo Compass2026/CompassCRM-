@@ -25,6 +25,16 @@ export type LintOptions = {
 
 const DIFFERENTIATOR_NGRAM = 4;
 
+// Gazetteer names that are also ordinary English words. These count as a
+// place only in a place context ("in Liberty", "near Union", "Republic, MO"),
+// so "Independence Day" or "a union of" never trip the location rule.
+export const COMMON_WORD_PLACES = new Set([
+  "Advance", "Arcadia", "Bland", "Center", "Clever", "Competition", "Crane", "Diamond", "Excelsior", "Freedom",
+  "Independence", "Liberal", "Liberty", "Paradise", "Peculiar", "Republic", "Success", "Summit", "Union", "Victoria",
+]);
+const PLACE_BEFORE = "(?:[Ii]n|[Nn]ear|[Aa]round|[Ss]erving|[Tt]hroughout|[Ff]rom|[Tt]o|[Oo]f|[Aa]cross)\\s+";
+const PLACE_AFTER = "(?:,?\\s+(?:MO|Missouri|County)\\b)";
+
 export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {}): LintResult {
   const problems: LintProblem[] = [];
   const warnings: LintProblem[] = [];
@@ -60,6 +70,9 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
   const len = copy.trim().length;
   if (len > 0 && len < rules.min_chars) add("too_short", `Write at least ${rules.min_chars} characters (this is ${len}).`);
   if (len > rules.max_chars) add("too_long", `Keep it to ${rules.max_chars} characters (this is ${len}).`);
+  if (len >= rules.min_chars && len <= rules.max_chars && (len < rules.preferred_min_chars || len > rules.preferred_max_chars)) {
+    warnings.push({ code: "length_outside_preferred", message: `Aim for ${rules.preferred_min_chars}–${rules.preferred_max_chars} characters (this is ${len}).` });
+  }
   for (const m of copy.matchAll(/https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+\.(?:com|net|org|co|us|io|biz|info)\b\S*/gi)) {
     add("url_in_body", "No links in the text: the button carries the link.", m[0]);
   }
@@ -118,7 +131,9 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
   }
   for (const name of opts.gazetteer ?? []) {
     if (name.length < 4 || allowedPlaces.has(name.toLowerCase())) continue;
-    const re = new RegExp(`(^|[^A-Za-z])${escapeRe(name)}(?![A-Za-z])`);
+    const re = COMMON_WORD_PLACES.has(name)
+      ? new RegExp(`(?:\\b${PLACE_BEFORE}${escapeRe(name)}(?![A-Za-z])|(^|[^A-Za-z])${escapeRe(name)}${PLACE_AFTER})`)
+      : new RegExp(`(^|[^A-Za-z])${escapeRe(name)}(?![A-Za-z])`);
     if (re.test(placeText)) add("unapproved_location", `"${name}" is not an approved location (approved: ${brief.allowed_facts.crm.places.join(", ") || "none"}).`, name);
   }
 

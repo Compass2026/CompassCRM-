@@ -9,6 +9,11 @@
 // brief. In v1 the adapter is the Claude worker skill; an API model, a
 // Compass-native agent or a router can replace it without touching the brief,
 // the linter or the post records.
+//
+// Write boundary (Deliverable 2): no model runtime — the Claude worker or any
+// successor — ever persists drafter records by direct SQL. Persistent drafter
+// operations go only through the governed Edge Function write path, and
+// migration 0045's grounding plus a person's approval stay mandatory.
 import type { IntelligenceInput, OfferRow, SearchIntent } from "../../../src/lib/client-intelligence.ts";
 
 export const DRAFTER_VERSION = "drafter-v1";
@@ -104,8 +109,11 @@ export type Brief = {
     differentiators: string[];
     differentiators_citable: false;
   };
+  // A Compass quality rule, not Google's API limit (hard_max_chars is that).
   channel_rules: {
     min_chars: number;
+    preferred_min_chars: number;
+    preferred_max_chars: number;
     max_chars: number;
     hard_max_chars: number;
     lead_chars: number;

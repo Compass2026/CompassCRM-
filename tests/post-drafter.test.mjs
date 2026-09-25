@@ -78,7 +78,7 @@ const lucas = () => ({
 });
 
 const TARGET = { channel: "google_business", postType: "standard", intent: "commercial", serviceId: ROOF, keywordId: KW, ctaType: "LEARN_MORE", offerId: null, assetIds: [] };
-const GAZETTEER = ["Wentzville", "O'Fallon", "Lake Saint Louis", "St. Peters", "Saint Charles", "Troy", "Lucas", "Union"];
+const GAZETTEER = ["Wentzville", "O'Fallon", "Lake Saint Louis", "St. Peters", "Saint Charles", "Troy", "Lucas", "Union", "Liberty", "Independence"];
 
 const GOOD =
   "Thinking about a roof replacement for your Wentzville home? Lucas Construction keeps the process straightforward, " +
@@ -264,4 +264,61 @@ test("refused: superlatives, stray numbers and words the brand avoids", () => {
   refused(GOOD + " The best roofer around.", "unsupported_superlative");
   refused(GOOD + " Over 300 roofs done.", "unsupported_number");
   refused(GOOD + " Not a storm chaser.", "word_to_avoid");
+});
+
+// ── Sept 25 decisions ────────────────────────────────────────────────────────
+test("GBP length: 300 minimum, 450–700 preferred (a warning), 900 normal maximum, 1500 channel maximum", () => {
+  const r = okBrief().channel_rules;
+  assert.deepEqual([r.min_chars, r.preferred_min_chars, r.preferred_max_chars, r.max_chars, r.hard_max_chars], [300, 450, 700, 900, 1500]);
+  const short = lint(GOOD); // ~400 characters: allowed, but outside the preferred range
+  assert.equal(short.ok, true);
+  assert.ok(short.warnings.some((w) => w.code === "length_outside_preferred"));
+});
+
+test("the model request forbids process detail, implied competence, broadened scope and differentiator paraphrase", () => {
+  const { instructions } = modelRequest(okBrief());
+  for (const needle of [/process steps/, /implied competence/, /"every", "all", "always"/, /promises inferred from brand wording/, /One local company from inspection and estimate to final sign-off/, /About 450–700|about 450–700/i, /plain "roof", "roofing"/]) {
+    assert.match(instructions, needle);
+  }
+});
+
+test("credentials stay faithful to the claim: no broadened warranty scope", () => {
+  refused(GOOD.replace("backed by our Lifetime Workmanship Warranty", "covered for life"), "unsupported_credential");
+  refused(GOOD.replace("our Lifetime Workmanship Warranty", "our lifelong guarantee"), "unsupported_credential");
+});
+
+test("materials: generic roof words are fine; specific materials and products need a linked claim", () => {
+  assert.equal(lint(GOOD.replace("If your roof is showing its age", "If your roofing is showing its age")).ok, true);
+  for (const add of [" We install asphalt roofs.", " Ask about metal.", " We use GAF Timberline products.", " Tamko and Malarkey lines available."]) {
+    refused(GOOD + add, "unsupported_material");
+  }
+  const duration = "fa1d2070-c56c-4a75-a7ce-43effb6f0d21";
+  assert.equal(lint(GOOD + " Installs Owens Corning Duration shingles.", [WARRANTY, duration]).problems.filter((p) => p.code === "unsupported_material").length, 0, "a linked claim naming the product allows it");
+});
+
+test("narrow false-positive exemptions: plain English passes, the category still fires", () => {
+  const ok = [
+    " Feel free to ask questions.",
+    " Fall is the best time to plan a roof replacement.",
+    " Small leaks can end up leading to bigger repairs.",
+    " Think about the lifetime of your roof.",
+    " Pick your preferred time for a visit.",
+    " We help you deal with the next steps.",
+    " It can save time later.",
+    " We'll review what we see with you.",
+    " Since the last storm, many roofs need attention.",
+    " Have a great Independence Day.",
+  ];
+  for (const add of ok) {
+    const r = lint(GOOD + add);
+    assert.deepEqual(r.problems, [], add);
+  }
+  refused(GOOD + " Ask for a free estimate.", "unsupported_pricing");
+  refused(GOOD + " The best roofer in town.", "unsupported_superlative");
+  refused(GOOD + " A leading roofer.", "unsupported_superlative");
+  refused(GOOD + " Read our reviews.", "unsupported_review");
+  refused(GOOD + " Serving homes since day one.", "unsupported_tenure");
+  refused(GOOD + " We're on site within the hour.", "unsupported_response");
+  refused(GOOD + " Now serving homes in Liberty.", "unapproved_location");
+  refused(GOOD + " Visit our office address downtown.", "unsupported_address");
 });

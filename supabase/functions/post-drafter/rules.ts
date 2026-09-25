@@ -5,45 +5,51 @@
 
 export const PHONE_RE = /(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
 
-// Categories of factual assertion the hard rules govern.
+// Categories of factual assertion the hard rules govern. The few negative
+// lookarounds are narrow exemptions for plain-English uses ("feel free",
+// "the best time", "leading to", "the lifetime of", "your preferred", "deal
+// with", "save time", "we'll review"); the categories themselves are
+// unchanged.
 export const DETECTORS: { category: string; label: string; re: RegExp }[] = [
-  { category: "review", label: "a review count, rating or testimonial", re: /\breviews?\b|\bstars?\b|\bfive[- ]star\b|\brated\b|\bratings?\b|\btestimonials?\b|\b\d(?:\.\d)?\s*\/\s*5\b/gi },
+  { category: "review", label: "a review count, rating or testimonial", re: /\breviews\b|\b(?:\d+\+?|customer|client|google|online|five[- ]star|5[- ]star)\s+review\b|\bstars?\b|\bfive[- ]star\b|\brated\b|\bratings?\b|\btestimonials?\b|\b\d(?:\.\d)?\s*\/\s*5\b/gi },
   {
     category: "address",
     label: "a street address",
-    re: /\b\d{1,6}\s+(?:[A-Z][A-Za-z.]*\s+){1,4}(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Parkway|Pkwy|Highway|Hwy|Lane|Ln|Way|Court|Ct|Place|Pl)\b\.?|\bsuite\s+\d+|\bP\.?\s?O\.?\s+Box\b|\b\d{5}(?:-\d{4})?\b|\baddress\b/gi,
+    re: /\b\d{1,6}\s+(?:[A-Z][A-Za-z.]*\s+){1,4}(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Parkway|Pkwy|Highway|Hwy|Lane|Ln|Way|Court|Ct|Place|Pl)\b\.?|\bsuite\s+\d+|\bP\.?\s?O\.?\s+Box\b|\b\d{5}(?:-\d{4})?\b|\b(?:our|office|street|mailing|shop|business|physical)\s+address\b/gi,
   },
   {
     category: "pricing",
     label: "pricing, a discount or a free offer",
-    re: /\$\s?\d|\bfree\b|\bdiscounts?\b|\b\d+\s?%|\bpercent\b|\bprices?\b|\bpriced\b|\bpricing\b|\bcosts?\b|\bafford\w*|\bcheap\w*|\bsavings?\b|\bsave\b|\bdeals?\b|\bfinancing\b|\bno[- ]obligation\b/gi,
+    re: /\$\s?\d|(?<!\bfeel\s)\bfree\b(?!\s+of\b)|\bdiscounts?\b|\b\d+\s?%|\bpercent\b|\bprices?\b|\bpriced\b|\bpricing\b|\bcosts?\b|\bafford\w*|\bcheap\w*|\bsavings?\b|\bsave\b(?!\s+(?:time|a trip)\b)|\bdeals?\b(?!\s+with\b)|\bfinancing\b|\bno[- ]obligation\b/gi,
   },
   {
     category: "tenure",
     label: "a founding year, tenure or ownership claim",
-    re: /\b(?:19|20)\d{2}\b|\bsince\b|\bestablished\b|\bfounded\b|\b\d+\+?\s*(?:years?|yrs|decades?)\b|\bdecades?\b|\bgenerations?\b|\bfamily[- ](?:owned|operated|run)\b|\bowner[- ]operated\b|\blocally[- ]owned\b|\bveteran[- ]owned\b/gi,
+    re: /\b(?:19|20)\d{2}\b|\bsince\s+(?:day one|the (?:start|beginning)|we (?:started|opened|began)|our (?:founding|start))\b|\bestablished\b|\bfounded\b|\b\d+\+?\s*(?:years?|yrs|decades?)\b|\bdecades?\b|\bgenerations?\b|\bfamily[- ](?:owned|operated|run)\b|\bowner[- ]operated\b|\blocally[- ]owned\b|\bveteran[- ]owned\b/gi,
   },
   {
     category: "response",
     label: "a response-time or availability promise",
-    re: /\b24\s?\/\s?7\b|\b24 hours\b|\bsame[- ](?:day|week)\b|\bnext[- ](?:day|week)\b|\bthis week\b|\bby tomorrow\b|\bwithin\s+\d+\b|\b\d+\s*(?:hours?|hrs|days?|minutes?|mins)\b|\bemergency\b|\bround[- ]the[- ]clock\b|\bon[- ]site\b|\bquick(?:ly)? respon\w*|\bfast(?:est)? respon\w*|\bimmediate(?:ly)?\b|\bright away\b/gi,
+    re: /\b24\s?\/\s?7\b|\b24 hours\b|\bsame[- ](?:day|week)\b|\bnext[- ](?:day|week)\b|\bthis week\b|\bby tomorrow\b|\bwithin\s+\d+\b|\b\d+\s*(?:hours?|hrs|days?|minutes?|mins)\b|\bemergency\b|\bround[- ]the[- ]clock\b|\bon[- ]site\s+(?:within|today|tomorrow|the same)\b|\bquick(?:ly)? respon\w*|\bfast(?:est)? respon\w*|\bimmediate(?:ly)?\b|\bright away\b/gi,
   },
   {
     category: "credential",
     label: "a credential, warranty or guarantee",
-    re: /\bwarrant(?:y|ies|ied)\b|\bguarantee[ds]?\b|\blifetime\b|\bcertifi(?:ed|cation|cations)\b|\blicensed\b|\binsured\b|\bbonded\b|\baccredit(?:ed|ation)\b|\bpreferred\b|\bawards?\b|\baward[- ]winning\b|\bowens corning\b|\bGAF\b|\bcertainteed\b|\bmaster elite\b|\bBBB\b|\bA\+|\bexperts?\b|\bspeciali[sz]\w*/gi,
+    re: /\bwarrant(?:y|ies|ied)\b|\bguarantee[ds]?\b|\blifetime\b(?!\s+of\b)|\bfor life\b|\blifelong\b|\bcertifi(?:ed|cation|cations)\b|\blicensed\b|\binsured\b|\bbonded\b|\baccredit(?:ed|ation)\b|(?<!\byour\s)(?<!\byou\s)\bpreferred\b|\bawards?\b|\baward[- ]winning\b|\bowens corning\b|\bGAF\b|\bcertainteed\b|\bmaster elite\b|\bBBB\b|\bA\+|\bexperts?\b|\bspeciali[sz]\w*/gi,
   },
   {
     category: "superlative",
     label: "an unprovable superlative",
-    re: /\bbest\b|#\s?1\b|\bnumber one\b|\btop[- ]rated\b|\bleading\b|\bpremier\b|\bunmatched\b|\bunbeatable\b|\bunrivall?ed\b|\bmost trusted\b/gi,
+    re: /\bbest\b(?!\s+(?:time|times|way|ways|practices?)\b)|#\s?1\b|\bnumber one\b|\btop[- ]rated\b|\bleading\b(?!\s+(?:to|up|into)\b)|\bpremier\b|\bunmatched\b|\bunbeatable\b|\bunrivall?ed\b|\bmost trusted\b/gi,
   },
 ];
 
-// Materials: stating one needs a linked claim that names it. Includes the
-// materials the hard rules name as unverified (cedar shake, slate).
+// Materials and products: stating one needs a linked claim that names it
+// (Sept 25 2026 decision). Generic service words — roof, roofing, the service
+// name — are not materials. Includes the materials the hard rules name as
+// unverified (cedar shake, slate) and shingle lines / manufacturers.
 export const MATERIAL_RE =
-  /\bcedar\b|\bshakes?\b|\bslate\b|\bmetal roof\w*|\bstanding seam\b|\btile roof\w*|\bclay tiles?\b|\bcopper\b|\bsynthetic\b|\bcomposite\b|\basphalt\b|\bshingles?\b|\barchitectural\b|\bduration\b|\bTPO\b|\bEPDM\b|\bfiber[- ]cement\b|\bhardie\w*|\bvinyl\b|\baluminum\b|\bsteel\b/gi;
+  /\bcedar\b|\bshakes?\b|\bslate\b|\bmetal\b|\bstanding seam\b|\btile roof\w*|\bclay tiles?\b|\bcopper\b|\bsynthetic\b|\bcomposite\b|\basphalt\b|\bshingles?\b|\barchitectural\b|\bduration\b|\bTPO\b|\bEPDM\b|\bfiber[- ]cement\b|\bhardie\w*|\bvinyl\b|\baluminum\b|\bsteel\b|\bmalarkey\b|\btamko\b|\bIKO\b|\btimberline\b|\bsmartside\b|\bjames hardie\b/gi;
 
 export const NUMBER_RE = /\d/g;
 
