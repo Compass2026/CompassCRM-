@@ -119,6 +119,14 @@ do $$
 declare e text := au.try($q$select authority_begin_run('00000000-0000-4000-b000-00000000000a', 'full', 'worker')$q$);
 begin perform au.ok('W4 ...nor after SET ROLE service_role (session_user is still postgres)', e like '42501%', e); end $$;
 reset role;
+do $$
+declare e text;
+begin
+  e := au.try($q$select authority_input('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('W5 the worker''s SQL cannot call authority_input (not team, not the governed caller)', e like '42501%', e);
+  e := au.try($q$select authority_fingerprint('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('W6 ...nor authority_fingerprint', e like '42501%', e);
+end $$;
 
 -- ── R. The authority-run function (authenticator → service_role) ────────────
 \c - authenticator
@@ -165,6 +173,14 @@ begin
   perform au.ok('R11 a finished run cannot be recorded again', e like '42501%', e);
   e := au.try(format($q$update authority_runs set counts = '{}' where id = %L$q$, au.id('r1')));
   perform au.ok('R12 a finished run is immutable', e like '42501%', e);
+end $$;
+do $$
+declare j jsonb; f jsonb;
+begin
+  j := authority_input('00000000-0000-4000-b000-00000000000a');
+  f := authority_fingerprint('00000000-0000-4000-b000-00000000000a');
+  perform au.ok('I7 the governed service caller can call authority_input', j->'client'->>'id' = '00000000-0000-4000-b000-00000000000a', left(j::text, 200));
+  perform au.ok('I8 ...and authority_fingerprint', f ? 'intelligence' and f ? 'gsc', f::text);
 end $$;
 reset role;
 
@@ -225,6 +241,20 @@ begin
   perform au.ok('H16 a decision is recorded in the history',
     exists (select 1 from authority_opportunity_events where opportunity_id = au.opp_id(a, 'data_fix:record-live-blog-posts') and kind = 'decision'));
 end $$;
+do $$
+declare j jsonb; f jsonb; kb uuid := '00000000-0000-4000-d000-00000000000b';
+begin
+  j := authority_input('00000000-0000-4000-b000-00000000000a');
+  f := authority_fingerprint('00000000-0000-4000-b000-00000000000a');
+  perform au.ok('I1 a teammate can call authority_input', j->'client'->>'id' = '00000000-0000-4000-b000-00000000000a' and j ? 'authority', left(j::text, 200));
+  perform au.ok('I2 a teammate can call authority_fingerprint', f ? 'intelligence' and f ? 'posts', f::text);
+  perform au.ok('I3 client A''s input holds only client A''s rows (no B keyword, query or post)',
+    not exists (select 1 from jsonb_array_elements(j->'keywords') k where (k->>'id')::uuid = kb)
+    and not exists (select 1 from jsonb_array_elements(j->'authority'->'gsc') g where g->>'query' like 'b %')
+    and (select bool_and((k->>'id')::uuid in (select id from keywords where client_id = '00000000-0000-4000-b000-00000000000a')) from jsonb_array_elements(j->'keywords') k));
+  perform au.ok('I4 a client that does not exist yields an empty input, not another client''s',
+    (authority_input(gen_random_uuid()))->'client' = 'null'::jsonb);
+end $$;
 reset role;
 
 -- ── P. Portal contact, stranger, anon: nothing ──────────────────────────────
@@ -241,6 +271,16 @@ begin
   e := au.try(format($q$select authority_decide(%L, 'accept')$q$, au.opp_id('00000000-0000-4000-b000-00000000000a', 'topic:signs_replacement')));
   perform au.ok('P3 ...and cannot decide', e like '42501%', e);
 end $$;
+do $$
+declare e text;
+begin
+  e := au.try($q$select authority_input('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('P8 a portal contact cannot call authority_input', e like '42501%', e);
+  e := au.try($q$select authority_fingerprint('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('P9 a portal contact cannot call authority_fingerprint', e like '42501%', e);
+  e := au.try($q$select authority_input('00000000-0000-4000-b000-00000000000b')$q$);
+  perform au.ok('P10 a portal contact cannot read another client either', e like '42501%', e);
+end $$;
 select au.as_user('authenticated', :'strngr');
 do $$
 declare e text;
@@ -248,6 +288,16 @@ begin
   perform au.ok('P4 a signed-in stranger reads nothing', (select count(*) from authority_runs) = 0 and (select count(*) from authority_opportunities) = 0);
   e := au.try(format($q$select authority_decide(%L, 'dismiss', '{"reason": "x"}')$q$, au.opp_id('00000000-0000-4000-b000-00000000000a', 'data_fix:record-live-blog-posts')));
   perform au.ok('P5 ...and cannot decide', e like '42501%', e);
+end $$;
+do $$
+declare e text;
+begin
+  e := au.try($q$select authority_input('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('P11 a signed-in stranger cannot call authority_input', e like '42501%', e);
+  e := au.try($q$select authority_fingerprint('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('P12 a signed-in stranger cannot call authority_fingerprint', e like '42501%', e);
+  e := au.try($q$select authority_input('00000000-0000-4000-b000-00000000000b')$q$);
+  perform au.ok('P13 a signed-in stranger cannot read another client either', e like '42501%', e);
 end $$;
 reset role;
 set role anon;
@@ -258,6 +308,16 @@ begin
   perform au.ok('P6 anon is refused outright', e like '42501%', e);
   e := au.try('select count(*) from authority_opportunities');
   perform au.ok('P7 ...on opportunities too', e like '42501%', e);
+end $$;
+do $$
+declare e text;
+begin
+  e := au.try($q$select authority_input('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('P14 anon cannot call authority_input', e like '42501%', e);
+  e := au.try($q$select authority_fingerprint('00000000-0000-4000-b000-00000000000a')$q$);
+  perform au.ok('P15 anon cannot call authority_fingerprint', e like '42501%', e);
+  e := au.try($q$select authority_input('00000000-0000-4000-b000-00000000000b')$q$);
+  perform au.ok('P16 anon cannot read another client either', e like '42501%', e);
 end $$;
 reset role;
 
@@ -271,9 +331,18 @@ declare a uuid := '00000000-0000-4000-b000-00000000000a';
 begin
   perform au.ok('L1 the linked task done → completed', au.state(a, 'service_page:00000000-0000-4000-e000-0000000000a1') = 'completed');
   perform au.ok('L2 a vetoed change is dead work → back to accepted', au.state(a, 'data_fix:record-live-blog-posts') = 'accepted');
-  perform au.ok('L3 renaming the service makes the run stale (intelligence)',
-    (select 'intelligence' = any (stale_sections) from authority_latest where client_id = a));
+  perform au.ok('L4 the worker''s SQL cannot read the staleness view (it calls the gated fingerprint)',
+    au.try('select stale_sections from authority_latest') like '42501%');
 end $$;
+-- Staleness is read by a teammate.
+\c - authenticator
+set role authenticated;
+select au.as_user('authenticated', :'team');
+do $$ begin
+  perform au.ok('L3 renaming the service makes the run stale (intelligence), read by a teammate',
+    (select 'intelligence' = any (stale_sections) from authority_latest where client_id = '00000000-0000-4000-b000-00000000000a'));
+end $$;
+reset role;
 
 -- ── N. Next runs: presence, degraded, regression, expiry, suppression ───────
 \c - authenticator

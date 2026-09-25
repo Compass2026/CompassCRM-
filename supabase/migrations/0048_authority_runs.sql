@@ -252,10 +252,19 @@ grant select on authority_runs, authority_opportunities, authority_opportunity_e
 -- ── 6. Reads: the engine input and the staleness fingerprint ────────────────
 -- The Authority input: the canonical Client Intelligence loader plus the
 -- authority section (scripts/authority-input.sql is this, for psql).
--- Invoker rights: RLS decides what the caller sees.
+-- Invoker rights for the reads (RLS still applies); the caller gate first.
 create function authority_input(p_client_id uuid) returns jsonb
-language sql stable security invoker set search_path = public as $$
-  select client_intelligence_input(p_client_id) || jsonb_build_object('authority', jsonb_build_object(
+language plpgsql stable security invoker set search_path = public as $$
+begin
+  -- Team-only, checked here and not left to table RLS alone: a signed-in
+  -- teammate, or the governed service caller (PostgREST's authenticator
+  -- login with the service role: the authority-run function). Portal
+  -- contacts, strangers, anon and the worker's own SQL are refused.
+  if not (coalesce((select is_team()), false)
+          or (session_user = 'authenticator' and coalesce(current_setting('role', true), '') = 'service_role')) then
+    raise exception 'Authority is team-only' using errcode = '42501';
+  end if;
+  return (select client_intelligence_input(p_client_id) || jsonb_build_object('authority', jsonb_build_object(
     'now', now(),
     'site', (select jsonb_build_object('url', coalesce(s.url, cl.website_url), 'content_paths', s.content_paths,
               'work_mode', s.work_mode, 'adapter', s.content_adapter)
@@ -292,17 +301,26 @@ language sql stable security invoker set search_path = public as $$
               'status', l.status, 'after', l.after, 'created_at', l.created_at) order by l.created_at, l.id)
              from change_log l where l.client_id = p_client_id and l.change_type in ('page_added', 'page_rewrite')), '[]'::jsonb),
     'inventory', null
-  ))
-$$;
+  )));
+end $$;
 revoke all on function authority_input(uuid) from public, anon;
 grant execute on function authority_input(uuid) to authenticated, service_role;
 
 -- One md5 per source section. A run stores the fingerprint it was built
 -- from; a later difference names the stale sections (checked on read — no
--- automatic reruns). Invoker rights.
+-- automatic reruns). Invoker rights for the reads; the same caller gate.
 create function authority_fingerprint(p_client_id uuid) returns jsonb
-language sql stable security invoker set search_path = public as $$
-  with i as (select authority_input(p_client_id) as j)
+language plpgsql stable security invoker set search_path = public as $$
+begin
+  -- Team-only, checked here and not left to table RLS alone: a signed-in
+  -- teammate, or the governed service caller (PostgREST's authenticator
+  -- login with the service role: the authority-run function). Portal
+  -- contacts, strangers, anon and the worker's own SQL are refused.
+  if not (coalesce((select is_team()), false)
+          or (session_user = 'authenticator' and coalesce(current_setting('role', true), '') = 'service_role')) then
+    raise exception 'Authority is team-only' using errcode = '42501';
+  end if;
+  return (with i as (select authority_input(p_client_id) as j)
   select jsonb_build_object(
     'intelligence', md5(((select j from i) - 'asOf' - 'authority')::text),
     'page_groups',  md5(coalesce((select j->'authority'->'pageGroupsFull' from i), 'null')::text),
@@ -315,8 +333,8 @@ language sql stable security invoker set search_path = public as $$
     'content',      md5(coalesce((select j->'authority'->'contentPosts' from i), 'null')::text),
     'change_log',   md5(coalesce((select j->'authority'->'changeLog' from i), 'null')::text),
     'site',         md5(coalesce((select j->'authority'->'site' from i), 'null')::text)
-  )
-$$;
+  ));
+end $$;
 revoke all on function authority_fingerprint(uuid) from public, anon;
 grant execute on function authority_fingerprint(uuid) to authenticated, service_role;
 
@@ -666,6 +684,17 @@ begin
   end loop;
   if exists (select 1 from pg_views where schemaname = 'public' and viewname like 'portal\_%' and definition ilike '%authority%') then
     raise exception 'A portal view reads Authority';
+  end if;
+  if (select bool_or(p.prosecdef) from pg_proc p where p.oid in ('public.authority_input(uuid)'::regprocedure, 'public.authority_fingerprint(uuid)'::regprocedure)) then
+    raise exception 'authority_input / authority_fingerprint must stay security invoker';
+  end if;
+  if (select bool_or(position('Authority is team-only' in p.prosrc) = 0) from pg_proc p
+      where p.oid in ('public.authority_input(uuid)'::regprocedure, 'public.authority_fingerprint(uuid)'::regprocedure)) then
+    raise exception 'authority_input / authority_fingerprint lost their caller gate';
+  end if;
+  if has_function_privilege('anon', 'public.authority_input(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.authority_fingerprint(uuid)', 'execute') then
+    raise exception 'anon can call the Authority reads';
   end if;
   if has_function_privilege('authenticated', 'public.authority_record_run(uuid, jsonb)', 'execute')
      or has_function_privilege('authenticated', 'public.authority_begin_run(uuid, text, text, uuid)', 'execute') then
