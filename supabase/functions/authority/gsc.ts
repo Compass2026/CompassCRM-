@@ -2,19 +2,28 @@
 // rolling 28-day windows, so summing them double-counts. Old URLs are mapped
 // through the inventory's redirects so a moved page keeps its history. Pure.
 import type { AuthorityInput, GscCoverage, GscRow, GscSummary, RankRow } from "./types.ts";
+import { GSC_LEGACY_ROW_LIMIT, GSC_MAX_ROWS } from "../_shared/gsc-paging.ts";
 import { normPath, type Inventory } from "./urls.ts";
 
-// gsc-sync/handler.ts requests rowLimit 250 and no startRow (Sept 25 2026).
-export const GSC_ROW_CAP = 250;
+// gsc-sync pages each window up to GSC_MAX_ROWS (_shared/gsc-paging.ts).
+// A window at that cap is partial; so is one with exactly the old
+// single-request limit (250), which is how windows stored before paging were
+// cut off. Conservative: a window that happens to hold exactly 250 rows reads
+// partial rather than complete.
+export { GSC_MAX_ROWS };
+
+export function rowCapFor(rows: number): number {
+  return rows === GSC_LEGACY_ROW_LIMIT ? GSC_LEGACY_ROW_LIMIT : GSC_MAX_ROWS;
+}
 
 export function gscCoverage(rows: number): GscCoverage {
   if (rows === 0) return "unknown";
-  return rows >= GSC_ROW_CAP ? "partial" : "complete";
+  return rows >= GSC_MAX_ROWS || rows === GSC_LEGACY_ROW_LIMIT ? "partial" : "complete";
 }
 
 // Appended wherever an impression count is quoted.
 export function demandNote(coverage: GscCoverage): string {
-  return coverage === "partial" ? ` (a floor: the stored window holds only the top ${GSC_ROW_CAP} query+page rows)` : coverage === "unknown" ? " (no Search Console rows stored)" : "";
+  return coverage === "partial" ? " (a floor: the stored window is cut off at gsc-sync's row cap)" : coverage === "unknown" ? " (no Search Console rows stored)" : "";
 }
 
 export function latestWindow(rows: GscRow[]): { rows: GscRow[]; label: string | null } {

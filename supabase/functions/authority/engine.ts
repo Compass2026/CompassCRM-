@@ -7,7 +7,7 @@ import { resolveOwner } from "./owners.ts";
 import { aboutUnconfirmed, classifyKeywords } from "./keywords.ts";
 import { distinctStems } from "./evidence.ts";
 import { blindSpots, contentPostCoverage, pageCoverage, pendingProposals, postCoverage } from "./coverage.ts";
-import { GSC_ROW_CAP, gscCoverage, gscForService, landingPath, latestWindow } from "./gsc.ts";
+import { gscCoverage, gscForService, landingPath, latestWindow, rowCapFor } from "./gsc.ts";
 import { TEMPLATES } from "./playbooks.ts";
 import { findConflicts, pageWordingIssues } from "./conflicts.ts";
 import { buildOpportunities } from "./opportunities.ts";
@@ -189,8 +189,9 @@ function judgments(input: AuthorityInput, pillars: Pillar[]): string[] {
     "JUDGMENT: a material is supported only when a usable claim names it; a brand of shingle does not prove the generic material (\"Duration shingles\" does not state \"asphalt\").",
   ];
   if (pillars.some((p) => p.owner.conflict)) out.push("JUDGMENT: which of the conflicting owner candidates becomes the owner page (the engine prefers a live page, then the page group).");
-  const cov = gscCoverage(latestWindow(input.authority.gsc).rows.length);
-  if (cov !== "complete") out.push(`DATA: Search Console coverage is ${cov}: ${cov === "partial" ? `the latest window is at gsc-sync's ${GSC_ROW_CAP}-row cap, so impression counts and the demand tiebreaker are floors` : "no rows are stored"}.`);
+  const n = latestWindow(input.authority.gsc).rows.length;
+  const cov = gscCoverage(n);
+  if (cov !== "complete") out.push(`DATA: Search Console coverage is ${cov}: ${cov === "partial" ? `the latest window is at gsc-sync's ${rowCapFor(n)}-row cap, so impression counts and the demand tiebreaker are floors` : "no rows are stored"}.`);
   if (!input.authority.inventory) out.push("MISSING: no site inventory — owner states are 'not_checked' and page coverage is empty.");
   return out;
 }
@@ -285,7 +286,7 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
       blind_spots: blind.length ? [{ tag: "FACT", text: `${blind.length} live blog posts are not in content_posts.` }] : [],
     },
     sources: {
-      gsc: { window: gscWin.label, rows: gscWin.rows.length, row_cap: GSC_ROW_CAP, coverage: gscCoverage(gscWin.rows.length) },
+      gsc: { window: gscWin.label, rows: gscWin.rows.length, row_cap: rowCapFor(gscWin.rows.length), coverage: gscCoverage(gscWin.rows.length) },
       ranks: { recorded_at: a.ranks.reduce<string | null>((m, r) => (!m || r.recorded_at > m ? r.recorded_at : m), null) },
       inventory: { fetched_at: a.inventory?.fetched_at ?? null, pages: inv.byPath.size },
     },

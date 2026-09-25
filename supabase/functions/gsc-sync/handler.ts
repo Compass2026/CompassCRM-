@@ -6,7 +6,10 @@
 // Auth to Google: OAuth refresh token for the Compass Workspace account
 // (internal OAuth app). Secrets in Vault: GSC_CLIENT_ID, GSC_CLIENT_SECRET,
 // GSC_REFRESH_TOKEN. Triggered monthly by pg_cron (1st, 07:30 UTC) and on
-// demand from the app. Optional body: { client_id }.
+// demand from the app. Optional body: { client_id }. Rows are paged with
+// startRow (_shared/gsc-paging.ts) until a short page or the GSC_MAX_ROWS
+// safety cap; a capped window is logged, and a failed page stores nothing
+// for that client.
 //
 // { client_id, submit_sitemap } (Launch) is a write to Search Console. An
 // automated caller (x-cron-secret — the Foundation worker) is refused it
@@ -15,6 +18,7 @@
 // token is fetched. The read-only sync is never gated.
 
 import { workerGoogleOpsEnabled, workerGoogleRefusal } from "../_shared/worker-google.ts";
+import { fetchAllRows, GSC_MAX_ROWS, GSC_PAGE_SIZE } from "../_shared/gsc-paging.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
@@ -217,30 +221,36 @@ export function createGscSync(deps: { supabase: Supabase; fetch: Fetch }) {
           continue;
         }
 
-        const saRes = await fetch(
-          `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`,
-          {
-            method: "POST",
-            headers: { ...gauth, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              startDate: periodStart,
-              endDate: periodEnd,
-              dimensions: ["query", "page"],
-              rowLimit: 250,
-            }),
-          }
-        );
-        if (!saRes.ok) {
-          stats.errors.push(`${client.name}: GSC query ${saRes.status}`);
+        const paged = await fetchAllRows(async (startRow, rowLimit) => {
+          const res = await fetch(
+            `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`,
+            {
+              method: "POST",
+              headers: { ...gauth, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                startDate: periodStart,
+                endDate: periodEnd,
+                dimensions: ["query", "page"],
+                rowLimit,
+                startRow,
+              }),
+            }
+          );
+          if (!res.ok) return { ok: false, status: res.status };
+          return { ok: true, rows: (await res.json()).rows ?? [] };
+        }, { pageSize: GSC_PAGE_SIZE, maxRows: GSC_MAX_ROWS });
+        if (!paged.ok) {
+          // A failed page stores nothing for this client: a window is never
+          // recorded short of what Google returned.
+          stats.errors.push(`${client.name}: GSC query ${paged.status} (page ${paged.pages})`);
           continue;
         }
-        const rows: {
-          keys: [string, string];
-          clicks: number;
-          impressions: number;
-          ctr: number;
-          position: number;
-        }[] = (await saRes.json()).rows ?? [];
+        if (paged.capped) {
+          // Authority labels such a window partial (rows at GSC_MAX_ROWS).
+          console.warn(JSON.stringify({ gsc_sync: "row_cap_reached", client_id: client.id, period_start: periodStart,
+            period_end: periodEnd, rows: paged.rows.length, max_rows: GSC_MAX_ROWS }));
+        }
+        const rows = paged.rows;
 
         const { data: kws } = await supabase
           .from("keywords")
@@ -267,16 +277,18 @@ export function createGscSync(deps: { supabase: Supabase; fetch: Fetch }) {
           };
         });
 
-        if (snapRows.length > 0) {
+        // Same natural key and ignoreDuplicates as before, in chunks so a
+        // large window is not one oversized request.
+        for (let i = 0; i < snapRows.length; i += GSC_PAGE_SIZE) {
           const { data: inserted, error } = await supabase
             .from("gsc_snapshots")
-            .upsert(snapRows, {
+            .upsert(snapRows.slice(i, i + GSC_PAGE_SIZE), {
               onConflict: "client_id,query,page,period_start,period_end",
               ignoreDuplicates: true,
             })
             .select("id");
-          if (error) stats.errors.push(`${client.name}: ${error.message}`);
-          else stats.rows += (inserted ?? []).length;
+          if (error) { stats.errors.push(`${client.name}: ${error.message}`); break; }
+          stats.rows += (inserted ?? []).length;
         }
         stats.clients_synced++;
       } catch (e) {
