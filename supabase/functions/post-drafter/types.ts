@@ -41,6 +41,39 @@ export type DrafterInput = {
   asOf: string;
 };
 
+// The fields client_intelligence_input() (migration 0047) returns, section
+// by section. The type checks below fail to compile if this list and
+// DrafterInput drift apart; tests/client-intelligence-loader.test.mjs fails
+// if the SQL and this list drift apart. Together: SQL ≡ list ≡ type.
+export const DRAFTER_INPUT_FIELDS = {
+  asOf: null,
+  client: ["id", "name", "phone", "website_url", "city", "state", "service_area", "business_type", "address_line1"],
+  brand: ["positioning", "voice_tone", "audience", "differentiators", "ai_guidance", "words_we_use", "words_we_avoid", "content_pillars", "tagline"],
+  board: ["id", "version", "status", "hard_rules", "standing_cta"],
+  services: ["id", "name", "status", "page_url", "primary_keyword_id", "parent_service_id", "segment"],
+  keywords: ["id", "keyword", "intent", "intent_note", "is_active", "is_tracked", "is_money", "service_id", "target_url", "priority"],
+  claims: ["id", "claim", "status", "source"],
+  locations: ["name", "city", "state", "is_active"],
+  assets: ["id", "kind", "label", "storage_path"],
+  offers: ["id", "title", "terms", "source", "status", "starts_on", "ends_on", "confirmed_by", "confirmed_on", "service_id"],
+  pageGroups: ["id", "name", "status", "target_url", "primary_keyword_id"],
+} as const;
+type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type Item<T> = T extends readonly (infer U)[] ? U : NonNullable<T>;
+type Listed<K extends keyof typeof DRAFTER_INPUT_FIELDS> = (typeof DRAFTER_INPUT_FIELDS)[K] extends readonly (infer F)[] ? F : never;
+export type DrafterInputFieldsMatch = {
+  [K in keyof DrafterInput]-?: K extends "asOf" ? true : Exact<Listed<K>, keyof Item<DrafterInput[K]>>;
+};
+// Compile-time: every section's listed fields are exactly the type's keys,
+// and the sections are exactly DrafterInput's keys.
+const _fieldsMatch: DrafterInputFieldsMatch = {
+  asOf: true, client: true, brand: true, board: true, services: true, keywords: true, claims: true,
+  locations: true, assets: true, offers: true, pageGroups: true,
+};
+const _sectionsMatch: Exact<keyof typeof DRAFTER_INPUT_FIELDS, keyof DrafterInput> = true;
+void _fieldsMatch;
+void _sectionsMatch;
+
 // What a person or the worker asks for. Nothing is inferred: v1 drafts one
 // named topic at a time.
 export type DraftTarget = {

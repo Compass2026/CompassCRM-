@@ -1101,6 +1101,88 @@ export type Database = {
           },
         ]
       }
+      drafter_runs: {
+        Row: {
+          attempt: number
+          brief: Json | null
+          brief_hash: string
+          brief_version: string
+          claim_ids: string[]
+          client_id: string
+          copy_hash: string | null
+          created_at: string
+          detail: string | null
+          id: string
+          lint: Json | null
+          post_id: string | null
+          requested_by: string | null
+          requested_via: string
+          runtime: string
+          status: string
+          target: Json
+        }
+        Insert: {
+          attempt?: number
+          brief?: Json | null
+          brief_hash: string
+          brief_version: string
+          claim_ids?: string[]
+          client_id: string
+          copy_hash?: string | null
+          created_at?: string
+          detail?: string | null
+          id?: string
+          lint?: Json | null
+          post_id?: string | null
+          requested_by?: string | null
+          requested_via: string
+          runtime: string
+          status: string
+          target: Json
+        }
+        Update: {
+          attempt?: number
+          brief?: Json | null
+          brief_hash?: string
+          brief_version?: string
+          claim_ids?: string[]
+          client_id?: string
+          copy_hash?: string | null
+          created_at?: string
+          detail?: string | null
+          id?: string
+          lint?: Json | null
+          post_id?: string | null
+          requested_by?: string | null
+          requested_via?: string
+          runtime?: string
+          status?: string
+          target?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drafter_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drafter_runs_post_fk"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "drafter_runs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       foundation_releases: {
         Row: {
           accepted_on: string | null
@@ -2674,6 +2756,7 @@ export type Database = {
           crm_facts_only: boolean
           cta_type: string | null
           cta_url: string | null
+          drafter_run_id: string | null
           error: string | null
           external_post_id: string | null
           id: string
@@ -2712,6 +2795,7 @@ export type Database = {
           crm_facts_only?: boolean
           cta_type?: string | null
           cta_url?: string | null
+          drafter_run_id?: string | null
           error?: string | null
           external_post_id?: string | null
           id?: string
@@ -2750,6 +2834,7 @@ export type Database = {
           crm_facts_only?: boolean
           cta_type?: string | null
           cta_url?: string | null
+          drafter_run_id?: string | null
           error?: string | null
           external_post_id?: string | null
           id?: string
@@ -2778,6 +2863,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "social_posts_drafter_run_fk"
+            columns: ["drafter_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "drafter_runs"
+            referencedColumns: ["id", "client_id"]
+          },
           {
             foreignKeyName: "social_posts_account_fkey"
             columns: ["social_account_id", "client_id"]
@@ -3627,6 +3719,7 @@ export type Database = {
       }
     }
     Functions: {
+      client_intelligence_input: { Args: { p_client_id: string }; Returns: Json }
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined
@@ -3638,6 +3731,7 @@ export type Database = {
         Returns: number
       }
       create_weekly_blog_tasks: { Args: never; Returns: number }
+      drafter_write: { Args: { p: Json }; Returns: Json }
       fire_foundation_worker: {
         Args: { p_client_id: string; p_reason: string }
         Returns: undefined

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// AI Drafter v1 dry run. Read-only: it reads a DrafterInput JSON (from
-// scripts/drafter-input.sql) and writes nothing anywhere.
+// AI Drafter v1 dry run. Read-only: it reads a DrafterInput JSON — the
+// output of the canonical loader, `select client_intelligence_input('<client
+// uuid>')` (migration 0047; the same read the Intelligence tab and the
+// post-drafter function make) — and writes nothing anywhere.
 //
 //   node --no-warnings scripts/drafter-dry-run.mjs --input input.json \
 //     --service "Roof Replacement" --intent commercial \
@@ -25,10 +27,11 @@ const arg = (name, dflt = null) => {
 const flag = (name) => args.includes(`--${name}`);
 const die = (msg) => { console.error(msg); process.exit(2); };
 
-const inputPath = arg("input") ?? die("--input <DrafterInput JSON> is required (see scripts/drafter-input.sql).");
+const inputPath = arg("input") ?? die("--input <DrafterInput JSON> is required: the output of select client_intelligence_input('<client uuid>').");
 let input = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 if (Array.isArray(input)) input = input[0];
 if (input && input.input) input = input.input;
+if (input && input.client_intelligence_input) input = input.client_intelligence_input;
 
 const service = arg("service") ? input.services.find((s) => s.name.toLowerCase() === arg("service").toLowerCase()) : null;
 if (arg("service") && !service) die(`No service named "${arg("service")}".`);
