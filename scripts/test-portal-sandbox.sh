@@ -83,3 +83,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/publisher_runs.test
 # between the worker (postgres), the post-drafter function (authenticator +
 # service_role) and a person (authenticator + authenticated).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter.test.sql"
+# 0048: Authority runs, opportunities, history and links. Switches between the
+# worker (postgres), the authority-run function (authenticator + service_role),
+# a person, a portal contact, a stranger and anon.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority.test.sql"

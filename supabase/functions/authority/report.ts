@@ -12,8 +12,9 @@ const cell = (s: string | number | null | undefined) => String(s ?? "–").repla
 function opportunity(o: Opportunity, n: number): string {
   const lines = [
     `### ${n}. ${o.topic} — \`${o.action}\` ${o.content_type} (tier ${o.tier})`,
-    `- id: \`${o.id}\``,
+    `- key: \`${o.key}\` · section: ${o.section}`,
     `- gap: ${o.gap}`,
+    ...(o.objective ? [`- objective: [HEURISTIC] ${o.objective}`] : []),
   ];
   const t = o.target;
   const tgt = [t.keyword && `keyword "${t.keyword}"`, t.intent && `intent ${t.intent}`, t.owner_path && `owner ${t.owner_path}`, t.cta && `CTA ${t.cta}`, t.location && `location ${t.location}`].filter(Boolean);
@@ -31,6 +32,7 @@ export function renderMarkdown(rep: AuthorityReport): string {
   const out: string[] = [];
   out.push(`# Authority map — ${rep.client.name}`, "",
     `${rep.version} · as of ${rep.as_of} · judged at ${rep.generated_at} · inventory ${rep.inventory.fetched_at ?? "none"} (${rep.inventory.live} live of ${rep.inventory.pages} checked: ${Object.entries(rep.inventory.by_kind).map(([k, v]) => `${k} ${v}`).join(", ")})`, "",
+    `Sources: Search Console ${rep.sources.gsc.window ?? "none"} — ${rep.sources.gsc.rows} rows, coverage **${rep.sources.gsc.coverage}**${rep.sources.gsc.coverage === "partial" ? ` (at gsc-sync's ${rep.sources.gsc.row_cap}-row cap: impression counts are floors)` : ""} · ranks ${rep.sources.ranks.recorded_at?.slice(0, 10) ?? "none"}`, "",
     "Tags: [FACT] read from the CRM or the live site · [HEURISTIC] a Compass rule of thumb · [RESEARCH REQUIRED] needs facts Client Intelligence does not hold · [REQUIRES CONFIRMATION] a person must decide.", "");
 
   out.push("## Pillars and owner pages", "",

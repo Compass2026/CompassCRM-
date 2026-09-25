@@ -9,18 +9,19 @@
 import { buildBrief } from "../post-drafter/brief.ts";
 import { cadence, GBP_CADENCE_DAYS } from "./coverage.ts";
 import { aboutUnconfirmed } from "./keywords.ts";
-import { normPath } from "./urls.ts";
+import { normPath, normPlace, placesIn, type PlaceIndex } from "./urls.ts";
+import { demandNote } from "./gsc.ts";
 import type {
   Action, AuthorityInput, ContentType, CoverageItem, Gate, KeywordAssignment, Opportunity, Pillar, Reason,
-  SupportingTopic, Tag, Tier,
+  Section, SupportingTopic, Tag, Tier,
 } from "./types.ts";
 
-type Draft = Omit<Opportunity, "tier" | "order" | "provenance"> & { value: number; severity: number; impressions: number; deferred: boolean };
+type Draft = Omit<Opportunity, "tier" | "order" | "provenance" | "section" | "objective"> & { value: number; severity: number; impressions: number; deferred: boolean };
 
 const TAGS: Tag[] = ["FACT", "HEURISTIC", "RESEARCH_REQUIRED", "REQUIRES_CONFIRMATION"];
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-function base(p: Partial<Draft> & Pick<Draft, "id" | "topic" | "action" | "content_type" | "gap">): Draft {
+function base(p: Partial<Draft> & Pick<Draft, "id" | "key" | "topic" | "action" | "content_type" | "gap">): Draft {
   return {
     service_id: null, target: { keyword_id: null, keyword: null, intent: null, location: null, owner_path: null, cta: null },
     evidence_claim_ids: [], existing_coverage: [], blockers: [], gates: [], eligible_from: null, reasons: [],
@@ -55,7 +56,8 @@ function bestKeyword(kws: KeywordAssignment[], serviceId: string, intent: string
 export function buildOpportunities(ctx: {
   input: AuthorityInput; pillars: Pillar[]; keywords: KeywordAssignment[]; supporting: SupportingTopic[];
   unconfirmed: { path: string; tokens: string[]; context: string[]; title: string | null; queries: { query: string; impressions: number }[] }[];
-  unapprovedLocationPages: string[]; blindSpots: string[];
+  unapprovedLocationPages: { path: string; place: string; title: string | null }[]; blindSpots: string[];
+  places: PlaceIndex;
   blogOverlaps: { topic: string; paths: string[]; shared_queries: string[] }[];
   servicePageUrlGaps: { service_id: string; service: string; owner: string; recorded: string | null }[];
   homeIssues?: Reason[];
@@ -74,9 +76,9 @@ export function buildOpportunities(ctx: {
       const hasEvidence = relevant.length > 0;
       const reasons: Reason[] = [...p.owner.reasons];
       if (p.owner.pending_proposal) reasons.push({ tag: "HEURISTIC", text: "Finish the pending proposal rather than starting a second page." });
-      if (p.gsc.impressions) reasons.push({ tag: "FACT", text: `Search demand already exists: ${p.gsc.impressions} impressions in ${p.gsc.window}, best position ${p.gsc.best_position ?? "–"}, landing on ${p.gsc.landing_pages.map((l) => l.path).join(", ")}.` });
+      if (p.gsc.impressions) reasons.push({ tag: "FACT", text: `Search demand already exists: ${p.gsc.impressions} impressions in ${p.gsc.window}${demandNote(p.gsc.coverage)}, best position ${p.gsc.best_position ?? "–"}, landing on ${p.gsc.landing_pages.map((l) => l.path).join(", ")}.` });
       out.push(base({
-        id: `service_page:${slug(p.name)}`, topic: p.name, service_id: p.service_id,
+        id: `service_page:${slug(p.name)}`, key: `service_page:${p.service_id}`, topic: p.name, service_id: p.service_id,
         action: hasEvidence ? "create" : "insufficient_evidence", content_type: "service_page",
         target: { keyword_id: primary?.keyword_id ?? null, keyword: primary?.keyword ?? null, intent: primary?.intent ?? "commercial", location: null, owner_path: p.owner.path, cta: null },
         evidence_claim_ids: relevant, existing_coverage: cov,
@@ -96,11 +98,11 @@ export function buildOpportunities(ctx: {
       const reasons: Reason[] = [...p.page_issues];
       const rk = p.gsc.rank;
       if (rk?.url_path && rk.url_path !== p.owner.path) reasons.push({ tag: "FACT", text: `"${rk.keyword}" ranks with ${rk.url_path} (organic ${rk.organic ?? "–"}, map pack ${rk.map_pack ?? "–"}), not ${p.owner.path}.` });
-      if (p.gsc.impressions > 0 && p.gsc.owner_impressions === 0) reasons.push({ tag: "FACT", text: `The owner page earned 0 of ${p.gsc.impressions} impressions for this topic in ${p.gsc.window}.` });
+      if (p.gsc.impressions > 0 && p.gsc.owner_impressions === 0) reasons.push({ tag: "FACT", text: `The owner page earned 0 of ${p.gsc.impressions} impressions for this topic in ${p.gsc.window}${demandNote(p.gsc.coverage)}.` });
       if (reasons.length) {
         reasons.push({ tag: "HEURISTIC", text: "Fix the headings to the approved location and remove wording no claim supports; link to the owner from the pages Google currently prefers." });
         out.push(base({
-          id: `page_improvement:${slug(p.name)}`, topic: p.name, service_id: p.service_id, action: "improve", content_type: "page_improvement",
+          id: `page_improvement:${slug(p.name)}`, key: `page_improvement:${p.service_id}`, topic: p.name, service_id: p.service_id, action: "improve", content_type: "page_improvement",
           target: { keyword_id: primary?.keyword_id ?? null, keyword: primary?.keyword ?? null, intent: primary?.intent ?? null, location: null, owner_path: p.owner.path, cta: null },
           evidence_claim_ids: relevant, existing_coverage: cov,
           gap: p.page_issues.length ? "The owner page's headings conflict with the governed rules." : "Google does not yet associate the topic with its owner page.",
@@ -158,7 +160,7 @@ export function buildOpportunities(ctx: {
         }
         gates.push({ gate: "cadence", pass: !cad.blocked, detail: cad.blocked ? `Blocked until ${cad.eligible_from ?? "the open post is decided"}.` : "No recent post for this service and intent." });
         out.push(base({
-          id: `gbp_post:${slug(p.name)}:${intent}`, topic: p.name, service_id: p.service_id, action, content_type: "gbp_post",
+          id: `gbp_post:${slug(p.name)}:${intent}`, key: `gbp_post:${p.service_id}:${intent}`, topic: p.name, service_id: p.service_id, action, content_type: "gbp_post",
           target: { keyword_id: kw.keyword_id, keyword: kw.keyword, intent, location: null, owner_path: p.owner.path, cta: "LEARN_MORE" },
           evidence_claim_ids: evidence, existing_coverage: cov.filter((c) => c.kind === "gbp_post"),
           gap: `A ${intent} Business Profile post for "${kw.keyword}".`, blockers, gates, eligible_from: deferred ? cad.eligible_from : null,
@@ -171,7 +173,7 @@ export function buildOpportunities(ctx: {
     const polluted = keywords.filter((k) => k.service_id === p.service_id && k.flags.includes("homepage_pollution"));
     if (polluted.length) {
       out.push(base({
-        id: `data_fix:keyword-ownership:${slug(p.name)}`, topic: p.name, service_id: p.service_id, action: "improve", content_type: "data_fix",
+        id: `data_fix:keyword-ownership:${slug(p.name)}`, key: `data_fix:keyword-ownership:${p.service_id}`, topic: p.name, service_id: p.service_id, action: "improve", content_type: "data_fix",
         target: { keyword_id: null, keyword: null, intent: null, location: null, owner_path: "/", cta: null },
         gap: `${polluted.length} keywords under ${p.name} target the home page.`,
         gates: [{ gate: "data_only", pass: true, detail: "Changes CRM data, not content." }],
@@ -187,7 +189,7 @@ export function buildOpportunities(ctx: {
 
   // ── The home page's own headings (it earns most impressions today) ──
   if (ctx.homeIssues?.length) out.push(base({
-    id: "page_improvement:home", topic: "Home page", action: "improve", content_type: "page_improvement",
+    id: "page_improvement:home", key: "page_improvement:home", topic: "Home page", action: "improve", content_type: "page_improvement",
     target: { keyword_id: null, keyword: null, intent: null, location: null, owner_path: "/", cta: null },
     gap: "The home page's headings conflict with the governed rules.",
     gates: [{ gate: "no_new_claims", pass: true, detail: "Fix removes or corrects wording." }],
@@ -199,7 +201,7 @@ export function buildOpportunities(ctx: {
   // ── Service record pages that disagree with the live owner → data fix ──
   for (const g of ctx.servicePageUrlGaps) {
     out.push(base({
-      id: `data_fix:service-page:${slug(g.service)}`, topic: g.service, service_id: g.service_id, action: "improve", content_type: "data_fix",
+      id: `data_fix:service-page:${slug(g.service)}`, key: `data_fix:service-page:${g.service_id}`, topic: g.service, service_id: g.service_id, action: "improve", content_type: "data_fix",
       target: { keyword_id: null, keyword: null, intent: null, location: null, owner_path: g.owner, cta: null },
       gap: `Set ${g.service}'s service page to ${g.owner} (now ${g.recorded ?? "empty"}).`,
       gates: [{ gate: "data_only", pass: true, detail: "Changes CRM data, not content." }],
@@ -211,7 +213,7 @@ export function buildOpportunities(ctx: {
   // ── Keywords with no service ──
   const unmapped = keywords.filter((k) => k.role === "unmapped");
   if (unmapped.length) out.push(base({
-    id: "data_fix:unmapped-keywords", topic: "Unmapped keywords", action: "improve", content_type: "data_fix",
+    id: "data_fix:unmapped-keywords", key: "data_fix:unmapped-keywords", topic: "Unmapped keywords", action: "improve", content_type: "data_fix",
     gap: `${unmapped.length} keywords have no service${unmapped.some((k) => !k.intent) ? " and no intent" : ""}.`,
     gates: [{ gate: "data_only", pass: true, detail: "Changes CRM data, not content." }],
     reasons: [{ tag: "FACT", text: `${unmapped.slice(0, 10).map((k) => k.keyword).join(", ")}${unmapped.length > 10 ? "…" : ""}.` }],
@@ -219,7 +221,7 @@ export function buildOpportunities(ctx: {
   }));
 
   if (ctx.blindSpots.length) out.push(base({
-    id: "data_fix:record-live-blog-posts", topic: "Content inventory", action: "improve", content_type: "data_fix",
+    id: "data_fix:record-live-blog-posts", key: "data_fix:record-live-blog-posts", topic: "Content inventory", action: "improve", content_type: "data_fix",
     gap: `${ctx.blindSpots.length} live blog posts are missing from content_posts.`,
     gates: [{ gate: "data_only", pass: true, detail: "Changes CRM data, not content." }],
     reasons: [{ tag: "FACT", text: ctx.blindSpots.join(", ") }, { tag: "HEURISTIC", text: "Until they are recorded, the Blog Creator cannot see what it must not duplicate." }],
@@ -230,7 +232,7 @@ export function buildOpportunities(ctx: {
   for (const u of ctx.unconfirmed) {
     const kws = keywords.filter((k) => k.flags.includes("requires_confirmation") && (k.target_path === u.path || aboutUnconfirmed(k.keyword, u)));
     out.push(base({
-      id: `confirm_service:${slug(u.path)}`, topic: u.title ?? u.path, action: "requires_confirmation", content_type: "service_page",
+      id: `confirm_service:${slug(u.path)}`, key: `confirm_service:${u.path}`, topic: u.title ?? u.path, action: "requires_confirmation", content_type: "service_page",
       target: { keyword_id: null, keyword: kws[0]?.keyword ?? null, intent: null, location: null, owner_path: u.path, cta: null },
       gap: "No approved service owns this live page.",
       blockers: ["A person must confirm the client wants this service promoted before any content, keyword or claim is assigned."],
@@ -243,45 +245,54 @@ export function buildOpportunities(ctx: {
       ],
     }));
   }
-  if (ctx.unapprovedLocationPages.length) {
-    const locKws = keywords.filter((k) => k.flags.includes("location_unapproved"));
+  // One decision per market (a live service-area page for a place that is
+  // not an approved location). Pages count as coverage; they authorise
+  // nothing until a person approves the market.
+  for (const m of ctx.unapprovedLocationPages) {
+    const norm = normPlace(m.place);
+    const kws = keywords.filter((k) => k.flags.includes("location_unapproved") && placesIn(k.keyword, ctx.places).some((p) => normPlace(p.name) === norm));
     out.push(base({
-      id: "confirm_markets:service-areas", topic: "Service-area markets", action: "requires_confirmation", content_type: "location_page",
-      gap: `${ctx.unapprovedLocationPages.length} live service-area pages name places that are not approved locations.`,
+      id: `confirm_market:${slug(m.place)}`, key: `confirm_market:${norm.trim().replace(/ /g, "-")}`,
+      topic: `Market: ${m.place}`, action: "requires_confirmation", content_type: "location_page",
+      target: { keyword_id: kws[0]?.keyword_id ?? null, keyword: kws[0]?.keyword ?? null, intent: null, location: m.place, owner_path: m.path, cta: null },
+      gap: `${m.place} has a live service-area page but is not an approved location.`,
       blockers: ["New location-targeted content waits for a person to approve the market."],
-      gates: [{ gate: "approved_location", pass: false, detail: "Not approved locations." }],
+      gates: [{ gate: "approved_location", pass: false, detail: `${m.place} is not an approved location.` }],
       reasons: [
-        { tag: "FACT", text: `Pages: ${ctx.unapprovedLocationPages.join(", ")}.` },
-        ...(locKws.length ? [{ tag: "FACT" as const, text: `Keywords naming them: ${locKws.map((k) => k.keyword).join(", ")}.` }] : []),
-        { tag: "REQUIRES_CONFIRMATION", text: "Existing pages count as coverage; approving a market is a separate, later decision." },
+        { tag: "FACT", text: `Live page ${m.path}${m.title ? `: "${m.title}"` : ""}.` },
+        ...(kws.length ? [{ tag: "FACT" as const, text: `Keywords naming it: ${kws.map((k) => k.keyword).join(", ")}.` }] : []),
+        { tag: "REQUIRES_CONFIRMATION", text: "The page counts as existing coverage; approving the market is a separate decision." },
       ],
     }));
   }
 
-  // ── Stored intents the query text contradicts: a person decides ──
-  const intentConflicts = keywords.filter((k) => k.flags.includes("intent_conflict"));
-  if (intentConflicts.length) out.push(base({
-    id: "confirm_intents:keywords", topic: "Stored keyword intents", action: "requires_confirmation", content_type: "data_fix",
-    gap: `${intentConflicts.length} keywords have a stored intent their query text contradicts.`,
-    blockers: ["They are excluded as post targets until a person confirms or corrects the intent; the engine never overwrites it."],
-    gates: [{ gate: "intent_sanity", pass: false, detail: "Stored intent contradicts the query." }],
-    reasons: [
-      ...intentConflicts.map((k) => ({ tag: "FACT" as const, text: `"${k.keyword}": stored ${k.intent_check.stored}, reads as ${k.intent_check.assessed.replace(/_/g, " ")}.` })),
-      { tag: "HEURISTIC", text: "The assessment is a conservative pattern match (brand, question form, buyer wording, service + place)." },
-    ],
-  }));
+  // One decision per keyword whose stored intent its query contradicts.
+  for (const k of keywords.filter((x) => x.flags.includes("intent_conflict"))) {
+    out.push(base({
+      id: `confirm_intent:${slug(k.keyword)}`, key: `confirm_intent:${k.keyword_id}`,
+      topic: `Intent: "${k.keyword}"`, service_id: k.service_id, action: "requires_confirmation", content_type: "data_fix",
+      target: { keyword_id: k.keyword_id, keyword: k.keyword, intent: k.intent, location: null, owner_path: k.target_path, cta: null },
+      gap: `Stored as ${k.intent_check.stored}; the query reads as ${k.intent_check.assessed.replace(/_/g, " ")}.`,
+      blockers: ["Excluded as a post target until a person keeps or corrects the intent; the engine never overwrites it."],
+      gates: [{ gate: "intent_sanity", pass: false, detail: "Stored intent contradicts the query." }],
+      reasons: [
+        { tag: "FACT", text: `Stored intent: ${k.intent_check.stored}.` },
+        { tag: "HEURISTIC", text: k.intent_check.reason },
+      ],
+    }));
+  }
 
   // ── Keywords the writers could never honour ──
   const risky = keywords.filter((k) => k.role === "avoid_risky");
   if (risky.length) out.push(base({
-    id: "avoid:risky-keywords", topic: "Keywords with unsupportable modifiers", action: "avoid", content_type: "gbp_post",
+    id: "avoid:risky-keywords", key: "avoid:risky-keywords", topic: "Keywords with unsupportable modifiers", action: "avoid", content_type: "gbp_post",
     gap: "Content targeting these would need superlatives, prices, credentials, reviews or promises no claim supports.",
     gates: [{ gate: "hard_rules", pass: false, detail: "Conflicts with the brand's hard rules / drafter detectors." }],
     reasons: risky.map((k) => ({ tag: "FACT" as const, text: `"${k.keyword}": ${k.reasons.find((r) => /Contains/.test(r.text))?.text ?? ""}` })),
   }));
   const material = keywords.filter((k) => k.role === "material_unsupported");
   if (material.length) out.push(base({
-    id: "evidence:unsupported-materials", topic: "Materials no claim names", action: "insufficient_evidence", content_type: "gbp_post",
+    id: "evidence:unsupported-materials", key: "evidence:unsupported-materials", topic: "Materials no claim names", action: "insufficient_evidence", content_type: "gbp_post",
     gap: "A material may be presented as offered only when a usable claim names it.",
     gates: [{ gate: "evidence", pass: false, detail: "No usable claim names the material." }],
     reasons: material.map((k) => ({ tag: "FACT" as const, text: `"${k.keyword}": ${k.reasons.filter((r) => /which no usable claim/.test(r.text)).map((r) => r.text).join(" ")}` })),
@@ -293,7 +304,7 @@ export function buildOpportunities(ctx: {
     const overlap = ctx.blogOverlaps.find((o) => o.topic === s.name);
     const ct: ContentType = s.action === "consolidate" || s.action === "refresh" ? "blog_refresh" : "blog_post";
     out.push(base({
-      id: `topic:${s.key}`, topic: s.name, service_id: s.service_ids[0] ?? null, action: s.action, content_type: ct,
+      id: `topic:${s.key}`, key: `topic:${s.key}`, topic: s.name, service_id: s.service_ids[0] ?? null, action: s.action, content_type: ct,
       evidence_claim_ids: s.evidence.map((e) => e.id), existing_coverage: s.coverage,
       gap: s.reasons.find((r) => r.tag !== "HEURISTIC")?.text ?? s.name,
       blockers: s.action === "research_required" ? ["Needs a research / evidence layer (not built in v1)."] : s.action === "insufficient_evidence" ? ["Needs a client-confirmed fact."] : [],
@@ -332,6 +343,38 @@ export function demandBucket(impressions: number): number {
   return Math.min(4, Math.floor(Math.log10(impressions)) + 1); // 1–9 → 1, 10–99 → 2, 100–999 → 3, 1000+ → 4
 }
 
+// The Authority tab section. Pure function of the action and content type.
+export function sectionOf(o: Pick<Opportunity, "action" | "content_type">): Section {
+  switch (o.action) {
+    case "requires_confirmation": return "needs_decision";
+    case "research_required": return "research";
+    case "blocked_data_prerequisite":
+    case "insufficient_evidence": return "blocked";
+    case "avoid": return "avoid";
+    case "create": return o.content_type === "gbp_post" || o.content_type === "blog_post" ? "ready" : "fix_now";
+    default: return "fix_now";
+  }
+}
+
+// What the work is for, from a fixed template per content type and intent
+// ([HEURISTIC]). Not strategy: no angle, hook or new fact.
+export function objectiveOf(o: Pick<Opportunity, "action" | "content_type" | "topic" | "target">): string | null {
+  const page = o.target.owner_path ?? "its page";
+  if (o.content_type === "gbp_post" && o.action === "create") {
+    switch (o.target.intent) {
+      case "transactional": return `Prompt people ready to act to request ${o.topic.toLowerCase()} and send them to ${page}.`;
+      case "commercial": return `Help people comparing providers for ${o.topic.toLowerCase()} and send them to ${page}.`;
+      case "informational": return `Answer a common ${o.topic.toLowerCase()} question and point to ${page}.`;
+      default: return null;
+    }
+  }
+  if (o.content_type === "service_page" && o.action === "create") return `Give ${o.topic} its own live page at ${page}, so searches for it have a correct owner.`;
+  if (o.content_type === "page_improvement") return `Bring ${page} in line with approved locations and supported claims.`;
+  if (o.content_type === "data_fix" && o.action === "improve") return "Reconcile CRM data so the engine and the writers read the same facts.";
+  if (o.action === "consolidate") return `Merge the overlapping posts on ${o.topic.toLowerCase()} into one.`;
+  return null;
+}
+
 export function prioritize(drafts: Draft[]): Opportunity[] {
   const tierRank: Record<Tier, number> = { A: 0, B: 1, C: 2, none: 3 };
   const withTier = drafts.map((d) => {
@@ -339,7 +382,7 @@ export function prioritize(drafts: Draft[]): Opportunity[] {
     const order = [tierRank[tier], -d.value, -d.severity, -demandBucket(d.impressions), d.deferred ? 1 : 0, -d.evidence_claim_ids.length, -d.impressions];
     const provenance = Object.fromEntries(TAGS.map((t) => [t, d.reasons.filter((r) => r.tag === t).map((r) => r.text)])) as Record<Tag, string[]>;
     const { value: _v, severity: _s, impressions: _i, deferred: _d, ...rest } = d;
-    return { ...rest, tier, order, provenance } as Opportunity;
+    return { ...rest, section: sectionOf(d), objective: objectiveOf(d), tier, order, provenance } as Opportunity;
   });
   return withTier.sort((a, b) => {
     for (let i = 0; i < a.order.length; i++) if (a.order[i] !== b.order[i]) return a.order[i] - b.order[i];

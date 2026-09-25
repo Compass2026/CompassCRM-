@@ -1,8 +1,21 @@
 // Search Console, latest window only. Stored snapshots are overlapping
 // rolling 28-day windows, so summing them double-counts. Old URLs are mapped
 // through the inventory's redirects so a moved page keeps its history. Pure.
-import type { AuthorityInput, GscRow, GscSummary, RankRow } from "./types.ts";
+import type { AuthorityInput, GscCoverage, GscRow, GscSummary, RankRow } from "./types.ts";
 import { normPath, type Inventory } from "./urls.ts";
+
+// gsc-sync/handler.ts requests rowLimit 250 and no startRow (Sept 25 2026).
+export const GSC_ROW_CAP = 250;
+
+export function gscCoverage(rows: number): GscCoverage {
+  if (rows === 0) return "unknown";
+  return rows >= GSC_ROW_CAP ? "partial" : "complete";
+}
+
+// Appended wherever an impression count is quoted.
+export function demandNote(coverage: GscCoverage): string {
+  return coverage === "partial" ? ` (a floor: the stored window holds only the top ${GSC_ROW_CAP} query+page rows)` : coverage === "unknown" ? " (no Search Console rows stored)" : "";
+}
 
 export function latestWindow(rows: GscRow[]): { rows: GscRow[]; label: string | null } {
   if (!rows.length) return { rows: [], label: null };
@@ -55,7 +68,7 @@ export function gscForService(
   const site = input.authority.site?.url ?? input.client.website_url;
   const kw = input.keywords.find((k) => k.id === primaryKeywordId);
   return {
-    window: label, impressions, clicks, best_position: best, owner_impressions: owner,
+    window: label, coverage: gscCoverage(rows.length), impressions, clicks, best_position: best, owner_impressions: owner,
     landing_pages: [...pages].map(([path, i]) => ({ path, impressions: i })).sort((a, b) => b.impressions - a.impressions),
     queries: mine.sort((a, b) => b.impressions - a.impressions).slice(0, 12)
       .map((r) => ({ query: r.query, impressions: r.impressions, position: r.avg_position, path: landingPath(input, inv, r.page) })),

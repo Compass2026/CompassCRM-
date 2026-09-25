@@ -9,6 +9,8 @@
 -- result type, posts with their linked claims, content posts, change_log
 -- page proposals and the site's recorded content contract. The site
 -- inventory is added by scripts/site-inventory.mjs; the dry run merges both.
+-- Once migration 0048 is applied, `select authority_input('<uuid>')` is the
+-- same read (arrays in a fixed order; the engine's result is identical).
 with c as (select :'client_id'::uuid as id)
 select client_intelligence_input(c.id) || jsonb_build_object('authority', jsonb_build_object(
   'now', now(),
