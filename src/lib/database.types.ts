@@ -103,6 +103,428 @@ export type Database = {
         }
         Relationships: []
       }
+      authority_opportunities: {
+        Row: {
+          action: string
+          client_id: string
+          content_type: string
+          decided_at: string | null
+          decided_by: string | null
+          dismissed_until: string | null
+          eligible_from: string | null
+          first_seen_run_id: string
+          id: string
+          intent: string | null
+          key: string
+          keyword_id: string | null
+          last_seen_at: string
+          last_seen_run_id: string
+          opportunity: Json
+          present: boolean
+          section: string
+          service_id: string | null
+          sort_order: number[]
+          status: string
+          status_reason: string | null
+          suppressed: boolean
+          target_path: string | null
+          tier: string
+          topic: string
+        }
+        Insert: {
+          action: string
+          client_id: string
+          content_type: string
+          decided_at?: string | null
+          decided_by?: string | null
+          dismissed_until?: string | null
+          eligible_from?: string | null
+          first_seen_run_id: string
+          id?: string
+          intent?: string | null
+          key: string
+          keyword_id?: string | null
+          last_seen_at: string
+          last_seen_run_id: string
+          opportunity: Json
+          present?: boolean
+          section: string
+          service_id?: string | null
+          sort_order?: number[]
+          status?: string
+          status_reason?: string | null
+          suppressed?: boolean
+          target_path?: string | null
+          tier: string
+          topic: string
+        }
+        Update: {
+          action?: string
+          client_id?: string
+          content_type?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          dismissed_until?: string | null
+          eligible_from?: string | null
+          first_seen_run_id?: string
+          id?: string
+          intent?: string | null
+          key?: string
+          keyword_id?: string | null
+          last_seen_at?: string
+          last_seen_run_id?: string
+          opportunity?: Json
+          present?: boolean
+          section?: string
+          service_id?: string | null
+          sort_order?: number[]
+          status?: string
+          status_reason?: string | null
+          suppressed?: boolean
+          target_path?: string | null
+          tier?: string
+          topic?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_first_run_fk"
+            columns: ["first_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_latest"
+            referencedColumns: ["run_id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_first_run_fk"
+            columns: ["first_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_last_run_fk"
+            columns: ["last_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_latest"
+            referencedColumns: ["run_id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_last_run_fk"
+            columns: ["last_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      authority_opportunity_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          created_at: string
+          detail: Json
+          id: string
+          kind: string
+          opportunity_id: string
+          run_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          kind: string
+          opportunity_id: string
+          run_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          kind?: string
+          opportunity_id?: string
+          run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authority_events_opportunity_fk"
+            columns: ["opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunities"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_events_opportunity_fk"
+            columns: ["opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunity_state"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_events_run_fk"
+            columns: ["run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_latest"
+            referencedColumns: ["run_id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_events_run_fk"
+            columns: ["run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunity_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      authority_opportunity_links: {
+        Row: {
+          change_log_id: string | null
+          client_id: string
+          content_post_id: string | null
+          created_at: string
+          created_by: string | null
+          drafter_run_id: string | null
+          id: string
+          kind: string
+          opportunity_id: string
+          ref_id: string
+          social_post_id: string | null
+          task_id: string | null
+        }
+        Insert: {
+          change_log_id?: string | null
+          client_id: string
+          content_post_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          drafter_run_id?: string | null
+          id?: string
+          kind: string
+          opportunity_id: string
+          ref_id: string
+          social_post_id?: string | null
+          task_id?: string | null
+        }
+        Update: {
+          change_log_id?: string | null
+          client_id?: string
+          content_post_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          drafter_run_id?: string | null
+          id?: string
+          kind?: string
+          opportunity_id?: string
+          ref_id?: string
+          social_post_id?: string | null
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authority_links_change_log_fk"
+            columns: ["change_log_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "change_log"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_links_content_post_fk"
+            columns: ["content_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "content_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_links_drafter_run_fk"
+            columns: ["drafter_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "drafter_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_links_opportunity_fk"
+            columns: ["opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunities"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_links_opportunity_fk"
+            columns: ["opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunity_state"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_links_social_post_fk"
+            columns: ["social_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_links_task_fk"
+            columns: ["task_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunity_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      authority_runs: {
+        Row: {
+          as_of: string | null
+          client_id: string
+          counts: Json | null
+          created_at: string
+          diff: Json | null
+          engine_version: string | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          input_hash: string | null
+          inventory: Json | null
+          inventory_errors: number | null
+          inventory_fetched_at: string | null
+          inventory_pages: number | null
+          judged_at: string | null
+          mode: string
+          previous_run_id: string | null
+          report: Json | null
+          requested_by: string | null
+          requested_via: string
+          section_hashes: Json | null
+          sources: Json | null
+          status: string
+        }
+        Insert: {
+          as_of?: string | null
+          client_id: string
+          counts?: Json | null
+          created_at?: string
+          diff?: Json | null
+          engine_version?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          input_hash?: string | null
+          inventory?: Json | null
+          inventory_errors?: number | null
+          inventory_fetched_at?: string | null
+          inventory_pages?: number | null
+          judged_at?: string | null
+          mode: string
+          previous_run_id?: string | null
+          report?: Json | null
+          requested_by?: string | null
+          requested_via: string
+          section_hashes?: Json | null
+          sources?: Json | null
+          status?: string
+        }
+        Update: {
+          as_of?: string | null
+          client_id?: string
+          counts?: Json | null
+          created_at?: string
+          diff?: Json | null
+          engine_version?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          input_hash?: string | null
+          inventory?: Json | null
+          inventory_errors?: number | null
+          inventory_fetched_at?: string | null
+          inventory_pages?: number | null
+          judged_at?: string | null
+          mode?: string
+          previous_run_id?: string | null
+          report?: Json | null
+          requested_by?: string | null
+          requested_via?: string
+          section_hashes?: Json | null
+          sources?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_runs_previous_fk"
+            columns: ["previous_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_latest"
+            referencedColumns: ["run_id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_runs_previous_fk"
+            columns: ["previous_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_runs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_assets: {
         Row: {
           client_id: string
@@ -3469,6 +3891,176 @@ export type Database = {
       }
     }
     Views: {
+      authority_latest: {
+        Row: {
+          client_id: string | null
+          counts: Json | null
+          created_at: string | null
+          diff: Json | null
+          engine_version: string | null
+          finished_at: string | null
+          inventory_fetched_at: string | null
+          inventory_stale: boolean | null
+          judged_at: string | null
+          mode: string | null
+          run_id: string | null
+          sources: Json | null
+          stale_sections: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      authority_opportunity_state: {
+        Row: {
+          action: string | null
+          client_id: string | null
+          content_type: string | null
+          decided_at: string | null
+          decided_by: string | null
+          dismissed_until: string | null
+          effective_status: string | null
+          eligible_from: string | null
+          first_seen_run_id: string | null
+          id: string | null
+          intent: string | null
+          key: string | null
+          keyword_id: string | null
+          last_seen_at: string | null
+          last_seen_run_id: string | null
+          opportunity: Json | null
+          present: boolean | null
+          section: string | null
+          service_id: string | null
+          sort_order: number[] | null
+          status: string | null
+          status_reason: string | null
+          suppressed: boolean | null
+          target_path: string | null
+          tier: string | null
+          topic: string | null
+        }
+        Insert: {
+          action?: string | null
+          client_id?: string | null
+          content_type?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          dismissed_until?: string | null
+          effective_status?: never
+          eligible_from?: string | null
+          first_seen_run_id?: string | null
+          id?: string | null
+          intent?: string | null
+          key?: string | null
+          keyword_id?: string | null
+          last_seen_at?: string | null
+          last_seen_run_id?: string | null
+          opportunity?: Json | null
+          present?: boolean | null
+          section?: string | null
+          service_id?: string | null
+          sort_order?: number[] | null
+          status?: string | null
+          status_reason?: string | null
+          suppressed?: boolean | null
+          target_path?: string | null
+          tier?: string | null
+          topic?: string | null
+        }
+        Update: {
+          action?: string | null
+          client_id?: string | null
+          content_type?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          dismissed_until?: string | null
+          effective_status?: never
+          eligible_from?: string | null
+          first_seen_run_id?: string | null
+          id?: string | null
+          intent?: string | null
+          key?: string | null
+          keyword_id?: string | null
+          last_seen_at?: string | null
+          last_seen_run_id?: string | null
+          opportunity?: Json | null
+          present?: boolean | null
+          section?: string | null
+          service_id?: string | null
+          sort_order?: number[] | null
+          status?: string | null
+          status_reason?: string | null
+          suppressed?: boolean | null
+          target_path?: string | null
+          tier?: string | null
+          topic?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_first_run_fk"
+            columns: ["first_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_latest"
+            referencedColumns: ["run_id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_first_run_fk"
+            columns: ["first_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_last_run_fk"
+            columns: ["last_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_latest"
+            referencedColumns: ["run_id", "client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_last_run_fk"
+            columns: ["last_seen_run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
       portal_client: {
         Row: {
           city: string | null
@@ -3726,6 +4318,33 @@ export type Database = {
       }
     }
     Functions: {
+      authority_begin_run: {
+        Args: {
+          p_client_id: string
+          p_mode: string
+          p_requested_by?: string
+          p_requested_via: string
+        }
+        Returns: string
+      }
+      authority_caller_is_service: { Args: never; Returns: boolean }
+      authority_decide: {
+        Args: { p_opportunity_id: string; p_payload?: Json; p_verb: string }
+        Returns: Json
+      }
+      authority_fingerprint: { Args: { p_client_id: string }; Returns: Json }
+      authority_input: { Args: { p_client_id: string }; Returns: Json }
+      authority_link_state: {
+        Args: {
+          l: Database["public"]["Tables"]["authority_opportunity_links"]["Row"]
+        }
+        Returns: string
+      }
+      authority_record_run: {
+        Args: { p: Json; p_run_id: string }
+        Returns: Json
+      }
+      authority_write_active: { Args: never; Returns: boolean }
       client_intelligence_input: {
         Args: { p_client_id: string }
         Returns: Json
