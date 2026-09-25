@@ -24,11 +24,12 @@
 -- that asset is done. resolved = the latest completed run no longer reports
 -- the opportunity. A degraded run changes no opportunity at all.
 --
--- Dismissal: a reason is required; dismissed_until is optional. Without a
--- date a dismissal lasts until the opportunity materially changes (section or
--- action) or a person reopens it — never permanent by default. "Never
--- recommend again" is the explicit, separate suppressed = true.
---
+-- Dismissal: a normal dismissal needs a reason AND a date (dismissed_until;
+-- the UI offers 30 / 60 / 90 days). A request without a date is refused.
+-- When the date passes, the opportunity returns to open if the engine still
+-- reports it. The only permanent state is the explicit, separate
+-- suppressed = true ("never recommend again"), which has no date.
+
 -- Markets: D2 keeps the governed locations model (locations.is_active =
 -- approved). Physical / service locations and SEO market targets may become
 -- separate concepts in D3; nothing here models market areas.
@@ -111,8 +112,11 @@ create table authority_opportunities (
   constraint authority_opportunities_id_client_key unique (id, client_id),
   constraint authority_opportunities_first_run_fk foreign key (first_seen_run_id, client_id) references authority_runs (id, client_id),
   constraint authority_opportunities_last_run_fk foreign key (last_seen_run_id, client_id) references authority_runs (id, client_id),
+  -- every dismissal has a reason; a normal one has a date, a suppression has none
   constraint authority_opportunities_dismissal check (status <> 'dismissed' or length(btrim(coalesce(status_reason, ''))) > 0),
-  constraint authority_opportunities_suppressed check (not suppressed or (status = 'dismissed' and dismissed_until is null))
+  constraint authority_opportunities_dismissal_dated check (status <> 'dismissed' or suppressed or dismissed_until is not null),
+  constraint authority_opportunities_suppressed check (not suppressed or (status = 'dismissed' and dismissed_until is null)),
+  constraint authority_opportunities_undismissed check (status = 'dismissed' or dismissed_until is null)
 );
 create index authority_opportunities_client_idx on authority_opportunities (client_id, present, section);
 comment on table authority_opportunities is
@@ -344,6 +348,10 @@ select o.*,
   case
     when exists (select 1 from authority_opportunity_links l where l.opportunity_id = o.id and authority_link_state(l) = 'done') then 'completed'
     when exists (select 1 from authority_opportunity_links l where l.opportunity_id = o.id and authority_link_state(l) = 'active') then 'in_progress'
+    -- a normal dismissal whose date has passed reads as open while still reported
+    -- (the next completed run records the reopening)
+    when o.status = 'dismissed' and not o.suppressed and o.dismissed_until <= (now() at time zone 'America/Chicago')::date
+         and o.present then 'open'
     when o.status = 'dismissed' then 'dismissed'
     when not o.present then 'resolved'
     else o.status
@@ -496,15 +504,12 @@ begin
                              'to', jsonb_build_object('section', o->>'section', 'action', o->>'action')));
         moved := moved || cur.key;
       end if;
-      -- An ordinary dismissal ends when its date passes or the opportunity
-      -- materially changes; a suppression never does.
-      if cur.status = 'dismissed' and not cur.suppressed and (
-           (cur.dismissed_until is not null and cur.dismissed_until <= v_as_of)
-        or cur.section <> o->>'section' or cur.action <> o->>'action') then
+      -- A normal dismissal ends on its date, and only then; a suppression
+      -- never does.
+      if cur.status = 'dismissed' and not cur.suppressed and cur.dismissed_until <= v_as_of then
         insert into authority_opportunity_events (opportunity_id, client_id, run_id, kind, actor_kind, detail)
         values (cur.id, r.client_id, p_run_id, 'reopened', 'engine',
-          jsonb_build_object('reason', case when cur.dismissed_until is not null and cur.dismissed_until <= v_as_of
-                                            then 'dismissal expired' else 'the opportunity changed' end));
+          jsonb_build_object('reason', 'dismissal expired', 'until', cur.dismissed_until));
         reopened := reopened || cur.key;
         cur.status := 'open'; cur.dismissed_until := null; cur.status_reason := null;
       end if;
@@ -546,7 +551,7 @@ grant execute on function authority_record_run(uuid, jsonb) to service_role;
 -- keywords, page groups) and recorded here with verb 'decision'.
 --   accept   {}                                  open → accepted
 --   release  {}                                  accepted → open (person only)
---   dismiss  {reason, until?}                    → dismissed (person only; not while work is linked)
+--   dismiss  {reason, until}                     → dismissed until a future date (person only; not while work is linked)
 --   suppress {reason}                            → dismissed + suppressed: never recommend again (person only)
 --   reopen   {}                                  dismissed → open, clears suppression (person only)
 --   link     {kind, id}                          links an asset of the same client; open → accepted
@@ -590,7 +595,10 @@ begin
     end if;
     if p_verb = 'dismiss' then
       v_until := nullif(p_payload->>'until', '')::date;
-      if v_until is not null and v_until <= (now() at time zone 'America/Chicago')::date then
+      if v_until is null then
+        raise exception 'A dismissal needs a date (dismissed_until); "never recommend again" is suppress' using errcode = '22023';
+      end if;
+      if v_until <= (now() at time zone 'America/Chicago')::date then
         raise exception 'dismissed_until must be in the future' using errcode = '22023';
       end if;
     end if;

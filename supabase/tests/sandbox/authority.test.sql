@@ -197,9 +197,15 @@ begin
     and not (au.row(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial')).suppressed);
   perform authority_decide(au.opp_id(a, 'confirm_market:ofallon'), 'suppress', jsonb_build_object('reason', 'Not a market we serve'));
   perform au.ok('H9 suppress is explicit and separate', (au.row(a, 'confirm_market:ofallon')).suppressed);
-  perform authority_decide(au.opp_id(a, 'topic:signs_replacement'), 'dismiss', jsonb_build_object('reason', 'Not now'));
-  perform au.ok('H10 a dismissal without a date is not a suppression',
-    (au.row(a, 'topic:signs_replacement')).status = 'dismissed' and not (au.row(a, 'topic:signs_replacement')).suppressed);
+  e := au.try(format($q$select authority_decide(%L, 'dismiss', '{"reason": "Not now"}')$q$, au.opp_id(a, 'topic:signs_replacement')));
+  perform au.ok('H10 a normal dismissal without a date is refused', e like '22023%', e);
+  perform au.ok('H10b ...and changed nothing', (au.row(a, 'topic:signs_replacement')).status = 'open');
+  perform authority_decide(au.opp_id(a, 'topic:signs_replacement'), 'dismiss', jsonb_build_object('reason', 'Not now', 'until', current_date + 90));
+  perform au.ok('H10c a 90-day dismissal: dismissed with its date, not suppressed',
+    (au.row(a, 'topic:signs_replacement')).status = 'dismissed' and (au.row(a, 'topic:signs_replacement')).dismissed_until = current_date + 90
+    and not (au.row(a, 'topic:signs_replacement')).suppressed);
+  e := au.try(format($q$select authority_decide(%L, 'suppress', '{}')$q$, au.opp_id(a, 'data_fix:record-live-blog-posts')));
+  perform au.ok('H10d a suppression needs a reason too', e like '22023%', e);
   -- links: accepted → in_progress only through a link; completed only when the asset is done
   perform authority_decide(au.opp_id(a, 'service_page:00000000-0000-4000-e000-0000000000a1'), 'link',
     jsonb_build_object('kind', 'task', 'id', au.id('task_a')));
@@ -297,7 +303,7 @@ begin
   perform au.ok('N3 a dated dismissal expires on its date → open',
     (au.row(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial')).status = 'open'
     and exists (select 1 from authority_opportunity_events where opportunity_id = au.opp_id(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial') and kind = 'reopened'));
-  perform au.ok('N4 an undated dismissal survives while the opportunity is unchanged',
+  perform au.ok('N4 a dismissal whose date has not come stays dismissed',
     (au.row(a, 'topic:signs_replacement')).status = 'dismissed');
   perform au.ok('N5 a suppression survives', (au.row(a, 'confirm_market:ofallon')).suppressed and au.state(a, 'confirm_market:ofallon') = 'dismissed');
 end $$;
@@ -329,8 +335,9 @@ do $$ begin
     (select run_id from authority_latest where client_id = '00000000-0000-4000-b000-00000000000a') = au.id('r3'));
 end $$;
 
--- Run 5: the resolved items come back → regressed and open; the undated
--- dismissal whose item changed section reopens; the suppression stays.
+-- Run 5: the resolved items come back → regressed and open; a dismissal
+-- whose item changed section stays dismissed until its date; the
+-- suppression stays.
 select au.put('r5', authority_begin_run(:'ca', 'refresh', 'worker'));
 select authority_record_run(au.id('r5'), au.payload(:'ca', jsonb_build_array(
   au.opp('service_page:' || :'svc', 'fix_now', 'create', 'Full Roof Replacement', :'svc', 'A'),
@@ -346,8 +353,8 @@ begin
     (au.row(a, 'data_fix:record-live-blog-posts')).present and (au.row(a, 'data_fix:record-live-blog-posts')).status = 'open'
     and exists (select 1 from authority_opportunity_events where opportunity_id = au.opp_id(a, 'data_fix:record-live-blog-posts') and kind = 'regressed'));
   perform au.ok('N11 ...the other one too', au.state(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial') = 'open');
-  perform au.ok('N12 an undated dismissal reopens when the opportunity materially changes',
-    (au.row(a, 'topic:signs_replacement')).status = 'open'
+  perform au.ok('N12 a change of section does not end a dismissal (only its date does)',
+    (au.row(a, 'topic:signs_replacement')).status = 'dismissed'
     and exists (select 1 from authority_opportunity_events where opportunity_id = au.opp_id(a, 'topic:signs_replacement') and kind = 'section_changed'));
   perform au.ok('N13 the suppression survives every run', (au.row(a, 'confirm_market:ofallon')).suppressed);
   perform au.ok('N14 completed work stays completed', au.state(a, 'service_page:00000000-0000-4000-e000-0000000000a1') = 'completed');
@@ -364,6 +371,28 @@ begin
   perform au.ok('N17 ...but may accept (the Drafter claims an opportunity)', e is null, e);
   perform au.ok('N18 ...recorded as the drafter', exists (select 1 from authority_opportunity_events
     where opportunity_id = au.opp_id(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial') and kind = 'accepted' and actor_kind = 'drafter'));
+end $$;
+reset role;
+
+-- Run 6, on the dismissal's date: it returns to open while still reported.
+\c - authenticator
+set role service_role;
+select au.as_user('service_role', null);
+select au.put('r6', authority_begin_run(:'ca', 'refresh', 'worker'));
+select authority_record_run(au.id('r6'), au.payload(:'ca', jsonb_build_array(
+  au.opp('service_page:' || :'svc', 'fix_now', 'create', 'Full Roof Replacement', :'svc', 'A'),
+  au.opp('confirm_market:ofallon', 'needs_decision', 'requires_confirmation', 'Market: O''Fallon', null, 'none'),
+  au.opp('topic:signs_replacement', 'avoid', 'avoid', 'Signs a roof may need replacement', null, 'none')),
+  'completed', current_date + 90));
+do $$
+declare a uuid := '00000000-0000-4000-b000-00000000000a';
+begin
+  perform au.ok('N19 an expired dismissal returns to open when still reported',
+    (au.row(a, 'topic:signs_replacement')).status = 'open' and (au.row(a, 'topic:signs_replacement')).dismissed_until is null
+    and exists (select 1 from authority_opportunity_events where opportunity_id = au.opp_id(a, 'topic:signs_replacement')
+                and kind = 'reopened' and run_id = au.id('r6') and detail->>'reason' = 'dismissal expired'));
+  perform au.ok('N20 ...while the suppression still holds', (au.row(a, 'confirm_market:ofallon')).suppressed
+    and au.state(a, 'confirm_market:ofallon') = 'dismissed');
 end $$;
 reset role;
 
