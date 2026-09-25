@@ -172,6 +172,7 @@ try {
     `in_review|not_scheduled|worker|-|${run}|LEARN_MORE|${PAGE}`);
   assert.equal(sql(`select string_agg(claim_id::text, ',' order by claim_id) from post_claims where post_id = '${post}'`), [OC, WARRANTY].sort().join(","));
   assert.equal(sql(`select key || '|' || owner || '|' || status || '|' || coalesce(assignee_id::text, '-') from tasks where id = '${task}'`), "post_review|CLAUDE_APPROVAL|open|-");
+  assert.equal(sql(`select string_agg(distinct actor_kind, ',') from post_events where post_id = '${post}'`), "drafter");
   const copyHash = createHash("sha256").update(COPY, "utf8").digest("hex");
   assert.equal(sql(`select status || '|' || attempt || '|' || runtime || '|' || copy_hash || '|' || requested_via || '|' || post_id from drafter_runs where id = '${run}'`),
     `submitted|2|sandbox-model|${copyHash}|worker|${post}`);

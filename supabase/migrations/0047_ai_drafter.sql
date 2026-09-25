@@ -46,7 +46,10 @@
 --    The compass.drafter_write flag is a label, not the boundary: setting it
 --    by hand changes nothing without the authenticator session.
 --    True superusers (Supabase's platform role; the sandbox fixtures) are
---    exempt: they bypass every trigger anyway, and the worker is not one.
+--    exempt: a superuser can switch triggers off (session_replication_role)
+--    or drop them, so the check would add nothing against one, and the
+--    worker's postgres login is not one. Only drafter_run_id stays reserved
+--    to the drafter session for everyone.
 --    OUT OF SCOPE by decision (Sept 25): a deliberate schema change by the
 --    table owner (disabling or dropping these triggers) defeats any in-database
 --    control, 0045's included. Follow-up after the pilot: run worker SQL as a
@@ -122,7 +125,7 @@ language sql stable set search_path = public as $$
   select drafter_caller_is_service() and coalesce(current_setting('compass.drafter_write', true), '') = 'on'
 $$;
 -- A true superuser session (Supabase's platform role; sandbox fixtures). It
--- bypasses every trigger regardless; the worker's postgres login is not one.
+-- can disable any trigger regardless; the worker's postgres login is not one.
 create function drafter_caller_is_superuser() returns boolean
 language sql stable set search_path = public, pg_catalog as $$
   select coalesce((select rolsuper from pg_roles where rolname = session_user), false)
@@ -139,6 +142,25 @@ revoke all on function drafter_copy_hash(text) from public, anon, authenticated;
 -- drafter_write (invoker, service role) calls these directly.
 grant execute on function drafter_caller_is_service() to service_role;
 grant execute on function drafter_copy_hash(text) to service_role;
+
+-- The drafter is its own actor in post history, never "publisher": 0045
+-- names any authenticator + service_role session the publisher, and only
+-- the publisher may make publishing transitions. Inside drafter_write the
+-- caller is the drafter (same body as 0045 plus the first branch).
+alter table post_events drop constraint post_events_actor_kind_check;
+alter table post_events add constraint post_events_actor_kind_check
+  check (actor_kind in ('team', 'worker', 'system', 'publisher', 'drafter'));
+create or replace function post_caller_kind() returns text
+language sql stable security definer set search_path = public as $$
+  select case
+    when drafter_session_active() then 'drafter'
+    when coalesce(current_setting('compass.post_system', true), '') = 'on' then 'system'
+    when post_caller_is_human() then 'team'
+    when session_user = 'authenticator' and current_setting('role', true) = 'service_role' then 'publisher'
+    else 'worker'
+  end
+$$;
+revoke execute on function post_caller_kind() from public, anon, authenticated;
 
 -- ── 3. drafter_runs ─────────────────────────────────────────────────────────
 create table drafter_runs (

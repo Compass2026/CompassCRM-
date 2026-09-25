@@ -283,9 +283,62 @@ try {
   assert.equal(await page.getByText(/Application error|Unhandled Runtime Error/).count(), 0);
   ok("Reports tab loads with the new published count");
 
+  // An AI-drafted post (0047): written the only way one can be, through
+  // drafter_write as the service role over PostgREST (what the post-drafter
+  // function does), then shown with its badge and its drafter row.
+  const WATER = "00000000-0000-4000-e000-00000000001a";
+  const LICENSED = "00000000-0000-4000-f000-00000000001a";
+  const WATER_PAGE = "https://a.example.test/water-heaters";
+  sql(`update services set page_url = '${WATER_PAGE}' where id = '${WATER}'`);
+  const aiCopy = "Is your water heater getting older? Licensed master plumber on every job. Learn more about water heaters.";
+  const briefHash = "sha256:" + "5a".repeat(32);
+  const serviceKey = sign({ role: "service_role", exp: exp() });
+  const drafted = await fetch(`${gatewayUrl}/rest/v1/rpc/drafter_write`, {
+    method: "POST",
+    headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json" },
+    body: JSON.stringify({ p: {
+      client_id: CLIENT_A, requested_via: "worker", runtime: "sandbox-model", attempt: 1,
+      brief_version: "drafter-v1", brief_hash: briefHash,
+      brief: { client: { id: CLIENT_A }, allowed_facts: { claims: [{ id: LICENSED }] },
+        target: { channel: "google_business", post_type: "standard", search_intent: "commercial",
+          service: { id: WATER, name: "Water heaters", page_url: WATER_PAGE }, keyword: null,
+          cta: { type: "LEARN_MORE", url: WATER_PAGE }, offer: null, assets: [] } },
+      lint: { ok: true, problems: [], warnings: [{ code: "length_outside_preferred", message: "Aim for 450–700 characters (this is 103)." }] },
+      copy: aiCopy, claim_ids: [LICENSED], asset_ids: [],
+    } }),
+  });
+  assert.equal(drafted.status, 200, await drafted.clone().text());
+  const { post_id: AI_POST } = await drafted.json();
+  await page.goto(`${base}/clients/${CLIENT_A}/social`, { waitUntil: "networkidle" });
+  const aiRow = page.getByRole("link", { name: /water heater getting older/ });
+  assert.ok(await aiRow.getByText("AI", { exact: true }).isVisible(), "AI badge on the drafted post");
+  assert.equal(await page.getByRole("link", { name: /Slow drains/ }).getByText("AI", { exact: true }).count(), 0, "no AI badge on a worker's SQL draft");
+  await page.goto(postUrl(AI_POST), { waitUntil: "networkidle" });
+  const row = page.getByRole("region", { name: "AI Drafter" });
+  assert.ok(await row.getByText("lint passed").isVisible());
+  assert.ok(await row.getByText("sandbox-model").isVisible());
+  assert.ok(await row.getByText(WATER_PAGE).isVisible());
+  assert.ok(await row.getByText(/brief 5a5a5a5a5a5a · drafter-v1/).isVisible());
+  assert.equal(await row.getByText(/edited after check/).count(), 0);
+  assert.equal(await row.getByText(briefHash).isVisible(), false, "full hash stays in the collapsed details");
+  await row.getByText("Details").click();
+  assert.ok(await row.getByText(briefHash).isVisible());
+  assert.ok(await row.getByText(/Aim for 450–700 characters/).isVisible());
+  await shot("post-ai-drafter");
+  // A person withdraws it and edits the copy: the row says so.
+  const asTeamHeaders = { apikey: anonKey, authorization: `Bearer ${tokenFor(TEAM)}`, "content-type": "application/json" };
+  for (const set of [{ review_status: "draft" }, { copy: aiCopy + " Call us." }]) {
+    const r = await fetch(`${gatewayUrl}/rest/v1/social_posts?id=eq.${AI_POST}`, { method: "PATCH", headers: asTeamHeaders, body: JSON.stringify(set) });
+    assert.ok(r.ok, await r.text());
+  }
+  await page.goto(postUrl(AI_POST), { waitUntil: "networkidle" });
+  assert.ok(await page.getByRole("region", { name: "AI Drafter" }).getByText("edited after check: copy").isVisible());
+  assert.ok(await page.getByText("AI Drafter: Drafted").isVisible(), "history names the AI Drafter, not the publisher");
+  ok("An AI-drafted post shows the AI badge and a compact drafter row (runtime, lint, brief, target page, details collapsed, edits after the check)");
+
   // Mobile.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [url, name] of [[`${base}/clients/${CLIENT_A}/social`, "posts-list-mobile"], [postUrl(POST_A), "post-detail-mobile"]]) {
+  for (const [url, name] of [[`${base}/clients/${CLIENT_A}/social`, "posts-list-mobile"], [postUrl(POST_A), "post-detail-mobile"], [postUrl(AI_POST), "post-ai-drafter-mobile"]]) {
     await page.goto(url, { waitUntil: "networkidle" });
     assert.ok(await noHorizontalScroll(page), `no horizontal scroll at 390px: ${name}`);
     await shot(name);

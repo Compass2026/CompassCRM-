@@ -225,6 +225,10 @@ begin
             and claim_ids = array['00000000-0000-4000-f000-00000000000b']::uuid[] and runtime = 'sandbox-model'
      from drafter_runs where id = dr.id('run')));
 
+  perform dr.ok('D5b the drafter is its own actor in post history (never the publisher)',
+    (select count(*) from post_events where post_id = dr.id('post') and actor_kind = 'drafter' and actor_id is null) = 3
+    and not exists (select 1 from post_events where post_id = dr.id('post') and actor_kind = 'publisher'));
+
   r0 := (select count(*) from drafter_runs); n0 := (select count(*) from social_posts);
   st := dr.try(format('select drafter_write(%L::jsonb)',
     dr.req('commercial', array['00000000-0000-4000-f000-00000000000b']::uuid[], 'Another panel upgrades post. Veteran owned')));
