@@ -68,4 +68,5 @@ for _ in $(seq 1 50); do curl -sf "http://127.0.0.1:$PGRST_PORT/" >/dev/null && 
 cd "$ROOT"
 JWT_SECRET="$JWT_SECRET" PGRST_URL="http://127.0.0.1:$PGRST_PORT" \
   PSQL="$PG_BIN/psql -X -q -t -A -h $WORK -p 54329 -U postgres -d sandbox" \
+  PSQL_ADMIN="$PG_BIN/psql -X -q -t -A -h $WORK -p 54329 -U supabase_admin -d sandbox" \
   node --no-warnings "${UI_SPEC:-tests/tasks-ui.mjs}"

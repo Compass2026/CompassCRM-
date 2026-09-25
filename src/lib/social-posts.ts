@@ -240,9 +240,11 @@ export function describePostEvent(e: PostEvent, names: Map<string, string>): str
       ? (e.actor_id && names.get(e.actor_id)) || "A former teammate"
       : e.actor_kind === "publisher"
         ? "Publisher"
-        : e.actor_kind === "system"
-          ? "System"
-          : "Worker";
+        : e.actor_kind === "drafter"
+          ? "AI Drafter"
+          : e.actor_kind === "system"
+            ? "System"
+            : "Worker";
   const base = eventText[e.kind] ?? e.kind;
   const d = (e.detail && typeof e.detail === "object" ? e.detail : {}) as Record<string, unknown>;
   const extra: string[] = [];

@@ -104,7 +104,9 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
         `unsupported_${d.category}`,
         d.category === "credential"
           ? `"${m[0].trim()}" states ${d.label}; say it only in the exact words of a linked usable claim.`
-          : `"${m[0].trim()}" is ${d.label}, which this brief does not support.`,
+          : d.category === "diagnosis"
+            ? `"${m[0].trim()}" tells the reader what their home needs; only an inspection can. Invite consideration instead ("If you're considering …", "Learn more about whether … may fit your home").`
+            : `"${m[0].trim()}" is ${d.label}, which this brief does not support.`,
         m[0].trim(),
       );
     }

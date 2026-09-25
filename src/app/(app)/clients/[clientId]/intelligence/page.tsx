@@ -10,8 +10,8 @@ import {
   SEARCH_INTENTS,
   topicCandidates,
   type AreaStatus,
+  type IntelligenceInput,
 } from "@/lib/client-intelligence";
-import { todayIn } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<AreaStatus, string> = {
@@ -47,44 +47,12 @@ export default async function IntelligencePage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [client, brand, board, services, keywords, claims, locations, assets, offers] = await Promise.all([
-    supabase
-      .from("clients")
-      .select("name, phone, website_url, city, state, service_area, business_type, address_line1")
-      .eq("id", clientId)
-      .single(),
-    supabase
-      .from("client_brands")
-      .select("positioning, voice_tone, audience, differentiators, ai_guidance, words_we_use, words_we_avoid, content_pillars")
-      .eq("client_id", clientId)
-      .maybeSingle(),
-    supabase
-      .from("brand_boards")
-      .select("status, hard_rules, standing_cta")
-      .eq("client_id", clientId)
-      .order("version", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("services")
-      .select("id, name, status, page_url, primary_keyword_id, parent_service_id")
-      .eq("client_id", clientId)
-      .order("sort_order"),
-    supabase
-      .from("keywords")
-      .select("id, keyword, intent, intent_note, is_active, is_tracked, is_money, service_id, target_url, priority")
-      .eq("client_id", clientId),
-    supabase.from("claims").select("id, claim, status, source").eq("client_id", clientId),
-    supabase.from("locations").select("name, city, state, is_active").eq("client_id", clientId),
-    supabase.from("brand_assets").select("kind").eq("client_id", clientId),
-    supabase
-      .from("offers")
-      .select("id, title, terms, source, status, starts_on, ends_on, confirmed_by, confirmed_on, service_id")
-      .eq("client_id", clientId),
-  ]);
-
-  const error = [client, brand, board, services, keywords, claims, locations, assets, offers].find((r) => r.error)?.error;
-  if (error || !client.data) {
+  // The one read of Client Intelligence (migration 0047): the same function
+  // the post-drafter Edge Function and the dry run call, so what this tab
+  // reports is exactly what a draft may stand on.
+  const { data, error } = await supabase.rpc("client_intelligence_input", { p_client_id: clientId });
+  const input = data as unknown as IntelligenceInput | null;
+  if (error || !input?.client) {
     return (
       <p role="alert" className="callout border-red-200 bg-red-50 text-red-900">
         Could not load this client&apos;s intelligence: {error?.message ?? "client not found"}.
@@ -92,18 +60,6 @@ export default async function IntelligencePage({
     );
   }
 
-  const input = {
-    client: client.data,
-    brand: brand.data,
-    board: board.data,
-    services: services.data ?? [],
-    keywords: keywords.data ?? [],
-    claims: claims.data ?? [],
-    locations: locations.data ?? [],
-    assets: assets.data ?? [],
-    offers: offers.data ?? [],
-    asOf: todayIn(),
-  };
   const areas = assessIntelligence(input);
   const pilot = pilotReadiness(areas);
   const intents = intentCounts(input.keywords);

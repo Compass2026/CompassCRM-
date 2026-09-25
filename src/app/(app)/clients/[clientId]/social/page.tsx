@@ -33,7 +33,7 @@ export default async function SocialPage({
   const [{ data: posts }, { data: plan }, { data: services }, { data: offers }, { data: keywords }] = await Promise.all([
     supabase
       .from("social_posts")
-      .select("id, platform, post_type, search_intent, copy, review_status, publish_status, scheduled_at, published_at, submitted_at, author_kind, created_at")
+      .select("id, platform, post_type, search_intent, copy, review_status, publish_status, scheduled_at, published_at, submitted_at, author_kind, created_at, drafter_run_id")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
     supabase.from("plans").select("social_posts_per_month").eq("client_id", clientId).maybeSingle(),
@@ -181,6 +181,11 @@ export default async function SocialPage({
                     <Link href={`/clients/${clientId}/social/${p.id}`} className="flex flex-col gap-1 p-3 hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-3">
                       <div className="flex shrink-0 items-center gap-2">
                         <Badge variant="secondary">{short(p.platform)}</Badge>
+                        {p.drafter_run_id && (
+                          <Badge variant="outline" className="border-violet-200 bg-violet-100 text-[10px] text-violet-800" title="Drafted by the AI Drafter">
+                            AI
+                          </Badge>
+                        )}
                         <Badge variant="outline" className={cn("text-[10px]", state.className)}>
                           {state.label}
                         </Badge>

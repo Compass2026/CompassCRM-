@@ -45,6 +45,12 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   `skipped`, `reason` `worker_google_ops_off`) — never retry or work
   around that. Read-only calls (`gbp_locate`, the Search Console sync) are
   fine either way. The post publisher is separate and never yours.
+- **Never write posts by SQL.** `social_posts`, `post_claims`,
+  `post_assets` and `drafter_runs` are written only through the
+  `post-drafter` Edge Function (AI Drafter, below); since 0047 the database
+  refuses your SQL anyway, whatever role you set. Never approve, reject,
+  schedule or publish a post — those are a person's (0045) and the
+  publisher's (0046). Reading them is fine.
 - **Never publish Business Profile Q&A.** Do not call `google-ops`
   `gbp_qa`, for any client, for any reason (Sept 23 2026 safety stop, same
   as posts). You draft the five Q&A seeds in the GBP Spec doc and leave them
@@ -1742,6 +1748,69 @@ only.
    `recommendation` = the title and URL.
 
 One post, then stop. The next task arrives next Wednesday.
+
+### AI Drafter — one Business Profile post (drafter v1)
+
+Only when a person asks for one by name (client, service, intent, keyword,
+button). Never on your own initiative and never as a batch: automatic
+drafting waits on a `plans` row, and no client has one. You are the model
+adapter; the `post-drafter` Edge Function owns the brief, the linter and the
+write. The CRM is still your only channel, and SQL is never the write path.
+
+**Call it** like the other functions (the auth is the cron secret):
+
+```bash
+curl -sS -X POST https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/post-drafter \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "x-cron-secret: $CRON" \
+  -H "Content-Type: application/json" --data @req.json
+```
+
+**Preflight:** `{"mode": "version"}` must answer `version` ≥ 1 with
+`modes` `brief`, `check`, `submit`. Anything else → stop and say so; do not
+draft.
+
+**The target** (`target` in every request): `{"channel":
+"google_business", "postType": "standard", "intent": "commercial",
+"serviceId": "<uuid>", "keywordId": "<uuid>", "ctaType": "LEARN_MORE",
+"offerId": null, "assetIds": []}` — exactly what the person asked for.
+
+1. **Brief.** `{"mode": "brief", "client_id", "target"}`. `422` with
+   `refusals` → stop: the client is not ready for this post; put the
+   refusals in your report, word for word. `200` → keep `brief_hash` and
+   `model_request`.
+2. **Draft.** Write from `model_request.instructions` and
+   `model_request.brief` only — nothing from the website, earlier chats,
+   memory or the brand board beyond what the brief carries. Return
+   `{"copy": "…", "claim_ids": [ids from brief.allowed_facts.claims]}`.
+   Consider, never diagnose: "If you're considering a roof replacement…",
+   never "your roof needs to be replaced".
+3. **Check.** `{"mode": "check", "client_id", "target", "brief_hash",
+   "draft"}`. `ok: false` → revise from `revision_request` (the same
+   brief) and check again. `409 stale_brief` → Client Intelligence changed:
+   go back to step 1 and draft from the new brief; never resend the old
+   draft.
+4. **Submit** once a check passes: `{"mode": "submit", "client_id",
+   "target", "brief_hash", "draft", "runtime": "claude-worker-skill"}`.
+   `201` → done: the post is `in_review` and 0045 opened the
+   `CLAUDE_APPROVAL` review task for a person. `422 lint_failed` → revise
+   and resubmit; `409 stale_brief` → step 1; `409 refused` (an open drafted
+   post already exists for that service and intent) or any other refusal →
+   stop and report it.
+
+**At most three drafts per brief** (checks included in your count); the
+function refuses a fourth submit (`429`). Out of attempts or out of ideas →
+stop and report the last problems; a person picks it up. A new brief (step 1
+after `stale_brief`) starts a new count.
+
+**Never:** insert or edit `social_posts`, `post_claims`, `post_assets` or
+`drafter_runs` by SQL; edit the post after submit; approve, reject,
+schedule or publish it (no function mode does that, and you never call the
+publisher); draft for any channel but `google_business`; cite a claim that
+is not in the brief; retry past three.
+
+**Report:** client, target, `brief_hash`, attempts used, and the answer —
+`post_id`, `run_id`, `review_task_id` on success, the refusals or last lint
+problems otherwise. The post waits for a person's review; say so.
 
 ## 6. End of run
 

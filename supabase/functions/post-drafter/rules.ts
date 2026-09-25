@@ -38,6 +38,15 @@ export const DETECTORS: { category: string; label: string; re: RegExp }[] = [
     re: /\bwarrant(?:y|ies|ied)\b|\bguarantee[ds]?\b|\blifetime\b(?!\s+of\b)|\bfor life\b|\blifelong\b|\bcertifi(?:ed|cation|cations)\b|\blicensed\b|\binsured\b|\bbonded\b|\baccredit(?:ed|ation)\b|(?<!\byour\s)(?<!\byou\s)\bpreferred\b|\bawards?\b|\baward[- ]winning\b|\bowens corning\b|\bGAF\b|\bcertainteed\b|\bmaster elite\b|\bBBB\b|\bA\+|\bexperts?\b|\bspeciali[sz]\w*/gi,
   },
   {
+    // Telling the reader what their roof or home needs (Sept 25 2026
+    // decision): a post may invite consideration ("If you're considering a
+    // roof replacement…", "Learn more about whether roof replacement may fit
+    // your home") but never diagnose. Only an inspection can.
+    category: "diagnosis",
+    label: "a diagnosis of the reader's home",
+    re: /\bpatch(?:ing|es)?\b[^.!?]{0,40}?\bno longer\b[^.!?]{0,30}|\bno longer worth (?:patching|repairing|fixing)\b|\bbeyond (?:repair|saving|fixing)\b|\b(?:needs?|requires?|must)\s+(?:to\s+)?be\s+replaced\b|\bneeds?\s+replacing\b|\b(?:it'?s\s+|it\s+is\s+)?time\s+(?:to\s+replace|for\s+(?:a\s+)?(?:new|replacement))\b[^.!?]{0,20}|\b(?:needs?|requires?|calls? for)\s+(?:a\s+)?(?:new|full|complete)\s+(?:roof|siding|gutters?|system)\b|\b(?:needs?|requires?|calls? for)\s+(?:a\s+)?(?:full\s+|complete\s+)?(?:\w+\s+)?replacement\b/gi,
+  },
+  {
     category: "superlative",
     label: "an unprovable superlative",
     re: /\bbest\b(?!\s+(?:time|times|way|ways|practices?)\b)|#\s?1\b|\bnumber one\b|\btop[- ]rated\b|\bleading\b(?!\s+(?:to|up|into)\b)|\bpremier\b|\bunmatched\b|\bunbeatable\b|\bunrivall?ed\b|\bmost trusted\b/gi,

@@ -79,3 +79,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/report_measurements
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_post_review.test.sql"
 # 0046: Business Profile publisher schema (runs, outcomes, reminder cycles).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/publisher_runs.test.sql"
+# 0047: AI Drafter write boundary and the Client Intelligence loader. Switches
+# between the worker (postgres), the post-drafter function (authenticator +
+# service_role) and a person (authenticator + authenticated).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter.test.sql"

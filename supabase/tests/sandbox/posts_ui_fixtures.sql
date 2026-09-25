@@ -3,6 +3,11 @@
 -- Spec's first-month posts, drafted with no JWT (SQL as postgres), plus the
 -- claims, services and offers they stand on. Fictional names and
 -- example.test addresses only.
+--
+-- Run as the cluster superuser: since 0047 the worker's own SQL cannot create
+-- posts (only the post-drafter function can); 0045 still records these as
+-- worker drafts (no JWT).
+\c - supabase_admin
 
 update team_members set name = 'Sam Team' where email = 'sandbox-team@compassmarketing.ai';
 update clients set name = 'Harbor Lane Plumbing', phone = '(417) 555-0100' where id = '00000000-0000-4000-b000-00000000000a';

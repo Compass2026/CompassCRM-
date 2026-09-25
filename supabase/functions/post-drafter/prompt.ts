@@ -27,6 +27,7 @@ export function modelRequest(brief: Brief, revision?: ModelRequest["revision"]):
     `Facts: say only what brief.allowed_facts contains. State a claim only in its exact words, and link it in claim_ids. Use the fewest claims that make the post useful (at most ${brief.allowed_facts.max_claims}; prefer ${brief.allowed_facts.recommended_claim_ids.length ? "the recommended ones" : "none"}).`,
     `Places: only ${brief.allowed_facts.crm.places.join(", ") || "none"}.`,
     `Never: prices, discounts or "free"; years, tenure or "since"; response times; reviews, ratings or stars; street addresses; any other phone number; materials no linked claim names; superlatives; numbers outside the phone; anything in brief.excluded; a brand differentiator stated as fact.`,
+    `Never diagnose the reader's home: no "beyond repair", "needs to be replaced", "time to replace", "needs a new roof", "patching no longer makes sense", "this damage requires replacement". Only an inspection can say that. Invite consideration instead: "If you're considering a roof replacement…", "If you're starting to think about replacing an aging roof…", "Learn more about whether roof replacement may fit your home".`,
     `Do not add anything the facts do not say. In particular, never write:`,
     `- process steps or how the work is done (who does it, in what order, what is included, how long it takes) unless a linked claim states them;`,
     `- implied competence or quality ("we know how…", "done right", "the right way", "careful", "experienced crews", "attention to detail");`,

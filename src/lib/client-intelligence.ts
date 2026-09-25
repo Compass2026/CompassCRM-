@@ -8,7 +8,7 @@
 // can never disagree about what counts as a fact.
 //
 // Imports are type-only so node --test can load this file directly.
-import type { Database } from "./database.types";
+import type { Database } from "./database.types.ts";
 
 type Tables = Database["public"]["Tables"];
 type Row<T extends keyof Tables> = Tables[T]["Row"];

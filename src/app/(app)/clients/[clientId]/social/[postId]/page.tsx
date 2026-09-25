@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -38,6 +39,7 @@ import {
   reviewLabels,
 } from "@/lib/social-posts";
 import { approvedChannelProblems, MAX_ATTEMPTS, modeLabels, outcomeLabels, parsePublisherSettings } from "@/lib/publisher";
+import { drafterSummary } from "@/lib/drafter-run";
 import { cn } from "@/lib/utils";
 
 const claimStyles: Record<string, string> = {
@@ -82,6 +84,22 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       ])
     : [{ data: null }, { data: null }];
   const publisher = parsePublisherSettings(publisherRow?.value);
+  // An AI-drafted post (0047): its run, and what changed since the linter passed it.
+  const { data: drafterRun } = post.drafter_run_id
+    ? await supabase
+        .from("drafter_runs")
+        .select("id, created_at, runtime, attempt, status, requested_via, brief_version, brief_hash, copy_hash, claim_ids, lint, target")
+        .eq("id", post.drafter_run_id)
+        .maybeSingle()
+    : { data: null };
+  const drafter = drafterRun
+    ? drafterSummary(drafterRun, {
+        copy: post.copy,
+        cta_url: post.cta_url,
+        linkedClaimIds: (linked ?? []).map((l) => l.claim_id),
+        copyHash: createHash("sha256").update(post.copy ?? "", "utf8").digest("hex"),
+      })
+    : null;
   const channel = isGbp && post.review_status === "approved" ? approvedChannelProblems(post.approved_snapshot) : [];
   const { data: brandAssets } = await supabase
     .from("brand_assets")
@@ -127,6 +145,55 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           </span>
         </div>
       </div>
+
+      {drafter && (
+        <section aria-label="AI Drafter" className="surface space-y-2 p-4 text-sm sm:p-5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Badge variant="outline" className="border-violet-200 bg-violet-100 text-[10px] text-violet-800">AI</Badge>
+            <span className="font-semibold">AI Drafter</span>
+            <span className="text-muted-foreground">· {drafter.runtime}</span>
+            <Badge
+              variant="outline"
+              className={cn("text-[10px]", drafter.lintPassed ? "border-green-200 bg-green-100 text-green-800" : "border-red-200 bg-red-100 text-red-800")}
+            >
+              {drafter.lintPassed ? "lint passed" : "lint not passed"}
+            </Badge>
+            <span className="font-mono text-xs text-muted-foreground" title={drafter.briefHash}>
+              brief {drafter.briefHashShort} · {drafter.briefVersion}
+            </span>
+            {drafter.editedAfterCheck.length > 0 && (
+              <Badge variant="outline" className="border-amber-200 bg-amber-100 text-[10px] text-amber-900">
+                edited after check: {drafter.editedAfterCheck.join(", ")}
+              </Badge>
+            )}
+          </div>
+          <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-xs">
+            <dt className="text-muted-foreground">Target page</dt>
+            <dd className="break-all">{drafter.targetPage ?? "—"}</dd>
+            <dt className="text-muted-foreground">Linked claims</dt>
+            <dd>{drafter.claimCount} chosen by the drafter (listed below)</dd>
+          </dl>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground">Details</summary>
+            <dl className="mt-2 grid grid-cols-[7rem_1fr] gap-y-1">
+              <dt className="text-muted-foreground">Brief hash</dt>
+              <dd className="break-all font-mono">{drafter.briefHash}</dd>
+              <dt className="text-muted-foreground">Attempt</dt>
+              <dd>{drafter.attempt} of 3</dd>
+              <dt className="text-muted-foreground">Requested by</dt>
+              <dd>{drafter.requestedVia === "worker" ? "the worker" : "a team member"}</dd>
+              <dt className="text-muted-foreground">Warnings</dt>
+              <dd>
+                {drafter.warnings.length === 0
+                  ? "none"
+                  : drafter.warnings.map((w) => (
+                      <span key={`${w.code}:${w.message}`} className="block">{w.message}</span>
+                    ))}
+              </dd>
+            </dl>
+          </details>
+        </section>
+      )}
 
       {post.review_status === "rejected" && post.review_note && (
         <div role="note" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
