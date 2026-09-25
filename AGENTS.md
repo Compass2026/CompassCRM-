@@ -24,8 +24,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   `0001_initial_schema.sql`. Supabase records each migration under a
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
-  migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0047` (AI Drafter) was applied Sept 25 2026 as
+  migration that was missing a file — never apply it; `0042` and `0048` (Authority
+  runs) are written but **not yet applied**; `0047` (AI Drafter) was applied Sept 25 2026 as
   `20260925165933`; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
   Sept 24 2026 as `20260924004839`; `0046` (the Business Profile publisher)
   was applied Sept 24 2026 as `20260924015915`). `scripts/test-portal-sandbox.sh` replays all migrations into
