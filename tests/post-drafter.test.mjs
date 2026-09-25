@@ -245,3 +245,44 @@ test("narrow false-positive exemptions: plain English passes, the category still
   refused(GOOD + " Now serving homes in Liberty.", "unapproved_location");
   refused(GOOD + " Visit our office address downtown.", "unsupported_address");
 });
+
+// ── Diagnostic language (Sept 25 2026 decision): consider, never diagnose ──
+test("refused: telling the reader what their home needs", () => {
+  const lead = "Thinking about a roof replacement for your Wentzville home? ";
+  const tail = " We're an Owens Corning Preferred Contractor, and every roof replacement we complete is backed by our Lifetime Workmanship Warranty. Request a quote.";
+  for (const phrase of [
+    "When patching no longer makes sense, Lucas Construction can help.",
+    "If your roof is beyond repair, Lucas Construction can help.",
+    "An older roof needs to be replaced before it leaks.",
+    "An older roof requires to be replaced.",
+    "Hail-damaged shingles must be replaced.",
+    "It's time to replace your roof.",
+    "Your home needs a new roof.",
+    "This damage requires replacement.",
+    "Your roof needs replacing.",
+    "An aging roof calls for a full replacement.",
+  ]) {
+    const r = lint(lead + phrase + tail);
+    assert.ok(codes(r).includes("unsupported_diagnosis"), `${phrase} → ${JSON.stringify(codes(r))}`);
+    assert.match(r.problems.find((p) => p.code === "unsupported_diagnosis").message, /only an inspection can/);
+  }
+});
+
+test("allowed: inviting consideration", () => {
+  const tail = " Lucas Construction is an Owens Corning Preferred Contractor, and every roof replacement we complete is backed by our Lifetime Workmanship Warranty. Request a quote.";
+  for (const phrase of [
+    "If you're considering a roof replacement for your Wentzville home, we can walk you through it.",
+    "If you're starting to think about replacing an aging roof, we can walk you through it.",
+    "Learn more about whether roof replacement may fit your home.",
+  ]) {
+    const r = lint(phrase + tail);
+    assert.ok(!codes(r).includes("unsupported_diagnosis"), `${phrase} → ${JSON.stringify(r.problems)}`);
+  }
+  assert.ok(!codes(lint(GOOD)).includes("unsupported_diagnosis"), "the reviewed Lucas copy stays clean");
+});
+
+test("the model request says to invite consideration, never diagnose", () => {
+  const text = modelRequest(okBrief()).instructions;
+  assert.match(text, /Never diagnose the reader's home/);
+  assert.match(text, /Learn more about whether roof replacement may fit your home/);
+});
