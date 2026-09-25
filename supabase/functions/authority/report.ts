@@ -59,6 +59,13 @@ export function renderMarkdown(rep: AuthorityReport): string {
   }
   out.push("");
 
+  out.push("## Intent sanity", "", "Stored intent is a [FACT]; the assessment is [HEURISTIC] and never written back.", "",
+    "| Keyword | Stored | Assessed | Conflict | Reason |", "| --- | --- | --- | --- | --- |");
+  for (const k of rep.keywords.filter((k) => k.intent_check.conflict || k.intent_check.assessed === "ambiguous")) {
+    out.push(`| ${cell(k.keyword)} | ${cell(k.intent_check.stored)} | ${k.intent_check.assessed} | ${k.intent_check.conflict ? "**yes**" : "no (judgment)"} | ${cell(k.intent_check.reason)} |`);
+  }
+  out.push("");
+
   out.push("## Supporting topics", "");
   for (const s of rep.supporting) out.push(`- **${s.name}** → \`${s.action}\``, bullets(s.reasons, "  "));
   out.push("");
@@ -71,7 +78,8 @@ export function renderMarkdown(rep: AuthorityReport): string {
   const held = rep.opportunities.filter((o) => o.tier === "none");
   out.push("## Ranked opportunities", "");
   ranked.forEach((o, i) => out.push(opportunity(o, i + 1), ""));
-  out.push("## Blocked, research-required and needs-confirmation", "");
+  out.push("## Blocked, research-required and needs-confirmation", "",
+    "`insufficient_evidence` = missing client facts · `research_required` = general research · `requires_confirmation` = a human business decision · `blocked_data_prerequisite` = CRM data to reconcile first.", "");
   held.forEach((o, i) => out.push(opportunity(o, i + 1), ""));
 
   out.push("## Rules that still need human judgment", "", ...rep.judgments.map((j) => `- ${j}`), "");

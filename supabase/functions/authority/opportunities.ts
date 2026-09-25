@@ -28,6 +28,16 @@ function base(p: Partial<Draft> & Pick<Draft, "id" | "topic" | "action" | "conte
   };
 }
 
+// What a drafter refusal means: missing client facts, a human business
+// decision, or CRM data that must be reconciled first.
+const EVIDENCE_REFUSALS = new Set(["no_usable_claim"]);
+const DECISION_REFUSALS = new Set(["brand_board_not_approved", "service_not_approved", "offer_not_current", "brand_voice_missing"]);
+export function actionForRefusals(codes: string[]): Action {
+  if (codes.some((c) => DECISION_REFUSALS.has(c))) return "requires_confirmation";
+  if (codes.some((c) => EVIDENCE_REFUSALS.has(c))) return "insufficient_evidence";
+  return "blocked_data_prerequisite";
+}
+
 export function pillarValue(p: Pillar, kws: KeywordAssignment[]): number {
   const mine = kws.filter((k) => k.service_id === p.service_id);
   if (mine.some((k) => k.money && (k.role === "primary" || k.role === "supporting"))) return 3;
@@ -38,7 +48,7 @@ export function pillarValue(p: Pillar, kws: KeywordAssignment[]): number {
 function bestKeyword(kws: KeywordAssignment[], serviceId: string, intent: string): KeywordAssignment | null {
   const rank = (k: KeywordAssignment) => [k.money ? 0 : 1, k.role === "primary" ? 0 : 1, (k.priority ?? "p9").localeCompare("p0"), -(k.volume ?? 0)];
   return kws
-    .filter((k) => k.service_id === serviceId && k.intent === intent && (k.role === "primary" || k.role === "supporting"))
+    .filter((k) => k.service_id === serviceId && k.intent === intent && (k.role === "primary" || k.role === "supporting") && !k.flags.includes("intent_conflict"))
     .sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i]; return a.keyword.localeCompare(b.keyword); })[0] ?? null;
 }
 
@@ -106,7 +116,8 @@ export function buildOpportunities(ctx: {
 
       // ── Business Profile post, per intent, through the drafter's own gate ──
       const gap = ctx.servicePageUrlGaps.find((g) => g.service_id === p.service_id);
-      const intents = [...new Set(keywords.filter((k) => k.service_id === p.service_id && k.intent && (k.role === "primary" || k.role === "supporting")).map((k) => k.intent!))].sort();
+      // A keyword whose stored intent contradicts its query is never a post target until a person confirms it.
+      const intents = [...new Set(keywords.filter((k) => k.service_id === p.service_id && k.intent && (k.role === "primary" || k.role === "supporting") && !k.flags.includes("intent_conflict")).map((k) => k.intent!))].sort();
       for (const intent of intents) {
         if (intent === "navigational") continue;
         const kw = bestKeyword(keywords, p.service_id, intent);
@@ -117,15 +128,17 @@ export function buildOpportunities(ctx: {
         let action: Action = "create";
         let evidence: string[] = [];
         if (gap) {
-          blockers.push(`The service record's page is ${gap.recorded ?? "empty"} while the owner is ${gap.owner}; fix the record first.`);
-          gates.push({ gate: "drafter_brief", pass: false, detail: "Not attempted: the service record has no valid page." });
-          action = "insufficient_evidence";
+          blockers.push(`The service record's page is ${gap.recorded ?? "empty"} while the live owner is ${gap.owner}; resolve data_fix:service-page:${slug(p.name)} first.`);
+          gates.push({ gate: "data_prerequisite", pass: false, detail: "The service record does not name its live owner page, so the drafter cannot build a brief." });
+          gates.push({ gate: "drafter_brief", pass: false, detail: "Not attempted until the data prerequisite is reconciled." });
+          reasons.push({ tag: "FACT", text: `Compass already knows the owner page (${gap.owner}, live); only the CRM relationship is missing.` });
+          action = "blocked_data_prerequisite";
         } else {
           const r = buildBrief(input, { channel: "google_business", postType: "standard", intent, serviceId: p.service_id, keywordId: kw.keyword_id, ctaType: "LEARN_MORE", offerId: null, assetIds: [] });
           if (!r.ok) {
             gates.push({ gate: "drafter_brief", pass: false, detail: r.refusals.map((x) => x.code).join(", ") });
             for (const x of r.refusals) blockers.push(x.message);
-            action = "insufficient_evidence";
+            action = actionForRefusals(r.refusals.map((x) => x.code));
           } else {
             gates.push({ gate: "drafter_brief", pass: true, detail: "The drafter's governed brief builds for this target." });
             const used = new Set(input.authority.socialPosts.filter((s) => s.service_id === p.service_id && s.review_status !== "rejected").flatMap((s) => s.claim_ids));
@@ -167,7 +180,7 @@ export function buildOpportunities(ctx: {
           ...(polluted.some((k) => k.money) ? [{ tag: "FACT" as const, text: `Includes money keywords: ${polluted.filter((k) => k.money).map((k) => k.keyword).join(", ")}.` }] : []),
           { tag: "HEURISTIC", text: "Re-home them to the Home page group so this service's topic, evidence and GSC read cleanly." },
         ],
-        value: polluted.some((k) => k.money) ? 3 : 2, severity: 3,
+        value: polluted.some((k) => k.money) ? 3 : 2, severity: 3, impressions: p.gsc.impressions,
       }));
     }
   }
@@ -245,6 +258,19 @@ export function buildOpportunities(ctx: {
     }));
   }
 
+  // ── Stored intents the query text contradicts: a person decides ──
+  const intentConflicts = keywords.filter((k) => k.flags.includes("intent_conflict"));
+  if (intentConflicts.length) out.push(base({
+    id: "confirm_intents:keywords", topic: "Stored keyword intents", action: "requires_confirmation", content_type: "data_fix",
+    gap: `${intentConflicts.length} keywords have a stored intent their query text contradicts.`,
+    blockers: ["They are excluded as post targets until a person confirms or corrects the intent; the engine never overwrites it."],
+    gates: [{ gate: "intent_sanity", pass: false, detail: "Stored intent contradicts the query." }],
+    reasons: [
+      ...intentConflicts.map((k) => ({ tag: "FACT" as const, text: `"${k.keyword}": stored ${k.intent_check.stored}, reads as ${k.intent_check.assessed.replace(/_/g, " ")}.` })),
+      { tag: "HEURISTIC", text: "The assessment is a conservative pattern match (brand, question form, buyer wording, service + place)." },
+    ],
+  }));
+
   // ── Keywords the writers could never honour ──
   const risky = keywords.filter((k) => k.role === "avoid_risky");
   if (risky.length) out.push(base({
@@ -297,11 +323,20 @@ export function tierOf(d: Draft): Tier {
   return "C";
 }
 
+// Scope of impact: affected search demand (latest-window impressions) on a
+// coarse order-of-magnitude scale, so a page carrying hundreds of
+// impressions outranks one carrying two when value and severity tie, while
+// small differences never override severity or business value.
+export function demandBucket(impressions: number): number {
+  if (impressions <= 0) return 0;
+  return Math.min(4, Math.floor(Math.log10(impressions)) + 1); // 1–9 → 1, 10–99 → 2, 100–999 → 3, 1000+ → 4
+}
+
 export function prioritize(drafts: Draft[]): Opportunity[] {
   const tierRank: Record<Tier, number> = { A: 0, B: 1, C: 2, none: 3 };
   const withTier = drafts.map((d) => {
     const tier = tierOf(d);
-    const order = [tierRank[tier], -d.value, -d.severity, d.deferred ? 1 : 0, -d.evidence_claim_ids.length, -d.impressions];
+    const order = [tierRank[tier], -d.value, -d.severity, -demandBucket(d.impressions), d.deferred ? 1 : 0, -d.evidence_claim_ids.length, -d.impressions];
     const provenance = Object.fromEntries(TAGS.map((t) => [t, d.reasons.filter((r) => r.tag === t).map((r) => r.text)])) as Record<Tag, string[]>;
     const { value: _v, severity: _s, impressions: _i, deferred: _d, ...rest } = d;
     return { ...rest, tier, order, provenance } as Opportunity;

@@ -7,6 +7,9 @@ import { runAuthority } from "../supabase/functions/authority/engine.ts";
 import { renderMarkdown } from "../supabase/functions/authority/report.ts";
 import { ACTIONS } from "../supabase/functions/authority/types.ts";
 import { GBP_CADENCE_DAYS } from "../supabase/functions/authority/coverage.ts";
+import { assessIntent } from "../supabase/functions/authority/intent.ts";
+import { buildPlaceIndex } from "../supabase/functions/authority/urls.ts";
+import { prioritize, demandBucket, actionForRefusals } from "../supabase/functions/authority/opportunities.ts";
 import { lucasAuthority, page, ROOF, REPAIR, STORM, SITE, APPROVED_POST, REJECTED_POST } from "./fixtures/authority-lucas.mjs";
 
 const run = (mut) => { const i = lucasAuthority(); mut?.(i); return runAuthority(i); };
@@ -219,4 +222,86 @@ test("Business Profile opportunities pass through the drafter's own brief", () =
   // Missing owner → no Business Profile post for Roof Repair or Storm
   assert.ok(!r.opportunities.some((o) => o.content_type === "gbp_post" && (o.service_id === REPAIR || o.service_id === STORM)));
   assert.equal(t.target.keyword, "new roof installation wentzville");
+});
+
+// ── Refinement 1: intent sanity ────────────────────────────────────────────
+
+const PLACES = buildPlaceIndex(["Wentzville", "O'Fallon", "Saint Charles", "Lucas"], ["Wentzville"], ["Lucas Construction", "Lucas"]);
+const assess = (q, stored) => assessIntent(q, stored, { clientName: "Lucas Construction", places: PLACES });
+
+test("intent sanity: service-discovery queries stored as navigational conflict", () => {
+  for (const q of ["roof repair wentzville mo", "roof inspection wentzville mo", "vinyl siding installation wentzville mo", "seamless gutters wentzville mo"]) {
+    const r = assess(q, "navigational");
+    assert.equal(r.stored, "navigational", "the stored value is preserved");
+    assert.equal(r.assessed, "commercial_or_transactional", q);
+    assert.equal(r.conflict, true, q);
+    assert.match(r.reason, /Stored as navigational/);
+  }
+});
+
+test("intent sanity: conservative patterns, ambiguity left to judgment", () => {
+  assert.deepEqual([assess("lucas construction", "navigational").assessed, assess("lucas construction", "navigational").conflict], ["navigational", false]);
+  assert.equal(assess("lucas construction", "commercial").conflict, true, "a pure brand query stored as commercial");
+  assert.equal(assess("roofer near me", "informational").conflict, true, "near me is strong buyer wording");
+  assert.equal(assess("get a roofing quote wentzville", "transactional").conflict, false);
+  assert.equal(assess("how long does a roof last", "informational").assessed, "informational");
+  assert.equal(assess("how much does a new roof cost in wentzville", "commercial").conflict, false, "commercial research phrased as a question is not a conflict");
+  assert.equal(assess("how long does a roof last", "transactional").conflict, true);
+  const brandService = assess("lucas construction gutter services", "commercial");
+  assert.equal(brandService.assessed, "ambiguous");
+  assert.equal(brandService.conflict, false);
+  assert.equal(assess("trimlight", null).assessed, "ambiguous");
+  assert.equal(assess("roof repair wentzville mo", null).conflict, false, "no stored intent, nothing to contradict");
+});
+
+test("intent sanity in the engine: flagged, kept, excluded from post targets, never rewritten", () => {
+  const i = lucasAuthority();
+  const r = runAuthority(i);
+  const k = kwd(r, "roof repair wentzville mo");
+  assert.ok(k.flags.includes("intent_conflict"));
+  assert.equal(k.intent, "navigational", "stored intent reported as is");
+  assert.equal(k.role, "primary", "the flag never changes the role");
+  assert.equal(i.keywords.find((x) => x.keyword === "roof repair wentzville mo").intent, "navigational", "input untouched");
+  assert.equal(conflicts(r, "intent_conflict").length, 1);
+  assert.equal(opp(r, "confirm_intents:keywords").action, "requires_confirmation");
+  // a conflicted keyword is never picked as a Business Profile target
+  const r2 = run((x) => { x.keywords.find((y) => y.id === "kw-trans").keyword = "lucas construction"; });
+  assert.ok(!r2.opportunities.some((o) => o.content_type === "gbp_post" && o.target.keyword === "lucas construction"));
+  assert.ok(!r2.opportunities.some((o) => o.id === "gbp_post:roof-replacement:transactional"), "no other clean transactional keyword");
+});
+
+// ── Refinement 2: demand tiebreaker within a tier ──────────────────────────
+test("ordering: demand breaks ties after value and severity, never before", () => {
+  assert.deepEqual([0, 2, 9, 10, 99, 100, 2577].map(demandBucket), [0, 1, 1, 2, 2, 3, 4]);
+  const d = (id, value, severity, impressions) => ({
+    id, topic: id, service_id: null, action: "improve", content_type: "page_improvement", gap: "", target: {},
+    evidence_claim_ids: id === "low" ? ["a", "b", "c"] : [], existing_coverage: [], blockers: [], gates: [], eligible_from: null,
+    reasons: [{ tag: "FACT", text: id }], value, severity, impressions, deferred: false,
+  });
+  let o = prioritize([d("low", 3, 3, 2), d("sitewide", 3, 3, 2577)]);
+  assert.deepEqual(o.map((x) => x.id), ["sitewide", "low"], "high demand outranks low demand at equal severity, despite less evidence");
+  o = prioritize([d("sitewide", 3, 3, 2577), d("broken", 3, 4, 0)]);
+  assert.deepEqual(o.map((x) => x.id), ["broken", "sitewide"], "severity still wins");
+  o = prioritize([d("sitewide", 2, 3, 2577), d("money", 3, 3, 0)]);
+  assert.equal(o[0].id, "money", "business value still wins");
+});
+
+// ── Refinement 3: blocked data prerequisite ────────────────────────────────
+test("blocked data prerequisite: a live owner the service record does not name", () => {
+  const r = run((i) => { i.services.find((s) => s.id === ROOF).page_url = null; });
+  const g = opp(r, "gbp_post:roof-replacement:transactional");
+  assert.equal(g.action, "blocked_data_prerequisite");
+  assert.notEqual(g.action, "insufficient_evidence");
+  assert.equal(g.tier, "none");
+  assert.equal(g.gates.find((x) => x.gate === "data_prerequisite").pass, false);
+  assert.match(g.blockers.join(" "), /data_fix:service-page:roof-replacement/);
+  assert.ok(opp(r, "data_fix:service-page:roof-replacement"), "the reconciling fix is itself an opportunity");
+});
+
+test("drafter refusals map to the right non-content action", () => {
+  assert.equal(actionForRefusals(["no_usable_claim"]), "insufficient_evidence");
+  assert.equal(actionForRefusals(["target_page_missing"]), "blocked_data_prerequisite");
+  assert.equal(actionForRefusals(["keyword_wrong_page", "target_page_unapproved"]), "blocked_data_prerequisite");
+  assert.equal(actionForRefusals(["brand_board_not_approved", "no_usable_claim"]), "requires_confirmation");
+  assert.equal(actionForRefusals(["target_page_missing", "no_usable_claim"]), "insufficient_evidence");
 });

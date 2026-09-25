@@ -180,6 +180,8 @@ function judgments(input: AuthorityInput, pillars: Pillar[]): string[] {
     "HEURISTIC: supporting-topic templates and their title / slug patterns (playbooks.ts) — a person should review the list per vertical.",
     `HEURISTIC: Business Profile cadence of one post per service + intent per 21 days.`,
     "HEURISTIC: claim relevance to a service is by shared word stem, owner-page source or segment in the source URL; it can miss a relevant claim or include a loose one.",
+    "HEURISTIC: the intent sanity classifier (brand, question form, buyer wording, service + place); brand + service and pattern-less queries are left ambiguous for a person.",
+    "HEURISTIC: the demand tiebreaker buckets latest-window impressions by order of magnitude (0, 1–9, 10–99, 100–999, 1000+).",
     "HEURISTIC: unmapped Search Console queries are matched to a service when they contain every 5+ letter stem of its name.",
     "HEURISTIC: tier thresholds (value 3 = a money keyword, 2 = a P1 / primary keyword; severity 4 = the owner page is missing or broken).",
     "JUDGMENT: whether an educational topic already covered by one blog post should be refreshed rather than left alone (the engine says avoid).",
@@ -256,6 +258,11 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
   const conflicts = findConflicts({
     pillars, keywords, pages, places, unconfirmed, blindSpots: blind, blogOverlaps: overlaps, blogWording: wording, servicePageUrlGaps,
   });
+  const intentConflicts = keywords.filter((k) => k.intent_check.conflict);
+  if (intentConflicts.length) conflicts.push({ kind: "intent_conflict", subject: `${intentConflicts.length} keywords`, reasons: [
+    ...intentConflicts.map((k) => ({ tag: "FACT" as const, text: `"${k.keyword}" is stored as ${k.intent_check.stored}; ${k.intent_check.reason}` })),
+    { tag: "HEURISTIC", text: "Assessed by a conservative pattern match; the stored value is kept and nothing is written." },
+  ] });
   const home = pages.find((p) => p.kind === "home");
   const homeIssues = home ? pageWordingIssues(home.page, places, citable) : [];
   if (homeIssues.length) conflicts.push({ kind: "home_page_wording", subject: "/", reasons: homeIssues });

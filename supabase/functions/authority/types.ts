@@ -20,6 +20,10 @@ export type Reason = { tag: Tag; text: string };
 export const ACTIONS = [
   "create", "improve", "refresh", "consolidate", "avoid",
   "insufficient_evidence", "research_required", "requires_confirmation",
+  // Compass already holds the underlying reality, but a CRM / system
+  // relationship must be reconciled before the downstream writer can run
+  // (e.g. a live owner page the service record does not name).
+  "blocked_data_prerequisite",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -92,10 +96,14 @@ export type OwnerResolution = {
 
 export type KeywordRole =
   | "primary" | "supporting" | "homepage_pollution" | "mis_targeted" | "location_unapproved"
-  | "material_supported" | "material_unsupported" | "avoid_risky" | "requires_confirmation" | "unmapped";
+  | "material_supported" | "material_unsupported" | "avoid_risky" | "requires_confirmation" | "unmapped"
+  | "intent_conflict";   // a flag only: never a keyword's role
 export type KeywordAssignment = {
   keyword_id: string; keyword: string; service_id: string | null; intent: string | null; money: boolean;
   priority: string | null; volume: number | null; target_path: string | null; role: KeywordRole; flags: string[]; reasons: Reason[];
+  // Stored intent (FACT) vs a conservative assessment of the query text
+  // (HEURISTIC). Never written back.
+  intent_check: { stored: string | null; assessed: "navigational" | "informational" | "commercial_or_transactional" | "ambiguous"; conflict: boolean; reason: string };
 };
 
 export type ClaimRef = { id: string; text: string };

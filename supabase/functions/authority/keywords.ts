@@ -5,6 +5,7 @@
 import { DETECTORS, MATERIAL_RE } from "../post-drafter/rules.ts";
 import type { AuthorityInput, ClaimRef, KeywordAssignment, KeywordRole, Reason } from "./types.ts";
 import { normPath, placesIn, type PlaceIndex } from "./urls.ts";
+import { assessIntent } from "./intent.ts";
 
 const RISK: Record<string, string> = {
   superlative: "an unprovable superlative",
@@ -110,6 +111,13 @@ export function classifyKeywords(input: AuthorityInput, ctx: KeywordContext): Ke
       reasons.push({ tag: "FACT", text: `Targets ${target}, not the service's owner page ${owner}.` });
     }
 
+    const intent_check = assessIntent(text, k.intent, { clientName: ctx.clientName, places: ctx.places });
+    if (intent_check.conflict) {
+      flags.add("intent_conflict");
+      reasons.push({ tag: "FACT", text: `Stored intent: ${k.intent}.` });
+      reasons.push({ tag: "HEURISTIC", text: `The query reads as ${intent_check.assessed.replace(/_/g, " ")}: ${intent_check.reason} A person should confirm; nothing is overwritten.` });
+    }
+
     let role: KeywordRole = !k.service_id ? "unmapped" : primaryIds.has(k.id) ? "primary" : "supporting";
     for (const r of ORDER) if (flags.has(r)) { role = r; break; }
     if (!k.service_id && role !== "requires_confirmation") role = "unmapped";
@@ -118,7 +126,7 @@ export function classifyKeywords(input: AuthorityInput, ctx: KeywordContext): Ke
     const ex = extras.get(k.id);
     return {
       keyword_id: k.id, keyword: text, service_id: k.service_id, intent: k.intent, money: money.has(k.id) || k.is_money,
-      priority: k.priority, volume: ex?.volume ?? null, target_path: target, role, flags: [...flags], reasons,
+      priority: k.priority, volume: ex?.volume ?? null, target_path: target, role, flags: [...flags], reasons, intent_check,
     };
   });
 }
