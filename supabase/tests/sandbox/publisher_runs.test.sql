@@ -70,6 +70,9 @@ begin
 end $$;
 
 -- ── Fixtures: two Facebook posts (worker drafts are enough for runs) ─────────
+-- Inserted by the cluster superuser: since 0047 the worker's own SQL cannot
+-- create posts (only the post-drafter function can).
+\c - supabase_admin
 do $$
 declare v uuid;
 begin
@@ -82,6 +85,7 @@ begin
   returning id into v;
   insert into pb.ids values ('ig1', v);
 end $$;
+\c - postgres
 
 -- ── The publisher writes (service role) ─────────────────────────────────────
 set role service_role;

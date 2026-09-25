@@ -109,7 +109,12 @@ begin
     has_table_privilege('authenticated', 'public.social_posts', 'select'));
 end $$;
 
--- ── W. The worker drafts the GBP Spec's four posts (SQL as postgres) ────────
+-- ── W. The worker drafts the GBP Spec's four posts ─────────────────────────
+-- Since 0047 the worker's own SQL cannot create posts (only the post-drafter
+-- function can), so these worker-authored fixtures are inserted by the
+-- cluster superuser; 0045 still records them as worker drafts. Everything
+-- after the inserts runs as the worker (postgres) again.
+\c - supabase_admin
 do $$
 declare v uuid; st text;
 begin
@@ -151,7 +156,14 @@ begin
   returning id into v;
   insert into pr.ids values ('social', v);
   insert into post_claims (post_id, claim_id) values (v, '00000000-0000-4000-f000-00000000000a');
-
+  perform pr.ok('W4c an Event post type is not accepted',
+    pr.try($q$insert into social_posts (client_id, platform, post_type, search_intent, copy)
+             values ('00000000-0000-4000-b000-00000000000a', 'google_business', 'event', 'informational', 'x')$q$) like '23514:%');
+end $$;
+\c - postgres
+do $$
+declare st text;
+begin
   perform pr.ok('W1 worker drafts carry no human author',
     not exists (select 1 from social_posts where author_kind <> 'worker' or created_by is not null));
   perform pr.ok('W2 each draft has a created event with no actor',
@@ -164,9 +176,6 @@ begin
   st := pr.try(format($q$update social_posts set review_status = 'in_review' where id = %L$q$, pr.id('city')));
   perform pr.ok('W4 the city post with an unverified claim cannot be submitted', st like '23514:%unverified%', st);
   perform pr.ok('W4b ...nor without an approved service as its topic', st like '%needs an approved service%', st);
-  perform pr.ok('W4c an Event post type is not accepted',
-    pr.try($q$insert into social_posts (client_id, platform, post_type, search_intent, copy)
-             values ('00000000-0000-4000-b000-00000000000a', 'google_business', 'event', 'informational', 'x')$q$) like '23514:%');
 
   perform pr.ok('W5 each submission opened one unassigned CLAUDE_APPROVAL post_review task on the post''s client',
     (select count(*) from social_posts p join tasks t on t.id = p.review_task_id and t.client_id = p.client_id

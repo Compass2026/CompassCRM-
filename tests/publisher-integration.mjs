@@ -14,8 +14,8 @@ import { createClient } from "@supabase/supabase-js";
 import { createPostPublisher } from "../supabase/functions/post-publisher/handler.ts";
 import { createStore } from "../supabase/functions/post-publisher/store.ts";
 
-const { PGRST_URL, JWT_SECRET, PSQL } = process.env;
-assert.ok(PGRST_URL && JWT_SECRET && PSQL, "run through npm run test:publisher");
+const { PGRST_URL, JWT_SECRET, PSQL, PSQL_ADMIN } = process.env;
+assert.ok(PGRST_URL && JWT_SECRET && PSQL && PSQL_ADMIN, "run through npm run test:publisher");
 
 const TEAM = { id: "00000000-0000-4000-a000-000000000001", email: "sandbox-team@compassmarketing.ai" };
 const CA = "00000000-0000-4000-b000-00000000000a";
@@ -28,8 +28,8 @@ const serviceKey = sign({ role: "service_role", exp: exp() });
 const anonKey = sign({ role: "anon", exp: exp() });
 const teamToken = sign({ sub: TEAM.id, role: "authenticated", aud: "authenticated", email: TEAM.email, exp: exp() });
 
-const sql = (q) => {
-  try { return execFileSync("/bin/sh", ["-c", `${PSQL} -c "$Q"`], { env: { ...process.env, Q: q }, stdio: ["ignore", "pipe", "pipe"] }).toString().trim(); }
+const sql = (q, psql = PSQL) => {
+  try { return execFileSync("/bin/sh", ["-c", `${psql} -c "$Q"`], { env: { ...process.env, Q: q }, stdio: ["ignore", "pipe", "pipe"] }).toString().trim(); }
   catch (e) { const err = new Error(`${String(e.stderr ?? e.message).trim()}\n  in: ${q}`); err.stderr = e.stderr; throw err; }
 };
 const sqlFails = (q) => { try { sql(q); return null; } catch (e) { return String(e.stderr ?? e.message); } };
@@ -90,11 +90,12 @@ const publisher = createPostPublisher({ store: createStore(service), fetch: fake
 const checks = [];
 const ok = (name) => { checks.push(name); console.log(`  ✔ ${name}`); };
 
-// Draft (as the worker, SQL as postgres) → link a claim → submit → a person approves through the API.
+// Draft (a worker-authored draft: inserted by the cluster superuser, since
+// 0047 lets only the post-drafter function create worker posts) → link a claim → submit → a person approves through the API.
 async function approvedPost(fields) {
   const cols = Object.keys(fields);
   const vals = Object.values(fields).map((v) => (v === null ? "null" : `'${String(v).replaceAll("'", "''")}'`));
-  const id = sql(`insert into social_posts (${cols.join(",")}) values (${vals.join(",")}) returning id`).split("\n")[0];
+  const id = sql(`insert into social_posts (${cols.join(",")}) values (${vals.join(",")}) returning id`, PSQL_ADMIN).split("\n")[0];
   if (fields.search_intent !== "navigational") sql(`insert into post_claims (post_id, claim_id) values ('${id}', '00000000-0000-4000-f000-00000000000a')`);
   sql(`update social_posts set review_status = 'in_review' where id = '${id}'`);
   const { error } = await asTeam.from("social_posts").update({ review_status: "approved" }).eq("id", id);
