@@ -25,9 +25,16 @@
 // write authority. A signed-in team member acting in person is not gated.
 //
 // Body: { client_id, op, ...op fields }. Ops:
-//   gbp_locate                       find the client's Business Profile location
-//                                    among the accounts the token manages (by
-//                                    phone, then name); stores clients.gbp_location
+//   gbp_locate                       read-only. With clients.gbp_location set:
+//                                    reports it. Without: lists the locations
+//                                    the token manages that match the client's
+//                                    phone, website or exact name, as
+//                                    suggestions only, and answers "skipped"
+//                                    with reason GBP_LOCATION_REQUIRED. It
+//                                    never stores a location: only a person's
+//                                    confirmed pick (google-connect gbp_select)
+//                                    does. gbp_apply and gbp_qa stop the same
+//                                    way when no location is selected.
 //   gbp_apply    { spec? }           patch categories, description, services,
 //                                    hours, website from clients.gbp_spec (body.spec
 //                                    is stored first when given). Never the title.
@@ -58,6 +65,14 @@ type Result = Record<string, unknown> & { op: string; status: "done" | "skipped"
 
 function digits(s: string | null | undefined): string {
   return (s ?? "").replace(/\D/g, "").replace(/^1(\d{10})$/, "$1");
+}
+
+function host(u: string | null | undefined): string {
+  try {
+    return new URL(u ?? "").hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 function b64url(s: string): string {
@@ -159,33 +174,60 @@ export function createGoogleOps(deps: { supabase: Supabase; fetch: Fetch }) {
 
   // ── Business Profile helpers ────────────────────────────────────────────
   // v1 names look like locations/{id}; v4 and posts want accounts/{a}/locations/{id}.
+  // Only a selected location (clients.gbp_location, set by google-connect
+  // gbp_select) is ever used; nothing here picks or stores one.
+  const locationRequired = (): Result => ({
+    op,
+    status: "skipped",
+    reason: "GBP_LOCATION_REQUIRED",
+    detail: `No Business Profile location is selected for "${client.name}". Pick it in Settings → Google hands → Business Profile location per client; nothing was sent to Google.`,
+  });
   const locate = async (): Promise<{ account: string; location: string } | Result> => {
-    if (client.gbp_location) {
-      const [account, location] = String(client.gbp_location).split("/locations/");
-      return { account, location: `locations/${location}` };
-    }
-    const accounts = await g(`${ACCT}/accounts?pageSize=20`);
-    if (!accounts.ok) return failed(await gerr("list accounts", accounts));
-    const accts: { name: string }[] = (await accounts.json()).accounts ?? [];
+    if (!client.gbp_location) return locationRequired();
+    const [account, location] = String(client.gbp_location).split("/locations/");
+    return { account, location: `locations/${location}` };
+  };
+
+  // Read-only: the managed locations that match the client, strongest first.
+  // Suggestions for a person, never a selection.
+  const suggestions = async (): Promise<{ list: Record<string, unknown>[]; error: string | null }> => {
     const want = digits(client.phone);
-    const names = [client.name, client.dba].filter(Boolean).map((n) => String(n).toLowerCase());
+    const site = host(client.website_url);
+    const names = [client.name, client.dba].filter(Boolean).map((n: string) => String(n).trim().toLowerCase());
+    const out: Record<string, unknown>[] = [];
+    const accts: { name: string }[] = [];
+    let pageToken: string | null = null;
+    for (let page = 0; page < 20; page++) {
+      const res = await g(`${ACCT}/accounts?pageSize=20${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`);
+      if (!res.ok) return { list: [], error: await gerr("list accounts", res) };
+      const j = await res.json();
+      accts.push(...(j.accounts ?? []));
+      pageToken = j.nextPageToken || null;
+      if (!pageToken) break;
+    }
     for (const a of accts) {
-      const locs = await g(`${BIZ}/${a.name}/locations?readMask=name,title,phoneNumbers,websiteUri&pageSize=100`);
-      if (!locs.ok) continue;
-      const list: { name: string; title?: string; phoneNumbers?: { primaryPhone?: string } }[] = (await locs.json()).locations ?? [];
-      const hit =
-        list.find((l) => want && digits(l.phoneNumbers?.primaryPhone) === want) ??
-        list.find((l) => names.some((n) => (l.title ?? "").toLowerCase() === n)) ??
-        list.find((l) => names.some((n) => (l.title ?? "").toLowerCase().includes(n)));
-      if (hit) {
-        const full = `${a.name}/${hit.name}`;
-        await supabase.from("clients").update({ gbp_location: full }).eq("id", client.id);
-        return { account: a.name, location: hit.name };
+      let locToken: string | null = null;
+      for (let page = 0; page < 20; page++) {
+        const res = await g(`${BIZ}/${a.name}/locations?readMask=name,title,phoneNumbers,websiteUri&pageSize=100${locToken ? `&pageToken=${encodeURIComponent(locToken)}` : ""}`);
+        if (!res.ok) break;
+        const j = await res.json();
+        for (const l of (j.locations ?? []) as { name: string; title?: string; phoneNumbers?: { primaryPhone?: string }; websiteUri?: string }[]) {
+          const hints = {
+            phone: !!want && digits(l.phoneNumbers?.primaryPhone) === want,
+            website: !!site && host(l.websiteUri) === site,
+            exact_name: names.includes((l.title ?? "").trim().toLowerCase()),
+          };
+          if (hints.phone || hints.website || hints.exact_name) {
+            out.push({ resource: `${a.name}/${l.name}`, title: l.title ?? "", phone: l.phoneNumbers?.primaryPhone ?? null, website: l.websiteUri ?? null, hints });
+          }
+        }
+        locToken = j.nextPageToken || null;
+        if (!locToken) break;
       }
     }
-    return failed(
-      `No Business Profile location for "${client.name}" (phone ${client.phone ?? "unset"}) under the ${accts.length} account(s) this token manages — grant the Compass Google account manager access on the client's profile, then retry.`
-    );
+    const score = (c: Record<string, unknown>) => Object.values(c.hints as Record<string, boolean>).filter(Boolean).length;
+    out.sort((x, y) => score(y) - score(x));
+    return { list: out, error: null };
   };
 
   const categoryName = async (displayName: string): Promise<string | null> => {
@@ -203,8 +245,13 @@ export function createGoogleOps(deps: { supabase: Supabase; fetch: Fetch }) {
     switch (op) {
       // ── gbp_locate ────────────────────────────────────────────────────
       case "gbp_locate": {
-        const loc = await locate();
-        result = "op" in loc ? loc : done("Location found and stored on clients.gbp_location.", { location: `${loc.account}/${loc.location}` });
+        if (client.gbp_location) {
+          result = done("A Business Profile location is already selected for this client.", { location: client.gbp_location });
+          break;
+        }
+        const found = await suggestions();
+        if (found.error) { result = failed(found.error); break; }
+        result = { ...locationRequired(), suggestions: found.list };
         break;
       }
 

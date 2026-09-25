@@ -45,6 +45,12 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
   `skipped`, `reason` `worker_google_ops_off`) — never retry or work
   around that. Read-only calls (`gbp_locate`, the Search Console sync) are
   fine either way. The post publisher is separate and never yours.
+- **Never choose a client's Business Profile location.** Only a person's
+  confirmed pick in Settings stores `clients.gbp_location`; never write it
+  yourself. `gbp_locate` returns `suggestions` and `reason`
+  `GBP_LOCATION_REQUIRED` when none is selected, and `gbp_apply` answers
+  the same: treat it like any `skipped` answer (Tom's task; put the top
+  suggestion in the notes as a suggestion, not a decision).
 - **Never publish Business Profile Q&A.** Do not call `google-ops`
   `gbp_qa`, for any client, for any reason (Sept 23 2026 safety stop, same
   as posts). You draft the five Q&A seeds in the GBP Spec doc and leave them

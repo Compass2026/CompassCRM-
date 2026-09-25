@@ -23,13 +23,14 @@ until then use sourced manual entries or explicit unavailable states.
    tasks stop landing on Tom. The trial key (1,000 lifetime requests) needs
    replacing first.
 2. **Google ops token.** Settings › Google hands has the button: **Connect
-   Google** signs in as the Compass Workspace account and stores
-   `GOOGLE_OPS_REFRESH_TOKEN` in Vault; pick the Analytics account for
-   `GA4_ACCOUNT_ID` on the same card; **Check access** shows which clients'
+   Business Profile** signs in as the Compass Workspace account and stores
+   `GOOGLE_OPS_REFRESH_TOKEN` in Vault with Business Profile access only
+   (Sept 24 2026; Analytics and Gmail need separate connections that do not
+   exist yet, so GA4 and drafts stay Tom's); pick each client's profile
+   under *Business Profile location per client*; **Check access** shows which clients'
    Business Profile / Search Console the account can already reach. Before
    the first press: add the redirect URI the card shows to the OAuth app,
-   enable the Business Profile, Analytics Admin and Gmail APIs on the Google
-   Cloud project (and request Business Profile API access once). Then one
+   enable the Business Profile APIs on the Google Cloud project (and request Business Profile API access once). Then one
    `google_access` grant per client that shows *no*. Until then GBP apply,
    GA4 and drafts fall back to Tom's tasks. Connecting stores the
    credential only: the worker writes to Google (GBP apply, GA4, Gmail

@@ -585,8 +585,9 @@ Function change that:
   view. Nothing waits on it.
 - **`google-ops`** (`{client_id, op}`; team JWT or cron secret) is the CRM's
   hands on Google with one refresh token, `GOOGLE_OPS_REFRESH_TOKEN`
-  (scopes `business.manage`, `analytics.edit`, `gmail.compose`, minted for
-  the GSC OAuth app), plus `GA4_ACCOUNT_ID`. Ops: `gbp_locate`, `gbp_apply`
+  (minted for the GSC OAuth app; since Sept 24 it carries
+  `business.manage` only — see *Business Profile-only connection* below),
+  plus `GA4_ACCOUNT_ID`. Ops: `gbp_locate`, `gbp_apply`
   (categories, description, services, website, confirmed hours — never the
   name — from `clients.gbp_spec`), `gbp_qa`, `ga4_provision`
   (property + web stream + `phone_click` / `form_submit` key events →
@@ -615,9 +616,39 @@ Function change that:
   OAuth app (`GSC_CLIENT_ID`) must list
   `https://iokcopiyzajigvhwexhe.supabase.co/functions/v1/google-connect`
   as an authorized redirect URI, and the Google Cloud project needs the
-  Business Profile APIs (Account Management, Business Information, Q&A,
-  and the v4 API for posts — Business Profile API access is requested
-  once per project), the Analytics Admin API and the Gmail API enabled.
+  Business Profile APIs (Account Management, Business Information, and
+  the v4 API for posts — Business Profile API access is requested once
+  per project).
+- **Business Profile-only connection** (Sept 24 2026, PR for the Lucas
+  pilot; `google-connect` is now `handler.ts` + `index.ts`, tests in
+  `tests/google-connect.test.mjs`). Connect Business Profile requests
+  `openid email business.manage` only, with `include_granted_scopes=false`,
+  so the token never inherits the Search Console / Analytics / Gmail /
+  Drive grants the same user gave the shared OAuth app; a callback that
+  comes back with anything more is **not stored**. The secret name stays
+  `GOOGLE_OPS_REFRESH_TOKEN`, so google-ops' GA4 and Gmail ops now fail on
+  scope and stay Tom's (separate per-purpose credentials are the later
+  architecture). `GSC_REFRESH_TOKEN` is never written here. Two team-JWT
+  modes: `gbp_locations` (read-only; every page of accounts and locations
+  with title, phone, website, address / service area, Maps link, and
+  phone / website / exact-name hints for a client — hints never select)
+  and `gbp_select` (`{client_id, location: "accounts/{a}/locations/{l}",
+  title, confirm: true}`: re-reads that location and its account's
+  listing from Google, refuses a changed name, then sets
+  `clients.gbp_location` only while it is NULL — never overwrites — and
+  reads the v4 posts list without creating anything). Settings › Google
+  hands › *Business Profile location per client* is the UI; the granted
+  scopes are shown there. Check access no longer matches on a partial
+  title and never writes `clients`. **`gbp_select` is the only writer of
+  `clients.gbp_location`** (same PR): google-ops `gbp_locate` returns
+  phone / website / exact-name matches as ranked `suggestions` with
+  `status: skipped`, `reason: GBP_LOCATION_REQUIRED` and stores nothing
+  (with a location already selected it reports it); `gbp_apply` / `gbp_qa`
+  stop the same way before any Google call; the publisher never searches.
+  **Return URLs:** `start` accepts, and the callback redirects to, only
+  `https://compass-crm-ten.vercel.app` or `http://localhost:3000`
+  (`ALLOWED_RETURN_ORIGINS`); anything else is refused at start and falls
+  back to the production Settings page on the callback.
 - **Worker Google operations switch** (Sept 24 2026; `app_settings`
   `worker_google_ops`, **off** unless it is exactly `{"enabled": true}`; a
   missing row is off). Connect Google only stores the credential and
@@ -926,8 +957,11 @@ out of scope.
 - **Path:** switch + pilot list (`app_settings.publisher` = `{enabled,
   clients}`, off by default; Settings › Publisher) → preflight (channel
   rules: ≤ 1500 chars, known CTA, https links, CALL without a link, offer
-  terms, one photo; Google connected; the profile located by
-  `clients.gbp_location`, else phone, then name, and stored) → claim
+  terms, one photo; Google connected; the profile is the selected
+  `clients.gbp_location` only — with none, the post stays scheduled, the
+  run is `blocked` with `GBP_LOCATION_REQUIRED` and a TOM
+  `publisher_select_location` task opens, closed by the tick once a
+  location is selected and opens) → claim
   (`scheduled → publishing`; 0045 re-checks the approval hash and
   grounding, a refusal sends the post back to review and records
   `lapsed`) → check Google before any re-send → create → `published` with

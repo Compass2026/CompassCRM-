@@ -4,7 +4,6 @@
 
 import type { GooglePost } from "./channel.ts";
 
-const ACCT = "https://mybusinessaccountmanagement.googleapis.com/v1";
 const BIZ = "https://mybusinessbusinessinformation.googleapis.com/v1";
 const V4 = "https://mybusiness.googleapis.com/v4";
 export const GOOGLE_TIMEOUT_MS = 20_000;
@@ -14,10 +13,6 @@ type Fetch = typeof fetch;
 export type ClientRow = { id: string; name: string; dba: string | null; phone: string | null; gbp_location: string | null };
 export type Location = { account: string; location: string; mapsUri: string | null };
 export type Answer = { ok: boolean; status: number | null; json: unknown; text: string };
-
-function digits(s: string | null | undefined): string {
-  return (s ?? "").replace(/\D/g, "").replace(/^1(\d{10})$/, "$1");
-}
 
 async function call(f: Fetch, url: string, init: RequestInit, timeoutMs: number): Promise<Answer> {
   const ctrl = new AbortController();
@@ -67,43 +62,26 @@ export function googleClient(f: Fetch, token: string, timeoutMs = GOOGLE_TIMEOUT
       headers: { Authorization: `Bearer ${token}`, ...(init.body ? { "Content-Type": "application/json" } : {}) },
     }, timeoutMs);
 
-  // The client's profile, as the token sees it. Uses the stored
-  // gbp_location when there is one; otherwise finds it by phone, then name
-  // (the same match google-ops gbp_locate makes) and returns it to store.
-  async function locate(client: ClientRow): Promise<{ loc: Location; found: boolean } | { blocked: string }> {
-    let account: string | null = null;
-    let location: string | null = null;
-    let found = false;
-    if (client.gbp_location) {
-      const [a, l] = String(client.gbp_location).split("/locations/");
-      account = a;
-      location = `locations/${l}`;
-    } else {
-      const accounts = await g(`${ACCT}/accounts?pageSize=20`);
-      if (!accounts.ok) return { blocked: `Could not list Business Profile accounts (${accounts.status ?? "network"}): ${accounts.text.slice(0, 200)}` };
-      const accts = ((accounts.json as { accounts?: { name: string }[] })?.accounts) ?? [];
-      const want = digits(client.phone);
-      const names = [client.name, client.dba].filter(Boolean).map((n) => String(n).toLowerCase());
-      for (const acc of accts) {
-        const locs = await g(`${BIZ}/${acc.name}/locations?readMask=name,title,phoneNumbers&pageSize=100`);
-        if (!locs.ok) continue;
-        const list = ((locs.json as { locations?: { name: string; title?: string; phoneNumbers?: { primaryPhone?: string } }[] })?.locations) ?? [];
-        const hit =
-          list.find((l) => want && digits(l.phoneNumbers?.primaryPhone) === want) ??
-          list.find((l) => names.some((n) => (l.title ?? "").toLowerCase() === n));
-        if (hit) { account = acc.name; location = hit.name; found = true; break; }
-      }
-      if (!account || !location) {
-        return { blocked: `No Business Profile location for "${client.name}" is managed by the Compass Google account. Make it a manager on the client's profile.` };
-      }
+  // The client's profile, as the token sees it: only the location a person
+  // selected and confirmed (google-connect gbp_select stores it on
+  // clients.gbp_location). With none recorded the publisher stops with
+  // GBP_LOCATION_REQUIRED; it never searches for, picks or stores one.
+  async function locate(client: ClientRow): Promise<{ loc: Location } | { blocked: string; code?: "GBP_LOCATION_REQUIRED" }> {
+    if (!client.gbp_location) {
+      return {
+        code: "GBP_LOCATION_REQUIRED",
+        blocked: `GBP_LOCATION_REQUIRED: no Business Profile location is selected for "${client.name}". Pick it in Settings → Google hands → Business Profile location per client; the publisher never chooses one itself.`,
+      };
     }
+    const [account, l] = String(client.gbp_location).split("/locations/");
+    const location = `locations/${l}`;
     // Confirm access (and pick up the Maps link as a fallback published URL).
     const check = await g(`${BIZ}/${location}?readMask=name,metadata`);
     if (!check.ok) {
       return { blocked: `The Compass Google account cannot open ${account}/${location} (${check.status ?? "network"}). Check its manager access on the client's profile.` };
     }
     const mapsUri = ((check.json as { metadata?: { mapsUri?: string } })?.metadata?.mapsUri) ?? null;
-    return { loc: { account, location, mapsUri }, found };
+    return { loc: { account, location, mapsUri } };
   }
 
   // Up to LIST_PAGES pages of 100. complete is false when Google had more,

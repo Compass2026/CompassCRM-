@@ -102,6 +102,7 @@ export default async function SettingsPage({
             access={settingValue("google_access") as AccessCheck | null}
             redirectUri={redirectUri}
             flash={flash}
+            clients={(clients ?? []).map((c) => ({ id: c.id, name: c.name, gbp_location: c.gbp_location }))}
           />
         </CardContent>
       </Card>
