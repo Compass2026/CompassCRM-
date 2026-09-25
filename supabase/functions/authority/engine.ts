@@ -7,7 +7,7 @@ import { resolveOwner } from "./owners.ts";
 import { aboutUnconfirmed, classifyKeywords } from "./keywords.ts";
 import { distinctStems } from "./evidence.ts";
 import { blindSpots, contentPostCoverage, pageCoverage, pendingProposals, postCoverage } from "./coverage.ts";
-import { gscForService, landingPath, latestWindow } from "./gsc.ts";
+import { GSC_ROW_CAP, gscCoverage, gscForService, landingPath, latestWindow } from "./gsc.ts";
 import { TEMPLATES } from "./playbooks.ts";
 import { findConflicts, pageWordingIssues } from "./conflicts.ts";
 import { buildOpportunities } from "./opportunities.ts";
@@ -189,6 +189,8 @@ function judgments(input: AuthorityInput, pillars: Pillar[]): string[] {
     "JUDGMENT: a material is supported only when a usable claim names it; a brand of shingle does not prove the generic material (\"Duration shingles\" does not state \"asphalt\").",
   ];
   if (pillars.some((p) => p.owner.conflict)) out.push("JUDGMENT: which of the conflicting owner candidates becomes the owner page (the engine prefers a live page, then the page group).");
+  const cov = gscCoverage(latestWindow(input.authority.gsc).rows.length);
+  if (cov !== "complete") out.push(`DATA: Search Console coverage is ${cov}: ${cov === "partial" ? `the latest window is at gsc-sync's ${GSC_ROW_CAP}-row cap, so impression counts and the demand tiebreaker are floors` : "no rows are stored"}.`);
   if (!input.authority.inventory) out.push("MISSING: no site inventory — owner states are 'not_checked' and page coverage is empty.");
   return out;
 }
@@ -253,7 +255,7 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
   const blind = blindSpots(input, pages);
   const unapprovedLocationPages = pages
     .filter((p) => p.kind === "location" && !placesIn(slugWords(p.slug), places).some((x) => x.approved))
-    .map((p) => p.path);
+    .map((p) => ({ path: p.path, place: placesIn(slugWords(p.slug), places)[0]?.name ?? titleCase(slugWords(p.slug)), title: p.page.title }));
 
   const conflicts = findConflicts({
     pillars, keywords, pages, places, unconfirmed, blindSpots: blind, blogOverlaps: overlaps, blogWording: wording, servicePageUrlGaps,
@@ -267,9 +269,10 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
   const homeIssues = home ? pageWordingIssues(home.page, places, citable) : [];
   if (homeIssues.length) conflicts.push({ kind: "home_page_wording", subject: "/", reasons: homeIssues });
   const opportunities = buildOpportunities({
-    input, pillars, keywords, supporting, unconfirmed, unapprovedLocationPages, blindSpots: blind, blogOverlaps: overlaps, servicePageUrlGaps, homeIssues,
+    input, pillars, keywords, supporting, unconfirmed, unapprovedLocationPages, blindSpots: blind, blogOverlaps: overlaps, servicePageUrlGaps, homeIssues, places,
   });
 
+  const gscWin = latestWindow(a.gsc);
   const by_kind: Record<string, number> = {};
   for (const p of pages) by_kind[p.kind] = (by_kind[p.kind] ?? 0) + 1;
   return {
@@ -280,6 +283,11 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
     inventory: {
       fetched_at: a.inventory?.fetched_at ?? null, pages: inv.byPath.size, live: pages.length, by_kind,
       blind_spots: blind.length ? [{ tag: "FACT", text: `${blind.length} live blog posts are not in content_posts.` }] : [],
+    },
+    sources: {
+      gsc: { window: gscWin.label, rows: gscWin.rows.length, row_cap: GSC_ROW_CAP, coverage: gscCoverage(gscWin.rows.length) },
+      ranks: { recorded_at: a.ranks.reduce<string | null>((m, r) => (!m || r.recorded_at > m ? r.recorded_at : m), null) },
+      inventory: { fetched_at: a.inventory?.fetched_at ?? null, pages: inv.byPath.size },
     },
     pillars, keywords, conflicts, supporting, opportunities, judgments: judgments(input, pillars),
   };

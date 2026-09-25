@@ -3,6 +3,7 @@
 import { DETECTORS } from "../post-drafter/rules.ts";
 import type { ClaimRef, Conflict, KeywordAssignment, Pillar, Reason, SitePage } from "./types.ts";
 import { placesIn, type PlaceIndex } from "./urls.ts";
+import { demandNote } from "./gsc.ts";
 import type { ClassifiedPage } from "./site.ts";
 
 const HEADING_RISK = new Set(["credential", "superlative", "pricing", "tenure", "review", "response"]);
@@ -50,7 +51,7 @@ export function findConflicts(args: {
     }
     if (p.owner.state === "live" && p.gsc.impressions > 0 && p.gsc.owner_impressions === 0) {
       out.push({ kind: "owner_not_earning", subject: p.name, reasons: [
-        { tag: "FACT", text: `In ${p.gsc.window}, ${p.gsc.impressions} impressions for this topic landed on ${p.gsc.landing_pages.map((l) => l.path).join(", ")}; the owner ${p.owner.path} earned none.` },
+        { tag: "FACT", text: `In ${p.gsc.window}, ${p.gsc.impressions} impressions for this topic landed on ${p.gsc.landing_pages.map((l) => l.path).join(", ")}${demandNote(p.gsc.coverage)}; the owner ${p.owner.path} earned none.` },
       ] });
     }
     const polluted = args.keywords.filter((k) => k.service_id === p.service_id && k.flags.includes("homepage_pollution"));

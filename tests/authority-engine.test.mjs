@@ -46,7 +46,11 @@ test("Lucas: the authority map rediscovers every known finding", () => {
   // unapproved city pages: coverage, not authorisation
   const loc = conflicts(r, "unapproved_location_pages")[0];
   assert.match(text(loc.reasons), /ofallon, troy/);
-  assert.equal(opp(r, "confirm_markets:service-areas").action, "requires_confirmation");
+  const byKey = (k) => r.opportunities.find((o) => o.key === k);
+  assert.equal(byKey("confirm_market:ofallon").action, "requires_confirmation");
+  assert.equal(byKey("confirm_market:ofallon").target.location, "O'Fallon");
+  assert.equal(byKey("confirm_market:troy").action, "requires_confirmation");
+  assert.ok(!r.opportunities.some((o) => o.key === "confirm_market:wentzville"), "the approved market needs no decision");
   // existing Business Profile coverage
   assert.ok(rr.coverage.some((c) => c.kind === "gbp_post" && c.ref === APPROVED_POST));
   // overlapping blogs
@@ -263,7 +267,10 @@ test("intent sanity in the engine: flagged, kept, excluded from post targets, ne
   assert.equal(k.role, "primary", "the flag never changes the role");
   assert.equal(i.keywords.find((x) => x.keyword === "roof repair wentzville mo").intent, "navigational", "input untouched");
   assert.equal(conflicts(r, "intent_conflict").length, 1);
-  assert.equal(opp(r, "confirm_intents:keywords").action, "requires_confirmation");
+  const d = r.opportunities.find((o) => o.key === "confirm_intent:kw-repair");
+  assert.equal(d.action, "requires_confirmation");
+  assert.equal(d.section, "needs_decision");
+  assert.equal(d.target.intent, "navigational", "the stored intent, not the assessment");
   // a conflicted keyword is never picked as a Business Profile target
   const r2 = run((x) => { x.keywords.find((y) => y.id === "kw-trans").keyword = "lucas construction"; });
   assert.ok(!r2.opportunities.some((o) => o.content_type === "gbp_post" && o.target.keyword === "lucas construction"));
@@ -304,4 +311,96 @@ test("drafter refusals map to the right non-content action", () => {
   assert.equal(actionForRefusals(["keyword_wrong_page", "target_page_unapproved"]), "blocked_data_prerequisite");
   assert.equal(actionForRefusals(["brand_board_not_approved", "no_usable_claim"]), "requires_confirmation");
   assert.equal(actionForRefusals(["target_page_missing", "no_usable_claim"]), "insufficient_evidence");
+});
+
+// ── D1.1: identity, sections, decision granularity, objectives, sources ────
+test("keys are ID-based, unique, and survive renaming a service", () => {
+  const r = run();
+  const keys = r.opportunities.map((o) => o.key);
+  assert.equal(new Set(keys).size, keys.length, "unique within a run");
+  for (const k of keys) assert.match(k, /^[a-z_]+:[A-Za-z0-9_:\/.-]+$/, k);
+  assert.ok(keys.includes(`gbp_post:${ROOF}:transactional`));
+  assert.ok(keys.includes(`service_page:${REPAIR}`));
+  const renamed = run((i) => {
+    i.services.find((s) => s.id === ROOF).name = "Full Roof Replacement";
+    i.authority.pageGroupsFull.find((g) => g.name === "Roof Replacement").name = "Full Roof Replacement";
+    i.pageGroups.find((g) => g.name === "Roof Replacement").name = "Full Roof Replacement";
+  });
+  const before = new Set(r.opportunities.filter((o) => o.service_id === ROOF).map((o) => o.key));
+  const after = new Set(renamed.opportunities.filter((o) => o.service_id === ROOF).map((o) => o.key));
+  assert.deepEqual([...after].sort(), [...before].sort(), "same keys after the rename");
+  assert.notDeepEqual(renamed.opportunities.filter((o) => o.service_id === ROOF).map((o) => o.id).sort(), r.opportunities.filter((o) => o.service_id === ROOF).map((o) => o.id).sort(), "only the readable id changed");
+});
+
+test("sections follow the action and content type", () => {
+  const r = run();
+  const sec = (key) => r.opportunities.find((o) => o.key === key).section;
+  assert.equal(sec(`service_page:${REPAIR}`), "fix_now");
+  assert.equal(sec("page_improvement:home"), "fix_now");
+  assert.equal(sec(`gbp_post:${ROOF}:transactional`), "ready");
+  assert.equal(sec(`gbp_post:${ROOF}:commercial`), "ready", "cadence-deferred is still ready, with eligible_from");
+  assert.equal(sec("confirm_market:ofallon"), "needs_decision");
+  assert.equal(sec("topic:signs_replacement"), "research");
+  assert.equal(sec("evidence:unsupported-materials"), "blocked");
+  assert.equal(sec("topic:cost"), "avoid");
+  const r2 = run((i) => { i.services.find((s) => s.id === ROOF).page_url = null; });
+  assert.equal(r2.opportunities.find((o) => o.key === `gbp_post:${ROOF}:transactional`).section, "blocked");
+});
+
+test("objectives are fixed templates, present only where they apply", () => {
+  const r = run();
+  const obj = (key) => r.opportunities.find((o) => o.key === key).objective;
+  assert.match(obj(`gbp_post:${ROOF}:transactional`), /^Prompt people ready to act to request roof replacement and send them to \/services\/roof-replacement\.$/);
+  assert.match(obj(`service_page:${REPAIR}`), /Give Roof Repair its own live page/);
+  assert.equal(obj("confirm_market:ofallon"), null);
+  assert.equal(obj("topic:signs_replacement"), null);
+});
+
+test("decision granularity only: the ranked opportunities are unchanged", () => {
+  const r = run();
+  const ranked = r.opportunities.filter((o) => o.tier !== "none").map((o) => o.key);
+  assert.ok(ranked.length > 0);
+  for (const o of r.opportunities.filter((x) => x.key.startsWith("confirm_"))) assert.equal(o.tier, "none");
+});
+
+test("Search Console coverage: partial at the gsc-sync row cap, complete below, unknown with none", () => {
+  assert.equal(run().sources.gsc.coverage, "complete");
+  const capped = run((i) => {
+    const w = ["2026-08-25", "2026-09-21"];
+    i.authority.gsc = Array.from({ length: 250 }, (_, n) => ({ query: `q${n}`, page: `${SITE}/`, impressions: 1, clicks: 0, avg_position: 9, period_start: w[0], period_end: w[1], keyword_id: null }));
+  });
+  assert.equal(capped.sources.gsc.coverage, "partial");
+  assert.equal(capped.sources.gsc.row_cap, 250);
+  assert.ok(capped.judgments.some((j) => /coverage is partial/.test(j)));
+  assert.match(renderMarkdown(capped), /coverage \*\*partial\*\*/);
+  assert.equal(run((i) => { i.authority.gsc = []; }).sources.gsc.coverage, "unknown");
+});
+
+test("inventory: only the site's own host, loops detected, off-site redirects recorded not followed", async () => {
+  const { inventorySite, allowedUrl } = await import("../supabase/functions/authority/inventory.ts");
+  assert.equal(allowedUrl("https://www.lucasconstructionmo.com/a", SITE), true);
+  for (const bad of ["https://evil.test/", "http://127.0.0.1/", "https://localhost/", "https://user:pw@lucasconstructionmo.com/", "https://lucasconstructionmo.com:8443/", "ftp://lucasconstructionmo.com/"]) {
+    assert.equal(allowedUrl(bad, SITE), false, bad);
+  }
+  const hits = [];
+  const routes = {
+    "/sitemap.xml": [200, `<urlset><url><loc>${SITE}/a</loc></url><url><loc>https://evil.test/x</loc></url></urlset>`],
+    "/": [200, "<title>Home</title><h1>Hi</h1>"],
+    "/a": [200, "<title>A</title><h2>One</h2>"],
+    "/loop": [308, null, "/loop2"], "/loop2": [308, null, "/loop"],
+    "/off": [301, null, "https://evil.test/landing"],
+  };
+  const fake = async (url) => {
+    hits.push(url);
+    const u = new URL(url);
+    const [status, body, loc] = routes[u.pathname] ?? [404, ""];
+    return { status, headers: { get: (h) => (h === "location" ? loc ?? null : null) }, text: async () => body ?? "" };
+  };
+  const inv = await inventorySite({ site: SITE, candidates: [`${SITE}/loop`, `${SITE}/off`, "https://evil.test/y"], fetch: fake, now: () => "T" });
+  const by = (p) => inv.pages.find((x) => x.url === `${SITE}${p}`);
+  assert.equal(by("/a").title, "A");
+  assert.equal(by("/loop").redirect_loop, true);
+  assert.equal(by("/off").final_url, "https://evil.test/landing");
+  assert.ok(!hits.some((h) => h.includes("evil.test")), "never requested another host");
+  assert.ok(inv.pages.every((p) => allowedUrl(p.url, SITE)));
 });

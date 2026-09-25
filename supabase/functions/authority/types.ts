@@ -11,7 +11,7 @@
 // it may never introduce any of the above.
 import type { DrafterInput } from "../post-drafter/types.ts";
 
-export const AUTHORITY_VERSION = "authority-v1";
+export const AUTHORITY_VERSION = "authority-v1.1";
 
 // Every statement the engine makes carries one of these.
 export type Tag = "FACT" | "HEURISTIC" | "RESEARCH_REQUIRED" | "REQUIRES_CONFIRMATION";
@@ -31,6 +31,17 @@ export type ContentType =
   | "gbp_post" | "blog_post" | "blog_refresh" | "service_page" | "location_page" | "page_improvement" | "data_fix";
 
 export type Tier = "A" | "B" | "C" | "none";
+
+// Where an opportunity sits on the Authority tab (D2). Derived from the
+// action and content type only, so the UI, the database and the Drafter
+// handoff always agree.
+export const SECTIONS = ["fix_now", "ready", "needs_decision", "research", "blocked", "avoid"] as const;
+export type Section = (typeof SECTIONS)[number];
+
+// Search Console coverage of the latest window. gsc-sync asks for at most
+// GSC_ROW_CAP query+page rows per window without pagination, so a window at
+// the cap is partial: demand numbers are a floor, never exhaustive.
+export type GscCoverage = "complete" | "partial" | "unknown";
 
 // ── Input ──────────────────────────────────────────────────────────────────
 
@@ -115,7 +126,7 @@ export type CoverageItem = {
 };
 
 export type GscSummary = {
-  window: string | null; impressions: number; clicks: number; best_position: number | null;
+  window: string | null; coverage: GscCoverage; impressions: number; clicks: number; best_position: number | null;
   owner_impressions: number; landing_pages: { path: string; impressions: number }[];
   queries: { query: string; impressions: number; position: number | null; path: string | null }[];
   rank: { keyword: string; organic: number | null; map_pack: number | null; url_path: string | null; recorded_at: string | null } | null;
@@ -136,7 +147,10 @@ export type SupportingTopic = {
 
 export type Gate = { gate: string; pass: boolean; detail: string };
 export type Opportunity = {
-  id: string; topic: string; service_id: string | null; action: Action; content_type: ContentType;
+  // id: readable label (names may change). key: stable identity for
+  // persistence, built from database ids (or a path / place / template key
+  // where no row exists yet). Keys survive renaming a service.
+  id: string; key: string; section: Section; objective: string | null; topic: string; service_id: string | null; action: Action; content_type: ContentType;
   target: { keyword_id: string | null; keyword: string | null; intent: string | null; location: string | null; owner_path: string | null; cta: string | null };
   evidence_claim_ids: string[]; existing_coverage: CoverageItem[]; gap: string; blockers: string[];
   gates: Gate[]; tier: Tier; eligible_from: string | null; order: number[];
@@ -146,6 +160,11 @@ export type Opportunity = {
 export type AuthorityReport = {
   version: typeof AUTHORITY_VERSION; client: { id: string; name: string }; as_of: string; generated_at: string;
   inventory: { fetched_at: string | null; pages: number; live: number; by_kind: Record<string, number>; blind_spots: Reason[] };
+  sources: {
+    gsc: { window: string | null; rows: number; row_cap: number; coverage: GscCoverage };
+    ranks: { recorded_at: string | null };
+    inventory: { fetched_at: string | null; pages: number };
+  };
   pillars: Pillar[]; keywords: KeywordAssignment[]; conflicts: Conflict[]; supporting: SupportingTopic[];
   opportunities: Opportunity[]; judgments: string[];
 };
