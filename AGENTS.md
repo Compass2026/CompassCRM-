@@ -24,7 +24,7 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   `0001_initial_schema.sql`. Supabase records each migration under a
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
-  migration that was missing a file — never apply it; `0042` is written but
+  migration that was missing a file — never apply it; `0042` and `0047` are written but
   **not yet applied**; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
   Sept 24 2026 as `20260924004839`; `0046` (the Business Profile publisher)
   was applied Sept 24 2026 as `20260924015915`). `scripts/test-portal-sandbox.sh` replays all migrations into
@@ -978,6 +978,44 @@ out of scope.
   `npm run test:publisher` (the real handler and store over the sandbox
   replay + PostgREST, fake Google) and the sandbox's
   `publisher_runs.test.sql`.
+
+## AI Drafter (0047 and `post-drafter`, written Sept 25 2026, NOT applied or deployed)
+
+Drafts one Business Profile post from governed Client Intelligence and hands
+it to 0045's human review. It never approves, schedules or publishes.
+
+- **One read:** `client_intelligence_input(client_id)` (invoker rights) feeds
+  the Intelligence tab, the `post-drafter` function and
+  `scripts/drafter-dry-run.mjs`. Its fields are pinned to `DrafterInput` by
+  `DRAFTER_INPUT_FIELDS` (compile time) and
+  `tests/client-intelligence-loader.test.mjs` (SQL).
+- **`post-drafter`** (`supabase/functions/post-drafter/`: `brief.ts`,
+  `lint.ts`, `rules.ts`, `prompt.ts` from D1; `handler.ts`, `store.ts`,
+  `index.ts`, `gazetteer.json` from D2). Modes: `brief`, `check`, `submit`,
+  `version`. Auth: `x-cron-secret` (worker) or a team JWT;
+  `verify_jwt = true`. Every request rebuilds the brief from live data, and
+  a submit with a stale `brief_hash` is refused. There are at most three
+  submits per brief. An accepted submit is one `drafter_write()` call.
+- **Write boundary (session_user, like 0045):** only authenticator +
+  service_role inside `drafter_write` may create a non-human post. The
+  worker's SQL (`postgres`, with or without SET ROLE or the
+  `compass.drafter_write` flag) cannot create posts, edit a drafted post's
+  content or links, or write `drafter_runs`. `drafter_run_id` is
+  provenance and never changes. A person may still edit a drafted post in
+  the app; the post page flags "edited after check". Post history names
+  the drafter `drafter`, never `publisher`. A deliberate schema change by
+  the table owner is out of scope; the follow-up is a non-owner role for
+  worker SQL.
+- **Sandbox fixtures** that create worker-authored posts now insert as the
+  cluster superuser (`supabase_admin`), because the worker's own SQL can no
+  longer create them.
+- **Tests:** `npm test`, `npm run test:sandbox` (`drafter.test.sql`),
+  `npm run test:drafter` (the real handler and store over PostgREST),
+  `npm run test:posts-ui` (the badge and the drafter row).
+- **After applying 0047:** regenerate `src/lib/database.types.ts`. The
+  0047 objects were added by hand. Deploy `post-drafter` with the D1 files,
+  `src/lib/client-intelligence.ts` and `post-publisher/channel.ts` (it
+  imports them).
 
 ## Client portal (Phase 5, Sept 17 2026)
 
