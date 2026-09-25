@@ -24,8 +24,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   `0001_initial_schema.sql`. Supabase records each migration under a
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
-  migration that was missing a file — never apply it; `0042` and `0048` (Authority
-  runs) are written but **not yet applied**; `0047` (AI Drafter) was applied Sept 25 2026 as
+  migration that was missing a file — never apply it; `0042` is written but
+  **not yet applied**; `0048` (Authority runs) was applied Sept 25 2026 as
+  `20260925221705`; `0047` (AI Drafter) was applied Sept 25 2026 as
   `20260925165933`; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
   Sept 24 2026 as `20260924004839`; `0046` (the Business Profile publisher)
   was applied Sept 24 2026 as `20260924015915`). `scripts/test-portal-sandbox.sh` replays all migrations into
@@ -1023,6 +1024,38 @@ it to 0045's human review. It never approves, schedules or publishes.
   `database.types.ts` was regenerated from production. **Still to do:**
   deploy `post-drafter` with the D1 files, `src/lib/client-intelligence.ts`
   and `post-publisher/channel.ts` (it imports them).
+
+## Authority runs (D2; 0048 applied Sept 25 2026, `authority-run` NOT deployed)
+
+The deterministic Authority Engine (`supabase/functions/authority/`, D1.1)
+recorded as runs. **`authority-run`** (`handler.ts` factory, `store.ts`,
+`classify.ts` pure rules, `index.ts`): modes `version` (engine, limits,
+whether DNS resolves here), `full` (fresh read-only site inventory) and
+`refresh` (reuses the latest completed run's inventory; `409 needs_full_run`
+without one). Callers: a team JWT or `x-cron-secret`; `verify_jwt = true`.
+It answers `202 {run_id}` after `authority_begin_run` (a running run is a
+real `409 run_in_progress`), then in the background reads
+`authority_fingerprint` **before** `authority_input`, inventories, runs the
+engine, classifies and calls `authority_record_run` once; an exception
+records the run `failed`. It writes nothing else. **Degraded:** the home page
+not 2xx, ≥ 25% of requested URLs erroring (no answer or 5xx; a 404 is a
+finding), or the inventory budget exceeded; no site URL completes with no
+inventory. **Inventory limits** (`INVENTORY_LIMITS`): 150 URLs, 4 at a time,
+20 s per request, 120 s overall, 2 MB per body, 4,000 characters of text.
+**Address guard** (`authority/netguard.ts`): every request, each same-host
+redirect hop included, resolves the host first and is refused unless every
+A / AAAA answer is public (loopback, private, link-local, CGNAT, reserved,
+documentation, multicast, and IPv4 inside IPv6 all refused); no resolver
+fails closed. DNS rebinding between the check and fetch's own lookup is the
+accepted residual. Deploy with the Supabase CLI (`supabase functions deploy
+authority-run`; the gazetteer makes the bundle too large for the connector).
+Tests: `npm test` (`authority-run-handler`, `authority-netguard`),
+`npm run test:authority` (the real handler and store over the sandbox replay
++ PostgREST, fake site and DNS), the sandbox's `authority.test.sql`.
+`gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
+`_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
+reached); Authority labels a window at the cap, or a legacy window of
+exactly 250, `partial`.
 
 ## Client portal (Phase 5, Sept 17 2026)
 

@@ -402,7 +402,7 @@ test("inventory: only the site's own host, loops detected, off-site redirects re
     const [status, body, loc] = routes[u.pathname] ?? [404, ""];
     return { status, headers: { get: (h) => (h === "location" ? loc ?? null : null) }, text: async () => body ?? "" };
   };
-  const inv = await inventorySite({ site: SITE, candidates: [`${SITE}/loop`, `${SITE}/off`, "https://evil.test/y"], fetch: fake, now: () => "T" });
+  const inv = await inventorySite({ site: SITE, candidates: [`${SITE}/loop`, `${SITE}/off`, "https://evil.test/y"], fetch: fake, resolve: async () => ["93.184.216.34"], now: () => "T" });
   const by = (p) => inv.pages.find((x) => x.url === `${SITE}${p}`);
   assert.equal(by("/a").title, "A");
   assert.equal(by("/loop").redirect_loop, true);
