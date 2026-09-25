@@ -39,7 +39,7 @@ export const SECTIONS = ["fix_now", "ready", "needs_decision", "research", "bloc
 export type Section = (typeof SECTIONS)[number];
 
 // Search Console coverage of the latest window. gsc-sync asks for at most
-// GSC_ROW_CAP query+page rows per window without pagination, so a window at
+// a capped number of query+page rows per window (gsc-paging.ts), so a window at
 // the cap is partial: demand numbers are a floor, never exhaustive.
 export type GscCoverage = "complete" | "partial" | "unknown";
 

@@ -374,6 +374,12 @@ test("Search Console coverage: partial at the gsc-sync row cap, complete below, 
   assert.ok(capped.judgments.some((j) => /coverage is partial/.test(j)));
   assert.match(renderMarkdown(capped), /coverage \*\*partial\*\*/);
   assert.equal(run((i) => { i.authority.gsc = []; }).sources.gsc.coverage, "unknown");
+  // After gsc-sync paging: a large window below the cap is complete; one at the cap is partial.
+  const win = (n) => (i) => { i.authority.gsc = Array.from({ length: n }, (_, k) => ({ query: `q${k}`, page: `${SITE}/`, impressions: 1, clicks: 0, avg_position: 9, period_start: "2026-08-26", period_end: "2026-09-22", keyword_id: null })); };
+  assert.equal(run(win(800)).sources.gsc.coverage, "complete", "a paged window below the cap");
+  const atCap = run(win(10000));
+  assert.equal(atCap.sources.gsc.coverage, "partial", "the safety cap reached");
+  assert.equal(atCap.sources.gsc.row_cap, 10000);
 });
 
 test("inventory: only the site's own host, loops detected, off-site redirects recorded not followed", async () => {
