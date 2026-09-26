@@ -14,6 +14,7 @@ const tabs = [
   { label: "Tasks", segment: "tasks" },
   { label: "Foundation", segment: "foundation" },
   { label: "Intelligence", segment: "intelligence" },
+  { label: "Authority", segment: "authority" },
   { label: "Services", segment: "services" },
   { label: "Keywords", segment: "keywords" },
   { label: "Content", segment: "content" },
