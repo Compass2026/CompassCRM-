@@ -203,9 +203,14 @@ test("banners: running, and a newer degraded or failed attempt that did not repl
   assert.equal(d.banners[0].kind, "degraded");
   assert.match(d.banners[0].body, /home page answered 503/);
   const running = { ...failed, id: "r1", status: "running", finished_at: null, error: null };
-  const r = buildAuthorityView(input({ runs: [running, ...runs()] }));
+  const r = buildAuthorityView(input({ runs: [running, ...runs()], now: new Date("2026-09-27T10:05:00Z") }));
   assert.equal(r.header.state, "running");
   assert.equal(r.banners[0].kind, "running");
+  assert.match(r.banners[0].body, /updates when it finishes/);
+  const s = buildAuthorityView(input({ runs: [running, ...runs()], now: new Date("2026-09-27T10:15:00Z") }));
+  assert.equal(s.header.state, "stuck", "15 minutes running is stuck");
+  assert.deepEqual(s.banners.map((b) => b.kind), ["stuck"]);
+  assert.match(s.banners[0].body, /Starting a new analysis marks it failed/);
   const older = { ...failed, created_at: "2026-09-20T10:00:00Z", finished_at: "2026-09-20T10:00:03Z" };
   assert.deepEqual(buildAuthorityView(input({ runs: [...runs(), older] })).banners, [], "an older failure is history, not a banner");
 });

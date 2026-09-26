@@ -8,19 +8,23 @@ import {
   type PillarLite,
   type RunRow,
 } from "@/lib/authority-view";
+import { controlsState } from "@/lib/authority-controls";
 import { listTeamMembers } from "@/lib/team";
 import { AuthorityBanners, AuthorityHeader, AuthoritySummary } from "@/components/authority/authority-header";
 import { AuthoritySections } from "@/components/authority/authority-sections";
 import { AuthorityRunHistory } from "@/components/authority/authority-run-history";
+import { AuthorityRunControls } from "@/components/authority/authority-run-controls";
 
-// Read-only view of the Authority Engine's recorded runs (0048). Every read is
-// the signed-in teammate's own (RLS: is_team()); nothing here starts a run or
-// changes an opportunity.
+// The Authority Engine's recorded runs (0048). Every read is the signed-in
+// teammate's own (RLS: is_team()). The only controls start a full analysis or
+// a refresh through the authority-run function; nothing here changes an
+// opportunity.
 export default async function AuthorityPage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [latestQ, runsQ, statesQ, eventsQ, members] = await Promise.all([
+  const [clientQ, latestQ, runsQ, statesQ, eventsQ, members] = await Promise.all([
+    supabase.from("clients").select("status").eq("id", clientId).maybeSingle(),
     supabase.from("authority_latest").select("*").eq("client_id", clientId).maybeSingle(),
     supabase
       .from("authority_runs")
@@ -41,7 +45,7 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
     listTeamMembers(supabase),
   ]);
 
-  const failure = latestQ.error ?? runsQ.error ?? statesQ.error ?? eventsQ.error;
+  const failure = clientQ.error ?? latestQ.error ?? runsQ.error ?? statesQ.error ?? eventsQ.error;
   let report: { opportunities: Opportunity[]; pillars: PillarLite[] } | null = null;
   let reportError: string | null = null;
   const latest = latestQ.data as unknown as LatestRow | null;
@@ -63,42 +67,39 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
     );
   }
 
+  const runs = (runsQ.data ?? []) as unknown as RunRow[];
+  const now = new Date();
   const view = buildAuthorityView({
     latest,
-    runs: (runsQ.data ?? []) as unknown as RunRow[],
+    runs,
+    now,
     opportunities: report?.opportunities ?? [],
     pillars: report?.pillars ?? [],
     states: (statesQ.data ?? []) as unknown as OpportunityState[],
     events: (eventsQ.data ?? []) as unknown as OpportunityEvent[],
     members,
   });
-
-  if (view.empty) {
-    return (
-      <div className="space-y-6">
-        <section className="surface-tint space-y-2 p-4 sm:p-6" data-empty="authority">
-          <p className="eyebrow">Authority</p>
-          <h2 className="text-xl font-bold tracking-tight">No Authority analysis yet</h2>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            An analysis reads this client&apos;s governed facts, keywords and Search Console data with a read-only
-            snapshot of their public site, and ranks what to fix, what content is supported and what needs a
-            decision. It has not been run for this client. Analyses are started by the team; none runs on its own
-            from this page.
-          </p>
-        </section>
-        <AuthorityBanners banners={view.banners} />
-        {view.history.length > 0 && <AuthorityRunHistory rows={view.history} />}
-      </div>
-    );
-  }
+  const controls = (
+    <AuthorityRunControls
+      clientId={clientId}
+      state={controlsState({
+        clientStatus: clientQ.data?.status ?? null,
+        hasCompletedRun: !!latest?.run_id,
+        staleSections: latest?.stale_sections ?? [],
+        inventoryStale: !!latest?.inventory_stale,
+        runs,
+        now,
+      })}
+    />
+  );
 
   return (
     <div className="space-y-6">
-      <AuthorityHeader header={view.header!} />
+      <AuthorityHeader header={view.header} controls={controls} />
       <AuthorityBanners banners={view.banners} />
-      <AuthoritySummary summary={view.summary} />
-      <AuthoritySections sections={view.sections} />
-      <AuthorityRunHistory rows={view.history} />
+      {!view.empty && <AuthoritySummary summary={view.summary} />}
+      {!view.empty && <AuthoritySections sections={view.sections} />}
+      {view.history.length > 0 && <AuthorityRunHistory rows={view.history} />}
     </div>
   );
 }
