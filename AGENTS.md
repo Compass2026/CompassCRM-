@@ -1061,9 +1061,24 @@ cadence, decisions as Services / Markets / Intent conflicts, research (first
 three), Blocked grouped by the prerequisite that unblocks it, Avoid collapsed;
 details, gates and lifecycle behind a collapsed Details. Reads are the
 teammate's own (`authority_latest`, `authority_runs`,
-`authority_opportunity_state`, `authority_opportunity_events`). No run,
-refresh or decision controls yet. Browser check: `npm run
-test:authority-ui`; screenshots in `docs/screenshots/authority/`.
+`authority_opportunity_state`, `authority_opportunity_events`). Browser
+check: `npm run test:authority-ui`; screenshots in `docs/screenshots/authority/`.
+**Run controls** (`src/lib/authority-controls.ts` rules,
+`src/app/authority-actions.ts`, `authority-run-controls.tsx` /
+`authority-run-watcher.tsx`): **Run Full Analysis** and **Refresh** call the
+deployed `authority-run` with the signed-in teammate's JWT (the action checks
+`team_members` first and writes nothing itself). Refresh is disabled with no
+completed run, a changed site record or a snapshot over 14 days old, and is
+the primary when only CRM / Search Console data changed; both are disabled
+while a run is running, and a run left `running` 15 minutes is shown as stuck
+(the next begin fails it). The watcher polls the run's status every 3 s only
+while it runs, pauses while the tab is hidden, stops after 3 minutes, and
+refreshes the page once when the run finishes (completed / degraded / failed
+message). A 409 `run_in_progress` shows and watches the running run; a
+timeout, network error or 5xx says it could not confirm the start and
+refreshes the page to show a run if one began. No decisions, scheduling or
+Drafter hand-off. Browser check: `npm run test:authority-controls-ui` (the
+real handler and store behind the gateway, fake site and DNS).
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of

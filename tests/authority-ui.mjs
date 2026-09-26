@@ -275,20 +275,23 @@ try {
   await shot("authority-attempts-desktop");
   ok("Degraded and failed runs: listed in history with their reasons, a failed-attempt banner, results still from the completed refresh");
 
-  // 7. Running: a run in progress is shown; nothing on the page starts one.
+  // 7. Running: a run in progress is shown and both run buttons wait for it;
+  // there are no decision controls (tests/authority-controls-ui.mjs covers the buttons).
   const running = await recordRun({ mode: "refresh", via: "worker", status: "running" });
   await page.goto(url, { waitUntil: "networkidle" });
   assert.ok(await page.locator('[data-banner="running"]').isVisible());
-  assert.equal(await page.getByRole("button", { name: /Run|Refresh|Accept|Dismiss/ }).count(), 0, "no run, refresh or decision controls in this checkpoint");
+  assert.ok(await page.locator('[data-run="full"]').isDisabled());
+  assert.ok(await page.locator('[data-run="refresh"]').isDisabled());
+  assert.equal(await page.getByRole("button", { name: /Accept|Dismiss/ }).count(), 0, "no decision controls");
   await rpc("authority_record_run", { p_run_id: running, p: { status: "failed", error: "test cleanup" } });
-  ok("Running: a run in progress shows a banner; the page has no run, refresh or decision buttons");
+  ok("Running: a run in progress shows a banner and disables both run buttons; no decision buttons");
 
   // 8. No run yet.
   await page.goto(`${base}/clients/${CLIENT_A}/authority`, { waitUntil: "networkidle" });
   assert.ok(await page.locator('[data-empty="authority"]').isVisible());
   assert.ok((await page.locator('[data-empty="authority"]').innerText()).includes("No Authority analysis yet"));
   await shot("authority-empty-desktop");
-  ok("No run yet: the empty state explains the analysis and starts nothing");
+  ok("No run yet: the empty state explains the analysis; nothing runs until a teammate presses Run Full Analysis");
 
   assert.deepEqual(errors, []);
 

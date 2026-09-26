@@ -350,10 +350,21 @@ export type Header = {
   pagesChecked: number | null;
   urlsRequested: number | null;
   gsc: { coverage: string; rows: number; window: string | null; cap: number | null } | null;
-  state: "current" | "stale" | "running" | "attempt_problem";
+  state: "current" | "stale" | "running" | "stuck" | "attempt_problem";
 };
 
-export type Banner = { kind: "running" | "stale" | "degraded" | "failed"; title: string; body: string };
+export type Banner = { kind: "running" | "stuck" | "stale" | "degraded" | "failed"; title: string; body: string };
+
+// A run still "running" after this long is stuck: authority_begin_run (0048)
+// fails it when the next run begins, so starting a new run clears it.
+export const STUCK_AFTER_MS = 15 * 60 * 1000;
+
+export function activeRun<R extends Pick<RunRow, "id" | "mode" | "created_at" | "status">>(runs: R[], now: Date): { running: R | null; stuck: R | null } {
+  const r = runs.find((x) => x.status === "running");
+  if (!r) return { running: null, stuck: null };
+  const age = now.getTime() - new Date(r.created_at).getTime();
+  return age >= STUCK_AFTER_MS ? { running: null, stuck: r } : { running: r, stuck: null };
+}
 
 // ── Run history ─────────────────────────────────────────────────────────────
 
@@ -428,7 +439,7 @@ export type AuthorityView = {
 
 export function buildAuthorityView(input: ViewInput): AuthorityView {
   const { latest, runs } = input;
-  const running = runs.find((r) => r.status === "running") ?? null;
+  const { running, stuck } = activeRun(runs, input.now ?? new Date());
   const currentRun = latest ? runs.find((r) => r.id === latest.run_id) ?? null : null;
   // The newest attempt that did not become the current result.
   const latestFinished = runs.find((r) => r.status !== "running") ?? null;
@@ -438,7 +449,10 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
   const st = staleness(latest);
   const banners: Banner[] = [];
   if (running) {
-    banners.push({ kind: "running", title: "Analysis running", body: `A ${running.mode} analysis started ${formatWhen(running.created_at)}. Reload the page for the result; results below are from the last completed run.` });
+    banners.push({ kind: "running", title: "Analysis running", body: `A ${running.mode} analysis started ${formatWhen(running.created_at)}. This page updates when it finishes; results below are from the last completed run.` });
+  }
+  if (stuck) {
+    banners.push({ kind: "stuck", title: "An analysis appears stuck", body: `A ${stuck.mode} analysis started ${formatWhen(stuck.created_at)} and never finished. Starting a new analysis marks it failed and runs again.` });
   }
   if (problem) {
     const why = problem.status === "failed" ? problem.error ?? "no reason recorded" : (problem.health?.reasons ?? []).join("; ") || "no reason recorded";
@@ -486,7 +500,7 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
     pagesChecked: latest.sources?.inventory?.pages ?? null,
     urlsRequested: currentRun?.inventory_pages ?? null,
     gsc: gsc ? { coverage: gsc.coverage, rows: gsc.rows, window: windowLabel(gsc.window), cap: gsc.coverage === "partial" ? gsc.row_cap : null } : null,
-    state: running ? "running" : problem ? "attempt_problem" : st.stale ? "stale" : "current",
+    state: running ? "running" : stuck ? "stuck" : problem ? "attempt_problem" : st.stale ? "stale" : "current",
   };
 
   return { empty: false, header, banners, staleness: st, summary, sections, history };

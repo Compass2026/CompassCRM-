@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { AuthorityView } from "@/lib/authority-view";
 import { cn } from "@/lib/utils";
@@ -7,14 +8,45 @@ const stateBadge: Record<string, { label: string; className: string }> = {
   current: { label: "Current", className: "bg-green-100 text-green-800 border-green-200" },
   stale: { label: "Stale", className: "bg-amber-100 text-amber-800 border-amber-200" },
   running: { label: "Running", className: "bg-royal-50 text-royal-700 border-royal-100" },
+  stuck: { label: "Run appears stuck", className: "bg-red-100 text-red-800 border-red-200" },
   attempt_problem: { label: "Latest attempt did not complete", className: "bg-red-100 text-red-800 border-red-200" },
 };
 
-export function AuthorityHeader({ header }: { header: NonNullable<AuthorityView["header"]> }) {
+// The top panel, with or without a completed analysis. One component in both
+// cases, with the controls always its last child, so the run controls (and
+// the message they are showing) survive the page switching from the empty
+// state to the results when the first analysis finishes.
+export function AuthorityHeader({ header, controls }: { header: AuthorityView["header"]; controls?: ReactNode }) {
+  return (
+    <section
+      className={cn("surface-tint p-4 sm:p-6", header ? "space-y-3" : "space-y-2")}
+      aria-label={header ? "Latest analysis" : "No Authority analysis yet"}
+      data-empty={header ? undefined : "authority"}
+    >
+      <p className="eyebrow">Authority</p>
+      {header ? <HeaderBody header={header} /> : <EmptyBody />}
+      {controls}
+    </section>
+  );
+}
+
+function EmptyBody() {
+  return (
+    <>
+      <h2 className="text-xl font-bold tracking-tight">No Authority analysis yet</h2>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        An analysis reads this client&apos;s governed facts, keywords and Search Console data with a read-only
+        snapshot of their public site, and ranks what to fix, what content is supported and what needs a
+        decision. It has not been run for this client. Analyses are started by the team; none runs on its own.
+      </p>
+    </>
+  );
+}
+
+function HeaderBody({ header }: { header: NonNullable<AuthorityView["header"]> }) {
   const state = stateBadge[header.state];
   return (
-    <section className="surface-tint space-y-3 p-4 sm:p-6" aria-label="Latest analysis">
-      <p className="eyebrow">Authority</p>
+    <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="text-xl font-bold tracking-tight">Last analyzed {header.lastAnalyzed}</h2>
         <Badge variant="outline" className={state.className} data-state={header.state}>{state.label}</Badge>
@@ -37,9 +69,10 @@ export function AuthorityHeader({ header }: { header: NonNullable<AuthorityView[
       </ul>
       <p className="max-w-3xl text-sm text-muted-foreground">
         What the Authority Engine found on the latest completed analysis: what to fix, what content the governed facts
-        already support, and what a person must decide. Read-only; nothing here changes the site, the CRM or Google.
+        already support, and what a person must decide. An analysis only reads: nothing here changes the site, the
+        CRM or Google.
       </p>
-    </section>
+    </>
   );
 }
 
@@ -69,6 +102,7 @@ export function AuthoritySummary({ summary }: { summary: AuthorityView["summary"
 
 const bannerStyles: Record<string, string> = {
   running: "border-royal-100 bg-royal-50 text-navy-900",
+  stuck: "border-red-200 bg-red-50 text-red-900",
   stale: "border-amber-200 bg-amber-50 text-amber-950",
   degraded: "border-amber-200 bg-amber-50 text-amber-950",
   failed: "border-red-200 bg-red-50 text-red-900",
