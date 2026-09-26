@@ -282,9 +282,9 @@ try {
   assert.ok(await page.locator('[data-banner="running"]').isVisible());
   assert.ok(await page.locator('[data-run="full"]').isDisabled());
   assert.ok(await page.locator('[data-run="refresh"]').isDisabled());
-  assert.equal(await page.getByRole("button", { name: /Approve market|Confirm service|Set service page|Create task/ }).count(), 0, "no decision or CRM controls (lifecycle actions: tests/authority-lifecycle-ui.mjs)");
+  assert.equal(await page.getByRole("button", { name: /Set service page|Re-home|Record page|Map keyword/ }).count(), 0, "no CRM reconciliation controls yet (decisions: tests/authority-decisions-ui.mjs)");
   await rpc("authority_record_run", { p_run_id: running, p: { status: "failed", error: "test cleanup" } });
-  ok("Running: a run in progress shows a banner and disables both run buttons; no decision or CRM buttons");
+  ok("Running: a run in progress shows a banner and disables both run buttons; no CRM reconciliation buttons");
 
   // 8. No run yet.
   await page.goto(`${base}/clients/${CLIENT_A}/authority`, { waitUntil: "networkidle" });

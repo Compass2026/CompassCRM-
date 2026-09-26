@@ -127,6 +127,7 @@ export type Database = {
           status: string
           status_reason: string | null
           suppressed: boolean
+          suppression_basis: Json | null
           target_path: string | null
           tier: string
           topic: string
@@ -154,6 +155,7 @@ export type Database = {
           status?: string
           status_reason?: string | null
           suppressed?: boolean
+          suppression_basis?: Json | null
           target_path?: string | null
           tier: string
           topic: string
@@ -181,6 +183,7 @@ export type Database = {
           status?: string
           status_reason?: string | null
           suppressed?: boolean
+          suppression_basis?: Json | null
           target_path?: string | null
           tier?: string
           topic?: string
@@ -4328,17 +4331,35 @@ export type Database = {
         Returns: string
       }
       authority_caller_is_service: { Args: never; Returns: boolean }
+      authority_apply: {
+        Args: {
+          p_action: string
+          p_expected?: Json
+          p_opportunity_id: string
+          p_payload?: Json
+        }
+        Returns: Json
+      }
       authority_decide: {
         Args: { p_opportunity_id: string; p_payload?: Json; p_verb: string }
         Returns: Json
       }
       authority_fingerprint: { Args: { p_client_id: string }; Returns: Json }
       authority_input: { Args: { p_client_id: string }; Returns: Json }
+      authority_lock_opportunity: {
+        Args: { p_opportunity_id: string }
+        Returns: Database["public"]["Tables"]["authority_opportunities"]["Row"]
+      }
       authority_link_state: {
         Args: {
           l: Database["public"]["Tables"]["authority_opportunity_links"]["Row"]
         }
         Returns: string
+      }
+      authority_norm_place: { Args: { p: string }; Returns: string }
+      authority_recommendation_basis: {
+        Args: { p_key: string; p_opportunity: Json }
+        Returns: Json
       }
       authority_record_run: {
         Args: { p: Json; p_run_id: string }

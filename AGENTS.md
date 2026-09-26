@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0048` (Authority runs) was applied Sept 25 2026 as
+  **not yet applied**; `0049` (Authority decisions) is written but **not yet
+  applied**; `0048` (Authority runs) was applied Sept 25 2026 as
   `20260925221705`; `0047` (AI Drafter) was applied Sept 25 2026 as
   `20260925165933`; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
   Sept 24 2026 as `20260924004839`; `0046` (the Business Profile publisher)
@@ -1094,6 +1095,33 @@ status chip; dismissed and never-recommend items move to a collapsed
 shows the history with who, reason and date. Offboarded clients get no
 actions. Tests: `tests/authority-lifecycle.test.mjs`, the sandbox's
 `authority_lifecycle.test.sql`, `npm run test:authority-lifecycle-ui`.
+**Decisions** (Decisions PR B; migration **0049, not yet applied**;
+`src/lib/authority-decisions.ts` rules, `src/app/authority-decision-actions.ts`,
+`opportunity-decisions.tsx`): Keep current intent / Change to the
+recommended intent, Approve / Decline / Later for a market, Confirm service /
+Not offered, and Create task, each previewed (before → after) and applied by
+`authority_apply(opportunity, action, payload, expected)`, which runs with
+the caller's rights (RLS on every client-data write), refuses anyone but a
+signed-in teammate through PostgREST, locks the opportunity
+(`authority_lock_opportunity`) and the rows it writes, refuses with
+SQLSTATE `AU409` when anything differs from the preview, and writes the
+client-data change with its decision / suppression / link through
+`authority_decide` in one transaction. Keep current intent is a suppression
+bound to the reviewed recommendation (`authority_opportunities.suppression_basis`
+= keyword, stored and assessed intent); `authority_record_run` lifts it only
+when a later completed run recommends something materially different.
+Decline market and Not offered write no Client Intelligence record and say
+so ("Authority decision only; no Client Intelligence record created.").
+Create task inserts a TOM task keyed `authority:<opportunity key>` and links
+it atomically. Markets act only on ticked rows (at most 25, one transaction
+each, one refresh). After a client-data change (set intent, approve market,
+confirm service) the app starts an Authority **refresh** (never a full
+crawl; skipped with a note when the site snapshot needs one), followed by
+the page's shared run watcher (`authority-run-context.tsx`). No website,
+`change_log`, Drafter or portal writes. Tests: `tests/authority-decisions.test.mjs`,
+the sandbox's `authority_apply.test.sql`, `npm run test:authority-decisions-ui`
+(a real engine run over a fake site). `database.types.ts` carries the 0049
+objects by hand until it is regenerated after the migration is applied.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of

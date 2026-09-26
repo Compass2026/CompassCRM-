@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { startAuthorityRunAction } from "@/app/authority-actions";
 import type { ControlsState, Mode } from "@/lib/authority-controls";
 import { cn } from "@/lib/utils";
-import { useAuthorityRunWatcher } from "./authority-run-watcher";
+import { useAuthorityRun } from "./authority-run-context";
 
 type Message = { tone: "success" | "warning" | "error" | "info"; text: string };
 
@@ -25,20 +25,9 @@ const messageStyles: Record<Message["tone"], string> = {
 export function AuthorityRunControls({ clientId, state }: { clientId: string; state: ControlsState }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<Message | null>(null);
-  const [startedId, setStartedId] = useState<string | null>(null);
-  const [watching, setWatching] = useState(false);
+  const { message, setMessage, watch, watching } = useAuthorityRun();
   const [starting, setStarting] = useState<Mode | null>(null);
   const clicked = useRef(false);
-
-  // The run to watch: the one this click started, else one the page found running.
-  const watchId = startedId ?? state.running?.id ?? null;
-  useAuthorityRunWatcher(clientId, watchId, (m) => {
-    setMessage(m);
-    setStartedId(null);
-    setWatching(false);
-    clicked.current = false;
-  });
 
   const busy = pending || watching || !!state.running;
 
@@ -50,14 +39,12 @@ export function AuthorityRunControls({ clientId, state }: { clientId: string; st
     startTransition(async () => {
       const o = await startAuthorityRunAction(clientId, mode);
       setStarting(null);
+      clicked.current = false;
       if (o.kind === "started" || (o.kind === "running" && o.runId)) {
-        setStartedId(o.runId);
-        setWatching(true);
-        setMessage({ tone: "info", text: o.text });
+        watch(o.runId!, { tone: "info", text: o.text });
         router.refresh();
         return;
       }
-      clicked.current = false;
       setMessage({ tone: o.kind === "uncertain" ? "warning" : "error", text: o.text });
       // Maybe it started: the page shows (and then watches) a running run if so.
       if (o.kind === "uncertain" || o.kind === "running") router.refresh();

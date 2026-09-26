@@ -212,13 +212,17 @@ type CardCtx = {
   members: ViewInput["members"];
 };
 
-function workflowOf(st: OpportunityState | null, members: ViewInput["members"]): Workflow | null {
+function workflowOf(st: OpportunityState | null, members: ViewInput["members"], events: OpportunityEvent[]): Workflow | null {
   if (!st || !st.status) return null;
   const who = st.decided_by ? members.find((m) => m.id === st.decided_by) : null;
+  // A suppression bound to the reviewed recommendation (0049) names it in its event.
+  const lastSuppressed = [...events].reverse().find((e) => e.kind === "suppressed");
+  const basis = st.suppressed ? (lastSuppressed?.detail as { basis?: { stored?: string; assessed?: string } } | undefined)?.basis : undefined;
   return {
     opportunityId: st.id, status: st.status, suppressed: !!st.suppressed, dismissed_until: st.dismissed_until ?? null,
     effective: (st.effective_status ?? st.status) as EffectiveStatus, reason: st.status_reason ?? null,
     decidedBy: who ? who.name ?? who.email : null, decidedAt: st.decided_at ?? null,
+    keptIntent: basis?.stored && basis.assessed ? { stored: basis.stored, assessed: basis.assessed } : null,
   };
 }
 
@@ -242,7 +246,7 @@ function toCard(o: Opportunity, ctx: CardCtx): Card {
     eligibleFrom: o.eligible_from,
     provenance: provenanceCounts(o.reasons),
     lifecycle: st?.effective_status ?? null,
-    workflow: workflowOf(st, ctx.members),
+    workflow: workflowOf(st, ctx.members, st ? ctx.eventsById.get(st.id) ?? [] : []),
     details: {
       objective: o.objective,
       reasons: o.reasons,

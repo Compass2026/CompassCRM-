@@ -14,11 +14,13 @@ import { AuthorityBanners, AuthorityHeader, AuthoritySummary } from "@/component
 import { AuthoritySections } from "@/components/authority/authority-sections";
 import { AuthorityRunHistory } from "@/components/authority/authority-run-history";
 import { AuthorityRunControls } from "@/components/authority/authority-run-controls";
+import { AuthorityRunProvider } from "@/components/authority/authority-run-context";
 
 // The Authority Engine's recorded runs (0048). Every read is the signed-in
 // teammate's own (RLS: is_team()). The controls start a full analysis or a
-// refresh (authority-run) and move an opportunity through its lifecycle
-// (authority_decide); nothing here changes client data.
+// refresh (authority-run), move an opportunity through its lifecycle
+// (authority_decide) and apply a decision with its client-data change
+// (authority_apply, 0049), which starts a refresh afterwards.
 export default async function AuthorityPage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;
   const supabase = await createClient();
@@ -79,33 +81,31 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
     events: (eventsQ.data ?? []) as unknown as OpportunityEvent[],
     members,
   });
-  const controls = (
-    <AuthorityRunControls
-      clientId={clientId}
-      state={controlsState({
-        clientStatus: clientQ.data?.status ?? null,
-        hasCompletedRun: !!latest?.run_id,
-        staleSections: latest?.stale_sections ?? [],
-        inventoryStale: !!latest?.inventory_stale,
-        runs,
-        now,
-      })}
-    />
-  );
+  const controlState = controlsState({
+    clientStatus: clientQ.data?.status ?? null,
+    hasCompletedRun: !!latest?.run_id,
+    staleSections: latest?.stale_sections ?? [],
+    inventoryStale: !!latest?.inventory_stale,
+    runs,
+    now,
+  });
+  const controls = <AuthorityRunControls clientId={clientId} state={controlState} />;
 
   return (
-    <div className="space-y-6">
-      <AuthorityHeader header={view.header} controls={controls} />
-      <AuthorityBanners banners={view.banners} />
-      {!view.empty && <AuthoritySummary summary={view.summary} />}
-      {!view.empty && (
-        <AuthoritySections
-          sections={view.sections}
-          dismissed={view.dismissed}
-          clientId={clientQ.data?.status === "offboarded" ? null : clientId}
-        />
-      )}
-      {view.history.length > 0 && <AuthorityRunHistory rows={view.history} />}
-    </div>
+    <AuthorityRunProvider clientId={clientId} runningId={controlState.running?.id ?? null}>
+      <div className="space-y-6">
+        <AuthorityHeader header={view.header} controls={controls} />
+        <AuthorityBanners banners={view.banners} />
+        {!view.empty && <AuthoritySummary summary={view.summary} />}
+        {!view.empty && (
+          <AuthoritySections
+            sections={view.sections}
+            dismissed={view.dismissed}
+            clientId={clientQ.data?.status === "offboarded" ? null : clientId}
+          />
+        )}
+        {view.history.length > 0 && <AuthorityRunHistory rows={view.history} />}
+      </div>
+    </AuthorityRunProvider>
   );
 }

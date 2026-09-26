@@ -27,6 +27,7 @@ export type Workflow = WorkflowSnapshot & {
   reason: string | null;
   decidedBy: string | null;   // a teammate's name
   decidedAt: string | null;   // ISO
+  keptIntent?: { stored: string; assessed: string } | null; // a suppression bound to the reviewed recommendation (0049)
 };
 
 // ── Dates (the agency's calendar, America/Chicago) ──────────────────────────
@@ -57,6 +58,9 @@ export function statusChip(w: Workflow | null): Chip | null {
     case "completed": return { label: "Completed", tone: "green", title: "Linked work is done." };
     case "resolved": return { label: "Resolved", tone: "green" };
     case "dismissed":
+      if (w.suppressed && w.keptIntent) {
+        return { label: `Intent kept: ${w.keptIntent.stored}`, tone: "slate", title: `Returns if the analysis stops reading it as ${w.keptIntent.assessed}.` };
+      }
       return w.suppressed
         ? { label: "Never recommend", tone: "slate", title: w.reason ?? undefined }
         : { label: `Dismissed until ${formatDay(w.dismissed_until)}`, tone: "amber", title: w.reason ?? undefined };

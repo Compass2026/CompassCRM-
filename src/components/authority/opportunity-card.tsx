@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { statusChip } from "@/lib/authority-lifecycle";
 import { TAG_LABEL, type Card } from "@/lib/authority-view";
 import { cn } from "@/lib/utils";
+import { OpportunityDecisions } from "./opportunity-decisions";
 import { OpportunityLifecycle } from "./opportunity-lifecycle";
 import { pageStateStyles, tagStyles, tierStyles, toneStyles } from "./tones";
 
@@ -161,6 +162,7 @@ export function OpportunityCard({ card, compact = false, clientId = null }: { ca
           “{card.workflow.reason}”{card.workflow.decidedBy ? ` — ${card.workflow.decidedBy}` : ""}
         </p>
       )}
+      {clientId && card.workflow && <OpportunityDecisions clientId={clientId} card={card} />}
       {clientId && card.workflow && <OpportunityLifecycle clientId={clientId} topic={card.topic} workflow={card.workflow} />}
       <Details card={card} />
     </article>

@@ -123,11 +123,11 @@ begin
   -- authority_decide (0048) refuses anyone but a signed-in teammate (and the
   -- authority-run function for accept / link): D11c here, P3 / P5 in
   -- authority.test.sql.
-  perform t.ok('A7 authenticated can execute exactly authority_decide, is_team, portal_client_id, portal_seen, secret_present, social_post_readiness among security-definer functions',
+  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_lock_opportunity, is_team, portal_client_id, portal_seen, secret_present, social_post_readiness among security-definer functions',
     (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
      where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
        and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['authority_decide', 'is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness']);
+    = array['authority_decide', 'authority_lock_opportunity', 'is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness']);
 
   -- portal_client and portal_site are simple views, so Postgres would let a
   -- write through them (as the owner, bypassing RLS) if a grant allowed it.
@@ -269,12 +269,15 @@ begin
   perform t.ok('D11 portal user cannot call any other security-definer function',
     not exists (select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
       where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
-        and p.proname not in ('authority_decide', 'is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness')
+        and p.proname not in ('authority_decide', 'authority_lock_opportunity', 'is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness')
         and has_function_privilege(p.oid, 'execute')));
   perform t.ok('D11b social_post_readiness refuses a portal user',
     t.try('select social_post_readiness(gen_random_uuid())') = '42501');
   perform t.ok('D11c authority_decide refuses a portal user',
     t.try('select authority_decide(gen_random_uuid(), ''accept'')') = '42501');
+  perform t.ok('D11d authority_lock_opportunity and authority_apply (0049) refuse a portal user',
+    t.try('select authority_lock_opportunity(gen_random_uuid())') = '42501'
+    and t.try('select authority_apply(gen_random_uuid(), ''create_task'', ''{}'', ''{}'')') = '42501');
   perform t.ok('D12 secret_present() answers false for a portal user', not secret_present('SANDBOX_SECRET'));
   perform t.ok('D13 get_brand_profile() (security invoker) reveals nothing to a portal user',
     coalesce(get_brand_profile(cb)::text, '') not like '%Sandbox Client B%'
