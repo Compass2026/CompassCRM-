@@ -18,6 +18,7 @@
     "test:authority": "UI_SPEC=tests/authority-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority-ui": "UI_SPEC=tests/authority-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority-controls-ui": "UI_SPEC=tests/authority-controls-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:authority-lifecycle-ui": "UI_SPEC=tests/authority-lifecycle-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"
   },
   "dependencies": {

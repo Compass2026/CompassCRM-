@@ -223,7 +223,7 @@ try {
   const card = page.locator('[data-key="page_improvement:home"]');
   await card.locator("details > summary", { hasText: "Details" }).click();
   const details = await card.innerText();
-  for (const s of ["Reasons", "Gates", "no_new_claims", "page_improvement:home", "First seen", "created"]) assert.ok(details.includes(s), `details show ${s}`);
+  for (const s of ["Reasons", "Gates", "no_new_claims", "page_improvement:home", "First seen", "First reported"]) assert.ok(details.includes(s), `details show ${s}`);
   ok("Opening Tier B shows its 16 cards; Details shows reasons, gates, key and lifecycle history");
 
   // 3. Run history: both runs, the current one marked.
@@ -282,9 +282,9 @@ try {
   assert.ok(await page.locator('[data-banner="running"]').isVisible());
   assert.ok(await page.locator('[data-run="full"]').isDisabled());
   assert.ok(await page.locator('[data-run="refresh"]').isDisabled());
-  assert.equal(await page.getByRole("button", { name: /Accept|Dismiss/ }).count(), 0, "no decision controls");
+  assert.equal(await page.getByRole("button", { name: /Approve market|Confirm service|Set service page|Create task/ }).count(), 0, "no decision or CRM controls (lifecycle actions: tests/authority-lifecycle-ui.mjs)");
   await rpc("authority_record_run", { p_run_id: running, p: { status: "failed", error: "test cleanup" } });
-  ok("Running: a run in progress shows a banner and disables both run buttons; no decision buttons");
+  ok("Running: a run in progress shows a banner and disables both run buttons; no decision or CRM buttons");
 
   // 8. No run yet.
   await page.goto(`${base}/clients/${CLIENT_A}/authority`, { waitUntil: "networkidle" });

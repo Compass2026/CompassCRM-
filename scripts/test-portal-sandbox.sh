@@ -87,3 +87,6 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter.test.sql"
 # worker (postgres), the authority-run function (authenticator + service_role),
 # a person, a portal contact, a stranger and anon.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority.test.sql"
+# Authority lifecycle actions (accept / release / dismiss 30-60-90 / never
+# recommend / reopen) through authority_decide, on a client of its own.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_lifecycle.test.sql"

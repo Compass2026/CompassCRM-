@@ -16,9 +16,9 @@ import { AuthorityRunHistory } from "@/components/authority/authority-run-histor
 import { AuthorityRunControls } from "@/components/authority/authority-run-controls";
 
 // The Authority Engine's recorded runs (0048). Every read is the signed-in
-// teammate's own (RLS: is_team()). The only controls start a full analysis or
-// a refresh through the authority-run function; nothing here changes an
-// opportunity.
+// teammate's own (RLS: is_team()). The controls start a full analysis or a
+// refresh (authority-run) and move an opportunity through its lifecycle
+// (authority_decide); nothing here changes client data.
 export default async function AuthorityPage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;
   const supabase = await createClient();
@@ -34,11 +34,11 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
       .limit(10),
     supabase
       .from("authority_opportunity_state")
-      .select("id, key, effective_status, present, first_seen_run_id, last_seen_run_id")
+      .select("id, key, effective_status, present, first_seen_run_id, last_seen_run_id, status, suppressed, dismissed_until, status_reason, decided_by, decided_at")
       .eq("client_id", clientId),
     supabase
       .from("authority_opportunity_events")
-      .select("opportunity_id, run_id, created_at, kind, actor_kind")
+      .select("opportunity_id, run_id, created_at, kind, actor_kind, actor_id, detail")
       .eq("client_id", clientId)
       .order("created_at", { ascending: true })
       .limit(2000),
@@ -98,7 +98,13 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
       <AuthorityHeader header={view.header} controls={controls} />
       <AuthorityBanners banners={view.banners} />
       {!view.empty && <AuthoritySummary summary={view.summary} />}
-      {!view.empty && <AuthoritySections sections={view.sections} />}
+      {!view.empty && (
+        <AuthoritySections
+          sections={view.sections}
+          dismissed={view.dismissed}
+          clientId={clientQ.data?.status === "offboarded" ? null : clientId}
+        />
+      )}
       {view.history.length > 0 && <AuthorityRunHistory rows={view.history} />}
     </div>
   );
