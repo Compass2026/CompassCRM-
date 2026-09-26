@@ -1,0 +1,74 @@
+name: Deploy Supabase Edge Function
+
+on:
+  workflow_dispatch:
+    inputs:
+      function_name:
+        description: "Edge Function to deploy"
+        required: true
+        type: choice
+        options:
+          - authority-run
+          - gsc-sync
+          - post-drafter
+          - post-publisher
+          - google-ops
+          - rank-sync
+          - brightlocal-sync
+          - site-push
+          - brand-scan
+          - client-provision
+          - portal-invite
+          - stripe-billing
+      expected_sha:
+        description: "Exact main commit SHA approved for deployment"
+        required: true
+        type: string
+      confirm:
+        description: "Type DEPLOY to confirm production deployment"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production-${{ inputs.function_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirm == 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Verify approved commit
+        shell: bash
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [ "$ACTUAL_SHA" != "${{ inputs.expected_sha }}" ]; then
+            echo "::error::main moved. Expected ${{ inputs.expected_sha }}, found $ACTUAL_SHA"
+            exit 1
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy selected Edge Function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: iokcopiyzajigvhwexhe
+          FUNCTION_NAME: ${{ inputs.function_name }}
+        shell: bash
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" || {
+            echo "::error::SUPABASE_ACCESS_TOKEN repository secret is not configured"
+            exit 1
+          }
+          supabase functions deploy "$FUNCTION_NAME" --project-ref "$PROJECT_REF" --use-api
