@@ -1052,6 +1052,18 @@ authority-run`; the gazetteer makes the bundle too large for the connector).
 Tests: `npm test` (`authority-run-handler`, `authority-netguard`),
 `npm run test:authority` (the real handler and store over the sandbox replay
 + PostgREST, fake site and DNS), the sandbox's `authority.test.sql`.
+**Authority tab** (`/clients/[clientId]/authority`, read-only checkpoint):
+the latest completed run as a work queue. `src/lib/authority-view.ts` (pure;
+`tests/authority-view.test.mjs` over the trimmed production Lucas export in
+`tests/fixtures/authority-lucas-run.json`) groups and labels what the engine
+decided: Fix Now by tier (A open, B / C collapsed), Ready now vs waiting on
+cadence, decisions as Services / Markets / Intent conflicts, research (first
+three), Blocked grouped by the prerequisite that unblocks it, Avoid collapsed;
+details, gates and lifecycle behind a collapsed Details. Reads are the
+teammate's own (`authority_latest`, `authority_runs`,
+`authority_opportunity_state`, `authority_opportunity_events`). No run,
+refresh or decision controls yet. Browser check: `npm run
+test:authority-ui`; screenshots in `docs/screenshots/authority/`.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of

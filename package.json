@@ -16,6 +16,7 @@
     "test:publisher": "UI_SPEC=tests/publisher-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:drafter": "UI_SPEC=tests/drafter-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority": "UI_SPEC=tests/authority-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:authority-ui": "UI_SPEC=tests/authority-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"
   },
   "dependencies": {
