@@ -1,7 +1,9 @@
 import { Badge } from "@/components/ui/badge";
+import { statusChip } from "@/lib/authority-lifecycle";
 import { TAG_LABEL, type Card } from "@/lib/authority-view";
 import { cn } from "@/lib/utils";
-import { pageStateStyles, tagStyles, tierStyles } from "./tones";
+import { OpportunityLifecycle } from "./opportunity-lifecycle";
+import { pageStateStyles, tagStyles, tierStyles, toneStyles } from "./tones";
 
 const pageStateLabel: Record<string, string> = {
   live: "live", missing: "missing", redirects: "redirects", redirect_loop: "redirect loop", error: "error", not_checked: "not checked",
@@ -87,7 +89,9 @@ function Details({ card }: { card: Card }) {
           <div>
             <p className="font-semibold">History</p>
             <ul className="mt-1 space-y-0.5">
-              {d.history.map((h, i) => <li key={i}>{h.when} · {h.kind} · {h.actor}</li>)}
+              {d.history.map((h, i) => (
+                <li key={i} data-event={h.kind} className="break-words">{h.when} · {h.text} · <span className="text-muted-foreground">{h.actor}</span></li>
+              ))}
             </ul>
           </div>
         )}
@@ -100,8 +104,10 @@ function Details({ card }: { card: Card }) {
   );
 }
 
-// One opportunity. compact: a decision row (Needs Decision, Avoid).
-export function OpportunityCard({ card, compact = false }: { card: Card; compact?: boolean }) {
+// One opportunity. compact: a decision row (Needs Decision, Avoid). With a
+// clientId the card carries its lifecycle actions (teammates, not offboarded).
+export function OpportunityCard({ card, compact = false, clientId = null }: { card: Card; compact?: boolean; clientId?: string | null }) {
+  const chip = statusChip(card.workflow);
   const facts = [
     card.keyword && (
       <span key="kw">
@@ -128,8 +134,15 @@ export function OpportunityCard({ card, compact = false }: { card: Card; compact
             Tier {card.tier}
           </Badge>
         )}
-        {card.lifecycle && card.lifecycle !== "open" && (
-          <Badge variant="outline" className="h-5 px-1.5 text-[11px]">{card.lifecycle}</Badge>
+        {chip && (
+          <Badge
+            variant="outline"
+            className={cn("h-5 px-1.5 text-[11px]", toneStyles[chip.tone].card, toneStyles[chip.tone].text)}
+            title={chip.title}
+            data-status={card.lifecycle ?? undefined}
+          >
+            {chip.label}
+          </Badge>
         )}
       </div>
       <p className="mt-1 text-sm text-foreground/90">{card.reason}</p>
@@ -143,6 +156,12 @@ export function OpportunityCard({ card, compact = false }: { card: Card; compact
       {card.blocker && (
         <p className="mt-2 border-l-2 border-amber-400 pl-2 text-xs text-amber-900">{card.blocker}</p>
       )}
+      {card.workflow?.reason && card.lifecycle === "dismissed" && (
+        <p className="mt-1.5 text-xs text-muted-foreground" data-dismiss-reason>
+          “{card.workflow.reason}”{card.workflow.decidedBy ? ` — ${card.workflow.decidedBy}` : ""}
+        </p>
+      )}
+      {clientId && card.workflow && <OpportunityLifecycle clientId={clientId} topic={card.topic} workflow={card.workflow} />}
       <Details card={card} />
     </article>
   );

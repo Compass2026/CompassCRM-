@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { OpportunityCard } from "./opportunity-card";
 import { toneStyles } from "./tones";
 
-function GroupBlock({ group, compact }: { group: Group; compact: boolean }) {
+function GroupBlock({ group, compact, clientId }: { group: Group; compact: boolean; clientId: string | null }) {
   return (
     <details id={group.id} data-group={group.id} open={group.open} className="group/grp rounded-xl bg-muted/40 ring-1 ring-border">
       <summary className="flex cursor-pointer select-none flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-sm">
@@ -18,13 +18,16 @@ function GroupBlock({ group, compact }: { group: Group; compact: boolean }) {
         )}
       </summary>
       <div className="space-y-2 px-2 pb-2 sm:px-3 sm:pb-3">
-        {group.cards.map((c) => <OpportunityCard key={c.key} card={c} compact={compact} />)}
+        {group.cards.map((c) => <OpportunityCard key={c.key} card={c} compact={compact} clientId={clientId} />)}
       </div>
     </details>
   );
 }
 
-export function AuthoritySections({ sections }: { sections: AuthorityView["sections"] }) {
+// clientId: set when the viewer may decide (lifecycle actions on each card).
+export function AuthoritySections({ sections, dismissed, clientId = null }: {
+  sections: AuthorityView["sections"]; dismissed: AuthorityView["dismissed"]; clientId?: string | null;
+}) {
   return (
     <div className="space-y-8">
       {sections.map((s) => {
@@ -34,7 +37,7 @@ export function AuthoritySections({ sections }: { sections: AuthorityView["secti
           // Always collapsed: guidance, not work.
           return (
             <section key={s.section} id="section-avoid" aria-label="Avoid">
-              {s.groups.map((g) => <GroupBlock key={g.id} group={{ ...g, label: "Avoid — do not target", open: false }} compact />)}
+              {s.groups.map((g) => <GroupBlock key={g.id} group={{ ...g, label: "Avoid — do not target", open: false }} compact clientId={clientId} />)}
             </section>
           );
         }
@@ -52,12 +55,17 @@ export function AuthoritySections({ sections }: { sections: AuthorityView["secti
               <p className="text-sm text-muted-foreground">Nothing here.</p>
             ) : (
               <div className="space-y-2">
-                {s.groups.map((g) => <GroupBlock key={g.id} group={g} compact={compact} />)}
+                {s.groups.map((g) => <GroupBlock key={g.id} group={g} compact={compact} clientId={clientId} />)}
               </div>
             )}
           </section>
         );
       })}
+      {dismissed && (
+        <section id="section-dismissed" aria-label="Dismissed" className="scroll-mt-24">
+          <GroupBlock group={dismissed} compact clientId={clientId} />
+        </section>
+      )}
     </div>
   );
 }

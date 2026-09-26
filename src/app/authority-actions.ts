@@ -2,8 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentTeamMember } from "@/lib/team";
+import { getCurrentTeamMember, requireTeamMember } from "@/lib/team";
 import { isUuid } from "@/lib/tasks";
+import {
+  CHANGED_SINCE_LOADED,
+  decideErrorText,
+  doneText,
+  planDecision,
+  sameSnapshot,
+  type DecideInput,
+  type WorkflowSnapshot,
+} from "@/lib/authority-lifecycle";
 import { START_TIMEOUT_MS, startOutcome, type Mode, type RunStatus, type StartOutcome } from "@/lib/authority-controls";
 
 // The Authority tab's two controls. Neither writes to the database: starting a
@@ -64,4 +73,42 @@ export async function authorityRunStatusAction(clientId: string, runId: string):
     .maybeSingle();
   if (error) return { failure: error.message };
   return data ? { run: data as unknown as RunStatus } : { missing: true };
+}
+
+// ── Lifecycle decisions (authority_decide, 0048) ────────────────────────────
+// Accept, release, dismiss for 30 / 60 / 90 days, never recommend again and
+// reopen. Authority workflow only: no client data changes and no analysis
+// starts. The page's snapshot of the stored workflow comes back with the
+// request, so a second tab or a repeated click cannot act on a state it did
+// not see; authority_decide then enforces every rule again.
+export type DecideResult = { ok: true; text: string } | { ok: false; text: string; changed?: boolean };
+
+export async function decideAuthorityAction(clientId: string, opportunityId: string, input: DecideInput): Promise<DecideResult> {
+  if (!isUuid(clientId) || !isUuid(opportunityId)) return { ok: false, text: "Unknown opportunity." };
+  const supabase = await createClient();
+  try {
+    await requireTeamMember(supabase);
+  } catch {
+    return { ok: false, text: NOT_TEAM };
+  }
+  const plan = planDecision(input, new Date());
+  if ("error" in plan) return { ok: false, text: plan.error };
+
+  const { data: current, error: readError } = await supabase
+    .from("authority_opportunities")
+    .select("status, suppressed, dismissed_until")
+    .eq("id", opportunityId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (readError) return { ok: false, text: decideErrorText(readError) };
+  if (!current) return { ok: false, text: "This opportunity no longer exists." };
+  if (!input.expected || !sameSnapshot(current as WorkflowSnapshot, input.expected)) {
+    revalidatePath(`/clients/${clientId}/authority`);
+    return { ok: false, text: CHANGED_SINCE_LOADED, changed: true };
+  }
+
+  const { error } = await supabase.rpc("authority_decide", { p_opportunity_id: opportunityId, p_verb: plan.verb, p_payload: plan.payload });
+  revalidatePath(`/clients/${clientId}/authority`);
+  if (error) return { ok: false, text: decideErrorText(error) };
+  return { ok: true, text: doneText(plan.verb, plan.payload) };
 }

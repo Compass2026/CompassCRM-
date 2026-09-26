@@ -5,6 +5,7 @@
 // section, tier, gate and order; this only groups, labels and collapses.
 import type { Opportunity, Reason, Section, Tag } from "../../supabase/functions/authority/types.ts";
 import { AGENCY_TIME_ZONE } from "./tasks.ts";
+import { historyLine, type EffectiveStatus, type EventRow, type HistoryLine, type StoredStatus, type Workflow } from "./authority-lifecycle.ts";
 
 export type { Opportunity };
 
@@ -50,9 +51,16 @@ export type OpportunityState = {
   present: boolean;
   first_seen_run_id: string;
   last_seen_run_id: string;
+  // the stored workflow (0048); absent in older callers
+  status?: StoredStatus;
+  suppressed?: boolean;
+  dismissed_until?: string | null;
+  status_reason?: string | null;
+  decided_by?: string | null;
+  decided_at?: string | null;
 };
 
-export type OpportunityEvent = { opportunity_id: string; run_id: string | null; created_at: string; kind: string; actor_kind: string };
+export type OpportunityEvent = EventRow;
 
 export type PillarLite = {
   service_id: string;
@@ -170,7 +178,8 @@ export type Card = {
   blocker: string | null;
   eligibleFrom: string | null;
   provenance: { tag: Tag; count: number }[];
-  lifecycle: string | null;                // effective_status (read-only)
+  lifecycle: string | null;                // effective_status
+  workflow: Workflow | null;               // the stored workflow, for the chip and the lifecycle menu
   details: {
     objective: string | null;
     reasons: Reason[];
@@ -182,7 +191,7 @@ export type Card = {
     order: number[];
     firstSeen: string | null;
     lastSeen: string | null;
-    history: { when: string; kind: string; actor: string }[];
+    history: (HistoryLine & { when: string })[];
     raw: Opportunity;
   };
 };
@@ -198,7 +207,22 @@ function pageStatus(o: Opportunity, pillars: PillarLite[]): PageStatus | null {
   return { path, state: null };
 }
 
-function toCard(o: Opportunity, ctx: { pillars: PillarLite[]; stateByKey: Map<string, OpportunityState>; eventsById: Map<string, OpportunityEvent[]>; runsById: Map<string, RunRow> }): Card {
+type CardCtx = {
+  pillars: PillarLite[]; stateByKey: Map<string, OpportunityState>; eventsById: Map<string, OpportunityEvent[]>; runsById: Map<string, RunRow>;
+  members: ViewInput["members"];
+};
+
+function workflowOf(st: OpportunityState | null, members: ViewInput["members"]): Workflow | null {
+  if (!st || !st.status) return null;
+  const who = st.decided_by ? members.find((m) => m.id === st.decided_by) : null;
+  return {
+    opportunityId: st.id, status: st.status, suppressed: !!st.suppressed, dismissed_until: st.dismissed_until ?? null,
+    effective: (st.effective_status ?? st.status) as EffectiveStatus, reason: st.status_reason ?? null,
+    decidedBy: who ? who.name ?? who.email : null, decidedAt: st.decided_at ?? null,
+  };
+}
+
+function toCard(o: Opportunity, ctx: CardCtx): Card {
   const st = ctx.stateByKey.get(o.key) ?? null;
   const seen = (id: string | null | undefined) => (id ? formatWhen(ctx.runsById.get(id)?.finished_at ?? ctx.runsById.get(id)?.created_at) : null);
   return {
@@ -218,6 +242,7 @@ function toCard(o: Opportunity, ctx: { pillars: PillarLite[]; stateByKey: Map<st
     eligibleFrom: o.eligible_from,
     provenance: provenanceCounts(o.reasons),
     lifecycle: st?.effective_status ?? null,
+    workflow: workflowOf(st, ctx.members),
     details: {
       objective: o.objective,
       reasons: o.reasons,
@@ -229,7 +254,7 @@ function toCard(o: Opportunity, ctx: { pillars: PillarLite[]; stateByKey: Map<st
       order: o.order,
       firstSeen: seen(st?.first_seen_run_id),
       lastSeen: seen(st?.last_seen_run_id),
-      history: (st ? ctx.eventsById.get(st.id) ?? [] : []).map((e) => ({ when: formatWhen(e.created_at), kind: e.kind, actor: e.actor_kind })),
+      history: (st ? ctx.eventsById.get(st.id) ?? [] : []).map((e) => ({ ...historyLine(e, ctx.members), when: formatWhen(e.created_at) })),
       raw: o,
     },
   };
@@ -435,6 +460,7 @@ export type AuthorityView = {
   summary: { section: SummarySection; label: string; tone: string; count: number }[];
   sections: { section: Section; label: string; tone: string; blurb: string; count: number; groups: Group[] }[];
   history: HistoryRow[];
+  dismissed: Group | null;                 // dismissed and never-recommend items, out of their sections
 };
 
 export function buildAuthorityView(input: ViewInput): AuthorityView {
@@ -466,15 +492,20 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
 
   const history = historyRows(runs, latest?.run_id ?? null, input.members);
   if (!latest) {
-    return { empty: true, header: null, banners, staleness: st, summary: [], sections: [], history };
+    return { empty: true, header: null, banners, staleness: st, summary: [], sections: [], history, dismissed: null };
   }
 
   const stateByKey = new Map(input.states.map((s) => [s.key, s]));
   const eventsById = new Map<string, OpportunityEvent[]>();
   for (const e of input.events) eventsById.set(e.opportunity_id, [...(eventsById.get(e.opportunity_id) ?? []), e]);
   const runsById = new Map(runs.map((r) => [r.id, r]));
-  const ctx = { pillars: input.pillars, stateByKey, eventsById, runsById };
-  const cards = input.opportunities.map((o) => ({ o, c: toCard(o, ctx) }));
+  const ctx = { pillars: input.pillars, stateByKey, eventsById, runsById, members: input.members };
+  const everything = input.opportunities.map((o) => ({ o, c: toCard(o, ctx) }));
+  // A dismissed item (dated or never-recommend) leaves its section for the
+  // collapsed Dismissed group; a dismissal whose date has passed reads open again.
+  const isDismissed = (c: Card) => c.lifecycle === "dismissed";
+  const cards = everything.filter((x) => !isDismissed(x.c));
+  const dismissedCards = everything.filter((x) => isDismissed(x.c)).map((x) => x.c);
   const bySection = (s: Section) => cards.filter((x) => x.o.section === s).map((x) => x.c);
   const all = cards.map((x) => x.c);
 
@@ -489,8 +520,15 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
     return { section: s, ...SECTION_META[s], count: cs.length, groups };
   });
 
+  // What is still to act on: the engine's counts less what a person dismissed.
   const counts = latest.counts?.by_section ?? {};
-  const summary = SUMMARY_SECTIONS.map((s) => ({ section: s, label: SECTION_META[s].label, tone: SECTION_META[s].tone, count: counts[s] ?? bySection(s).length }));
+  const summary = SUMMARY_SECTIONS.map((s) => ({
+    section: s, label: SECTION_META[s].label, tone: SECTION_META[s].tone,
+    count: (counts[s] ?? everything.filter((x) => x.o.section === s).length) - dismissedCards.filter((c) => c.details.raw.section === s).length,
+  }));
+  const dismissed: Group | null = dismissedCards.length
+    ? { id: "dismissed", label: "Dismissed", count: dismissedCards.length, open: false, note: "dismissed for a while, or never recommend again", cards: dismissedCards }
+    : null;
 
   const gsc = latest.sources?.gsc;
   const header: Header = {
@@ -503,5 +541,5 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
     state: running ? "running" : stuck ? "stuck" : problem ? "attempt_problem" : st.stale ? "stale" : "current",
   };
 
-  return { empty: false, header, banners, staleness: st, summary, sections, history };
+  return { empty: false, header, banners, staleness: st, summary, sections, history, dismissed };
 }

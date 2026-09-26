@@ -1079,6 +1079,21 @@ timeout, network error or 5xx says it could not confirm the start and
 refreshes the page to show a run if one began. No decisions, scheduling or
 Drafter hand-off. Browser check: `npm run test:authority-controls-ui` (the
 real handler and store behind the gateway, fake site and DNS).
+**Lifecycle actions** (Decisions PR A; `src/lib/authority-lifecycle.ts` rules,
+`decideAuthorityAction` in `src/app/authority-actions.ts`,
+`opportunity-lifecycle.tsx`): Accept, Release, Dismiss for 30 / 60 / 90 days
+(reason required; the end date is computed server-side on the Chicago
+calendar), Never recommend again (reason plus a "permanent until reopened"
+acknowledgement) and Reopen, all through 0048's `authority_decide` as the
+signed-in teammate (`requireTeamMember` first). The request carries the
+page's snapshot of the stored workflow; a mismatch (second tab, repeat
+click) is refused as "changed since the page loaded". Authority workflow
+only: no client data changes and no analysis starts. Each card shows a
+status chip; dismissed and never-recommend items move to a collapsed
+**Dismissed** group (with Reopen) and leave the summary counts; Details
+shows the history with who, reason and date. Offboarded clients get no
+actions. Tests: `tests/authority-lifecycle.test.mjs`, the sandbox's
+`authority_lifecycle.test.sql`, `npm run test:authority-lifecycle-ui`.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of

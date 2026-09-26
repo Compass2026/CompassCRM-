@@ -237,3 +237,40 @@ test("no run yet: the empty state, with any failed attempts still listed", () =>
   assert.equal(v.banners[0].kind, "failed");
   assert.equal(buildAuthorityView(input({ latest: null, runs: [], opportunities: [] })).banners.length, 0);
 });
+
+test("lifecycle: each card carries its workflow; dismissed items leave their section for the collapsed Dismissed group", () => {
+  const key = (o) => o.key;
+  const fixA = FX.opportunities.find((o) => o.section === "fix_now" && o.tier === "A");
+  const market = FX.opportunities.find((o) => o.key.startsWith("confirm_market:"));
+  const ended = FX.opportunities.find((o) => o.section === "research");
+  const TEAM_M = { id: TEAM, name: "Sam Team", email: "sam@example.test" };
+  const states = FX.opportunities.map((o, i) => {
+    const base = { id: `s${i}`, key: o.key, effective_status: "open", present: true, first_seen_run_id: FULL.id, last_seen_run_id: REFRESH_ID, status: "open", suppressed: false, dismissed_until: null, status_reason: null, decided_by: null, decided_at: null };
+    if (key(o) === key(fixA)) return { ...base, status: "dismissed", effective_status: "dismissed", dismissed_until: "2026-12-25", status_reason: "After the photo shoot", decided_by: TEAM };
+    if (key(o) === key(market)) return { ...base, status: "dismissed", effective_status: "dismissed", suppressed: true, status_reason: "Not a market we serve", decided_by: TEAM };
+    if (key(o) === key(ended)) return { ...base, status: "dismissed", effective_status: "open", dismissed_until: "2026-09-01", status_reason: "later" };
+    return base;
+  });
+  const v = buildAuthorityView(input({ states, members: [TEAM_M] }));
+  assert.equal(v.dismissed.count, 2);
+  assert.equal(v.dismissed.open, false);
+  assert.deepEqual(v.dismissed.cards.map((c) => c.key).sort(), [fixA.key, market.key].sort());
+  const d = v.dismissed.cards.find((c) => c.key === fixA.key);
+  assert.deepEqual([d.workflow.status, d.workflow.dismissed_until, d.workflow.reason, d.workflow.decidedBy], ["dismissed", "2026-12-25", "After the photo shoot", "Sam Team"]);
+  assert.ok(!v.sections.flatMap((s) => s.groups.flatMap((g) => g.cards)).some((c) => c.key === fixA.key || c.key === market.key), "not in their sections");
+  assert.ok(card(v, ended.key), "a dismissal whose date passed reads open and stays in its section");
+  const counts = Object.fromEntries(v.summary.map((s) => [s.section, s.count]));
+  assert.deepEqual(counts, { fix_now: 22, ready: 2, needs_decision: 26, research: 3, blocked: 9 }, "the summary counts what is left to act on");
+  assert.equal(buildAuthorityView(input()).dismissed, null);
+});
+
+test("history in Details: lifecycle events with who, reason and date", () => {
+  const o = FX.opportunities[0];
+  const events = [
+    { opportunity_id: "s0", run_id: FULL.id, created_at: FULL.finished_at, kind: "created", actor_kind: "engine", actor_id: null, detail: {} },
+    { opportunity_id: "s0", run_id: null, created_at: "2026-09-26T17:00:00Z", kind: "dismissed", actor_kind: "team", actor_id: TEAM, detail: { reason: "After the photo shoot", until: "2026-12-25" } },
+  ];
+  const v = buildAuthorityView(input({ events }));
+  const h = card(v, o.key).details.history;
+  assert.deepEqual(h.map((x) => [x.text, x.actor]), [["First reported", "engine"], ["Dismissed until Dec 25, 2026 — “After the photo shoot”", "Sam Team"]]);
+});
