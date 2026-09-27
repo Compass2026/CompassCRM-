@@ -108,6 +108,7 @@ export type Database = {
           action: string
           client_id: string
           content_type: string
+          cycle_started_at: string | null
           decided_at: string | null
           decided_by: string | null
           dismissed_until: string | null
@@ -136,6 +137,7 @@ export type Database = {
           action: string
           client_id: string
           content_type: string
+          cycle_started_at?: string | null
           decided_at?: string | null
           decided_by?: string | null
           dismissed_until?: string | null
@@ -164,6 +166,7 @@ export type Database = {
           action?: string
           client_id?: string
           content_type?: string
+          cycle_started_at?: string | null
           decided_at?: string | null
           decided_by?: string | null
           dismissed_until?: string | null
@@ -1532,6 +1535,7 @@ export type Database = {
       drafter_runs: {
         Row: {
           attempt: number
+          authority_opportunity_id: string | null
           brief: Json | null
           brief_hash: string
           brief_version: string
@@ -1551,6 +1555,7 @@ export type Database = {
         }
         Insert: {
           attempt?: number
+          authority_opportunity_id?: string | null
           brief?: Json | null
           brief_hash: string
           brief_version: string
@@ -1570,6 +1575,7 @@ export type Database = {
         }
         Update: {
           attempt?: number
+          authority_opportunity_id?: string | null
           brief?: Json | null
           brief_hash?: string
           brief_version?: string
@@ -1588,6 +1594,20 @@ export type Database = {
           target?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "drafter_runs_authority_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunities"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "drafter_runs_authority_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunity_state"
+            referencedColumns: ["id", "client_id"]
+          },
           {
             foreignKeyName: "drafter_runs_client_id_fkey"
             columns: ["client_id"]
@@ -3935,6 +3955,7 @@ export type Database = {
           action: string | null
           client_id: string | null
           content_type: string | null
+          cycle_started_at: string | null
           decided_at: string | null
           decided_by: string | null
           dismissed_until: string | null
@@ -3955,6 +3976,7 @@ export type Database = {
           status: string | null
           status_reason: string | null
           suppressed: boolean | null
+          suppression_basis: Json | null
           target_path: string | null
           tier: string | null
           topic: string | null
@@ -3963,6 +3985,7 @@ export type Database = {
           action?: string | null
           client_id?: string | null
           content_type?: string | null
+          cycle_started_at?: string | null
           decided_at?: string | null
           decided_by?: string | null
           dismissed_until?: string | null
@@ -3983,6 +4006,7 @@ export type Database = {
           status?: string | null
           status_reason?: string | null
           suppressed?: boolean | null
+          suppression_basis?: Json | null
           target_path?: string | null
           tier?: string | null
           topic?: string | null
@@ -3991,6 +4015,7 @@ export type Database = {
           action?: string | null
           client_id?: string | null
           content_type?: string | null
+          cycle_started_at?: string | null
           decided_at?: string | null
           decided_by?: string | null
           dismissed_until?: string | null
@@ -4011,6 +4036,7 @@ export type Database = {
           status?: string | null
           status_reason?: string | null
           suppressed?: boolean | null
+          suppression_basis?: Json | null
           target_path?: string | null
           tier?: string | null
           topic?: string | null
@@ -4347,6 +4373,7 @@ export type Database = {
         Args: { p_opportunity_id: string; p_payload?: Json; p_verb: string }
         Returns: Json
       }
+      authority_draft_start: { Args: { p_task_id: string }; Returns: Json }
       authority_fingerprint: { Args: { p_client_id: string }; Returns: Json }
       authority_input: { Args: { p_client_id: string }; Returns: Json }
       authority_link_state: {
@@ -4361,6 +4388,7 @@ export type Database = {
           action: string
           client_id: string
           content_type: string
+          cycle_started_at: string | null
           decided_at: string | null
           decided_by: string | null
           dismissed_until: string | null
