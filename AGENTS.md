@@ -26,7 +26,7 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0050` (Authority reconciliation + `content_posts.origin`)
-  is written but **not yet applied**; `0049` (Authority decisions) was applied Sept 27 2026 as
+  was applied Sept 27 2026 as `20260927173308` (app not yet deployed with it); `0049` (Authority decisions) was applied Sept 27 2026 as
   `20260927162712` (app not yet deployed with it); `0048` (Authority runs) was applied Sept 25 2026 as
   `20260925221705`; `0047` (AI Drafter) was applied Sept 25 2026 as
   `20260925165933`; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
@@ -1127,8 +1127,8 @@ applying: the recorded SQL and every function body match the file (md5),
 grants as designed, and rolled-back probes refused the worker's SQL (also
 with a team JWT), the service role, a non-team sign-in and anon;
 `database.types.ts` was regenerated from production.
-**Reconciliation** (Decisions PR C1; migration **0050, written, NOT
-applied**; database only, no UI yet): four more `authority_apply` actions for
+**Reconciliation** (Decisions PR C1; migration **0050, applied Sept 27
+2026 as `20260927173308`**; database only, no UI yet): four more `authority_apply` actions for
 the data fixes the engine already reports, with 0049's guarantees (caller's
 RLS, teammate through PostgREST only, rows locked, `AU409` when anything
 differs from the preview, the write and its decision event in one
@@ -1157,7 +1157,13 @@ work log (`portal_work_log` filter), the Reports tab's cycle counts, the
 Content tab tracker (which notes how many pages were recorded) and the
 worker's report Activity; `authority_input` counts both. Tests: the
 sandbox's `authority_reconcile.test.sql`, `tests/authority-norm-path.test.mjs`,
-`npm run test:content-origin-ui`.
+`npm run test:content-origin-ui`. Verified on production after applying: the
+recorded SQL and every function body match the file (md5), grants as
+designed, all 8 existing `content_posts` rows are `compass`, rolled-back
+probes refused the worker's SQL (also with a team JWT), the service role,
+anon and a portal contact, and a rolled-back portal contact saw a Compass
+post but not a `site_inventory` one; no client or Authority data changed;
+`database.types.ts` was regenerated from production.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of
