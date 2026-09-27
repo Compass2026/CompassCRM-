@@ -11,6 +11,7 @@ import {
 import { controlsState } from "@/lib/authority-controls";
 import { listTeamMembers } from "@/lib/team";
 import { RECORD_KEY } from "@/lib/authority-reconcile";
+import type { DraftInfo } from "@/lib/authority-draft";
 import { normPath } from "../../../../../../supabase/functions/authority/urls";
 import { AuthorityBanners, AuthorityHeader, AuthoritySummary } from "@/components/authority/authority-header";
 import { AuthoritySections } from "@/components/authority/authority-sections";
@@ -38,7 +39,7 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
       .limit(10),
     supabase
       .from("authority_opportunity_state")
-      .select("id, key, effective_status, present, first_seen_run_id, last_seen_run_id, status, suppressed, dismissed_until, status_reason, decided_by, decided_at")
+      .select("id, key, effective_status, present, first_seen_run_id, last_seen_run_id, status, suppressed, dismissed_until, status_reason, decided_by, decided_at, cycle_started_at")
       .eq("client_id", clientId),
     supabase
       .from("authority_opportunity_events")
@@ -78,6 +79,30 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
     };
   }
 
+  // 0053: Draft with AI — each Business Profile opportunity's open request
+  // (orchestration only) and its linked posts (the lifecycle asset).
+  let drafts: Record<string, DraftInfo> | undefined;
+  const gbpStates = ((statesQ.data ?? []) as unknown as (OpportunityState & { cycle_started_at: string | null })[])
+    .filter((s) => s.key.startsWith("gbp_post:") && s.present);
+  if (report && gbpStates.length) {
+    const [reqQ, linkQ] = await Promise.all([
+      supabase.from("tasks").select("id, key, status, notes, created_at").eq("client_id", clientId)
+        .like("key", "authority\\_draft:%").in("status", ["open", "in_progress", "blocked"]),
+      supabase.from("authority_opportunity_links").select("opportunity_id, created_at, social_posts(id, review_status, publish_status)")
+        .eq("client_id", clientId).eq("kind", "social_post"),
+    ]);
+    drafts = Object.fromEntries(gbpStates.map((s) => {
+      const t = (reqQ.data ?? []).find((r) => r.key === `authority_draft:${s.id}`);
+      const posts = ((linkQ.data ?? []) as unknown as { opportunity_id: string; created_at: string; social_posts: { id: string; review_status: string; publish_status: string } | null }[])
+        .filter((l) => l.opportunity_id === s.id && l.social_posts)
+        .map((l) => ({ id: l.social_posts!.id, reviewStatus: l.social_posts!.review_status, publishStatus: l.social_posts!.publish_status, linkedAt: l.created_at }));
+      return [s.id, {
+        request: t ? { id: t.id, status: t.status as "open" | "in_progress" | "blocked", notes: t.notes, createdAt: t.created_at } : null,
+        posts, cycleStartedAt: s.cycle_started_at ?? null,
+      }];
+    }));
+  }
+
   if (failure || reportError) {
     return (
       <p role="alert" className="callout border-red-200 bg-red-50 text-red-900">
@@ -98,6 +123,7 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
     events: (eventsQ.data ?? []) as unknown as OpportunityEvent[],
     members,
     recorded,
+    drafts,
   });
   const controlState = controlsState({
     clientStatus: clientQ.data?.status ?? null,

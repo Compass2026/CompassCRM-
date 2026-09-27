@@ -7,6 +7,7 @@ import type { Opportunity, Reason, Section, Tag } from "../../supabase/functions
 import { AGENCY_TIME_ZONE } from "./tasks.ts";
 import { historyLine, type EffectiveStatus, type EventRow, type HistoryLine, type StoredStatus, type Workflow } from "./authority-lifecycle.ts";
 import { RECORD_KEY, reconcileAction, recordProgress, type ReconcileAction, type RecordProgress } from "./authority-reconcile.ts";
+import { draftControl, type DraftControl, type DraftInfo } from "./authority-draft.ts";
 
 export type { Opportunity };
 
@@ -81,6 +82,9 @@ export type ViewInput = {
   // C2: content_posts' paths (normalised against the run's site) and how many
   // pages the record-content opportunity has recorded (its content_post links).
   recorded?: { paths: string[]; linked: number };
+  // 0053: per opportunity id, the open Draft with AI request and the linked
+  // Business Profile posts (the lifecycle asset).
+  drafts?: Record<string, DraftInfo>;
   now?: Date;
 };
 
@@ -186,6 +190,7 @@ export type Card = {
   workflow: Workflow | null;               // the stored workflow, for the chip and the lifecycle menu
   reconcile: ReconcileAction | null;       // C2: the reconciliation this data fix takes
   progress: RecordProgress;                // C2: record-content while pages remain (overrides the chip)
+  draft: DraftControl | null;              // 0053: Draft with AI on a Ready Business Profile post
   details: {
     objective: string | null;
     reasons: Reason[];
@@ -216,6 +221,7 @@ function pageStatus(o: Opportunity, pillars: PillarLite[]): PageStatus | null {
 type CardCtx = {
   pillars: PillarLite[]; stateByKey: Map<string, OpportunityState>; eventsById: Map<string, OpportunityEvent[]>; runsById: Map<string, RunRow>;
   members: ViewInput["members"]; recorded: ViewInput["recorded"];
+  drafts: ViewInput["drafts"]; today: string; runId: string;
 };
 
 function workflowOf(st: OpportunityState | null, members: ViewInput["members"], events: OpportunityEvent[]): Workflow | null {
@@ -257,6 +263,7 @@ function toCard(o: Opportunity, ctx: CardCtx): Card {
     progress: o.key === RECORD_KEY && ctx.recorded
       ? recordProgress({ candidates: o.candidate_paths, recorded: new Set(ctx.recorded.paths), linked: ctx.recorded.linked })
       : null,
+    draft: st ? draftControl(o, st.status ?? null, ctx.drafts?.[st.id], ctx.today, ctx.runId) : null,
     details: {
       objective: o.objective,
       reasons: o.reasons,
@@ -515,7 +522,10 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
   const eventsById = new Map<string, OpportunityEvent[]>();
   for (const e of input.events) eventsById.set(e.opportunity_id, [...(eventsById.get(e.opportunity_id) ?? []), e]);
   const runsById = new Map(runs.map((r) => [r.id, r]));
-  const ctx = { pillars: input.pillars, stateByKey, eventsById, runsById, members: input.members, recorded: input.recorded };
+  const ctx = {
+    pillars: input.pillars, stateByKey, eventsById, runsById, members: input.members, recorded: input.recorded,
+    drafts: input.drafts, runId: latest.run_id ?? "", today: new Intl.DateTimeFormat("en-CA", { timeZone: AGENCY_TIME_ZONE }).format(input.now ?? new Date()),
+  };
   const everything = input.opportunities.map((o) => ({ o, c: toCard(o, ctx) }));
   // A dismissed item (dated or never-recommend) leaves its section for the
   // collapsed Dismissed group; a dismissal whose date has passed reads open again.

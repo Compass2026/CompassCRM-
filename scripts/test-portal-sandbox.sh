@@ -104,3 +104,6 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_home_clea
 # 0052: every reconciliation write is bound to its preview (target / destination
 # URLs, a Home re-home's page groups); map_keywords refuses location_unapproved.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_bind_preview.test.sql"
+# 0053: Authority → AI Drafter hand-off (request_draft, retry-safe starts,
+# drafter_write's Authority refusals, the linked post's lifecycle, recurring cycles).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_drafter_handoff.test.sql"

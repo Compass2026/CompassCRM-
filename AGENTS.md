@@ -25,7 +25,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0052` (reconciliation writes bound to their preview) was
+  **not yet applied**; `0053` (Authority → AI Drafter hand-off) was applied Sept
+  27 2026 as `20260927224214` (the app and `post-drafter` v2 that use it are
+  not deployed yet); `0052` (reconciliation writes bound to their preview) was
   applied Sept 27 2026 as `20260927212625` (app deployed with it: PR #77); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
   `20260927193245`;
   `0050` (Authority reconciliation + `content_posts.origin`)
@@ -986,7 +988,7 @@ out of scope.
   replay + PostgREST, fake Google) and the sandbox's
   `publisher_runs.test.sql`.
 
-## AI Drafter (0047 applied Sept 25 2026 as `20260925165933`; `post-drafter` NOT deployed)
+## AI Drafter (0047 applied Sept 25 2026 as `20260925165933`; `post-drafter` v1 deployed Sept 25 2026)
 
 Drafts one Business Profile post from governed Client Intelligence and hands
 it to 0045's human review. It never approves, schedules or publishes.
@@ -1026,9 +1028,85 @@ it to 0045's human review. It never approves, schedules or publishes.
   service_role / authenticator / authenticated + team JWT, SET SESSION
   AUTHORIZATION, editing a drafted post's copy, button or claims, rewriting
   or deleting a run, approving). The loader returns all 9 clients.
-  `database.types.ts` was regenerated from production. **Still to do:**
-  deploy `post-drafter` with the D1 files, `src/lib/client-intelligence.ts`
-  and `post-publisher/channel.ts` (it imports them).
+  `database.types.ts` was regenerated from production. `post-drafter` v1
+  was deployed Sept 25 2026 (Supabase deployment version 1, with the D1
+  files, `src/lib/client-intelligence.ts` and `post-publisher/channel.ts`
+  it imports); the two Lucas pilot runs used it.
+
+## Authority → AI Drafter hand-off (0053 applied Sept 27 2026 as `20260927224214`; `post-drafter` v2 and the app NOT deployed)
+
+A teammate asks the AI Drafter for the Business Profile post a Ready
+Authority opportunity recommends. Authority chooses what to create; the
+Drafter decides whether and how it can be written. Nothing is approved,
+scheduled or published by any of it.
+
+- **Request (0053, `authority_apply('request_draft')`):** a signed-in
+  teammate only. One CLAUDE task keyed `authority_draft:<opportunity id>`
+  (a partial unique index allows one open or blocked request per
+  opportunity; a repeat request reuses it, a blocked one reopens), the
+  opportunity accepted, the team's `request_draft` decision event naming the
+  task, and the worker started through `authority_draft_start(task)` →
+  `fire_foundation_worker` (reason `Authority draft request <task id>`). A
+  failed start is retried by `retry_failed_fires()`; a missed one is
+  restarted from the card's **Restart** (debounced two minutes). No path
+  creates a second request, run or post.
+- **The request task is orchestration only** — never an Authority link.
+  The linked `social_post` is the lifecycle: in review → in progress,
+  rejected → draftable again, approved / published → completed for the
+  current cycle. `authority_opportunities.cycle_started_at`: when the engine
+  reports a recurring post eligible again and this cycle's post is done,
+  `authority_record_run` starts a new cycle (a `reopened` event, "new
+  cadence cycle"); only links since then count.
+- **`post-drafter` v2** (`supabase/functions/post-drafter/authority.ts`,
+  handler v2, `features: ["authority_mode", "duplicate_recent_post"]`):
+  brief / check / submit take `authority_opportunity_id` and **no target**
+  (a target alongside it is refused); `expected_run_id` is an optional
+  expected version, checked against the opportunity. The target (service,
+  keyword, intent, button, standard post, no photo) is derived from the
+  opportunity the latest completed run reports. Every mode checks the
+  opportunity first (present and current, not dismissed, Ready / create,
+  `eligible_from` passed, nothing in review or approved this cycle, no
+  Business Profile post for the service and intent in the last 21 days),
+  then builds the Drafter's own brief exactly as v1, refuses a disagreement
+  (`target_mismatch` — the page, key, keyword or button; `evidence_ineligible`
+  — Authority evidence the Drafter does not allow) and adds
+  `brief.authority` (run, objective, gap, reasons, preferred claims = the
+  analysis's evidence, which become the recommended claims, and the recent
+  posts' openings). check and submit add the `duplicate_recent_post` lint
+  (same opening, or half the five-word phrasing of any Business Profile post
+  of the last 90 days, rejected ones included). submit needs the teammate's
+  open request, then one `drafter_write` with the opportunity and run, which
+  repeats every check under a row lock and links the post and closes the
+  request in the same transaction. Authority conflicts answer 409
+  `authority_conflict` with a `code` and record **no** Drafter run; the
+  Drafter's own refusals (stale brief, lint, database) are recorded as in v1
+  with `drafter_runs.authority_opportunity_id`. Without
+  `authority_opportunity_id` the function behaves exactly as v1.
+- **Worker:** the skill's "Authority draft request" playbook claims the task,
+  runs brief → check → submit with the opportunity id, and on any conflict or
+  refusal sets the task `blocked` with the code in its notes; it never
+  drafts another target and never refreshes Authority.
+- **Authority tab:** **Draft with AI** on a Ready, due Business Profile post
+  (`src/lib/authority-draft.ts`, `src/app/authority-draft-actions.ts`,
+  `opportunity-draft.tsx`): requested (with Restart), blocked (the worker's
+  reason, Draft with AI again), the draft in review (link to the post),
+  completed this cycle, or not yet due.
+- **Tests:** `tests/post-drafter-authority.test.mjs`,
+  `tests/authority-draft.test.mjs`, `tests/drafter-authority-lucas.test.mjs`
+  (the production Lucas snapshot, read-only), the sandbox's
+  `authority_drafter_handoff.test.sql`, `npm run test:drafter-authority`
+  (real handler and store over PostgREST), `npm run test:authority-draft-ui`.
+  Read-only dry run over a production snapshot:
+  `node scripts/drafter-authority-dry-run.mjs <snapshot.json> [draft.txt]`
+  (brief and check only; its store refuses writes).
+- **Lucas (Sept 27 2026, dry run only):** the Roof Replacement transactional
+  opportunity (`gbp_post:4288b96c-…:transactional`, keyword "get a roofing
+  quote wentzville", run `082e8e2a-…`) builds a brief; both evidence claims
+  ("Roofing, siding, guttering, fascia and soffit contractor", "Installs
+  Owens Corning Duration shingles") are Drafter-eligible and recommended;
+  no request exists. **No Lucas draft has been requested, no worker run
+  started and no post created.** To go live: deploy `post-drafter` v2,
+  deploy the app, then a teammate presses Draft with AI.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
