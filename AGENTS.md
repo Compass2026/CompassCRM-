@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0051` (atomic Home re-home cleanup) is written but **not yet applied**;
+  **not yet applied**; `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
+  `20260927193245`;
   `0050` (Authority reconciliation + `content_posts.origin`)
   was applied Sept 27 2026 as `20260927173308`; `0049` (Authority decisions) was applied Sept 27 2026 as
   `20260927162712` (app not yet deployed with it); `0048` (Authority runs) was applied Sept 25 2026 as
@@ -1186,7 +1187,8 @@ decision, with a `home_destination` gate; `report.home` summarises. Lucas
 Wentzville city page), 3 service-specific; all 68 opportunity keys kept, one
 `confirm_owner` added; no role changes. Tests: `tests/authority-home.test.mjs`
 over `tests/fixtures/authority-lucas-home.json`, `npm run test:authority`,
-`npm run test:authority-ui`. **0051** (not applied) makes 0050's Home re-home
+`npm run test:authority-ui`. **0051** (applied Sept 27 2026 as `20260927193245`; recorded SQL and the
+`authority_apply` body match the file by md5) makes 0050's Home re-home
 atomic: the keyword leaves every service / hub page group's supporting list
 in the same transaction that gives it to Home; a service's primary keyword is
 refused; the sandbox's `authority_home_cleanup.test.sql`. Apply 0051 before
