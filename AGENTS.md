@@ -26,11 +26,11 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0052` (reconciliation writes bound to their preview) was
-  applied Sept 27 2026 as `20260927212625` (app not yet deployed with it); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
+  applied Sept 27 2026 as `20260927212625` (app deployed with it: PR #77); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
   `20260927193245`;
   `0050` (Authority reconciliation + `content_posts.origin`)
   was applied Sept 27 2026 as `20260927173308`; `0049` (Authority decisions) was applied Sept 27 2026 as
-  `20260927162712` (app not yet deployed with it); `0048` (Authority runs) was applied Sept 25 2026 as
+  `20260927162712` (app deployed with it); `0048` (Authority runs) was applied Sept 25 2026 as
   `20260925221705`; `0047` (AI Drafter) was applied Sept 25 2026 as
   `20260925165933`; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
   Sept 24 2026 as `20260924004839`; `0046` (the Business Profile publisher)
@@ -1030,7 +1030,7 @@ it to 0045's human review. It never approves, schedules or publishes.
   deploy `post-drafter` with the D1 files, `src/lib/client-intelligence.ts`
   and `post-publisher/channel.ts` (it imports them).
 
-## Authority runs (D2; 0048 applied Sept 25 2026, `authority-run` NOT deployed)
+## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
 The deterministic Authority Engine (`supabase/functions/authority/`, D1.1)
 recorded as runs. **`authority-run`** (`handler.ts` factory, `store.ts`,
@@ -1053,7 +1053,10 @@ A / AAAA answer is public (loopback, private, link-local, CGNAT, reserved,
 documentation, multicast, and IPv4 inside IPv6 all refused); no resolver
 fails closed. DNS rebinding between the check and fetch's own lookup is the
 accepted residual. Deploy with the Supabase CLI (`supabase functions deploy
-authority-run`; the gazetteer makes the bundle too large for the connector).
+authority-run`; the gazetteer makes the bundle too large for the connector),
+through the `deploy-supabase-function.yml` workflow (`function_name`,
+`expected_sha` = main's HEAD, `confirm = DEPLOY`); check the deployed engine
+with body `{"mode": "version"}` before any run.
 Tests: `npm test` (`authority-run-handler`, `authority-netguard`),
 `npm run test:authority` (the real handler and store over the sandbox replay
 + PostgREST, fake site and DNS), the sandbox's `authority.test.sql`.
@@ -1167,8 +1170,8 @@ probes refused the worker's SQL (also with a team JWT), the service role,
 anon and a portal contact, and a rolled-back portal contact saw a Compass
 post but not a `site_inventory` one; no client or Authority data changed;
 `database.types.ts` was regenerated from production.
-**Home ownership** (C3, engine `authority-v1.2`; engine only, no schema;
-`authority-run` **not yet redeployed** with it): the approved Home page group
+**Home ownership** (C3, introduced in engine `authority-v1.2`; engine only, no
+schema; in production since Sept 27 2026, now as part of v1.3): the approved Home page group
 may govern broad brand / category keywords (`authority/home.ts`, pure).
 Considered only for keywords the Home group lists or that are mapped to a
 service yet target `/` — never an arbitrary unmapped keyword — and only when
@@ -1194,13 +1197,13 @@ atomic: the keyword leaves every service / hub page group's supporting list
 in the same transaction that gives it to Home; a service's primary keyword is
 refused; the sandbox's `authority_home_cleanup.test.sql`. Apply 0051 before
 any real Home re-home.
-**Reconciliation UI** (C2; migration **0052, applied Sept 27 2026 as
+**Reconciliation UI** (C2; **live since Sept 27 2026**: PR #77 merged as
+`261829d` and deployed to Vercel production; migration **0052 applied as
 `20260927212625`** — recorded SQL and the `authority_apply` body match the
 file by md5, grants unchanged, rolled-back probes refused the worker's SQL
 (also with a team JWT), the service role, anon, a portal contact and a
-non-team sign-in, types unchanged;
-engine `authority-v1.3`, `authority-run` **not yet redeployed** with it):
-a **Reconcile** control on each of the four data-fix cards (Set service page,
+non-team sign-in, types unchanged; `authority-run` redeployed from that
+commit and reporting engine **`authority-v1.3`**): a **Reconcile** control on each of the four data-fix cards (Set service page,
 Re-home keywords, Record pages, Map keywords; `opportunity-reconcile.tsx`),
 rules in `src/lib/authority-reconcile.ts` (pure), `previewReconcileAction` /
 `applyReconcileAction` in `src/app/authority-decision-actions.ts`. The
@@ -1228,6 +1231,15 @@ still lists pages, the card reads "Partly recorded · N remaining" (or
 lifecycle says completed once any page is linked; the analysis confirms
 completion by no longer reporting it. Tests: `tests/authority-reconcile.test.mjs`,
 the sandbox's `authority_bind_preview.test.sql`, `npm run test:authority-reconcile-ui`.
+**Lucas after the rollout** (one Refresh, run `082e8e2a-94cf-4b03-b385-2c7cd7fb239b`,
+v1.3, reusing the stored inventory): 69 opportunities with the same keys,
+sections, tiers, gaps, reasons and keyword roles as the v1.2 run; 14
+`home_eligible`, 1 `confirm_owner` (Ownership) decision; 5 structured
+`candidate_paths` on record-content; 13 of 26 unmapped keywords blocked by
+the unapproved-market rule. **No real reconciliation has been performed for
+Lucas yet**: no service page set, keyword re-homed or mapped, page recorded,
+market decided or Authority task created; Lucas's keywords, services, page
+groups, locations, content posts and Authority workflow are unchanged.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of
