@@ -1,0 +1,1649 @@
+{
+ "input": {
+  "asOf": "2026-09-27",
+  "board": {
+   "id": "ebbe3fac-77b5-4e84-9fe4-8ece69d458d2",
+   "status": "approved",
+   "version": 1,
+   "hard_rules": [
+    "No street address in ad copy or social bios beyond what is already public on BBB/Yelp \u2014 lead with service area, not a storefront.",
+    "Never quote or imply pricing.",
+    "Never use \"storm chaser,\" \"cheapest,\" \"out-of-town,\" or high-pressure/limited-time language.",
+    "Only one phone number: (636) 459-9328.",
+    "Never claim a specific founding year, response-time promise, or material offering (cedar shake/slate) until confirmed \u2014 currently unverified.",
+    "Never fabricate a testimonial, review count, or project photo \u2014 use only sourced claims."
+   ],
+   "standing_cta": "Request a quote"
+  },
+  "brand": {
+   "tagline": "Built on local roots. Driven by trust.",
+   "audience": "Homeowners in Wentzville and surrounding communities who need roofing, siding or gutter services, including homeowners dealing with aging roofs or hail and wind damage.",
+   "voice_tone": "Warm, straight-talking and local. Speaks like a knowledgeable neighbor. Confident and reassuring during storm season. Do not state or imply specific prices, discounts, savings or cost promises unless approved and supported by evidence.",
+   "ai_guidance": "Use only locations currently approved in Client Intelligence. Phone: (636) 459-9328. Use the post's appropriate native CTA and link to the relevant approved service page. Use only sourced or confirmed claims. Follow all hard rules concerning pricing, street addresses, founding year, response times, materials, reviews and ratings. Do not infer unsupported business facts. Keep the lighting division governed by its separate approved lighting guidance.",
+   "positioning": "Wentzville roofing, siding and gutter contractor serving Wentzville and surrounding communities. One local company from inspection and estimate to final sign-off, backed by a Lifetime Workmanship Warranty.",
+   "words_we_use": [
+    "local",
+    "straightforward",
+    "Lifetime Workmanship Warranty",
+    "Owens Corning",
+    "inspection",
+    "estimate",
+    "final sign-off"
+   ],
+   "words_we_avoid": [
+    "storm chaser",
+    "cheapest",
+    "out-of-town",
+    "limited time offer",
+    "high-pressure language"
+   ],
+   "content_pillars": [
+    "Storm damage & insurance help",
+    "Roof replacement done right",
+    "Siding, gutters, soffit & fascia",
+    "Local pride / Wentzville community",
+    "Reviews & project showcases",
+    "Holiday & landscape lighting (new division)"
+   ],
+   "differentiators": "Owens Corning Preferred Contractor\nLifetime Workmanship Warranty\nOne local company from inspection and estimate to final sign-off"
+  },
+  "assets": [
+   {
+    "id": "c387232b-b9fe-490c-be0a-39f6b686a8ca",
+    "kind": "logo_icon",
+    "label": "Site icon (192px)",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/1788301800729-0.png"
+   },
+   {
+    "id": "81a697a7-63ce-4517-8565-98e8f9dfe545",
+    "kind": "logo_primary",
+    "label": "Logo",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/1788301801819-1.png"
+   },
+   {
+    "id": "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1",
+    "kind": "photo",
+    "label": "Brick and stone two story home with a new architectural shingle roof and well maintained front yard",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337326454-0.jpg"
+   },
+   {
+    "id": "57d63a06-12d6-4a92-9950-495736f385a8",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337326798-1.jpg"
+   },
+   {
+    "id": "d3bb7aac-fbab-4ea5-89c4-23bdcec54328",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337327118-2.jpg"
+   },
+   {
+    "id": "03437409-1c0e-4129-9533-3e078329f5a1",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337327439-3.jpg"
+   },
+   {
+    "id": "9f599e07-a041-46a8-b7d3-b782097900d5",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337327719-4.jpg"
+   },
+   {
+    "id": "3b515e61-f713-454a-a746-96853d0487f0",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337327992-5.jpg"
+   },
+   {
+    "id": "c097fe30-bbc9-4457-99f0-7311c534a57c",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337328181-6.jpg"
+   },
+   {
+    "id": "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337328364-7.jpg"
+   },
+   {
+    "id": "db8e7148-8f13-47c4-9ecf-47053df220e6",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337328640-8.jpg"
+   },
+   {
+    "id": "1979f6aa-accb-46b0-919a-7af48d7d6f87",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337328879-9.jpg"
+   },
+   {
+    "id": "db6eec44-9c4d-4313-82d7-d27e5dfd9bda",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337329087-10.jpg"
+   },
+   {
+    "id": "8dfb59dd-1aab-4f2f-9200-1aff067b5396",
+    "kind": "photo",
+    "label": "Photo from the home page",
+    "storage_path": "102d3b20-2795-44ae-bd64-d1e43916291c/scan/photo-1789337329451-11.jpg"
+   }
+  ],
+  "claims": [
+   {
+    "id": "25fc4471-38d3-4349-93e2-e76d7b7b2955",
+    "claim": "Offers cedar shake and slate roofing in addition to asphalt",
+    "source": null,
+    "status": "unverified"
+   },
+   {
+    "id": "28ba6126-91e5-478b-8aae-2ec2ee9ea111",
+    "claim": "Specializes in storm damage repair and insurance claims assistance",
+    "source": "https://leadsmartinc.com/services/roofing-services/roofing-contractor/missouri/wentzville/lucas-construction-and-roofing/",
+    "status": "sourced"
+   },
+   {
+    "id": "64d13e2d-c6d0-417d-b5c8-b3f368fb2077",
+    "claim": "Lifetime Workmanship Warranty",
+    "source": "https://lucasconstructionmo.com/services/roof-replacement",
+    "status": "sourced"
+   },
+   {
+    "id": "7c2a2d65-8242-4734-851d-fa3d6f58911e",
+    "claim": "BBB Accredited Business since 6/30/2025",
+    "source": "https://www.bbb.org/us/mo/wentzville/profile/residential-roofing/lucas-construction-roofing-0734-1000023653",
+    "status": "sourced"
+   },
+   {
+    "id": "818761df-41bb-41ab-afab-6ecbe4779803",
+    "claim": "Owens Corning Preferred Contractor",
+    "source": "https://www.owenscorning.com/en-us/roofing/contractors/contractor-profile/234319",
+    "status": "sourced"
+   },
+   {
+    "id": "a1ba3d4a-a619-4a61-8de0-cd3cfab3a50c",
+    "claim": "Local / family-operated since 2018",
+    "source": null,
+    "status": "unverified"
+   },
+   {
+    "id": "b73742bd-3d98-40f5-997f-846860397621",
+    "claim": "Office address 12618 Veterans Memorial Pkwy, Wentzville, MO 63385",
+    "source": "https://www.bbb.org/us/mo/wentzville/profile/residential-roofing/lucas-construction-roofing-0734-1000023653",
+    "status": "sourced"
+   },
+   {
+    "id": "b7444b1f-7600-4f5d-8a50-7fabe47a2f6f",
+    "claim": "On site within 2-3 days after storm damage",
+    "source": null,
+    "status": "unverified"
+   },
+   {
+    "id": "c28a16b0-7357-42dc-b975-c43d50c7505f",
+    "claim": "Phone (636) 459-9328",
+    "source": "https://www.bbb.org/us/mo/wentzville/profile/residential-roofing/lucas-construction-roofing-0734-1000023653",
+    "status": "sourced"
+   },
+   {
+    "id": "ca802383-d8a4-42ea-a7a1-c2747e113cff",
+    "claim": "100+ 5-star reviews (5.0 stars, 97 reviews aggregated)",
+    "source": "https://leadsmartinc.com/services/roofing-services/roofing-contractor/missouri/wentzville/lucas-construction-and-roofing/",
+    "status": "sourced"
+   },
+   {
+    "id": "d7c9864d-6e9e-4010-bd5c-4e0e5128ce72",
+    "claim": "Free quotes offered",
+    "source": null,
+    "status": "unverified"
+   },
+   {
+    "id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21",
+    "claim": "Installs Owens Corning Duration shingles",
+    "source": "https://www.owenscorning.com/en-us/roofing/contractors/contractor-profile/234319",
+    "status": "sourced"
+   },
+   {
+    "id": "fc6e22d0-f704-43f8-b39b-24f8750ada61",
+    "claim": "Roofing, siding, guttering, fascia and soffit contractor",
+    "source": "https://lucasconstructionmo.com/",
+    "status": "sourced"
+   }
+  ],
+  "client": {
+   "id": "102d3b20-2795-44ae-bd64-d1e43916291c",
+   "city": "Wentzville",
+   "name": "Lucas Construction",
+   "phone": "(636) 459-9328",
+   "state": "MO",
+   "website_url": "https://lucasconstructionmo.com",
+   "service_area": "Wentzville, O'Fallon, Lake St. Louis, St. Peters, St. Charles County, Lincoln County, and Warren County, Missouri",
+   "address_line1": "12618 Veterans Memorial Pkwy",
+   "business_type": "service_area"
+  },
+  "offers": [],
+  "keywords": [
+   {
+    "id": "0c00d65b-1a14-47e2-b149-17129a17a461",
+    "intent": "commercial",
+    "keyword": "roofer in wentzville mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "c323e4c3-a061-4b0b-981a-a22aae4c1392",
+    "intent": "commercial",
+    "keyword": "roofing company in wentzville mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "0fd4fb44-379d-4b22-92ef-dfad62c26547",
+    "intent": "commercial",
+    "keyword": "roof replacement wentzville",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "5096e080-382b-433d-af85-0ae486296fbd",
+    "intent": "commercial",
+    "keyword": "new roof installation wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "c75deccf-c3e1-46e8-b74e-f49f6633f0dc",
+    "intent": "navigational",
+    "keyword": "roof repair wentzville mo",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "7ab05877-2265-4f46-a2c4-8ce3b851f993",
+    "intent": "commercial",
+    "keyword": "local roofing contractor wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "10474566-3567-491f-bda4-52cd67419d55",
+    "intent": "commercial",
+    "keyword": "affordable roofer wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "c3ac9a46-e0d4-4930-82cc-9b925dd04932",
+    "intent": "commercial",
+    "keyword": "best roofing company wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "f5e89a26-5283-491a-b529-ac979650b6a5",
+    "intent": "commercial",
+    "keyword": "top rated roofer in wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "2744bb36-04d2-4260-982e-b79a0c54f680",
+    "intent": "commercial",
+    "keyword": "roofing contractor near wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "cfc0c88e-6f16-40b6-ab6d-85a683952e15",
+    "intent": "commercial",
+    "keyword": "hail damage roof repair wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "2d53aa66-3353-4ea7-b5b9-fd1961a69788",
+    "target_url": "https://lucasconstructionmo.com/services/storm-damage",
+    "intent_note": null
+   },
+   {
+    "id": "8651dc71-a689-446e-affd-c5e9e9b8f453",
+    "intent": "commercial",
+    "keyword": "storm damage roofing wentzville mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "2d53aa66-3353-4ea7-b5b9-fd1961a69788",
+    "target_url": "https://lucasconstructionmo.com/services/storm-damage",
+    "intent_note": null
+   },
+   {
+    "id": "52a8e5d4-f134-4bc5-a084-598dc95a342c",
+    "intent": "commercial",
+    "keyword": "emergency roof repair wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "7e67a297-92bd-405b-a524-983dc7d85424",
+    "intent": "commercial",
+    "keyword": "wind damage roof repair wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "2d53aa66-3353-4ea7-b5b9-fd1961a69788",
+    "target_url": "https://lucasconstructionmo.com/services/storm-damage",
+    "intent_note": null
+   },
+   {
+    "id": "9af8ff13-15c2-4b6c-95e4-fa0fa3aa0de7",
+    "intent": "commercial",
+    "keyword": "storm restoration roofing wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "2d53aa66-3353-4ea7-b5b9-fd1961a69788",
+    "target_url": "https://lucasconstructionmo.com/services/storm-damage",
+    "intent_note": null
+   },
+   {
+    "id": "247e25e0-0732-4e93-aec7-77c8285e303f",
+    "intent": "commercial",
+    "keyword": "asphalt shingle roofing wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "17936c45-1d4f-4b44-810e-b6283595bb25",
+    "intent": "commercial",
+    "keyword": "metal roofing wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "539b9c2e-4da5-4ea1-bb7f-f960a6ee3c90",
+    "intent": "commercial",
+    "keyword": "residential roofer wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "bd504329-4724-428d-8ccf-850fe0f64bb2",
+    "intent": "commercial",
+    "keyword": "commercial roofing company wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/commercial-roofing",
+    "intent_note": null
+   },
+   {
+    "id": "b61a8a6f-5d79-408b-aa0d-2ceeb2782798",
+    "intent": "commercial",
+    "keyword": "gutter and roof services wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "f578a33a-6a2d-407c-b6cb-86c11b472207",
+    "target_url": "https://lucasconstructionmo.com/services/gutters",
+    "intent_note": null
+   },
+   {
+    "id": "d30efba4-9d55-45b7-9d2f-ba49c073bf1a",
+    "intent": "transactional",
+    "keyword": "roofer near me",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "08ec15e9-d499-40f2-b49b-306e4b9da47b",
+    "intent": "commercial",
+    "keyword": "local roofer near me",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "aebf640f-8c08-4974-b498-921fd2c7f2fe",
+    "intent": "commercial",
+    "keyword": "roofing repair near me",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "806c3e51-1d03-46bb-842f-4805853c6d8d",
+    "intent": "commercial",
+    "keyword": "best roofer near me",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "4ccb5cef-8acf-435d-b748-1bdf6ed54502",
+    "intent": "commercial",
+    "keyword": "trusted roofer near me",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "f8351d65-1f66-4767-bbf7-5dc2dc3fff10",
+    "intent": "transactional",
+    "keyword": "get a roofing quote wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "86d16221-84bd-425e-9937-934d1f92e4ec",
+    "intent": "navigational",
+    "keyword": "roof inspection wentzville mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "39e0704c-6fec-495c-87f9-a4b64a30b063",
+    "intent": "commercial",
+    "keyword": "roofing estimates wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "b2f056fc-d00b-4de5-a382-b94c978847b1",
+    "intent": "commercial",
+    "keyword": "how much does a new roof cost in wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "a52dc6c3-0ef8-4c0e-b854-1f1a14391927",
+    "intent": "commercial",
+    "keyword": "licensed roofing contractor wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "517332a9-c0de-4f86-b79d-1a4b137146d1",
+    "intent": "navigational",
+    "keyword": "leaky roof repair wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "57d2955f-f835-4d5e-b3f8-8e0478455d3d",
+    "intent": "commercial",
+    "keyword": "missing shingles repair wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "37a6793c-47e7-4713-926c-72917f7824e7",
+    "intent": "commercial",
+    "keyword": "roof flashing repair wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "3564caee-79e7-48be-bfb0-a9d446c0f511",
+    "intent": "commercial",
+    "keyword": "flat roof repair wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "intent_note": null
+   },
+   {
+    "id": "f0d0ecae-4266-4970-a34e-ffe2a54c3b6d",
+    "intent": "commercial",
+    "keyword": "roof replacement insurance claims wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "2d53aa66-3353-4ea7-b5b9-fd1961a69788",
+    "target_url": "https://lucasconstructionmo.com/services/storm-damage",
+    "intent_note": null
+   },
+   {
+    "id": "11954f27-e93b-4ad1-a75c-7b465ec810d8",
+    "intent": "commercial",
+    "keyword": "roofing wentzville missouri",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "2428970a-0e4d-40e2-8089-8fafea971215",
+    "intent": "commercial",
+    "keyword": "roofing company near lake st louis mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/service-areas/lake-st-louis",
+    "intent_note": null
+   },
+   {
+    "id": "d9fb5c28-ae55-4b1d-b719-6cf4614d634b",
+    "intent": "commercial",
+    "keyword": "roofer in o'fallon mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/service-areas/ofallon",
+    "intent_note": null
+   },
+   {
+    "id": "b33a9626-c350-41d9-9bd7-e41c4df35e0d",
+    "intent": "commercial",
+    "keyword": "roofer in st charles mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/service-areas/st-charles",
+    "intent_note": null
+   },
+   {
+    "id": "7afc20ce-e049-4298-aa39-70267d63c8b6",
+    "intent": "commercial",
+    "keyword": "roofing contractor near new melle mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/service-areas/new-melle",
+    "intent_note": null
+   },
+   {
+    "id": "9864f190-ebf1-417b-b38c-0a6116460d1d",
+    "intent": "navigational",
+    "keyword": "lucas construction roofing wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "576bef5d-ad16-4515-9144-001f3f39b295",
+    "intent": "navigational",
+    "keyword": "lucas construction roof repair",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "9250accb-9c35-4a4e-8a82-8503a37f6a0b",
+    "intent": "commercial",
+    "keyword": "lucas construction roofing reviews",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "e013bf6e-1ac2-4bc8-b0ab-990f75d64c75",
+    "intent": "commercial",
+    "keyword": "lucas construction storm damage repair",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "2d53aa66-3353-4ea7-b5b9-fd1961a69788",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "4298e989-8793-4bb6-b16d-cf216eb771df",
+    "intent": "commercial",
+    "keyword": "lucas construction gutter services",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "f578a33a-6a2d-407c-b6cb-86c11b472207",
+    "target_url": "https://lucasconstructionmo.com/",
+    "intent_note": null
+   },
+   {
+    "id": "0f5fd309-201d-4a8f-bb42-e8e9d9637d09",
+    "intent": "commercial",
+    "keyword": "summer roof replacement wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "intent_note": null
+   },
+   {
+    "id": "5da4c7d3-99a1-44e3-ae30-31646883acc9",
+    "intent": "commercial",
+    "keyword": "spring roof inspection wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "54fd8061-059d-4e33-a1e9-ba848cfe76e6",
+    "intent": "commercial",
+    "keyword": "winter roofing services wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "e2cc1a2c-aa39-47f8-9a76-1d162b6fdd12",
+    "intent": "commercial",
+    "keyword": "fall gutter cleaning and roofing wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "f578a33a-6a2d-407c-b6cb-86c11b472207",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "23cd8609-f7ad-4064-8a25-49bdf32e1403",
+    "intent": "commercial",
+    "keyword": "seasonal roof maintenance wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "1403b969-1773-4889-8c6f-d7f2e212dec8",
+    "intent": "transactional",
+    "keyword": "christmas light installation near me",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c82e9fe9-e7c0-4768-ab6e-3dc1ba717b2e",
+    "target_url": "https://lucasconstructionmo.com/christmas-lights",
+    "intent_note": null
+   },
+   {
+    "id": "142e9fe6-da95-4a8e-bd20-fe14dd8b4e26",
+    "intent": "commercial",
+    "keyword": "holiday lighting company wentzville mo",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c82e9fe9-e7c0-4768-ab6e-3dc1ba717b2e",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "2e861e92-85b0-4bc0-862f-8abd40b09c7c",
+    "intent": "commercial",
+    "keyword": "gutter repair near me",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "f578a33a-6a2d-407c-b6cb-86c11b472207",
+    "target_url": "https://lucasconstructionmo.com/services/gutters",
+    "intent_note": null
+   },
+   {
+    "id": "3289e6ca-4603-4a7e-a651-8e09d9dd1fd0",
+    "intent": "commercial",
+    "keyword": "landscape lighting installation near me",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "ae2f28f0-38d4-41e0-9f30-b029724665d8",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "42496f91-6aea-432a-bac2-67e9011b8cbb",
+    "intent": "navigational",
+    "keyword": "vinyl siding installation wentzville mo",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c60685d4-16f9-4544-9978-3d7182b47edf",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "58d7f270-9db6-4b10-b2bf-57a19e70f970",
+    "intent": "commercial",
+    "keyword": "fascia repair near me",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "11759626-b741-4d49-be9a-b53215f040d6",
+    "target_url": "https://lucasconstructionmo.com/services/soffit-fascia",
+    "intent_note": null
+   },
+   {
+    "id": "8296bfc1-d8e4-4065-be8f-1fc566117f1f",
+    "intent": "navigational",
+    "keyword": "holiday lighting installation wentzville",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c82e9fe9-e7c0-4768-ab6e-3dc1ba717b2e",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "88ed8ad2-c1ba-42a2-85a8-c45fb961ff2a",
+    "intent": "commercial",
+    "keyword": "permanent landscape lighting wentzville",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "ae2f28f0-38d4-41e0-9f30-b029724665d8",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "a1de93fb-3638-4127-bfc3-45114d4c7c54",
+    "intent": "commercial",
+    "keyword": "siding repair near me",
+    "is_money": true,
+    "priority": "p1",
+    "is_active": true,
+    "is_tracked": true,
+    "service_id": "c60685d4-16f9-4544-9978-3d7182b47edf",
+    "target_url": "https://lucasconstructionmo.com/services/siding",
+    "intent_note": null
+   },
+   {
+    "id": "a57e20d6-2a19-408d-8076-bc61f48796ce",
+    "intent": "commercial",
+    "keyword": "soffit and fascia replacement wentzville",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "11759626-b741-4d49-be9a-b53215f040d6",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "c3bc58b2-9ce5-4448-bac6-1836914d8b3f",
+    "intent": "commercial",
+    "keyword": "outdoor lighting contractor st charles county mo",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "ae2f28f0-38d4-41e0-9f30-b029724665d8",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "c8925b1b-0d17-4a2d-ab34-1091c769fe58",
+    "intent": "commercial",
+    "keyword": "siding contractor st charles county",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c60685d4-16f9-4544-9978-3d7182b47edf",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "e27d6c9f-e6a0-4a88-8e39-d1b1b09d8a48",
+    "intent": "commercial",
+    "keyword": "siding installation wentzville",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "c60685d4-16f9-4544-9978-3d7182b47edf",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "f144cc30-77c1-4ef7-9945-7a271656a813",
+    "intent": "navigational",
+    "keyword": "seamless gutters wentzville mo",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "f578a33a-6a2d-407c-b6cb-86c11b472207",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "ff578be8-b2b5-45ba-99fc-71a53e327f18",
+    "intent": "navigational",
+    "keyword": "gutter installation wentzville",
+    "is_money": false,
+    "priority": "p3",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": "f578a33a-6a2d-407c-b6cb-86c11b472207",
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "748cb0f9-74de-4205-824f-dbf80d73e701",
+    "intent": null,
+    "keyword": "christmas light installation wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "c171fb7c-51f3-47ed-8bbe-0625c905233f",
+    "intent": null,
+    "keyword": "christmas light installation st charles mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "4d8cab10-6728-4554-995d-16f4ea5ff912",
+    "intent": null,
+    "keyword": "christmas light installation st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "bd274f0d-81a4-48ad-9912-8286a6c87c7b",
+    "intent": null,
+    "keyword": "christmas light installers near me",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "6079bf7f-f396-460a-a8f7-d08e79fac4dc",
+    "intent": null,
+    "keyword": "professional christmas light installation wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "b3f689a3-a4e6-4844-8f3f-8b020c4a1ef6",
+    "intent": null,
+    "keyword": "holiday light installation wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "300ce96c-4069-423e-b13f-4dbc05c46caf",
+    "intent": null,
+    "keyword": "holiday lighting company st charles county",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "faad1cb6-20c9-45e1-ad15-c4b3cebdaa6a",
+    "intent": null,
+    "keyword": "permanent christmas lights wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "f4f0d87c-ae2a-4292-ae6f-8b45ef5398ea",
+    "intent": null,
+    "keyword": "permanent christmas lights st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "4b08887a-f1db-4de3-b009-89ef6bfa78a3",
+    "intent": null,
+    "keyword": "permanent holiday lighting st charles mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "5ffd14de-9947-4834-abf9-636041f55dea",
+    "intent": null,
+    "keyword": "permanent outdoor lighting wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "25277222-4056-4e00-a397-8e29eed35b16",
+    "intent": null,
+    "keyword": "permanent roofline lighting st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "82919834-4478-44c9-9a21-bc14333e482e",
+    "intent": null,
+    "keyword": "permanent led lights for house wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "21a079fb-c456-45be-beea-ead2cd2c50d8",
+    "intent": null,
+    "keyword": "trimlight st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "5b942925-175b-4229-87cc-e810a6dde871",
+    "intent": null,
+    "keyword": "jellyfish lighting st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "b2932e62-a74b-44c1-81fd-5831e6da662b",
+    "intent": null,
+    "keyword": "christmas light hanging service wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "4e07249e-85e1-4c2d-8e78-4f1094fe0baa",
+    "intent": null,
+    "keyword": "outdoor christmas light installation st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "320543cf-10ec-4087-b82c-56f4ffdac7e9",
+    "intent": null,
+    "keyword": "residential christmas light installation wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "c645b7d7-81af-42d9-afcc-ace190a450b9",
+    "intent": null,
+    "keyword": "commercial christmas light installation st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "2d1bcbce-1e3e-4f79-a32d-f29ae4e5f0ed",
+    "intent": null,
+    "keyword": "christmas light removal wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "9ec447f0-c468-49b7-975d-df77d7657f7e",
+    "intent": null,
+    "keyword": "warm white christmas lights installation",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "51dfb1d6-7ffa-41a9-aea6-ac2d4f34c38d",
+    "intent": null,
+    "keyword": "exterior lighting installation wentzville",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "be2fcf6b-de57-4c1b-8664-8fb43115dd71",
+    "intent": null,
+    "keyword": "christmas lights o'fallon mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "dd0653c4-58be-4640-a31f-aa3894bde601",
+    "intent": null,
+    "keyword": "christmas light installation lake st louis",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "7f231ac3-6385-454e-a673-0a5e5dc6afa1",
+    "intent": null,
+    "keyword": "holiday lighting st peters mo",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   },
+   {
+    "id": "59204363-a26f-4bbe-8590-56cb576d2b55",
+    "intent": null,
+    "keyword": "lucas construction christmas lights",
+    "is_money": false,
+    "priority": "p2",
+    "is_active": true,
+    "is_tracked": false,
+    "service_id": null,
+    "target_url": null,
+    "intent_note": null
+   }
+  ],
+  "services": [
+   {
+    "id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "name": "Roof Replacement",
+    "status": "approved",
+    "segment": "Roofing",
+    "page_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "parent_service_id": null,
+    "primary_keyword_id": "0fd4fb44-379d-4b22-92ef-dfad62c26547"
+   },
+   {
+    "id": "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d",
+    "name": "Roof Repair",
+    "status": "approved",
+    "segment": "Roofing",
+    "page_url": "https://lucasconstructionmo.com/roofing-repairs/",
+    "parent_service_id": null,
+    "primary_keyword_id": "c75deccf-c3e1-46e8-b74e-f49f6633f0dc"
+   },
+   {
+    "id": "2d53aa66-3353-4ea7-b5b9-fd1961a69788",
+    "name": "Storm Damage & Insurance Claims",
+    "status": "approved",
+    "segment": "Roofing",
+    "page_url": null,
+    "parent_service_id": null,
+    "primary_keyword_id": "8651dc71-a689-446e-affd-c5e9e9b8f453"
+   },
+   {
+    "id": "c60685d4-16f9-4544-9978-3d7182b47edf",
+    "name": "Siding Installation & Repair",
+    "status": "approved",
+    "segment": "Exterior",
+    "page_url": null,
+    "parent_service_id": null,
+    "primary_keyword_id": "a1de93fb-3638-4127-bfc3-45114d4c7c54"
+   },
+   {
+    "id": "f578a33a-6a2d-407c-b6cb-86c11b472207",
+    "name": "Gutter Installation & Repair",
+    "status": "approved",
+    "segment": "Exterior",
+    "page_url": null,
+    "parent_service_id": null,
+    "primary_keyword_id": "2e861e92-85b0-4bc0-862f-8abd40b09c7c"
+   },
+   {
+    "id": "11759626-b741-4d49-be9a-b53215f040d6",
+    "name": "Soffit & Fascia Replacement",
+    "status": "approved",
+    "segment": "Exterior",
+    "page_url": null,
+    "parent_service_id": null,
+    "primary_keyword_id": "58d7f270-9db6-4b10-b2bf-57a19e70f970"
+   },
+   {
+    "id": "269dbe4a-7870-4293-a564-a2e02a16b32a",
+    "name": "Holiday & Landscape Lighting",
+    "status": "approved",
+    "segment": "Lighting",
+    "page_url": null,
+    "parent_service_id": null,
+    "primary_keyword_id": null
+   },
+   {
+    "id": "c82e9fe9-e7c0-4768-ab6e-3dc1ba717b2e",
+    "name": "Holiday Lighting Installation",
+    "status": "approved",
+    "segment": "Lighting",
+    "page_url": null,
+    "parent_service_id": "269dbe4a-7870-4293-a564-a2e02a16b32a",
+    "primary_keyword_id": "1403b969-1773-4889-8c6f-d7f2e212dec8"
+   },
+   {
+    "id": "ae2f28f0-38d4-41e0-9f30-b029724665d8",
+    "name": "Permanent & Landscape Lighting Installation",
+    "status": "approved",
+    "segment": "Lighting",
+    "page_url": null,
+    "parent_service_id": "269dbe4a-7870-4293-a564-a2e02a16b32a",
+    "primary_keyword_id": "3289e6ca-4603-4a7e-a651-8e09d9dd1fd0"
+   }
+  ],
+  "locations": [
+   {
+    "city": "Wentzville",
+    "name": "Wentzville, MO",
+    "state": "MO",
+    "is_active": true
+   }
+  ],
+  "pageGroups": [
+   {
+    "id": "046dba3b-fae7-44d5-a1a8-887d30602d85",
+    "name": "Roof Replacement",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/services/roof-replacement",
+    "primary_keyword_id": "0fd4fb44-379d-4b22-92ef-dfad62c26547"
+   },
+   {
+    "id": "1da1e2b4-30a2-4794-b1c3-07019e663c32",
+    "name": "O'Fallon",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/service-areas/ofallon",
+    "primary_keyword_id": "d9fb5c28-ae55-4b1d-b719-6cf4614d634b"
+   },
+   {
+    "id": "2bd40f8a-650e-4788-8af9-64f5c23b9824",
+    "name": "Permanent & Landscape Lighting Installation",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/permanent-holiday-lights",
+    "primary_keyword_id": "3289e6ca-4603-4a7e-a651-8e09d9dd1fd0"
+   },
+   {
+    "id": "4366feeb-e791-477d-b764-544a6bbfc9dc",
+    "name": "St. Charles",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/service-areas/st-charles",
+    "primary_keyword_id": "b33a9626-c350-41d9-9bd7-e41c4df35e0d"
+   },
+   {
+    "id": "4f0f633b-eab3-4c2b-94d6-1a01251c4c2c",
+    "name": "Siding Installation & Repair",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/services/siding",
+    "primary_keyword_id": "a1de93fb-3638-4127-bfc3-45114d4c7c54"
+   },
+   {
+    "id": "5c9b5617-25c4-4171-b20a-1c49d849cc57",
+    "name": "New Melle",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/service-areas/new-melle",
+    "primary_keyword_id": "7afc20ce-e049-4298-aa39-70267d63c8b6"
+   },
+   {
+    "id": "60084718-ab47-425c-9bde-30eeea890014",
+    "name": "Lake St. Louis",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/service-areas/lake-st-louis",
+    "primary_keyword_id": "2428970a-0e4d-40e2-8089-8fafea971215"
+   },
+   {
+    "id": "7939d26c-1934-4c1d-b0da-3677433f3ee5",
+    "name": "Home",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/",
+    "primary_keyword_id": "d30efba4-9d55-45b7-9d2f-ba49c073bf1a"
+   },
+   {
+    "id": "87f9deb8-7c6b-431e-ac3b-74bfd1b96cf3",
+    "name": "Holiday Lighting Installation",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/christmas-lights",
+    "primary_keyword_id": "1403b969-1773-4889-8c6f-d7f2e212dec8"
+   },
+   {
+    "id": "8a7006aa-c20a-41c2-918c-ec4fc461ab03",
+    "name": "Gutter Installation & Repair",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/services/gutters",
+    "primary_keyword_id": "2e861e92-85b0-4bc0-862f-8abd40b09c7c"
+   },
+   {
+    "id": "9aa9b681-185a-482f-9ac2-0b578de4fbc3",
+    "name": "Soffit & Fascia Replacement",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/services/soffit-fascia",
+    "primary_keyword_id": "58d7f270-9db6-4b10-b2bf-57a19e70f970"
+   },
+   {
+    "id": "9cedc754-a566-43a2-9411-58ef5dc09bea",
+    "name": "Wentzville",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/service-areas/wentzville",
+    "primary_keyword_id": "0c00d65b-1a14-47e2-b149-17129a17a461"
+   },
+   {
+    "id": "a799b5a4-1fa0-4ee5-8896-4bcfb69d8fcd",
+    "name": "Holiday & Landscape Lighting",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/lighting",
+    "primary_keyword_id": null
+   },
+   {
+    "id": "dd954b79-0fa6-43c5-8064-482b1fc5704a",
+    "name": "Storm Damage & Insurance Claims",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/services/storm-damage",
+    "primary_keyword_id": "8651dc71-a689-446e-affd-c5e9e9b8f453"
+   },
+   {
+    "id": "f4fca02f-bcf8-4c12-afa2-1dac6be037a5",
+    "name": "Roof Repair",
+    "status": "approved",
+    "target_url": "https://lucasconstructionmo.com/services/roof-repair",
+    "primary_keyword_id": "c75deccf-c3e1-46e8-b74e-f49f6633f0dc"
+   }
+  ]
+ },
+ "authority": {
+  "request": null,
+  "latest_run": {
+   "id": "082e8e2a-94cf-4b03-b385-2c7cd7fb239b",
+   "site": "https://lucasconstructionmo.com",
+   "engine_version": "authority-v1.3"
+  },
+  "post_links": [],
+  "opportunity": {
+   "id": "70ac7544-cd22-4221-ae61-d5d5daf9d9b5",
+   "key": "gbp_post:4288b96c-db9f-436e-b492-78f5fa7f1f21:transactional",
+   "tier": "B",
+   "topic": "Roof Replacement",
+   "action": "create",
+   "intent": "transactional",
+   "status": "open",
+   "present": true,
+   "section": "ready",
+   "client_id": "102d3b20-2795-44ae-bd64-d1e43916291c",
+   "keyword_id": "f8351d65-1f66-4767-bbf7-5dc2dc3fff10",
+   "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+   "opportunity": {
+    "id": "gbp_post:roof-replacement:transactional",
+    "gap": "A transactional Business Profile post for \"get a roofing quote wentzville\".",
+    "key": "gbp_post:4288b96c-db9f-436e-b492-78f5fa7f1f21:transactional",
+    "tier": "B",
+    "gates": [
+     {
+      "gate": "drafter_brief",
+      "pass": true,
+      "detail": "The drafter's governed brief builds for this target."
+     },
+     {
+      "gate": "cadence",
+      "pass": true,
+      "detail": "No recent post for this service and intent."
+     }
+    ],
+    "order": [
+     1,
+     -3,
+     -2,
+     -4,
+     0,
+     -2,
+     -2115
+    ],
+    "topic": "Roof Replacement",
+    "action": "create",
+    "target": {
+     "cta": "LEARN_MORE",
+     "intent": "transactional",
+     "keyword": "get a roofing quote wentzville",
+     "location": null,
+     "keyword_id": "f8351d65-1f66-4767-bbf7-5dc2dc3fff10",
+     "owner_path": "/services/roof-replacement"
+    },
+    "reasons": [
+     {
+      "tag": "HEURISTIC",
+      "text": "Lead with evidence the last post did not use: Roofing, siding, guttering, fascia and soffit contractor; Installs Owens Corning Duration shingles."
+     }
+    ],
+    "section": "ready",
+    "blockers": [],
+    "objective": "Prompt people ready to act to request roof replacement and send them to /services/roof-replacement.",
+    "provenance": {
+     "FACT": [],
+     "HEURISTIC": [
+      "Lead with evidence the last post did not use: Roofing, siding, guttering, fascia and soffit contractor; Installs Owens Corning Duration shingles."
+     ],
+     "RESEARCH_REQUIRED": [],
+     "REQUIRES_CONFIRMATION": []
+    },
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "content_type": "gbp_post",
+    "eligible_from": null,
+    "existing_coverage": [
+     {
+      "ref": "ea0600b3-024d-4784-b761-4a12b8e83a74",
+      "tag": "FACT",
+      "date": "2026-09-25T18:01:29.061089+00:00",
+      "kind": "gbp_post",
+      "label": "google_business commercial post (AI Drafter): \"If you're considering a roof replacement for your Wentzville\u2026\"",
+      "state": "approved/not_scheduled"
+     },
+     {
+      "ref": "226ccecd-f0a4-41ba-a89f-2943e4125408",
+      "tag": "FACT",
+      "date": "2026-09-25T18:26:45.723968+00:00",
+      "kind": "gbp_post",
+      "label": "google_business commercial post (AI Drafter): \"Choosing who to trust with a roof replacement is a big decis\u2026\"",
+      "state": "rejected/not_scheduled"
+     }
+    ],
+    "evidence_claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ]
+   },
+   "target_path": "/services/roof-replacement",
+   "content_type": "gbp_post",
+   "eligible_from": null,
+   "cycle_started_at": null,
+   "last_seen_run_id": "082e8e2a-94cf-4b03-b385-2c7cd7fb239b"
+  },
+  "recent_posts": [
+   {
+    "id": "226ccecd-f0a4-41ba-a89f-2943e4125408",
+    "copy": "Choosing who to trust with a roof replacement is a big decision for any Wentzville homeowner. Before you sign anything, it's worth asking a few simple questions. Does the contractor hold a manufacturer credential? What workmanship coverage comes with the job? Will they explain your options in plain language? Here's where Lucas Construction stands: we're an Owens Corning Preferred Contractor, and we offer a Lifetime Workmanship Warranty. Visit our Roof Replacement page to learn more, and request a quote when you'd like to talk it through.",
+    "created_at": "2026-09-25T18:26:45.723968+00:00",
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "review_status": "rejected",
+    "search_intent": "commercial",
+    "publish_status": "not_scheduled"
+   },
+   {
+    "id": "ea0600b3-024d-4784-b761-4a12b8e83a74",
+    "copy": "If you're considering a roof replacement for your Wentzville home, you probably have questions before you decide anything. Maybe your roof has been through a few hail and wind seasons, or it's simply getting older and you want to understand your options. Lucas Construction is an Owens Corning Preferred Contractor, and we offer a Lifetime Workmanship Warranty. Learn more about whether roof replacement may fit your home and which questions are worth asking along the way. When you're ready, request a quote.",
+    "created_at": "2026-09-25T18:01:29.061089+00:00",
+    "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+    "review_status": "approved",
+    "search_intent": "commercial",
+    "publish_status": "not_scheduled"
+   }
+  ]
+ },
+ "captured_at": "2026-09-27T23:14:56.055258+00:00"
+}

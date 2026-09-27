@@ -3,6 +3,7 @@ import { statusChip } from "@/lib/authority-lifecycle";
 import { TAG_LABEL, type Card } from "@/lib/authority-view";
 import { cn } from "@/lib/utils";
 import { OpportunityDecisions } from "./opportunity-decisions";
+import { OpportunityDraft } from "./opportunity-draft";
 import { OpportunityLifecycle } from "./opportunity-lifecycle";
 import { OpportunityReconcile } from "./opportunity-reconcile";
 import { pageStateStyles, tagStyles, tierStyles, toneStyles } from "./tones";
@@ -164,6 +165,7 @@ export function OpportunityCard({ card, compact = false, clientId = null }: { ca
           “{card.workflow.reason}”{card.workflow.decidedBy ? ` — ${card.workflow.decidedBy}` : ""}
         </p>
       )}
+      {clientId && card.workflow && <OpportunityDraft clientId={clientId} card={card} />}
       {clientId && card.workflow && <OpportunityReconcile clientId={clientId} card={card} />}
       {clientId && card.workflow && <OpportunityDecisions clientId={clientId} card={card} />}
       {clientId && card.workflow && <OpportunityLifecycle clientId={clientId} topic={card.topic} workflow={card.workflow} />}

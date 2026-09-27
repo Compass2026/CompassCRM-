@@ -307,9 +307,24 @@ where t.key = 'blog_post' and t.status <> 'done' and c.status = 'active'
 order by t.due_date, c.name;
 ```
 
+- **Authority draft request** — an open task keyed `authority_draft:<opportunity
+  id>` (0053): a teammate pressed **Draft with AI** on a Ready Business Profile
+  opportunity on the Authority tab. The fire's reason is `Authority draft request
+  <task id>`; a payload naming it points at that one task.
+
+```sql
+select c.name, c.id as client_id, t.id as task_id, t.status, t.updated_at,
+       substring(t.key from 17)::uuid as opportunity_id
+from tasks t join clients c on c.id = t.client_id
+where t.key like 'authority\_draft:%' and t.status in ('open', 'in_progress')
+  and c.status not in ('paused', 'offboarded')
+order by t.created_at;
+```
+
 Order within a client: Foundation → Website → SEO → Reporting → Website
-updates → Blog post. A payload naming "Website updates" or "Weekly blog
-post" points at those units.
+updates → Blog post → Authority draft request. A payload naming "Website
+updates", "Weekly blog post" or "Authority draft request" points at those
+units.
 
 Runs are started by the CRM (`worker_fires` records why — a client created, a
 stage completed, Website activated, a stage reopened) and by a daily sweep.
@@ -1814,6 +1829,67 @@ is not in the brief; retry past three.
 **Report:** client, target, `brief_hash`, attempts used, and the answer —
 `post_id`, `run_id`, `review_task_id` on success, the refusals or last lint
 problems otherwise. The post waits for a person's review; say so.
+
+### Authority draft request (post-drafter v2, one Business Profile post)
+
+Work exactly the request task you found (a teammate asked for it; this is not
+your initiative). The Authority opportunity decides *what* the post is for;
+`post-drafter` rebuilds its own brief, decides whether it can be written and
+writes it. You pass the opportunity id and nothing else about the target.
+
+**Claim** the task so a second session does not draft the same thing (a
+session that died leaves `in_progress`; after an hour it is yours again):
+
+```sql
+update tasks set status = 'in_progress'
+where id = '<task_id>'
+  and (status = 'open' or (status = 'in_progress' and updated_at < now() - interval '1 hour'))
+returning id;
+```
+
+No row → skip it. Never mark the task done yourself: the successful submit
+closes it in the same transaction that writes and links the post.
+
+**Preflight:** `{"mode": "version"}` must answer `version` ≥ 2 with
+`features` containing `authority_mode`. Anything else → stop, leave the task
+`in_progress`, say so.
+
+**Every request** carries `client_id`, `authority_opportunity_id` and
+`expected_run_id` (the analysis run named in the task's notes) and **no
+`target`** (the function refuses one). Then the same loop as drafter v1:
+
+1. **Brief** `{"mode": "brief", …}`. `200` → keep `brief_hash` and
+   `model_request`; `brief.authority` carries the objective, the preferred
+   evidence (use it) and the client's recent posts (do not repeat them).
+2. **Draft** from `model_request` only, as in drafter v1.
+3. **Check** `{"mode": "check", …, "brief_hash", "draft"}` → revise from
+   `revision_request` until `ok`; `duplicate_recent_post` means write
+   something genuinely new.
+4. **Submit** `{"mode": "submit", …, "brief_hash", "draft", "runtime":
+   "claude-worker-skill"}`. `201` → done: the post is in review, linked to the
+   opportunity, the request closed.
+
+**Stop, never work around:**
+- `409 authority_conflict` (any `code`: `authority_stale`,
+  `opportunity_not_current`, `not_ready`, `dismissed`, `cadence_active`,
+  `already_in_progress`, `target_mismatch`, `evidence_ineligible`,
+  `not_requested`) or `404` → the recommendation changed or is not
+  draftable. Set the task `blocked` with the `code` and `message` in its
+  notes (`update tasks set status = 'blocked', notes = coalesce(notes ||
+  E'\n', '') || '<code>: <message>' where id = '<task_id>'`). Never draft
+  for a different target, never refresh Authority yourself.
+- `422` with `refusals` → the Drafter's own gate; same: `blocked`, refusals
+  in the notes, word for word.
+- `409 stale_brief` → back to step 1 (a new brief, a new attempt count).
+- Three attempts per brief, as in v1; out of attempts → `blocked` with the
+  last problems.
+
+A `blocked` request is the teammate's to retry: pressing Draft with AI again
+reopens the same task and starts a new run. Nothing is approved, scheduled or
+published by you, ever.
+
+**Report:** client, opportunity key, `brief_hash`, attempts, and `post_id` /
+`run_id` / `review_task_id` on success, the conflict or refusals otherwise.
 
 ## 6. End of run
 
