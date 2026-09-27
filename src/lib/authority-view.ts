@@ -296,6 +296,8 @@ const DECISION_KINDS: { prefix: string; id: string; label: string }[] = [
   { prefix: "confirm_service:", id: "decide-services", label: "Services" },
   { prefix: "confirm_market:", id: "decide-markets", label: "Markets" },
   { prefix: "confirm_intent:", id: "decide-intents", label: "Intent conflicts" },
+  // C3: a Home-like keyword another governed page (or rule) competes for.
+  { prefix: "confirm_owner:", id: "decide-owners", label: "Ownership" },
 ];
 function decisionGroups(cards: Card[]): Group[] {
   const used = new Set<string>();

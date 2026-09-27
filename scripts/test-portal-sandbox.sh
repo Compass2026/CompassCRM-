@@ -98,3 +98,6 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_apply.tes
 # tests/authority-norm-path.test.mjs.
 psql_as postgres -d sandbox -v vectors="$(cat "$ROOT/tests/fixtures/authority-norm-path-vectors.json")" \
   -f "$ROOT/supabase/tests/sandbox/authority_reconcile.test.sql"
+# 0051: a Home re-home removes the keyword from every service / hub page
+# group's supporting list in the same transaction (all or nothing).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_home_cleanup.test.sql"

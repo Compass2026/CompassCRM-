@@ -115,6 +115,19 @@ test("Needs Decision: Services, Markets and Intent conflicts, one row each; smal
   assert.ok(group(v, "needs_decision", "decide-intents").cards.every((c) => c.intent === "navigational" && c.keyword));
 });
 
+test("Needs Decision: Ownership (C3) groups the Home ownership decisions, read-only", async () => {
+  const { runAuthority } = await import("../supabase/functions/authority/engine.ts");
+  const { lucasHomeInput } = await import("./helpers/lucas-home-input.mjs");
+  const owner = runAuthority(lucasHomeInput()).opportunities.filter((o) => o.key.startsWith("confirm_owner:"));
+  assert.equal(owner.length, 1);
+  const v = buildAuthorityView(input({ opportunities: [...FX.opportunities, ...owner] }));
+  assert.deepEqual(section(v, "needs_decision").groups.map((g) => g.label), ["Services", "Markets", "Intent conflicts", "Ownership"]);
+  const g = group(v, "needs_decision", "decide-owners");
+  assert.deepEqual([g.count, g.open], [1, true]);
+  assert.equal(g.cards[0].topic, 'Owner: "roofer in wentzville mo"');
+  assert.equal(g.cards[0].keyword, "roofer in wentzville mo");
+});
+
 test("Research: the first few shown, the rest collapsed once the list grows", () => {
   const v = buildAuthorityView(input());
   assert.deepEqual(section(v, "research").groups.map((g) => [g.count, g.open]), [[3, true]]);

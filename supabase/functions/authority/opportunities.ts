@@ -12,7 +12,7 @@ import { aboutUnconfirmed } from "./keywords.ts";
 import { normPath, normPlace, placesIn, type PlaceIndex } from "./urls.ts";
 import { demandNote } from "./gsc.ts";
 import type {
-  Action, AuthorityInput, ContentType, CoverageItem, Gate, KeywordAssignment, Opportunity, Pillar, Reason,
+  Action, AuthorityInput, ContentType, CoverageItem, Gate, HomeSummary, KeywordAssignment, Opportunity, Pillar, Reason,
   Section, SupportingTopic, Tag, Tier,
 } from "./types.ts";
 
@@ -61,6 +61,7 @@ export function buildOpportunities(ctx: {
   blogOverlaps: { topic: string; paths: string[]; shared_queries: string[] }[];
   servicePageUrlGaps: { service_id: string; service: string; owner: string; recorded: string | null }[];
   homeIssues?: Reason[];
+  home?: HomeSummary | null;
 }): Opportunity[] {
   const { input, pillars, keywords } = ctx;
   const out: Draft[] = [];
@@ -170,18 +171,34 @@ export function buildOpportunities(ctx: {
     }
 
     // ── Keywords mapped to the service but owned by the home page → data fix ──
+    // C3: each one is sorted by where it belongs. Home only when the engine
+    // marks it home_eligible; service-specific ones go to the service's own
+    // page; Home-like ones that another governed page claims need a decision.
     const polluted = keywords.filter((k) => k.service_id === p.service_id && k.flags.includes("homepage_pollution"));
     if (polluted.length) {
+      const toHome = polluted.filter((k) => k.flags.includes("home_eligible"));
+      const decide = polluted.filter((k) => k.flags.includes("home_ambiguous"));
+      const toService = polluted.filter((k) => !toHome.includes(k) && !decide.includes(k));
+      const list = (ks: KeywordAssignment[]) => ks.map((k) => k.keyword).join(", ");
+      const ownerLive = p.owner.state === "live" && p.owner.path;
+      const reasons: Reason[] = [
+        { tag: "FACT", text: `${list(polluted)}.` },
+        ...(polluted.some((k) => k.money) ? [{ tag: "FACT" as const, text: `Includes money keywords: ${polluted.filter((k) => k.money).map((k) => k.keyword).join(", ")}.` }] : []),
+      ];
+      if (toHome.length) reasons.push({ tag: "HEURISTIC", text: `To the Home page group (${toHome.length}): ${list(toHome)}. Brand or general category queries with no service, activity or material.` });
+      if (toService.length) reasons.push(ownerLive
+        ? { tag: "HEURISTIC", text: `To ${p.name}'s page ${p.owner.path} (${toService.length}): ${list(toService)}.` }
+        : { tag: "FACT", text: `Belong to ${p.name}, whose page ${p.owner.path ?? "(none)"} is not live yet (${toService.length}): ${list(toService)}. Nothing to move them to until it is.` });
+      if (decide.length) reasons.push({ tag: "REQUIRES_CONFIRMATION", text: `Needs a decision (${decide.length}): ${list(decide)}. Each has its own ownership decision.` });
+      const gates: Gate[] = [{ gate: "data_only", pass: true, detail: "Changes CRM data, not content." }];
+      if (ctx.home && ctx.home.page_group_id && toHome.length + polluted.filter((k) => k.home_check?.fit === "home").length > 0) {
+        gates.push({ gate: "home_destination", pass: ctx.home.valid, detail: ctx.home.valid ? `The Home page group targets ${ctx.home.path}, live.` : ctx.home.reasons.map((r) => r.text).join(" ") });
+      }
       out.push(base({
         id: `data_fix:keyword-ownership:${slug(p.name)}`, key: `data_fix:keyword-ownership:${p.service_id}`, topic: p.name, service_id: p.service_id, action: "improve", content_type: "data_fix",
         target: { keyword_id: null, keyword: null, intent: null, location: null, owner_path: "/", cta: null },
-        gap: `${polluted.length} keywords under ${p.name} target the home page.`,
-        gates: [{ gate: "data_only", pass: true, detail: "Changes CRM data, not content." }],
-        reasons: [
-          { tag: "FACT", text: `${polluted.map((k) => k.keyword).join(", ")}.` },
-          ...(polluted.some((k) => k.money) ? [{ tag: "FACT" as const, text: `Includes money keywords: ${polluted.filter((k) => k.money).map((k) => k.keyword).join(", ")}.` }] : []),
-          { tag: "HEURISTIC", text: "Re-home them to the Home page group so this service's topic, evidence and GSC read cleanly." },
-        ],
+        gap: `${polluted.length} keywords under ${p.name} target the home page${toHome.length || decide.length ? `: ${toHome.length} to Home, ${toService.length} to ${p.name}, ${decide.length} to decide` : ""}.`,
+        gates, reasons,
         value: polluted.some((k) => k.money) ? 3 : 2, severity: 3, impressions: p.gsc.impressions,
       }));
     }
@@ -278,6 +295,23 @@ export function buildOpportunities(ctx: {
       reasons: [
         { tag: "FACT", text: `Stored intent: ${k.intent_check.stored}.` },
         { tag: "HEURISTIC", text: k.intent_check.reason },
+      ],
+    }));
+  }
+
+  // One decision per keyword whose ownership between Home and another page the rules cannot settle (C3).
+  for (const k of keywords.filter((x) => x.flags.includes("home_ambiguous"))) {
+    out.push(base({
+      id: `confirm_owner:${slug(k.keyword)}`, key: `confirm_owner:${k.keyword_id}`,
+      topic: `Owner: "${k.keyword}"`, service_id: k.service_id, action: "requires_confirmation", content_type: "data_fix",
+      target: { keyword_id: k.keyword_id, keyword: k.keyword, intent: k.intent, location: null, owner_path: k.target_path, cta: null },
+      gap: k.home_check?.reason ?? "Home-like, but another governed page or rule competes for it.",
+      blockers: ["A person decides which page owns it; Authority never re-homes it to Home."],
+      gates: [{ gate: "ownership", pass: false, detail: "Home ownership is not established." }],
+      reasons: [
+        ...(k.home_check ? [{ tag: "HEURISTIC" as const, text: k.home_check.reason }] : []),
+        ...k.reasons.filter((r) => r.tag === "REQUIRES_CONFIRMATION"),
+        { tag: "REQUIRES_CONFIRMATION", text: "Keep it with its current service, give it to Home, or leave it to the page that claims it." },
       ],
     }));
   }
