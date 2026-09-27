@@ -39,7 +39,7 @@ test("9. Lucas: 14 home_eligible, 1 home_ambiguous, 3 service-specific; nothing 
   // Every one is still mapped to its service in the CRM: roles do not change until a person re-homes it.
   for (const t of [...HOME_14, "roofer in wentzville mo"]) assert.equal(kw(r, t).service_id, ROOF, t);
   assert.equal(r.keywords.filter((k) => k.role === "unmapped").length, 26);
-  assert.equal(r.version, "authority-v1.2");
+  assert.equal(r.version, "authority-v1.3");
 });
 
 test("9b. Lucas: the Roof Replacement ownership fix is split by destination", () => {

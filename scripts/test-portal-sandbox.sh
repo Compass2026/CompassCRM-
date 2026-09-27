@@ -101,3 +101,6 @@ psql_as postgres -d sandbox -v vectors="$(cat "$ROOT/tests/fixtures/authority-no
 # 0051: a Home re-home removes the keyword from every service / hub page
 # group's supporting list in the same transaction (all or nothing).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_home_cleanup.test.sql"
+# 0052: every reconciliation write is bound to its preview (target / destination
+# URLs, a Home re-home's page groups); map_keywords refuses location_unapproved.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_bind_preview.test.sql"

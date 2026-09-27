@@ -156,7 +156,7 @@ try {
   assert.equal((await call({ mode: "version" }, { "x-cron-secret": "wrong" })).status, 403);
   const v = await call({ mode: "version" }, { Authorization: `Bearer ${teamToken}` });
   assert.equal(v.status, 200);
-  assert.equal(v.body.engine, "authority-v1.2");
+  assert.equal(v.body.engine, "authority-v1.3");
   assert.equal(v.body.dns, true);
   ok("Callers: the cron secret or a team member; anon and a wrong secret refused; version reports the engine and DNS");
 
@@ -180,7 +180,7 @@ try {
   assert.equal(run1.mode, "full");
   assert.equal(run1.requested_via, "team");
   assert.equal(run1.requested_by, sql(`select id from team_members where auth_user_id = '${TEAM.id}'`));
-  assert.equal(run1.engine_version, "authority-v1.2");
+  assert.equal(run1.engine_version, "authority-v1.3");
   assert.match(run1.input_hash, /^sha256:[0-9a-f]{64}$/);
   assert.equal(run1.inventory_pages, 3);
   assert.equal(run1.inventory_errors, 0);

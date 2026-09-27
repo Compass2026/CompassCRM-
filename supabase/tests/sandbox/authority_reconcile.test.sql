@@ -129,6 +129,17 @@ create function rc.exp(p_key text, p_extra jsonb default '{}') returns jsonb lan
 create function rc.rows_exp(p_keys text[]) returns jsonb language sql stable security definer as $$
   select coalesce(jsonb_agg(jsonb_build_object('keyword_id', k.id, 'service_id', k.service_id, 'target_url', k.target_url)), '[]'::jsonb)
   from unnest(p_keys) n join public.keywords k on k.id = rc.id(n) $$;
+-- 0052: a preview also names the destination written, per row, and for Home
+-- the service / hub page groups the keyword leaves. p_dests: 'home' or the
+-- name of the approved page group whose target the row is written to.
+create function rc.tgt(p_group text) returns text language sql stable security definer as $$
+  select target_url from public.page_groups where client_id = rc.id('cr') and name = p_group and status = 'approved' $$;
+create function rc.rows_exp(p_keys text[], p_dests text[]) returns jsonb language sql stable security definer as $$
+  select coalesce(jsonb_agg(jsonb_build_object('keyword_id', k.id, 'service_id', k.service_id, 'target_url', k.target_url,
+      'destination_url', case when d = 'home' then rc.tgt('Home') else rc.tgt(d) end,
+      'removed_from', (select coalesce(jsonb_agg(g.id order by g.id), '[]') from public.page_groups g
+                        where g.client_id = k.client_id and g.page_type in ('service', 'hub') and k.id = any (g.supporting_keyword_ids)))), '[]'::jsonb)
+  from unnest(p_keys, p_dests) u(n, d) join public.keywords k on k.id = rc.id(u.n) $$;
 create function rc.apply(p_key text, p_action text, p_payload jsonb, p_expected jsonb) returns text language sql as $$
   select rc.try(format('select authority_apply(%L, %L, %L::jsonb, %L::jsonb)', rc.oid(p_key), p_action, p_payload, p_expected)) $$;
 create function rc.kwrow(p_k text) returns public.keywords language sql stable security definer as $$ select * from public.keywords where id = rc.id(p_k) $$;
@@ -303,7 +314,7 @@ begin
   perform rc.ok('P2 another run than the preview''s is refused (AU409)', e like 'AU409%', e);
   e := rc.apply(rc.sp('pr'), 'set_service_page', '{}', rc.exp(rc.sp('pr'), '{"page_url": null}'));
   perform rc.ok('P3 a proposed service takes no service page', e like '22023%', e);
-  e := rc.apply(rc.sp('sd'), 'set_service_page', '{}', rc.exp(rc.sp('sd'), '{"page_url": null}'));
+  e := rc.apply(rc.sp('sd'), 'set_service_page', '{}', rc.exp(rc.sp('sd'), jsonb_build_object('page_url', null, 'target_url', rc.tgt('Storm Damage'))));
   perform rc.ok('P4 a page group whose page is missing (404) is refused, page_url untouched',
     e like '22023%' and (rc.count($q$select count(*) from services where id = '00000000-0000-4000-e000-0000000000f3' and page_url is null$q$)) = 1, e);
   e := rc.apply(rc.sp('xs'), 'set_service_page', '{}', rc.exp(rc.sp('xs'), '{"page_url": null}'));
@@ -311,7 +322,7 @@ begin
     and rc.count($q$select count(*) from services where id = '00000000-0000-4000-e000-0000000000f9' and page_url is null$q$) = 1, e);
   e := rc.apply(rc.sp('rr'), 'record_content', '{"paths": ["/blog/post-one"]}', rc.exp(rc.sp('rr')));
   perform rc.ok('P6 another reconciliation action on a service-page fix is refused', e like '22023%', e);
-  e := rc.apply(rc.sp('rr'), 'set_service_page', '{}', rc.exp(rc.sp('rr'), '{"page_url": null}'));
+  e := rc.apply(rc.sp('rr'), 'set_service_page', '{}', rc.exp(rc.sp('rr'), jsonb_build_object('page_url', null, 'target_url', rc.tgt('Roof Replacement'))));
   perform rc.ok('P7 set_service_page writes the approved page group''s live target',
     e is null and rc.count($q$select count(*) from services where id = '00000000-0000-4000-e000-0000000000f1' and page_url = 'https://www.recon.example.test/roof-replacement/'$q$) = 1, e);
   perform rc.ok('P8 ...with one decision event carrying before / after',
@@ -361,7 +372,7 @@ begin
       jsonb_build_object('keyword_id', rc.id('kh1'), 'destination', 'home'),
       jsonb_build_object('keyword_id', rc.id('kh2'), 'destination', 'home'),
       jsonb_build_object('keyword_id', rc.id('kh3'), 'destination', 'service_page'))),
-    rc.exp(rc.own(), jsonb_build_object('rows', rc.rows_exp('{kh1,kh2,kh3}'))));
+    rc.exp(rc.own(), jsonb_build_object('rows', rc.rows_exp('{kh1,kh2,kh3}', '{home,home,Roof Replacement}'))));
   perform rc.ok('K9 home_eligible keywords move to Home: no service, the Home page group''s target', e is null
     and (rc.kwrow('kh1')).service_id is null and (rc.kwrow('kh1')).target_url = 'https://www.recon.example.test/'
     and (rc.kwrow('kh2')).service_id is null, e);
@@ -460,7 +471,7 @@ begin
     rc.exp(k, jsonb_build_object('rows', rc.rows_exp('{ku1}'))));
   perform rc.ok('M4 another client''s service is not a destination', e like '22023%' and (rc.kwrow('ku1')).service_id is null, e);
   e := rc.apply(k, 'map_keywords', jsonb_build_object('rows', jsonb_build_array(jsonb_build_object('keyword_id', rc.id('ku1'), 'service_id', rc.id('gu')))),
-    rc.exp(k, jsonb_build_object('rows', rc.rows_exp('{ku1}'))));
+    rc.exp(k, jsonb_build_object('rows', rc.rows_exp('{ku1}', '{Gutters}'))));
   perform rc.ok('M5 map_keywords to an approved service with a live owner page applies', e is null, e);
   e := rc.apply(k, 'map_keywords', jsonb_build_object('rows', jsonb_build_array(jsonb_build_object('keyword_id', rc.id('kh5'), 'service_id', rc.id('gu')))),
     rc.exp(k, jsonb_build_object('rows', rc.rows_exp('{kh5}'))));

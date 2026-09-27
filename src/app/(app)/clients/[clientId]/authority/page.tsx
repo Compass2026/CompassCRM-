@@ -10,6 +10,8 @@ import {
 } from "@/lib/authority-view";
 import { controlsState } from "@/lib/authority-controls";
 import { listTeamMembers } from "@/lib/team";
+import { RECORD_KEY } from "@/lib/authority-reconcile";
+import { normPath } from "../../../../../../supabase/functions/authority/urls";
 import { AuthorityBanners, AuthorityHeader, AuthoritySummary } from "@/components/authority/authority-header";
 import { AuthoritySections } from "@/components/authority/authority-sections";
 import { AuthorityRunHistory } from "@/components/authority/authority-run-history";
@@ -48,17 +50,32 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
   ]);
 
   const failure = clientQ.error ?? latestQ.error ?? runsQ.error ?? statesQ.error ?? eventsQ.error;
-  let report: { opportunities: Opportunity[]; pillars: PillarLite[] } | null = null;
+  let report: { opportunities: Opportunity[]; pillars: PillarLite[]; site: string | null } | null = null;
   let reportError: string | null = null;
   const latest = latestQ.data as unknown as LatestRow | null;
   if (!failure && latest?.run_id) {
     const { data, error } = await supabase
       .from("authority_runs")
-      .select("opportunities:report->opportunities, pillars:report->pillars")
+      .select("opportunities:report->opportunities, pillars:report->pillars, site:inventory->>site")
       .eq("id", latest.run_id)
       .single();
     if (error) reportError = error.message;
-    else report = data as unknown as { opportunities: Opportunity[]; pillars: PillarLite[] };
+    else report = data as unknown as { opportunities: Opportunity[]; pillars: PillarLite[]; site: string | null };
+  }
+
+  // C2: the record-content card counts what is recorded against the pages the
+  // analysis still lists (content_posts' paths, and the opportunity's links).
+  let recorded: { paths: string[]; linked: number } | undefined;
+  const recordState = ((statesQ.data ?? []) as unknown as OpportunityState[]).find((s) => s.key === RECORD_KEY && s.present);
+  if (report && recordState) {
+    const [postsQ, linksQ] = await Promise.all([
+      supabase.from("content_posts").select("url").eq("client_id", clientId),
+      supabase.from("authority_opportunity_links").select("id", { count: "exact", head: true }).eq("opportunity_id", recordState.id).eq("kind", "content_post"),
+    ]);
+    recorded = {
+      paths: (postsQ.data ?? []).map((p) => normPath(p.url, report!.site)).filter((x): x is string => !!x),
+      linked: linksQ.count ?? 0,
+    };
   }
 
   if (failure || reportError) {
@@ -80,6 +97,7 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
     states: (statesQ.data ?? []) as unknown as OpportunityState[],
     events: (eventsQ.data ?? []) as unknown as OpportunityEvent[],
     members,
+    recorded,
   });
   const controlState = controlsState({
     clientStatus: clientQ.data?.status ?? null,

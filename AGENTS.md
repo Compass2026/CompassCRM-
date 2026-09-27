@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
+  **not yet applied**; `0052` (reconciliation writes bound to their preview) is
+  written but **not yet applied**; `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
   `20260927193245`;
   `0050` (Authority reconciliation + `content_posts.origin`)
   was applied Sept 27 2026 as `20260927173308`; `0049` (Authority decisions) was applied Sept 27 2026 as
@@ -1193,6 +1194,36 @@ atomic: the keyword leaves every service / hub page group's supporting list
 in the same transaction that gives it to Home; a service's primary keyword is
 refused; the sandbox's `authority_home_cleanup.test.sql`. Apply 0051 before
 any real Home re-home.
+**Reconciliation UI** (C2; migration **0052, written, not yet applied**;
+engine `authority-v1.3`, `authority-run` **not yet redeployed** with it):
+a **Reconcile** control on each of the four data-fix cards (Set service page,
+Re-home keywords, Record pages, Map keywords; `opportunity-reconcile.tsx`),
+rules in `src/lib/authority-reconcile.ts` (pure), `previewReconcileAction` /
+`applyReconcileAction` in `src/app/authority-decision-actions.ts`. The
+preview reads what `authority_apply` will read (the run's `report.keywords`,
+the stored snapshot through `authority_page_state`, `authority_service_group`)
+and lists every field each row writes, before → after; rows start unticked,
+there is no Select All, at most 25; unavailable rows stay visible with the
+reason and a link to the decision that unblocks them (Ownership, the market).
+The apply sends exactly the ticked rows to `authority_apply` as the signed-in
+teammate (one transaction per batch), then one Authority **refresh**, never a
+full analysis. **0052** binds each write to the preview: `set_service_page`
+needs `expected.target_url`, every re-home / map row its `destination_url`,
+a Home re-home its `removed_from` page-group ids; any mismatch or missing
+field is AU409 and nothing is written. It also refuses to map a keyword the
+analysis flags `location_unapproved` ("This keyword references an unapproved
+market. Decide on that market first.") until the market is approved and a
+refresh clears the flag. **v1.3** adds structured data only (keys, sections,
+tiers and every other field unchanged): `candidate_paths` on
+`data_fix:record-live-blog-posts` (the rows Record pages offers; reason text
+is display-only, never a write source) and `unapproved_places` on each
+keyword. A run from before v1.3 has no `candidate_paths`, so Record pages
+asks for a refresh first. **Partial recording:** while the latest analysis
+still lists pages, the card reads "Partly recorded · N remaining" (or
+"Recorded · awaiting refresh") and keeps its control, although the stored
+lifecycle says completed once any page is linked; the analysis confirms
+completion by no longer reporting it. Tests: `tests/authority-reconcile.test.mjs`,
+the sandbox's `authority_bind_preview.test.sql`, `npm run test:authority-reconcile-ui`.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of

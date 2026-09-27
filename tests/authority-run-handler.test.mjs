@@ -69,7 +69,7 @@ test("version: the engine, modes, limits and whether DNS works here", async () =
   const { call } = harness({ store: fakeStore().store });
   const v = await call({ mode: "version" });
   assert.equal(v.status, 200);
-  assert.equal(v.body.engine, "authority-v1.2");
+  assert.equal(v.body.engine, "authority-v1.3");
   assert.deepEqual(v.body.modes, [...MODES]);
   assert.deepEqual(v.body.limits, { maxPages: 150, concurrency: 4, timeoutMs: 20000, budgetMs: 120000, maxBytes: 2000000, textChars: 4000 });
   assert.equal(v.body.dns, true);
@@ -130,7 +130,7 @@ test("full: 202 {run_id}, fingerprint before input, then one completed record wi
   const { id, p } = calls.record[0];
   assert.equal(id, RUN);
   assert.equal(p.status, "completed", JSON.stringify(p.inventory?.health));
-  assert.equal(p.engine_version, "authority-v1.2");
+  assert.equal(p.engine_version, "authority-v1.3");
   assert.match(p.input_hash, /^sha256:[0-9a-f]{64}$/);
   assert.deepEqual(p.section_hashes, FP);
   assert.equal(p.report.client.id, CLIENT);
@@ -280,7 +280,7 @@ test("input hash: ignores now, asOf and the inventory's fetched_at; nothing else
 });
 
 test("payload validation mirrors authority_record_run", () => {
-  const base = () => ({ status: "completed", engine_version: "authority-v1.2", judged_at: "2026-09-25T20:00:00Z", as_of: "2026-09-25",
+  const base = () => ({ status: "completed", engine_version: "authority-v1.3", judged_at: "2026-09-25T20:00:00Z", as_of: "2026-09-25",
     input_hash: `sha256:${"a".repeat(64)}`, section_hashes: {}, inventory: null, inventory_errors: 0,
     report: { client: { id: CLIENT }, opportunities: [{ key: "create:service_page:x" }, { key: "fix:owner:y" }] } });
   assert.equal(validatePayload(base(), CLIENT), null);
