@@ -1292,6 +1292,7 @@ export type Database = {
           id: string
           keyword_id: string | null
           notes: string | null
+          origin: string
           owner: Database["public"]["Enums"]["owner_type"]
           published_at: string | null
           status: Database["public"]["Enums"]["content_status"]
@@ -1305,6 +1306,7 @@ export type Database = {
           id?: string
           keyword_id?: string | null
           notes?: string | null
+          origin?: string
           owner?: Database["public"]["Enums"]["owner_type"]
           published_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]
@@ -1318,6 +1320,7 @@ export type Database = {
           id?: string
           keyword_id?: string | null
           notes?: string | null
+          origin?: string
           owner?: Database["public"]["Enums"]["owner_type"]
           published_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]

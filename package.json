@@ -20,6 +20,7 @@
     "test:authority-controls-ui": "UI_SPEC=tests/authority-controls-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority-lifecycle-ui": "UI_SPEC=tests/authority-lifecycle-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority-decisions-ui": "UI_SPEC=tests/authority-decisions-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:content-origin-ui": "UI_SPEC=tests/content-origin-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"
   },
   "dependencies": {
