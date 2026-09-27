@@ -125,11 +125,11 @@ const inventory = (fetchedAt, health = { status: "completed", reasons: [], inven
   pages: Array.from({ length: 64 }, (_, i) => ({ url: `https://lucasconstructionmo.com/p${i}`, status: i < 62 ? 200 : 404, final_url: null, final_status: i < 62 ? 200 : 404,
     redirect_loop: false, in_sitemap: true, title: null, h1: null, h2: [], canonical: null, words: null, text: null })),
 });
-const report = () => ({
+const report = (extra = []) => ({
   version: "authority-v1.1", client: FX.meta.client, as_of: FX.meta.as_of, generated_at: FX.meta.generated_at, inventory: FX.meta.inventory,
-  sources: FX.meta.sources, pillars: FX.meta.pillars, keywords: [], conflicts: [], supporting: [], opportunities: FX.opportunities, judgments: [],
+  sources: FX.meta.sources, pillars: FX.meta.pillars, keywords: [], conflicts: [], supporting: [], opportunities: [...FX.opportunities, ...extra], judgments: [],
 });
-async function recordRun({ mode, via, by = null, status = "completed", fetchedAt = FX.meta.run.inventory_fetched_at, error = null, health }) {
+async function recordRun({ mode, via, by = null, status = "completed", fetchedAt = FX.meta.run.inventory_fetched_at, error = null, health, extra = [] }) {
   const runId = await rpc("authority_begin_run", { p_client_id: LUCAS, p_mode: mode, p_requested_via: via, p_requested_by: by });
   if (status === "running") return runId;
   if (status === "failed") { await rpc("authority_record_run", { p_run_id: runId, p: { status, error } }); return runId; }
@@ -137,7 +137,7 @@ async function recordRun({ mode, via, by = null, status = "completed", fetchedAt
   const inv = inventory(fetchedAt, health);
   await rpc("authority_record_run", { p_run_id: runId, p: {
     status, engine_version: "authority-v1.1", judged_at: FX.meta.generated_at, as_of: FX.meta.as_of,
-    input_hash: `sha256:${"a".repeat(64)}`, section_hashes: fingerprint, inventory: inv, inventory_errors: health?.inventory_errors ?? 0, report: report(),
+    input_hash: `sha256:${"a".repeat(64)}`, section_hashes: fingerprint, inventory: inv, inventory_errors: health?.inventory_errors ?? 0, report: report(extra),
   } });
   return runId;
 }
@@ -292,6 +292,24 @@ try {
   assert.ok((await page.locator('[data-empty="authority"]').innerText()).includes("No Authority analysis yet"));
   await shot("authority-empty-desktop");
   ok("No run yet: the empty state explains the analysis; nothing runs until a teammate presses Run Full Analysis");
+
+  // 8b. C3: a Home ownership decision (the engine's own output over the trimmed
+  // Lucas export) sits in its own read-only Ownership group.
+  const { runAuthority } = await import("../supabase/functions/authority/engine.ts");
+  const { lucasHomeInput } = await import("./helpers/lucas-home-input.mjs");
+  const ownerOpps = runAuthority(lucasHomeInput()).opportunities.filter((o) => o.key.startsWith("confirm_owner:"));
+  assert.equal(ownerOpps.length, 1);
+  await recordRun({ mode: "refresh", via: "worker", extra: ownerOpps });
+  await page.goto(url, { waitUntil: "networkidle" });
+  assert.deepEqual(await page.locator("#section-needs_decision details[data-group]").evaluateAll((els) => els.map((e) => [e.id, e.open, e.querySelector(":scope > summary [data-count]").textContent])),
+    [["decide-services", true, "1"], ["decide-markets", false, "19"], ["decide-intents", false, "7"], ["decide-owners", true, "1"]]);
+  const ownerCard = page.locator(`#decide-owners article[data-key="${ownerOpps[0].key}"]`);
+  assert.ok(await ownerCard.isVisible());
+  const ownerText = await ownerCard.innerText();
+  for (const s of ['Owner: "roofer in wentzville mo"', "Wentzville (city page /service-areas/wentzville)"]) assert.ok(ownerText.includes(s), `ownership card shows ${s}`);
+  assert.equal(await ownerCard.getByRole("button", { name: /Re-home|Keep current intent|Approve|Confirm service|Set service page/ }).count(), 0, "no ownership write action");
+  await shot("authority-ownership-desktop");
+  ok("Ownership (C3): the Home ownership decision in its own open group after Services / Markets / Intent conflicts, read-only");
 
   assert.deepEqual(errors, []);
 

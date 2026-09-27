@@ -11,7 +11,7 @@
 // it may never introduce any of the above.
 import type { DrafterInput } from "../post-drafter/types.ts";
 
-export const AUTHORITY_VERSION = "authority-v1.1";
+export const AUTHORITY_VERSION = "authority-v1.2";
 
 // Every statement the engine makes carries one of these.
 export type Tag = "FACT" | "HEURISTIC" | "RESEARCH_REQUIRED" | "REQUIRES_CONFIRMATION";
@@ -108,13 +108,26 @@ export type OwnerResolution = {
 export type KeywordRole =
   | "primary" | "supporting" | "homepage_pollution" | "mis_targeted" | "location_unapproved"
   | "material_supported" | "material_unsupported" | "avoid_risky" | "requires_confirmation" | "unmapped"
-  | "intent_conflict";   // a flag only: never a keyword's role
+  | "home"               // governed by the approved Home page group (no service), and the query is Home's (C3)
+  | "intent_conflict"    // a flag only: never a keyword's role
+  | "home_eligible"      // a flag only: the query belongs to the Home page group (C3); 0050's re-home to Home requires it
+  | "home_ambiguous";    // a flag only: Home-like, but another governed page or rule competes; a person decides
 export type KeywordAssignment = {
   keyword_id: string; keyword: string; service_id: string | null; intent: string | null; money: boolean;
   priority: string | null; volume: number | null; target_path: string | null; role: KeywordRole; flags: string[]; reasons: Reason[];
   // Stored intent (FACT) vs a conservative assessment of the query text
   // (HEURISTIC). Never written back.
   intent_check: { stored: string | null; assessed: "navigational" | "informational" | "commercial_or_transactional" | "ambiguous"; conflict: boolean; reason: string };
+  // Home ownership (C3), for keywords the Home page group lists or that are
+  // mapped to a service yet target "/"; null for every other keyword.
+  home_check: { fit: "home" | "service" | "ambiguous" | "none"; eligible: boolean; reason: string } | null;
+};
+
+// The approved Home page group as the engine found it (C3).
+export type HomeSummary = {
+  page_group_id: string | null; name: string | null; path: string | null; state: string;
+  valid: boolean; category: string[]; reasons: Reason[];
+  eligible: number; ambiguous: number; owned: number;
 };
 
 export type ClaimRef = { id: string; text: string };
@@ -166,5 +179,6 @@ export type AuthorityReport = {
     inventory: { fetched_at: string | null; pages: number };
   };
   pillars: Pillar[]; keywords: KeywordAssignment[]; conflicts: Conflict[]; supporting: SupportingTopic[];
+  home: HomeSummary;
   opportunities: Opportunity[]; judgments: string[];
 };

@@ -25,8 +25,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0050` (Authority reconciliation + `content_posts.origin`)
-  was applied Sept 27 2026 as `20260927173308` (app not yet deployed with it); `0049` (Authority decisions) was applied Sept 27 2026 as
+  **not yet applied**; `0051` (atomic Home re-home cleanup) is written but **not yet applied**;
+  `0050` (Authority reconciliation + `content_posts.origin`)
+  was applied Sept 27 2026 as `20260927173308`; `0049` (Authority decisions) was applied Sept 27 2026 as
   `20260927162712` (app not yet deployed with it); `0048` (Authority runs) was applied Sept 25 2026 as
   `20260925221705`; `0047` (AI Drafter) was applied Sept 25 2026 as
   `20260925165933`; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
@@ -1164,6 +1165,32 @@ probes refused the worker's SQL (also with a team JWT), the service role,
 anon and a portal contact, and a rolled-back portal contact saw a Compass
 post but not a `site_inventory` one; no client or Authority data changed;
 `database.types.ts` was regenerated from production.
+**Home ownership** (C3, engine `authority-v1.2`; engine only, no schema;
+`authority-run` **not yet redeployed** with it): the approved Home page group
+may govern broad brand / category keywords (`authority/home.ts`, pure).
+Considered only for keywords the Home group lists or that are mapped to a
+service yet target `/` — never an arbitrary unmapped keyword — and only when
+exactly one approved Home group targets a live `/`. A query is Home's
+(`home_eligible`) when every word is the brand, the home city / state, the
+category (from the Home group's primary keyword) or a fixed company /
+qualifier word; any service word, activity or material keeps it with its
+service; an unknown word, another approved or unapproved place, a city /
+hub / other page group that also lists it, or a service named for the
+category itself makes it `home_ambiguous` and a `confirm_owner:<keyword_id>`
+decision (Needs Decision › Ownership, read-only). A Home-group keyword with no
+service gets role `home` (not unmapped; stricter roles still win). The
+keyword-ownership fix now splits its keywords to Home / the service page /
+decision, with a `home_destination` gate; `report.home` summarises. Lucas
+(read-only dry run over the production input and stored snapshot): 14
+`home_eligible`, 1 `home_ambiguous` (`roofer in wentzville mo`, claimed by the
+Wentzville city page), 3 service-specific; all 68 opportunity keys kept, one
+`confirm_owner` added; no role changes. Tests: `tests/authority-home.test.mjs`
+over `tests/fixtures/authority-lucas-home.json`, `npm run test:authority`,
+`npm run test:authority-ui`. **0051** (not applied) makes 0050's Home re-home
+atomic: the keyword leaves every service / hub page group's supporting list
+in the same transaction that gives it to Home; a service's primary keyword is
+refused; the sandbox's `authority_home_cleanup.test.sql`. Apply 0051 before
+any real Home re-home.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when
 reached); Authority labels a window at the cap, or a legacy window of

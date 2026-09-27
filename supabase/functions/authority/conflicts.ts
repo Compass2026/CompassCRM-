@@ -57,7 +57,8 @@ export function findConflicts(args: {
     const polluted = args.keywords.filter((k) => k.service_id === p.service_id && k.flags.includes("homepage_pollution"));
     if (polluted.length) out.push({ kind: "keyword_pollution", subject: p.name, reasons: [
       { tag: "FACT", text: `${polluted.length} of its keywords target the home page: ${polluted.map((k) => k.keyword).slice(0, 8).join(", ")}${polluted.length > 8 ? "…" : ""}.` },
-      { tag: "HEURISTIC", text: "They read as brand / general-roofer terms; they belong to the Home page group, not this service." },
+      ...(polluted.some((k) => k.flags.includes("home_eligible")) ? [{ tag: "HEURISTIC" as const, text: `${polluted.filter((k) => k.flags.includes("home_eligible")).length} read as brand / general category queries; they belong to the Home page group, not this service.` }] : []),
+      ...(polluted.some((k) => k.flags.includes("home_ambiguous")) ? [{ tag: "REQUIRES_CONFIRMATION" as const, text: `${polluted.filter((k) => k.flags.includes("home_ambiguous")).map((k) => k.keyword).join(", ")}: Home-like, but another governed page competes; a person decides.` }] : []),
     ] });
   }
   for (const g of args.servicePageUrlGaps) {

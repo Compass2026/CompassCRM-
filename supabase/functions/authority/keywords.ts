@@ -6,6 +6,7 @@ import { DETECTORS, MATERIAL_RE } from "../post-drafter/rules.ts";
 import type { AuthorityInput, ClaimRef, KeywordAssignment, KeywordRole, Reason } from "./types.ts";
 import { normPath, placesIn, type PlaceIndex } from "./urls.ts";
 import { assessIntent } from "./intent.ts";
+import { homeCheck, isHomeCandidate, type HomeContext } from "./home.ts";
 
 const RISK: Record<string, string> = {
   superlative: "an unprovable superlative",
@@ -23,6 +24,7 @@ export type KeywordContext = {
   citable: ClaimRef[];
   unconfirmed: UnconfirmedPage[];   // live service-like pages no approved service owns
   clientName: string;
+  home?: HomeContext | null;       // C3: the approved Home page group, when one exists
 };
 
 // A live service page no approved service owns. tokens = its slug words no
@@ -111,6 +113,32 @@ export function classifyKeywords(input: AuthorityInput, ctx: KeywordContext): Ke
       reasons.push({ tag: "FACT", text: `Targets ${target}, not the service's owner page ${owner}.` });
     }
 
+    // ── Home ownership (C3) ──
+    // Only keywords the Home page group lists, or mapped to a service yet
+    // targeting "/", are ever considered; an unmapped keyword elsewhere never is.
+    let home_check: KeywordAssignment["home_check"] = null;
+    let homeOwned = false;
+    if (ctx.home && isHomeCandidate(k, target, ctx.home)) {
+      const h = ctx.home;
+      const check = homeCheck(k, h);
+      const onHome = h.group?.primary_keyword_id === k.id || (h.group?.supporting_keyword_ids ?? []).includes(k.id);
+      if (h.summary.valid) {
+        if (!k.service_id) {
+          // Listed on Home with no service: Home's, if the query is Home's; otherwise a person decides.
+          if (check.eligible) { flags.add("home_eligible"); homeOwned = true; }
+          else { flags.add("home_ambiguous"); reasons.push({ tag: "REQUIRES_CONFIRMATION", text: `Listed on the Home page group, but the rules cannot place it there: ${check.reason}` }); }
+        } else if (target === "/") {
+          if (check.eligible) flags.add("home_eligible");
+          else if (check.fit === "ambiguous") flags.add("home_ambiguous");
+        } else if (onHome && (check.fit === "home" || check.fit === "ambiguous")) {
+          flags.add("home_ambiguous");
+          reasons.push({ tag: "REQUIRES_CONFIRMATION", text: `Listed on the Home page group, but mapped to a service and targeting ${target ?? "no page"}.` });
+        }
+        reasons.push({ tag: "HEURISTIC", text: check.reason });
+      }
+      home_check = { ...check, eligible: flags.has("home_eligible") };
+    }
+
     const intent_check = assessIntent(text, k.intent, { clientName: ctx.clientName, places: ctx.places });
     if (intent_check.conflict) {
       flags.add("intent_conflict");
@@ -118,15 +146,17 @@ export function classifyKeywords(input: AuthorityInput, ctx: KeywordContext): Ke
       reasons.push({ tag: "HEURISTIC", text: `The query reads as ${intent_check.assessed.replace(/_/g, " ")}: ${intent_check.reason} A person should confirm; nothing is overwritten.` });
     }
 
-    let role: KeywordRole = !k.service_id ? "unmapped" : primaryIds.has(k.id) ? "primary" : "supporting";
+    let role: KeywordRole = !k.service_id ? (homeOwned ? "home" : "unmapped") : primaryIds.has(k.id) ? "primary" : "supporting";
     for (const r of ORDER) if (flags.has(r)) { role = r; break; }
-    if (!k.service_id && role !== "requires_confirmation") role = "unmapped";
+    // No service: unmapped, unless the Home page group governs it (then only a stricter gate outranks "home").
+    if (!k.service_id && role !== "requires_confirmation" && !(homeOwned && role === "avoid_risky")) role = homeOwned ? "home" : "unmapped";
+    if (homeOwned) reasons.unshift({ tag: "FACT", text: "Governed by the approved Home page group; not unmapped." });
     if (!reasons.length) reasons.push({ tag: "FACT", text: role === "primary" ? "The service's primary keyword, targeting its owner page." : "Supports the service and targets its owner page." });
 
     const ex = extras.get(k.id);
     return {
       keyword_id: k.id, keyword: text, service_id: k.service_id, intent: k.intent, money: money.has(k.id) || k.is_money,
-      priority: k.priority, volume: ex?.volume ?? null, target_path: target, role, flags: [...flags], reasons, intent_check,
+      priority: k.priority, volume: ex?.volume ?? null, target_path: target, role, flags: [...flags], reasons, intent_check, home_check,
     };
   });
 }

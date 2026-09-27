@@ -11,6 +11,7 @@ import { gscCoverage, gscForService, landingPath, latestWindow, rowCapFor } from
 import { TEMPLATES } from "./playbooks.ts";
 import { findConflicts, pageWordingIssues } from "./conflicts.ts";
 import { buildOpportunities } from "./opportunities.ts";
+import { homeContext } from "./home.ts";
 import { classifyPages, prefixes, slugWords, type ClassifiedPage } from "./site.ts";
 import { buildInventory, normPath, placesIn, buildPlaceIndex, type Inventory, type PlaceIndex } from "./urls.ts";
 import {
@@ -183,6 +184,7 @@ function judgments(input: AuthorityInput, pillars: Pillar[]): string[] {
     "HEURISTIC: the intent sanity classifier (brand, question form, buyer wording, service + place); brand + service and pattern-less queries are left ambiguous for a person.",
     "HEURISTIC: the demand tiebreaker buckets latest-window impressions by order of magnitude (0, 1–9, 10–99, 100–999, 1000+).",
     "HEURISTIC: unmapped Search Console queries are matched to a service when they contain every 5+ letter stem of its name.",
+    "HEURISTIC: Home ownership (C3) — a query is the Home page group's only when every word is the brand, the home city or state, the category taken from the Home group's primary keyword, or a fixed company / qualifier word, and it names no service word, activity or material; any unknown word, other approved or unapproved place, competing city / hub page group, or a service named for the category itself makes it a decision for a person.",
     "HEURISTIC: tier thresholds (value 3 = a money keyword, 2 = a P1 / primary keyword; severity 4 = the owner page is missing or broken).",
     "JUDGMENT: whether an educational topic already covered by one blog post should be refreshed rather than left alone (the engine says avoid).",
     "JUDGMENT: which of several overlapping blog posts survives a consolidation, and where the others redirect.",
@@ -210,7 +212,14 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
   borrowedOwners(approved, owners);
   const unconfirmed = unconfirmedServicePages(input, pages, [...owners.values()], inv);
   const ownerPathByService = new Map(approved.map((s) => [s.id, owners.get(s.id)!.path]));
-  const keywords = classifyKeywords(input, { ownerPathByService, cityPrefix, places, citable, unconfirmed, clientName: input.client.name });
+  const home = homeContext(input, inv, places, unconfirmed);
+  const keywords = classifyKeywords(input, { ownerPathByService, cityPrefix, places, citable, unconfirmed, clientName: input.client.name, home });
+  const homeSummary = {
+    ...home.summary,
+    eligible: keywords.filter((k) => k.flags.includes("home_eligible")).length,
+    ambiguous: keywords.filter((k) => k.flags.includes("home_ambiguous")).length,
+    owned: keywords.filter((k) => k.role === "home" || (!k.service_id && k.flags.includes("home_eligible"))).length,
+  };
   const pending = pendingProposals(input);
 
   const pillars: Pillar[] = approved.map((s) => {
@@ -266,11 +275,12 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
     ...intentConflicts.map((k) => ({ tag: "FACT" as const, text: `"${k.keyword}" is stored as ${k.intent_check.stored}; ${k.intent_check.reason}` })),
     { tag: "HEURISTIC", text: "Assessed by a conservative pattern match; the stored value is kept and nothing is written." },
   ] });
-  const home = pages.find((p) => p.kind === "home");
-  const homeIssues = home ? pageWordingIssues(home.page, places, citable) : [];
+  const homePage = pages.find((p) => p.kind === "home");
+  const homeIssues = homePage ? pageWordingIssues(homePage.page, places, citable) : [];
   if (homeIssues.length) conflicts.push({ kind: "home_page_wording", subject: "/", reasons: homeIssues });
   const opportunities = buildOpportunities({
     input, pillars, keywords, supporting, unconfirmed, unapprovedLocationPages, blindSpots: blind, blogOverlaps: overlaps, servicePageUrlGaps, homeIssues, places,
+    home: homeSummary,
   });
 
   const gscWin = latestWindow(a.gsc);
@@ -290,7 +300,7 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
       ranks: { recorded_at: a.ranks.reduce<string | null>((m, r) => (!m || r.recorded_at > m ? r.recorded_at : m), null) },
       inventory: { fetched_at: a.inventory?.fetched_at ?? null, pages: inv.byPath.size },
     },
-    pillars, keywords, conflicts, supporting, opportunities, judgments: judgments(input, pillars),
+    pillars, keywords, conflicts, supporting, home: homeSummary, opportunities, judgments: judgments(input, pillars),
   };
 }
 

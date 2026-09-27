@@ -26,6 +26,8 @@ const ROOF = "00000000-0000-4000-e000-0000000000a1";
 const REPAIR = "00000000-0000-4000-e000-0000000000a2";
 const KW = "00000000-0000-4000-d000-0000000000a1";
 const KW2 = "00000000-0000-4000-d000-0000000000a2";
+const KW_HOME = "00000000-0000-4000-d000-0000000000a3";   // C3: a general query, mapped to Roof Replacement, on "/"
+const KW_SVC_HOME = "00000000-0000-4000-d000-0000000000a4"; // C3: a service query also pointed at "/"
 const OC = "00000000-0000-4000-f000-0000000000a1";
 const SITE = "https://roof.example.test";
 const PAGE = `${SITE}/services/roof-replacement`;
@@ -131,7 +133,9 @@ try {
        ('${REPAIR}', '${C}', 'Roof Repair', 'approved', '${SITE}/services/roof-repair', 'Roofing', 2)`);
   sql(`insert into keywords (id, client_id, keyword, intent, is_active, is_tracked, is_money, service_id, target_url, priority) values
        ('${KW}', '${C}', 'roof replacement wentzville', 'commercial', true, true, true, '${ROOF}', '${PAGE}', 'p1'),
-       ('${KW2}', '${C}', 'roof repair wentzville', 'commercial', true, true, false, '${REPAIR}', '${SITE}/services/roof-repair', 'p2')`);
+       ('${KW2}', '${C}', 'roof repair wentzville', 'commercial', true, true, false, '${REPAIR}', '${SITE}/services/roof-repair', 'p2'),
+       ('${KW_HOME}', '${C}', 'roofer near me', 'transactional', true, true, true, '${ROOF}', '${SITE}/', 'p1'),
+       ('${KW_SVC_HOME}', '${C}', 'roof replacement near me', 'commercial', true, true, false, '${ROOF}', '${SITE}/', 'p2')`);
   sql(`update services set primary_keyword_id = '${KW}' where id = '${ROOF}'`);
   sql(`update services set primary_keyword_id = '${KW2}' where id = '${REPAIR}'`);
   sql(`insert into claims (id, client_id, claim, status, source) values
@@ -139,7 +143,8 @@ try {
   sql(`insert into locations (client_id, name, city, state) values ('${C}', 'Wentzville, MO', 'Wentzville', 'MO')`);
   sql(`insert into page_groups (client_id, name, page_type, status, target_url, primary_keyword_id, supporting_keyword_ids) values
        ('${C}', 'Roof Replacement', 'service', 'approved', '${PAGE}', '${KW}', '{}'),
-       ('${C}', 'Roof Repair', 'service', 'approved', '${SITE}/services/roof-repair', '${KW2}', '{}')`);
+       ('${C}', 'Roof Repair', 'service', 'approved', '${SITE}/services/roof-repair', '${KW2}', '{}'),
+       ('${C}', 'Home', 'home', 'approved', '${SITE}/', '${KW_HOME}', '{}')`);
   sql(`insert into gsc_snapshots (client_id, keyword_id, query, page, clicks, impressions, ctr, avg_position, period_start, period_end) values
        ('${C}', '${KW}', 'roof replacement wentzville', '${PAGE}', 4, 120, 0.0333, 8.2, '2026-08-26', '2026-09-22'),
        ('${C}', null, 'roof leak repair near me', '${SITE}/services/roof-repair', 1, 60, 0.0167, 14.5, '2026-08-26', '2026-09-22')`);
@@ -151,7 +156,7 @@ try {
   assert.equal((await call({ mode: "version" }, { "x-cron-secret": "wrong" })).status, 403);
   const v = await call({ mode: "version" }, { Authorization: `Bearer ${teamToken}` });
   assert.equal(v.status, 200);
-  assert.equal(v.body.engine, "authority-v1.1");
+  assert.equal(v.body.engine, "authority-v1.2");
   assert.equal(v.body.dns, true);
   ok("Callers: the cron secret or a team member; anon and a wrong secret refused; version reports the engine and DNS");
 
@@ -175,7 +180,7 @@ try {
   assert.equal(run1.mode, "full");
   assert.equal(run1.requested_via, "team");
   assert.equal(run1.requested_by, sql(`select id from team_members where auth_user_id = '${TEAM.id}'`));
-  assert.equal(run1.engine_version, "authority-v1.1");
+  assert.equal(run1.engine_version, "authority-v1.2");
   assert.match(run1.input_hash, /^sha256:[0-9a-f]{64}$/);
   assert.equal(run1.inventory_pages, 3);
   assert.equal(run1.inventory_errors, 0);
@@ -189,6 +194,16 @@ try {
   assert.ok(fetches >= 4, "sitemap + three pages");
   assert.deepEqual(await stale(), []);
   ok(`Full run (team): 202 → completed through authority_record_run; ${run1.opps} opportunities stored; fingerprint = section hashes; nothing stale`);
+
+  // C3: the deployed handler records Home ownership in the report 0050 reads.
+  const kwEntry = (id) => JSON.parse(sql(`select x from authority_runs, jsonb_array_elements(report->'keywords') x where id = '${r1.body.run_id}' and x->>'keyword_id' = '${id}'`));
+  assert.deepEqual(kwEntry(KW_HOME).flags.sort(), ["home_eligible", "homepage_pollution"]);
+  assert.equal(kwEntry(KW_HOME).home_check.fit, "home");
+  assert.equal(kwEntry(KW_SVC_HOME).home_check.fit, "service");
+  assert.ok(!kwEntry(KW_SVC_HOME).flags.includes("home_eligible"));
+  const homeSummary = JSON.parse(sql(`select report->'home' from authority_runs where id = '${r1.body.run_id}'`));
+  assert.deepEqual([homeSummary.valid, homeSummary.path, homeSummary.category, homeSummary.eligible], [true, "/", ["roof"], 1]);
+  ok("Home ownership (C3): the stored report marks 'roofer near me' home_eligible and keeps 'roof replacement near me' with its service");
 
   // 4. The run lock, and a second full run's diff.
   let release;
