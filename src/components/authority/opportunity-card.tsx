@@ -4,6 +4,7 @@ import { TAG_LABEL, type Card } from "@/lib/authority-view";
 import { cn } from "@/lib/utils";
 import { OpportunityDecisions } from "./opportunity-decisions";
 import { OpportunityLifecycle } from "./opportunity-lifecycle";
+import { OpportunityReconcile } from "./opportunity-reconcile";
 import { pageStateStyles, tagStyles, tierStyles, toneStyles } from "./tones";
 
 const pageStateLabel: Record<string, string> = {
@@ -108,7 +109,8 @@ function Details({ card }: { card: Card }) {
 // One opportunity. compact: a decision row (Needs Decision, Avoid). With a
 // clientId the card carries its lifecycle actions (teammates, not offboarded).
 export function OpportunityCard({ card, compact = false, clientId = null }: { card: Card; compact?: boolean; clientId?: string | null }) {
-  const chip = statusChip(card.workflow);
+  // While pages remain to record, the card is not done, whatever its links say.
+  const chip = card.progress ? { label: card.progress.label, tone: "amber" as const, title: card.progress.title } : statusChip(card.workflow);
   const facts = [
     card.keyword && (
       <span key="kw">
@@ -140,7 +142,7 @@ export function OpportunityCard({ card, compact = false, clientId = null }: { ca
             variant="outline"
             className={cn("h-5 px-1.5 text-[11px]", toneStyles[chip.tone].card, toneStyles[chip.tone].text)}
             title={chip.title}
-            data-status={card.lifecycle ?? undefined}
+            data-status={card.progress ? "partly_recorded" : card.lifecycle ?? undefined}
           >
             {chip.label}
           </Badge>
@@ -162,6 +164,7 @@ export function OpportunityCard({ card, compact = false, clientId = null }: { ca
           “{card.workflow.reason}”{card.workflow.decidedBy ? ` — ${card.workflow.decidedBy}` : ""}
         </p>
       )}
+      {clientId && card.workflow && <OpportunityReconcile clientId={clientId} card={card} />}
       {clientId && card.workflow && <OpportunityDecisions clientId={clientId} card={card} />}
       {clientId && card.workflow && <OpportunityLifecycle clientId={clientId} topic={card.topic} workflow={card.workflow} />}
       <Details card={card} />

@@ -177,6 +177,12 @@ export function historyLine(e: EventRow, members: { id: string; name: string | n
   if (e.kind === "section_changed" && section("from") && section("to")) parts.push(`${section("from")} → ${section("to")}`);
   if (e.kind === "linked" && s("kind")) parts.push(`(${s("kind")!.replace(/_/g, " ")})`);
   if (e.kind === "decision" && s("decision")) parts.push(`: ${s("decision")}`);
+  // C2: a reconciliation names the rows it wrote, and what it skipped.
+  if (e.kind === "decision" && Array.isArray(d.rows) && d.rows.length) {
+    const labels = (d.rows as Record<string, unknown>[]).map((r) => String(r.keyword ?? r.path ?? "")).filter(Boolean);
+    if (labels.length) parts.push(`(${labels.slice(0, 5).join(", ")}${labels.length > 5 ? `, +${labels.length - 5} more` : ""})`);
+  }
+  if (e.kind === "decision" && Array.isArray(d.skipped) && d.skipped.length) parts.push(`· ${d.skipped.length} already recorded`);
   let text = parts.join(" ");
   if (s("reason") && (e.kind === "dismissed" || e.kind === "suppressed" || e.kind === "reopened")) text += ` — “${s("reason")}”`;
   return { at: e.created_at, kind: e.kind, text, actor };

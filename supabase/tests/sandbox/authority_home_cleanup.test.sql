@@ -72,14 +72,19 @@ end $$;
 create function hc.key() returns text language sql stable as $$ select 'data_fix:keyword-ownership:' || hc.id('rr') $$;
 create function hc.o() returns public.authority_opportunities language sql stable security definer as $$
   select * from public.authority_opportunities where client_id = hc.id('c') and key = hc.key() $$;
-create function hc.exp(p_keys text[]) returns jsonb language sql stable security definer as $$
+-- The preview: each row as it stands, the destination written (0052) and,
+-- for Home, the service / hub page groups the keyword leaves (0052).
+create function hc.exp(p_rows jsonb) returns jsonb language sql stable security definer as $$
   select jsonb_build_object('run_id', (hc.o()).last_seen_run_id, 'status', (hc.o()).status, 'suppressed', (hc.o()).suppressed,
     'dismissed_until', (hc.o()).dismissed_until,
-    'rows', (select coalesce(jsonb_agg(jsonb_build_object('keyword_id', k.id, 'service_id', k.service_id, 'target_url', k.target_url)), '[]')
-             from unnest(p_keys) n join public.keywords k on k.id = hc.id(n)))
+    'rows', (select coalesce(jsonb_agg(jsonb_build_object('keyword_id', k.id, 'service_id', k.service_id, 'target_url', k.target_url,
+               'destination_url', (select target_url from public.page_groups where id = hc.id(case when r->>'destination' = 'home' then 'home' else 'g_rr' end)),
+               'removed_from', (select coalesce(jsonb_agg(g.id order by g.id), '[]') from public.page_groups g
+                                 where g.client_id = k.client_id and g.page_type in ('service', 'hub') and k.id = any (g.supporting_keyword_ids)))), '[]')
+             from jsonb_array_elements(p_rows) r join public.keywords k on k.id = (r->>'keyword_id')::uuid))
 $$;
 create function hc.rehome(p_rows jsonb, p_keys text[]) returns text language sql as $$
-  select hc.try(format('select authority_apply(%L, %L, %L::jsonb, %L::jsonb)', (hc.o()).id, 'rehome_keywords', jsonb_build_object('rows', p_rows), hc.exp(p_keys))) $$;
+  select hc.try(format('select authority_apply(%L, %L, %L::jsonb, %L::jsonb)', (hc.o()).id, 'rehome_keywords', jsonb_build_object('rows', p_rows), hc.exp(p_rows))) $$;
 create function hc.row(p_k text, p_dest text default 'home') returns jsonb language sql stable as $$
   select jsonb_build_object('keyword_id', hc.id(p_k), 'destination', p_dest) $$;
 -- Which groups list a keyword as supporting, by fixture name.

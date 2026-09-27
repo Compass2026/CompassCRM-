@@ -11,7 +11,7 @@
 // it may never introduce any of the above.
 import type { DrafterInput } from "../post-drafter/types.ts";
 
-export const AUTHORITY_VERSION = "authority-v1.2";
+export const AUTHORITY_VERSION = "authority-v1.3";
 
 // Every statement the engine makes carries one of these.
 export type Tag = "FACT" | "HEURISTIC" | "RESEARCH_REQUIRED" | "REQUIRES_CONFIRMATION";
@@ -121,6 +121,9 @@ export type KeywordAssignment = {
   // Home ownership (C3), for keywords the Home page group lists or that are
   // mapped to a service yet target "/"; null for every other keyword.
   home_check: { fit: "home" | "service" | "ambiguous" | "none"; eligible: boolean; reason: string } | null;
+  // Places the query names that are not approved locations (v1.3), as the
+  // place index spells them; the structured twin of the location_unapproved flag.
+  unapproved_places: string[];
 };
 
 // The approved Home page group as the engine found it (C3).
@@ -168,6 +171,11 @@ export type Opportunity = {
   evidence_claim_ids: string[]; existing_coverage: CoverageItem[]; gap: string; blockers: string[];
   gates: Gate[]; tier: Tier; eligible_from: string | null; order: number[];
   reasons: Reason[]; provenance: Record<Tag, string[]>;
+  // The rows a reconciliation acts on, where it acts on rows the engine lists
+  // (v1.3): data_fix:record-live-blog-posts carries the live blog paths
+  // missing from content_posts, normalised and sorted. Structured data for
+  // writes; the reasons stay display-only. Absent on every other opportunity.
+  candidate_paths?: string[];
 };
 
 export type AuthorityReport = {

@@ -215,8 +215,11 @@ try {
   await shot("authority-lifecycle-menu-desktop", page, false);
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("#section-dismissed").count(), 0, "no Dismissed group while nothing is dismissed");
-  assert.equal(await page.getByRole("button", { name: /Set service page|Re-home|Record page|Map keyword/ }).count(), 0, "no CRM reconciliation actions yet");
-  ok("Open cards: Accept plus a menu of Dismiss 30 / 60 / 90 and Never recommend again; no Dismissed group, no CRM reconciliation actions");
+  // C2: reconciliation controls sit on data-fix cards only (tests/authority-reconcile-ui.mjs covers them).
+  assert.ok((await page.locator("[data-open-reconcile]").evaluateAll((els) => els.map((e) => e.closest("article")?.dataset.key ?? ""))).every((k) => k.startsWith("data_fix:")),
+    "reconciliation controls only on data-fix cards");
+  assert.equal(await card(ROOF_REPAIR).locator("[data-open-reconcile]").count(), 0);
+  ok("Open cards: Accept plus a menu of Dismiss 30 / 60 / 90 and Never recommend again; no Dismissed group; reconciliation controls only on data-fix cards");
 
   // 2. Accept (double-clicked) → one event; Release.
   await card(ROOF_REPAIR).locator('[data-verb="accept"]').dblclick();

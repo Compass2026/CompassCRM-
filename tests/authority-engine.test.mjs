@@ -410,3 +410,30 @@ test("inventory: only the site's own host, loops detected, off-site redirects re
   assert.ok(!hits.some((h) => h.includes("evil.test")), "never requested another host");
   assert.ok(inv.pages.every((p) => allowedUrl(p.url, SITE)));
 });
+
+// v1.3 (C2): the rows a reconciliation writes come from structured fields,
+// never from reason text.
+test("record-live-blog-posts carries its candidate paths as structured data", () => {
+  const r = run();
+  const o = r.opportunities.find((x) => x.key === "data_fix:record-live-blog-posts");
+  assert.ok(o, "the fixture has live blog posts missing from content_posts");
+  assert.ok(Array.isArray(o.candidate_paths) && o.candidate_paths.length > 0);
+  assert.deepEqual(o.candidate_paths, [...o.candidate_paths].sort(), "sorted");
+  assert.equal(new Set(o.candidate_paths).size, o.candidate_paths.length, "no duplicates");
+  assert.ok(o.candidate_paths.every((p) => p.startsWith("/") && !p.endsWith("/")), "normalised paths");
+  assert.match(o.gap, new RegExp(`^${o.candidate_paths.length} live blog posts`), "the gap counts the same pages");
+  for (const p of o.candidate_paths) assert.ok(o.reasons[0].text.includes(p), `${p} is also in the display text`);
+  // Recording one removes exactly that path; the key never changes.
+  const r2 = run((i) => { i.authority.contentPosts.push({ id: "00000000-0000-4000-8000-00000000c2c2", title: "Recorded", status: "published", url: `${SITE}${o.candidate_paths[0]}`, keyword_id: null, published_at: null }); });
+  const o2 = r2.opportunities.find((x) => x.key === "data_fix:record-live-blog-posts");
+  assert.deepEqual(o2?.candidate_paths ?? [], o.candidate_paths.slice(1));
+  assert.ok(r.opportunities.filter((x) => x.key !== "data_fix:record-live-blog-posts").every((x) => x.candidate_paths === undefined), "only this opportunity carries rows");
+});
+
+test("a keyword naming an unapproved place lists it structurally", () => {
+  const r = run();
+  for (const k of r.keywords) {
+    assert.ok(Array.isArray(k.unapproved_places));
+    assert.equal(k.flags.includes("location_unapproved"), k.unapproved_places.length > 0, k.keyword);
+  }
+});

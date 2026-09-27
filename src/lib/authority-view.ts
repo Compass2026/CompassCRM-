@@ -6,6 +6,7 @@
 import type { Opportunity, Reason, Section, Tag } from "../../supabase/functions/authority/types.ts";
 import { AGENCY_TIME_ZONE } from "./tasks.ts";
 import { historyLine, type EffectiveStatus, type EventRow, type HistoryLine, type StoredStatus, type Workflow } from "./authority-lifecycle.ts";
+import { RECORD_KEY, reconcileAction, recordProgress, type ReconcileAction, type RecordProgress } from "./authority-reconcile.ts";
 
 export type { Opportunity };
 
@@ -77,6 +78,9 @@ export type ViewInput = {
   states: OpportunityState[];
   events: OpportunityEvent[];
   members: { id: string; name: string | null; email: string }[];
+  // C2: content_posts' paths (normalised against the run's site) and how many
+  // pages the record-content opportunity has recorded (its content_post links).
+  recorded?: { paths: string[]; linked: number };
   now?: Date;
 };
 
@@ -180,6 +184,8 @@ export type Card = {
   provenance: { tag: Tag; count: number }[];
   lifecycle: string | null;                // effective_status
   workflow: Workflow | null;               // the stored workflow, for the chip and the lifecycle menu
+  reconcile: ReconcileAction | null;       // C2: the reconciliation this data fix takes
+  progress: RecordProgress;                // C2: record-content while pages remain (overrides the chip)
   details: {
     objective: string | null;
     reasons: Reason[];
@@ -209,7 +215,7 @@ function pageStatus(o: Opportunity, pillars: PillarLite[]): PageStatus | null {
 
 type CardCtx = {
   pillars: PillarLite[]; stateByKey: Map<string, OpportunityState>; eventsById: Map<string, OpportunityEvent[]>; runsById: Map<string, RunRow>;
-  members: ViewInput["members"];
+  members: ViewInput["members"]; recorded: ViewInput["recorded"];
 };
 
 function workflowOf(st: OpportunityState | null, members: ViewInput["members"], events: OpportunityEvent[]): Workflow | null {
@@ -247,6 +253,10 @@ function toCard(o: Opportunity, ctx: CardCtx): Card {
     provenance: provenanceCounts(o.reasons),
     lifecycle: st?.effective_status ?? null,
     workflow: workflowOf(st, ctx.members, st ? ctx.eventsById.get(st.id) ?? [] : []),
+    reconcile: reconcileAction(o.key),
+    progress: o.key === RECORD_KEY && ctx.recorded
+      ? recordProgress({ candidates: o.candidate_paths, recorded: new Set(ctx.recorded.paths), linked: ctx.recorded.linked })
+      : null,
     details: {
       objective: o.objective,
       reasons: o.reasons,
@@ -505,7 +515,7 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
   const eventsById = new Map<string, OpportunityEvent[]>();
   for (const e of input.events) eventsById.set(e.opportunity_id, [...(eventsById.get(e.opportunity_id) ?? []), e]);
   const runsById = new Map(runs.map((r) => [r.id, r]));
-  const ctx = { pillars: input.pillars, stateByKey, eventsById, runsById, members: input.members };
+  const ctx = { pillars: input.pillars, stateByKey, eventsById, runsById, members: input.members, recorded: input.recorded };
   const everything = input.opportunities.map((o) => ({ o, c: toCard(o, ctx) }));
   // A dismissed item (dated or never-recommend) leaves its section for the
   // collapsed Dismissed group; a dismissal whose date has passed reads open again.

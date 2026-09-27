@@ -282,9 +282,11 @@ try {
   assert.ok(await page.locator('[data-banner="running"]').isVisible());
   assert.ok(await page.locator('[data-run="full"]').isDisabled());
   assert.ok(await page.locator('[data-run="refresh"]').isDisabled());
-  assert.equal(await page.getByRole("button", { name: /Set service page|Re-home|Record page|Map keyword/ }).count(), 0, "no CRM reconciliation controls yet (decisions: tests/authority-decisions-ui.mjs)");
+  // C2: reconciliation controls sit on data-fix cards only (tests/authority-reconcile-ui.mjs covers them).
+  assert.ok((await page.locator("[data-open-reconcile]").evaluateAll((els) => els.map((e) => e.closest("article")?.dataset.key ?? ""))).every((k) => k.startsWith("data_fix:")),
+    "reconciliation controls only on data-fix cards");
   await rpc("authority_record_run", { p_run_id: running, p: { status: "failed", error: "test cleanup" } });
-  ok("Running: a run in progress shows a banner and disables both run buttons; no CRM reconciliation buttons");
+  ok("Running: a run in progress shows a banner and disables both run buttons; reconciliation controls only on data-fix cards");
 
   // 8. No run yet.
   await page.goto(`${base}/clients/${CLIENT_A}/authority`, { waitUntil: "networkidle" });

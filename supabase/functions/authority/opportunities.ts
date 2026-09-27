@@ -240,6 +240,7 @@ export function buildOpportunities(ctx: {
   if (ctx.blindSpots.length) out.push(base({
     id: "data_fix:record-live-blog-posts", key: "data_fix:record-live-blog-posts", topic: "Content inventory", action: "improve", content_type: "data_fix",
     gap: `${ctx.blindSpots.length} live blog posts are missing from content_posts.`,
+    candidate_paths: [...new Set(ctx.blindSpots)].sort(),
     gates: [{ gate: "data_only", pass: true, detail: "Changes CRM data, not content." }],
     reasons: [{ tag: "FACT", text: ctx.blindSpots.join(", ") }, { tag: "HEURISTIC", text: "Until they are recorded, the Blog Creator cannot see what it must not duplicate." }],
     value: 1, severity: 2,
