@@ -215,8 +215,8 @@ try {
   await shot("authority-lifecycle-menu-desktop", page, false);
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("#section-dismissed").count(), 0, "no Dismissed group while nothing is dismissed");
-  assert.equal(await page.getByRole("button", { name: /Approve market|Confirm service|Set service page|Create task/ }).count(), 0, "no decision or reconciliation actions in PR A");
-  ok("Open cards: Accept plus a menu of Dismiss 30 / 60 / 90 and Never recommend again; no Dismissed group, no decision or CRM actions");
+  assert.equal(await page.getByRole("button", { name: /Set service page|Re-home|Record page|Map keyword/ }).count(), 0, "no CRM reconciliation actions yet");
+  ok("Open cards: Accept plus a menu of Dismiss 30 / 60 / 90 and Never recommend again; no Dismissed group, no CRM reconciliation actions");
 
   // 2. Accept (double-clicked) → one event; Release.
   await card(ROOF_REPAIR).locator('[data-verb="accept"]').dblclick();

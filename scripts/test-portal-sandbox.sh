@@ -90,3 +90,5 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority.test.sql"
 # Authority lifecycle actions (accept / release / dismiss 30-60-90 / never
 # recommend / reopen) through authority_decide, on a client of its own.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_lifecycle.test.sql"
+# 0049: authority_apply (decisions with their canonical change, atomically).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_apply.test.sql"

@@ -13,7 +13,8 @@ import {
   type DecideInput,
   type WorkflowSnapshot,
 } from "@/lib/authority-lifecycle";
-import { START_TIMEOUT_MS, startOutcome, type Mode, type RunStatus, type StartOutcome } from "@/lib/authority-controls";
+import type { Mode, RunStatus, StartOutcome } from "@/lib/authority-controls";
+import { callAuthorityRun } from "@/lib/authority-run-call";
 
 // The Authority tab's two controls. Neither writes to the database: starting a
 // run is the authority-run Edge Function's job (authority_begin_run makes the
@@ -28,33 +29,9 @@ export async function startAuthorityRunAction(clientId: string, mode: Mode): Pro
   if (mode !== "full" && mode !== "refresh") return { kind: "error", text: "Unknown analysis mode." };
   const supabase = await createClient();
   if (!(await getCurrentTeamMember(supabase))) return { kind: "error", text: NOT_TEAM };
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) return { kind: "error", text: NOT_TEAM };
-
-  let status: number | null = null;
-  let body: unknown = null;
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/authority-run`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ mode, client_id: clientId }),
-      signal: AbortSignal.timeout(START_TIMEOUT_MS),
-      cache: "no-store",
-    });
-    status = res.status;
-    body = await res.json().catch(() => null);
-  } catch {
-    // Timeout or network error: the run may or may not have begun.
-    status = null;
-  }
+  const outcome = await callAuthorityRun(supabase, clientId, mode);
   revalidatePath(`/clients/${clientId}/authority`);
-  return startOutcome(mode, status, body);
+  return outcome;
 }
 
 // One run's status, for the watcher: the run, "missing" when it is not

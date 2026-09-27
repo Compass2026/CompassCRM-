@@ -127,6 +127,7 @@ export type Database = {
           status: string
           status_reason: string | null
           suppressed: boolean
+          suppression_basis: Json | null
           target_path: string | null
           tier: string
           topic: string
@@ -154,6 +155,7 @@ export type Database = {
           status?: string
           status_reason?: string | null
           suppressed?: boolean
+          suppression_basis?: Json | null
           target_path?: string | null
           tier: string
           topic: string
@@ -181,6 +183,7 @@ export type Database = {
           status?: string
           status_reason?: string | null
           suppressed?: boolean
+          suppression_basis?: Json | null
           target_path?: string | null
           tier?: string
           topic?: string
@@ -4318,6 +4321,15 @@ export type Database = {
       }
     }
     Functions: {
+      authority_apply: {
+        Args: {
+          p_action: string
+          p_expected?: Json
+          p_opportunity_id: string
+          p_payload?: Json
+        }
+        Returns: Json
+      }
       authority_begin_run: {
         Args: {
           p_client_id: string
@@ -4339,6 +4351,48 @@ export type Database = {
           l: Database["public"]["Tables"]["authority_opportunity_links"]["Row"]
         }
         Returns: string
+      }
+      authority_lock_opportunity: {
+        Args: { p_opportunity_id: string }
+        Returns: {
+          action: string
+          client_id: string
+          content_type: string
+          decided_at: string | null
+          decided_by: string | null
+          dismissed_until: string | null
+          eligible_from: string | null
+          first_seen_run_id: string
+          id: string
+          intent: string | null
+          key: string
+          keyword_id: string | null
+          last_seen_at: string
+          last_seen_run_id: string
+          opportunity: Json
+          present: boolean
+          section: string
+          service_id: string | null
+          sort_order: number[]
+          status: string
+          status_reason: string | null
+          suppressed: boolean
+          suppression_basis: Json | null
+          target_path: string | null
+          tier: string
+          topic: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "authority_opportunities"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      authority_norm_place: { Args: { p: string }; Returns: string }
+      authority_recommendation_basis: {
+        Args: { p_key: string; p_opportunity: Json }
+        Returns: Json
       }
       authority_record_run: {
         Args: { p: Json; p_run_id: string }

@@ -62,3 +62,17 @@ export function searchCitiesByName(query: string, limit = 5): UsCity[] {
       population,
     }));
 }
+
+// The bundled city a place name refers to in a state: an exact match after
+// the Authority engine's place normalisation ("O'Fallon" = "OFallon", "St." =
+// "Saint"), the most populous if several share the name. null when none.
+export function findCity(name: string, state: string): UsCity | null {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/['’]/g, "").replace(/\bst\b\.?/g, "saint").replace(/[^a-z0-9]+/g, " ").trim();
+  const want = norm(name);
+  const st = state.trim().toUpperCase();
+  const hit = cities
+    .filter(([cName, cState]) => cState === st && norm(cName) === want)
+    .sort((a, b) => b[4] - a[4])[0];
+  return hit ? { name: hit[0], state: hit[1], lat: hit[2], lng: hit[3], population: hit[4] } : null;
+}

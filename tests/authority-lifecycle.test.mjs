@@ -100,3 +100,10 @@ test("history lines name the teammate, the reason and the end date", () => {
   assert.equal(e("linked", { kind: "social_post" }).text, "Work linked (social post)");
   assert.equal(e("accepted", {}, "team", "gone").actor, "teammate");
 });
+
+test("a kept intent (bound suppression) is labelled as such, not as never-recommend", () => {
+  const w = { opportunityId: "o", status: "dismissed", suppressed: true, dismissed_until: null, effective: "dismissed", reason: "x", decidedBy: null, decidedAt: null,
+    keptIntent: { stored: "commercial", assessed: "navigational" } };
+  assert.deepEqual(statusChip(w), { label: "Intent kept: commercial", tone: "slate", title: "Returns if the analysis stops reading it as navigational." });
+  assert.deepEqual(lifecycleMenu(w).map((i) => i.id), ["reopen"]);
+});
