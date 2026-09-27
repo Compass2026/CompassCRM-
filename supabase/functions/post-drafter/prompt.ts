@@ -3,6 +3,7 @@
 // formats, model names or parameters). Any adapter — the Claude worker skill
 // in v1, an API model, a Compass agent — renders this however its runtime
 // needs and must return a ModelDraft ({ copy, claim_ids }).
+import type { AuthoritySection } from "./authority.ts";
 import type { Brief, LintProblem, ModelDraft } from "./types.ts";
 
 export type ModelRequest = {
@@ -40,6 +41,20 @@ export function modelRequest(brief: Brief, revision?: ModelRequest["revision"]):
     `Prefer a plain, useful post: what the service is for and when a homeowner might need it, the linked claim(s) in their exact words, and the call to action.`,
     `Return JSON only: {"copy": "...", "claim_ids": ["..."]}.`,
   ];
+  // v2, Authority mode: why this post, the evidence the analysis prefers and
+  // what the client posted recently (a draft must not repeat it).
+  const a = (brief as Brief & { authority?: AuthoritySection }).authority;
+  if (a) {
+    lines.splice(2, 0,
+      `This post answers an Authority opportunity (${a.topic}, ${a.target.intent}${a.target.keyword ? `, "${a.target.keyword}"` : ""}).${a.objective ? ` Objective: ${a.objective}` : ""}${a.gap ? ` Gap: ${a.gap}` : ""}`,
+      a.preferred_claim_ids.length
+        ? `The analysis prefers these claims as evidence: ${a.preferred_claim_ids.map((id) => `"${brief.allowed_facts.claims.find((c) => c.id === id)?.text ?? id}"`).join(", ")}. Use them (in their exact words) unless the post reads better with another allowed claim.`
+        : `The analysis names no preferred evidence; choose from brief.allowed_facts.claims.`,
+      a.recent_posts.length
+        ? `Say something new: do not repeat or closely paraphrase the client's recent Business Profile posts, which open: ${a.recent_posts.map((p) => `"${p.opening}…"`).join("; ")}.`
+        : `The client has no recent Business Profile posts.`,
+    );
+  }
   if (revision) {
     lines.push(`Your previous draft was refused. Fix exactly these problems and change nothing the brief does not allow:`);
     for (const p of revision.problems) lines.push(`- ${p.code}: ${p.message}`);
