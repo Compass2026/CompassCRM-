@@ -1292,6 +1292,7 @@ export type Database = {
           id: string
           keyword_id: string | null
           notes: string | null
+          origin: string
           owner: Database["public"]["Enums"]["owner_type"]
           published_at: string | null
           status: Database["public"]["Enums"]["content_status"]
@@ -1305,6 +1306,7 @@ export type Database = {
           id?: string
           keyword_id?: string | null
           notes?: string | null
+          origin?: string
           owner?: Database["public"]["Enums"]["owner_type"]
           published_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]
@@ -1318,6 +1320,7 @@ export type Database = {
           id?: string
           keyword_id?: string | null
           notes?: string | null
+          origin?: string
           owner?: Database["public"]["Enums"]["owner_type"]
           published_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]
@@ -4389,7 +4392,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      authority_norm_path: {
+        Args: { p_site?: string; p_url: string }
+        Returns: string
+      }
       authority_norm_place: { Args: { p: string }; Returns: string }
+      authority_page_state: {
+        Args: { p_path: string; p_run_id: string }
+        Returns: Json
+      }
       authority_recommendation_basis: {
         Args: { p_key: string; p_opportunity: Json }
         Returns: Json
@@ -4398,6 +4409,33 @@ export type Database = {
         Args: { p: Json; p_run_id: string }
         Returns: Json
       }
+      authority_selected_rows: {
+        Args: { p_expected: Json; p_rows: Json }
+        Returns: Json
+      }
+      authority_service_group: {
+        Args: { p_client_id: string; p_service_name: string }
+        Returns: {
+          city_tier: Database["public"]["Enums"]["city_tier"] | null
+          client_id: string
+          created_at: string
+          id: string
+          name: string
+          page_type: Database["public"]["Enums"]["page_group_type"]
+          primary_keyword_id: string | null
+          serp_notes: string | null
+          status: Database["public"]["Enums"]["taxonomy_status"]
+          supporting_keyword_ids: string[]
+          target_url: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "page_groups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
       client_intelligence_input: {
         Args: { p_client_id: string }

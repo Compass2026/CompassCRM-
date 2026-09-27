@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0049` (Authority decisions) was applied Sept 27 2026 as
+  **not yet applied**; `0050` (Authority reconciliation + `content_posts.origin`)
+  was applied Sept 27 2026 as `20260927173308` (app not yet deployed with it); `0049` (Authority decisions) was applied Sept 27 2026 as
   `20260927162712` (app not yet deployed with it); `0048` (Authority runs) was applied Sept 25 2026 as
   `20260925221705`; `0047` (AI Drafter) was applied Sept 25 2026 as
   `20260925165933`; `0044` was applied Sept 23 2026 as `20260923164846`; `0045` was applied
@@ -1125,6 +1126,43 @@ the sandbox's `authority_apply.test.sql`, `npm run test:authority-decisions-ui`
 applying: the recorded SQL and every function body match the file (md5),
 grants as designed, and rolled-back probes refused the worker's SQL (also
 with a team JWT), the service role, a non-team sign-in and anon;
+`database.types.ts` was regenerated from production.
+**Reconciliation** (Decisions PR C1; migration **0050, applied Sept 27
+2026 as `20260927173308`**; database only, no UI yet): four more `authority_apply` actions for
+the data fixes the engine already reports, with 0049's guarantees (caller's
+RLS, teammate through PostgREST only, rows locked, `AU409` when anything
+differs from the preview, the write and its decision event in one
+transaction). Every page check reads the stored site snapshot of the run
+that last reported the opportunity (`authority_page_state`,
+`authority_norm_path` — a port of `authority/urls.ts` normPath pinned by
+`tests/fixtures/authority-norm-path-vectors.json`). Batches are 1-25
+explicitly selected rows that must equal the preview's
+(`authority_selected_rows`).
+`set_service_page` sets `services.page_url` to the approved service page
+group's live target. `rehome_keywords` moves keywords the analysis flags
+`homepage_pollution` to the service's live page, or to the one approved
+Home page group (keyword unassigned from the service, added to the group's
+supporting ids) **only when the run flags the keyword `home_eligible`** —
+the engine does not emit that flag until PR C3, so Home re-homing is
+refused until then. `record_content` records selected live blog pages
+missing from `content_posts` as `origin = 'site_inventory'` (published, no
+date, "Not produced by Compass."), skips URLs already recorded, serialises
+per client with an advisory lock and links each row. `map_keywords` gives
+an unmapped keyword an approved service only when that service's page group
+target is live (no temporary mappings; Roof Repair / Storm Damage stay
+unavailable until their pages exist). **Provenance:** `content_posts.origin`
+is `compass` (default, every existing row) or `site_inventory`, fixed once
+set (trigger, 42501). Compass-work views show `compass` only: the portal
+work log (`portal_work_log` filter), the Reports tab's cycle counts, the
+Content tab tracker (which notes how many pages were recorded) and the
+worker's report Activity; `authority_input` counts both. Tests: the
+sandbox's `authority_reconcile.test.sql`, `tests/authority-norm-path.test.mjs`,
+`npm run test:content-origin-ui`. Verified on production after applying: the
+recorded SQL and every function body match the file (md5), grants as
+designed, all 8 existing `content_posts` rows are `compass`, rolled-back
+probes refused the worker's SQL (also with a team JWT), the service role,
+anon and a portal contact, and a rolled-back portal contact saw a Compass
+post but not a `site_inventory` one; no client or Authority data changed;
 `database.types.ts` was regenerated from production.
 `gsc-sync` pages rows with `startRow` since Sept 25 2026 (PR #68, v5;
 `_shared/gsc-paging.ts`, 1,000 per page, safety cap 10,000, logged when

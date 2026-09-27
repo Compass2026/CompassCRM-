@@ -1,0 +1,22 @@
+{
+  "_note": "Shared by tests/authority-norm-path.test.mjs (authority/urls.ts normPath) and supabase/tests/sandbox/authority_reconcile.test.sql (0050 authority_norm_path). Both must give the same answer for every vector.",
+  "site": "https://www.recon.example.test",
+  "vectors": [
+    { "url": "https://www.recon.example.test", "expect": "/" },
+    { "url": "https://www.recon.example.test/", "expect": "/" },
+    { "url": "https://recon.example.test/blog/post-one/", "expect": "/blog/post-one" },
+    { "url": "https://WWW.Recon.Example.Test/Blog/Post-One", "expect": "/Blog/Post-One" },
+    { "url": "http://recon.example.test:8080/gutters?x=1#top", "expect": "/gutters" },
+    { "url": "https://www.recon.example.test//blog//double//", "expect": "/blog/double" },
+    { "url": "https://www.recon.example.test/blog/%E2%9C%93-check", "expect": "/blog/✓-check" },
+    { "url": "https://www.recon.example.test/a%2Fb", "expect": "/a/b" },
+    { "url": "https://www.recon.example.test/bad%E0%A4%A", "expect": null },
+    { "url": "https://elsewhere.example.test/blog/post-one", "expect": null },
+    { "url": "https://sub.recon.example.test/blog/post-one", "expect": null },
+    { "url": "/blog/post-two/", "expect": "/blog/post-two" },
+    { "url": "/roof-replacement?utm=x", "expect": "/roof-replacement" },
+    { "url": "/", "expect": "/" },
+    { "url": "", "expect": null },
+    { "url": "   ", "expect": null }
+  ]
+}

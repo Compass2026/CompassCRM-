@@ -92,3 +92,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_lifecycle.test.sql"
 # 0049: authority_apply (decisions with their canonical change, atomically).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_apply.test.sql"
+# 0050: Authority CRM reconciliation (set_service_page, rehome_keywords,
+# record_content, map_keywords), content_posts.origin and the portal work
+# log's Compass-only filter. The normPath vectors are shared with
+# tests/authority-norm-path.test.mjs.
+psql_as postgres -d sandbox -v vectors="$(cat "$ROOT/tests/fixtures/authority-norm-path-vectors.json")" \
+  -f "$ROOT/supabase/tests/sandbox/authority_reconcile.test.sql"

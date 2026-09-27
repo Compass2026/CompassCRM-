@@ -41,12 +41,15 @@ export default async function ContentPage({
   const { status: filter } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: posts }, { data: keywords }, { data: plan }] =
+  const [{ data: posts }, { data: keywords }, { data: plan }, { count: recordedFromSite }] =
     await Promise.all([
+      // The tracker is Compass's production: pages recorded from the client's
+      // own site (0050, origin site_inventory) are counted below, never listed.
       supabase
         .from("content_posts")
         .select("*, keywords(id, keyword)")
         .eq("client_id", clientId)
+        .eq("origin", "compass")
         .order("due_date", { ascending: true, nullsFirst: false }),
       supabase
         .from("keywords")
@@ -59,6 +62,11 @@ export default async function ContentPage({
         .select("blog_posts_per_month")
         .eq("client_id", clientId)
         .maybeSingle(),
+      supabase
+        .from("content_posts")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", clientId)
+        .eq("origin", "site_inventory"),
     ]);
 
   const visible = filter
@@ -102,6 +110,12 @@ export default async function ContentPage({
         <CardContent className="space-y-3">
           {visible.length === 0 && (
             <p className="text-sm text-muted-foreground">No posts{filter ? ` in ${filter}` : ""} yet.</p>
+          )}
+          {!!recordedFromSite && (
+            <p className="text-xs text-muted-foreground" data-recorded-from-site={recordedFromSite}>
+              {recordedFromSite} {recordedFromSite === 1 ? "page" : "pages"} already on the client&apos;s site{" "}
+              {recordedFromSite === 1 ? "is" : "are"} recorded for Authority coverage. Not Compass&apos;s work, so not listed here.
+            </p>
           )}
           <ul className="space-y-2">
             {visible.map((post) => (

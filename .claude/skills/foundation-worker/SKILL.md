@@ -1501,7 +1501,10 @@ everything from the CRM first:
   average averages. If totals cannot be verified, record them as not measured;
   query/page detail can remain in the appendix with its coverage limitation.
 - **Alerts:** `alerts` triggered in the period, acknowledged or not.
-- **Activity:** `content_posts` published in the period, `social_posts`
+- **Activity:** `content_posts` published in the period with `origin =
+  'compass'` (a `site_inventory` row is a page that was already on the
+  client's site, recorded by Authority — never count or report it as
+  Compass's work), `social_posts`
   with verified publication dates (social `scheduled_at` alone is not proof),
   GBP posts (count the `gbp_posts` task's notes if Tom recorded a verified number,
   else not measured), against `plans.gbp_posts_per_month` /

@@ -40,7 +40,9 @@ export default async function ReportsPage({
         .from("content_posts")
         .select("published_at")
         .eq("client_id", clientId)
-        .eq("status", "published"),
+        .eq("status", "published")
+        // 0050: pages recorded from the client's own site are not Compass's work.
+        .eq("origin", "compass"),
       // 0045: published is a publishing state, dated by when it went out.
       supabase
         .from("social_posts")
