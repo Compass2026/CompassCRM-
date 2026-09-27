@@ -25,8 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0052` (reconciliation writes bound to their preview) is
-  written but **not yet applied**; `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
+  **not yet applied**; `0052` (reconciliation writes bound to their preview) was
+  applied Sept 27 2026 as `20260927212625` (app not yet deployed with it); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
   `20260927193245`;
   `0050` (Authority reconciliation + `content_posts.origin`)
   was applied Sept 27 2026 as `20260927173308`; `0049` (Authority decisions) was applied Sept 27 2026 as
@@ -1194,7 +1194,11 @@ atomic: the keyword leaves every service / hub page group's supporting list
 in the same transaction that gives it to Home; a service's primary keyword is
 refused; the sandbox's `authority_home_cleanup.test.sql`. Apply 0051 before
 any real Home re-home.
-**Reconciliation UI** (C2; migration **0052, written, not yet applied**;
+**Reconciliation UI** (C2; migration **0052, applied Sept 27 2026 as
+`20260927212625`** — recorded SQL and the `authority_apply` body match the
+file by md5, grants unchanged, rolled-back probes refused the worker's SQL
+(also with a team JWT), the service role, anon, a portal contact and a
+non-team sign-in, types unchanged;
 engine `authority-v1.3`, `authority-run` **not yet redeployed** with it):
 a **Reconcile** control on each of the four data-fix cards (Set service page,
 Re-home keywords, Record pages, Map keywords; `opportunity-reconcile.tsx`),
