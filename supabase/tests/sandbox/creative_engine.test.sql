@@ -115,7 +115,8 @@ insert into storage.objects (bucket_id, name, metadata) values
   ('creative-assets', ce.id('c') || '/' || ce.h('small') || '.png', '{"size": 1000, "mimetype": "image/png"}'),
   ('creative-assets', ce.id('c') || '/' || ce.h('manual') || '.jpg', '{"size": 1000, "mimetype": "image/jpeg"}'),
   ('creative-assets', ce.id('c') || '/' || ce.h('r3') || '.png', '{"size": 1000, "mimetype": "image/png"}');
-insert into storage.objects (bucket_id, name) values ('brand-assets', ce.id('c') || '/p1.jpg');
+insert into storage.objects (bucket_id, name, metadata)
+  select 'brand-assets', storage_path, '{"size": 1000}' from brand_assets where client_id = ce.id('c');
 
 -- ── S. Static checks ────────────────────────────────────────────────────────
 do $$
@@ -182,12 +183,14 @@ end $$;
 do $$
 declare st text;
 begin
-  -- Measurements and suggestions are not governance: the worker may record them.
-  update brand_assets set content_hash = ce.h(label || id::text),
-         creative_suggestions = '{"depicts_own_work": true, "subjects": ["roof"], "model": "sandbox-vision"}'
+  -- Suggestions are not governance: the worker may record them. Hashes are
+  -- measurements of the stored bytes: only the source-assets function (0055).
+  update brand_assets set creative_suggestions = '{"depicts_own_work": true, "subjects": ["roof"], "model": "sandbox-vision"}'
    where client_id = ce.id('c');
-  perform ce.ok('W1 the worker records measured hashes and AI suggestions on unreviewed assets',
-    (select count(*) from brand_assets where client_id = ce.id('c') and content_hash is not null and creative_suggestions is not null) = 6);
+  st := ce.try(format($q$update brand_assets set content_hash = %L where id = %L$q$, ce.h('x'), ce.id('p1')));
+  perform ce.ok('W1 the worker records AI suggestions but not content hashes (0055)',
+    (select count(*) from brand_assets where client_id = ce.id('c') and creative_suggestions is not null) = 6
+    and st like '42501:%source-assets%', st);
   perform ce.ok('W2 a suggestion is not governed truth',
     (select depicts_own_work is null and subjects = '{}' and creative_use = 'unreviewed' from brand_assets where id = ce.id('p1')));
   st := ce.try(format($q$update brand_assets set creative_use = 'approved', depicts_own_work = true where id = %L$q$, ce.id('p1')));
@@ -228,15 +231,24 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', '', false);
 
--- ── G. A teammate governs source images and the policy ──────────────────────
+-- The source-assets function records what it measured (all but p2).
 \c - authenticator
+set role service_role;
+select ce.as_user('service_role', null);
+select brand_asset_record_hash(jsonb_build_object('asset_id', id, 'storage_path', storage_path, 'expected_hash', null,
+         'content_hash', ce.h(label || id::text), 'width', width, 'height', height, 'byte_size', 1000,
+         'content_type', case when kind::text like 'logo%' then 'image/png' else 'image/jpeg' end,
+         'raw_width', width, 'raw_height', height, 'orientation', 1, 'measured_by', 'sandbox'))
+  from brand_assets where client_id = ce.id('c') and id <> ce.id('p2');
+reset role;
+
+-- ── G. A teammate governs source images and the policy ──────────────────────
 set role authenticated;
 select ce.as_user('authenticated', :'team');
 do $$
 declare st text; v_me uuid := (select id from team_members where auth_user_id = '00000000-0000-4000-a000-000000000001');
 begin
-  st := ce.try(format($q$update brand_assets set content_hash = null where id = %L$q$, ce.id('p2')));
-  st := ce.try(format($q$update brand_assets set creative_use = 'approved', depicts_own_work = true where id = %L$q$, ce.id('p2')));
+  st := ce.try(format($q$update brand_assets set creative_use = 'approved', depicts_own_work = true, subjects = '{roof}', focal_x = 0.5, focal_y = 0.5 where id = %L$q$, ce.id('p2')));
   perform ce.ok('G1 approval needs the file''s content hash', st like '23514:%approved_complete%', st);
   st := ce.try(format($q$update brand_assets set creative_use = 'approved' where id = %L$q$, ce.id('p1')));
   perform ce.ok('G2 approving a photo needs the own-work decision', st like '23514:%approved_complete%', st);
@@ -251,9 +263,9 @@ begin
     exists (select 1 from creative_governance_events where subject_id = ce.id('p1') and action = 'approved'
             and actor_kind = 'team' and actor_id = v_me and changes ? 'creative_use' and changes ? 'depicts_own_work'
             and changes->'subjects'->'to' = '["roof", "shingles"]'::jsonb));
-  update brand_assets set creative_use = 'approved', depicts_own_work = false where id = ce.id('p3');
-  update brand_assets set creative_use = 'approved', depicts_own_work = true where id = ce.id('p5');
-  update brand_assets set creative_use = 'approved' where id = ce.id('l1');
+  update brand_assets set creative_use = 'approved', depicts_own_work = false, subjects = '{house}', focal_x = 0.5, focal_y = 0.5 where id = ce.id('p3');
+  update brand_assets set creative_use = 'approved', depicts_own_work = true, subjects = '{crew}', focal_x = 0.5, focal_y = 0.5 where id = ce.id('p5');
+  update brand_assets set creative_use = 'approved', subjects = '{logo}' where id = ce.id('l1');
   st := ce.try(format($q$update brand_assets set creative_use = 'excluded' where id = %L$q$, ce.id('p4')));
   perform ce.ok('G5 excluding needs a reason', st like '23514:%excluded_explained%', st);
   update brand_assets set creative_use = 'excluded', creative_review_note = 'Too small and blurry' where id = ce.id('p4');

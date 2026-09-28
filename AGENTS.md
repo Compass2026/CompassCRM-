@@ -27,7 +27,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
-  enabled); `0053` (Authority → AI Drafter hand-off) was applied Sept
+  enabled); `0055` (source-asset hashing) is written and
+  sandbox-tested but **not yet applied** (awaiting review); `0053` (Authority → AI Drafter hand-off) was applied Sept
   27 2026 as `20260927224214` (app and `post-drafter` v2 deployed with it: PR
   #79); `0052` (reconciliation writes bound to their preview) was
   applied Sept 27 2026 as `20260927212625` (app deployed with it: PR #77); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
@@ -1139,6 +1140,34 @@ scheduled or published by any of it.
   hashes and brand assets unchanged; `database.types.ts` regenerated (the post
   page lists brand-asset links only, since `post_assets.brand_asset_id` is now
   nullable).
+- **Source Asset Governance (0055 written Sept 28 2026, NOT applied;
+  `source-assets` Edge Function written, NOT deployed):** a hash is a
+  measurement of the stored bytes, so `brand_assets.content_hash` /
+  `content_hashed_at` / `content_measurement` are written only by
+  `brand_asset_record_hash()` in the source-assets function's service session
+  (compare-and-set on the path and previous hash, storage object present, size
+  matching; a no-op when nothing changed). Any other change to `storage_path`,
+  `url`, `width` or `height` clears the hash, and a changed or cleared hash
+  resets the review (0054). Approval now also needs a recorded hash, the
+  stored object present, at least one lower-case subject tag, and for a photo
+  the own-work decision and a focal point; hashing, approvals (with the
+  approved hash) and resets are in `creative_governance_events`.
+  `supabase/functions/source-assets` (`handler.ts`, `plan.ts`, `store.ts`,
+  `../_shared/image-meta.ts`): `inventory` is a read-only dry run (downloads
+  each stored file from `brand-assets`, sha256 + size + EXIF orientation;
+  link-only assets reported with the brand-scan import that would store them),
+  `hash` records only the assets named in `expect: {asset_id: hash}` from an
+  inventory and refuses bytes that changed since. It never writes image bytes
+  or review fields. UI: Brand tab › **Creative use**
+  (`/clients/[id]/brand/creative-use`; `src/lib/creative-use.ts`,
+  `src/app/creative-use-actions.ts`, `src/components/creative-use/`):
+  Approve for creative / Exclude (reason) / Keep unreviewed, as the signed-in
+  teammate, refused when the file changed since the page loaded; AI
+  suggestions shown apart and only prefill subjects / focal point on request.
+  Tests: `tests/source-assets.test.mjs`, `tests/creative-use.test.mjs`, the
+  sandbox's `source_asset_hashing.test.sql`, `npm run test:creative-use-ui`.
+  Deploying `source-assets` needs it added to the deploy workflow's function
+  list. Nothing has been hashed or reviewed on production.
 - **Architecture decisions (Sept 28 2026; `docs/client-intelligence.md`,
   "Content architecture decisions"):** one Authority opportunity per
   publishing channel (GBP, Facebook, Instagram each their own lifecycle; a

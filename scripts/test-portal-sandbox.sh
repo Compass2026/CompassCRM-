@@ -111,3 +111,6 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_drafter_h
 # runs, immutable content-addressed assets and sources, creative links,
 # approval binding, request new creative, manual uploads, the creative bucket).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/creative_engine.test.sql"
+# 0055: source-asset hashing provenance (only the source-assets function
+# records a hash; file changes clear it) and the stricter creative-use review.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/source_asset_hashing.test.sql"

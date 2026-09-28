@@ -535,6 +535,8 @@ export type Database = {
         Row: {
           client_id: string
           content_hash: string | null
+          content_hashed_at: string | null
+          content_measurement: Json | null
           created_at: string
           creative_review_note: string | null
           creative_reviewed_at: string | null
@@ -564,6 +566,8 @@ export type Database = {
         Insert: {
           client_id: string
           content_hash?: string | null
+          content_hashed_at?: string | null
+          content_measurement?: Json | null
           created_at?: string
           creative_review_note?: string | null
           creative_reviewed_at?: string | null
@@ -593,6 +597,8 @@ export type Database = {
         Update: {
           client_id?: string
           content_hash?: string | null
+          content_hashed_at?: string | null
+          content_measurement?: Json | null
           created_at?: string
           creative_review_note?: string | null
           creative_reviewed_at?: string | null
@@ -5090,6 +5096,7 @@ export type Database = {
       creative_actor_kind: { Args: never; Returns: string }
       creative_begin_run: { Args: { p: Json }; Returns: Json }
       creative_caller_is_teammate: { Args: never; Returns: boolean }
+      creative_subjects_valid: { Args: { p: string[] }; Returns: boolean }
       creative_diff: {
         Args: { p_fields: string[]; p_new: Json; p_old: Json }
         Returns: Json
