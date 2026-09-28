@@ -103,6 +103,51 @@ test("Ready: ready now open; the cadence item collapsed with its next eligible d
   assert.equal(waiting.note, "Next eligible Oct 16, 2026");
 });
 
+// Lifecycle truth (0053): an approved or published linked post completes the
+// current cycle; in review and rejected do not. The Lucas transactional
+// Roof Replacement post, whose state the view reads from
+// authority_opportunity_state.effective_status.
+const TX = "gbp_post:4288b96c-db9f-436e-b492-78f5fa7f1f21:transactional";
+const CM = "gbp_post:4288b96c-db9f-436e-b492-78f5fa7f1f21:commercial";
+const withState = (effective, key = TX, status = "accepted") => input({
+  states: FX.opportunities.map((o, i) => ({ id: `s${i}`, key: o.key, present: true, first_seen_run_id: FULL.id, last_seen_run_id: REFRESH_ID,
+    effective_status: o.key === key ? effective : "open", status: o.key === key ? status : "open", suppressed: false, dismissed_until: null })),
+});
+const readySummary = (v) => v.summary.find((s) => s.section === "ready").count;
+
+test("Ready: an approved post's opportunity leaves Ready now for a collapsed Completed this cycle group, and the Ready count", () => {
+  const before = buildAuthorityView(withState("open", TX, "open"));
+  assert.deepEqual(section(before, "ready").groups.map((g) => [g.id, g.count]), [["ready-now", 1], ["ready-waiting", 1]]);
+  assert.equal(readySummary(before), 2);
+
+  const v = buildAuthorityView(withState("completed"));
+  assert.deepEqual(section(v, "ready").groups.map((g) => [g.id, g.label, g.count, g.open]),
+    [["ready-waiting", "Waiting on cadence", 1, false], ["ready-completed", "Completed this cycle", 1, false]]);
+  assert.equal(group(v, "ready", "ready-completed").cards[0].key, TX);
+  assert.equal(group(v, "ready", "ready-now"), undefined, "no Ready now group when nothing is actionable");
+  assert.equal(readySummary(v), 1);
+  assert.equal(section(v, "ready").count, 2, "the section still lists both; only the actionable count drops");
+  // A completed item the engine already moved to its cadence wait is completed, not waiting.
+  const both = buildAuthorityView(withState("completed", CM));
+  assert.deepEqual(section(both, "ready").groups.map((g) => [g.id, g.count]), [["ready-now", 1], ["ready-completed", 1]]);
+});
+
+test("Ready: in review stays in Ready now; rejected (accepted again) is Ready now; a new cycle (open) is Ready now again", () => {
+  for (const effective of ["in_progress", "accepted", "open"]) {
+    const v = buildAuthorityView(withState(effective, TX, effective === "open" ? "open" : "accepted"));
+    assert.deepEqual(group(v, "ready", "ready-now").cards.map((c) => c.key), [TX], effective);
+    assert.equal(group(v, "ready", "ready-completed"), undefined, effective);
+    assert.equal(readySummary(v), 2, effective);
+  }
+});
+
+test("Only Ready is affected: a completed data fix keeps its place (C2 partial recording)", () => {
+  const RECORD = "data_fix:record-live-blog-posts";
+  const v = buildAuthorityView(withState("completed", RECORD, "accepted"));
+  assert.ok(section(v, "fix_now").groups.some((g) => g.cards.some((c) => c.key === RECORD)));
+  assert.equal(v.summary.find((s) => s.section === "fix_now").count, buildAuthorityView(input()).summary.find((s) => s.section === "fix_now").count);
+});
+
 test("Needs Decision: Services, Markets and Intent conflicts, one row each; small groups open", () => {
   const v = buildAuthorityView(input());
   assert.deepEqual(section(v, "needs_decision").groups.map((g) => [g.label, g.count, g.open]), [["Services", 1, true], ["Markets", 19, false], ["Intent conflicts", 7, false]]);

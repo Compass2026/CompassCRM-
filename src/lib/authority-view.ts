@@ -295,15 +295,31 @@ function fixNowGroups(cards: Card[]): Group[] {
     .map((g) => ({ ...g, count: g.cards.length }));
 }
 
+// Work whose linked asset is approved or published completes the current
+// cycle (authority_opportunity_state, 0053): it is no longer actionable, so
+// it leaves Ready now for its own collapsed group, and the summary count,
+// until a later analysis starts a new cadence cycle (the opportunity reads
+// open again). In review stays actionable (the draft is still being
+// decided); a rejected post never completes anything.
+export const isCompletedThisCycle = (c: Card) => c.lifecycle === "completed";
+
 function readyGroups(cards: Card[]): Group[] {
-  const now = cards.filter((c) => !c.eligibleFrom);
-  const waiting = cards.filter((c) => c.eligibleFrom).sort((a, b) => a.eligibleFrom!.localeCompare(b.eligibleFrom!));
+  const done = cards.filter(isCompletedThisCycle);
+  const open = cards.filter((c) => !isCompletedThisCycle(c));
+  const now = open.filter((c) => !c.eligibleFrom);
+  const waiting = open.filter((c) => c.eligibleFrom).sort((a, b) => a.eligibleFrom!.localeCompare(b.eligibleFrom!));
   const out: Group[] = [];
   if (now.length) out.push({ id: "ready-now", label: "Ready now", count: now.length, open: true, cards: now });
   if (waiting.length) {
     out.push({
       id: "ready-waiting", label: "Waiting on cadence", count: waiting.length, open: false,
       note: `Next eligible ${formatDate(waiting[0].eligibleFrom)}`, cards: waiting,
+    });
+  }
+  if (done.length) {
+    out.push({
+      id: "ready-completed", label: "Completed this cycle", count: done.length, open: false,
+      note: "approved or published; ready again when the next cycle starts", cards: done,
     });
   }
   return out;
@@ -546,11 +562,14 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
     return { section: s, ...SECTION_META[s], count: cs.length, groups };
   });
 
-  // What is still to act on: the engine's counts less what a person dismissed.
+  // What is still to act on: the engine's counts less what a person dismissed
+  // and, for Ready, what an approved or published post completed this cycle.
   const counts = latest.counts?.by_section ?? {};
+  const completedReady = cards.filter((x) => x.o.section === "ready" && isCompletedThisCycle(x.c)).length;
   const summary = SUMMARY_SECTIONS.map((s) => ({
     section: s, label: SECTION_META[s].label, tone: SECTION_META[s].tone,
-    count: (counts[s] ?? everything.filter((x) => x.o.section === s).length) - dismissedCards.filter((c) => c.details.raw.section === s).length,
+    count: (counts[s] ?? everything.filter((x) => x.o.section === s).length) - dismissedCards.filter((c) => c.details.raw.section === s).length
+      - (s === "ready" ? completedReady : 0),
   }));
   const dismissed: Group | null = dismissedCards.length
     ? { id: "dismissed", label: "Dismissed", count: dismissedCards.length, open: false, note: "dismissed for a while, or never recommend again", cards: dismissedCards }
