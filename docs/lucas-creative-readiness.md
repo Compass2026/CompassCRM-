@@ -1,5 +1,92 @@
 # Lucas Creative Readiness (Sept 28 2026)
 
+## Decisions (Tom, Sept 28 2026)
+
+The findings below were approved with these decisions. The template rules
+are in `docs/canva-integration.md`, under "Rules every family follows".
+
+- **Palette:**
+
+  | Colour | Hex |
+  |---|---|
+  | Charcoal | `#0d0f10` |
+  | Panel | `#1a1d1f` |
+  | Lucas blue | `#128fb1` |
+  | Sky blue | `#72d2e4` |
+  | Text | `#f0f4f8` |
+  | Muted text | `#8fa3b1` |
+
+  - Brown stays in the logo artwork only.
+  - The legacy red / cyan / grey palette is retired from Lucas templates.
+  - The palette will be carried by the Lucas template definitions when
+    templates are registered. `brand_colors` and the approved brand board
+    (the website's record) are unchanged.
+- **Creative type:** Montserrat for headlines, Poppins for supporting
+  text. The website keeps Inter.
+- **Logo:** the website's `lucas-logo-v3.png` is imported as the governed
+  `logo_primary` (details below). It still needs a teammate's review on
+  Creative use.
+- **CTA:** "Request a Quote" is the standing creative CTA. Phone and
+  website come from the governed client record.
+- **Unavailable unless separately confirmed:**
+  - Free Quote, Free Estimate and Free Inspection
+  - 24/7 and same-day response
+  - licensed / bonded
+  - 500+ roofs
+  - since 2018
+  - review counts
+  - Lifetime Workmanship Warranty (flagged for owner confirmation)
+- **Project location:** an approved city or service-area page is not
+  evidence that a project happened there. A caption names a place only when
+  that photo or project has a governed or human-confirmed location.
+  Geography is never inferred from the service area.
+- **Services and geography** stay as found in section 5:
+  - No Roof Inspections or Emergency Roof Repairs services, and no
+    "emergency" language.
+  - Wentzville where governed.
+  - The county line is "St. Charles, Lincoln & Warren Counties".
+  - No St. Louis County, Chesterfield, Ballwin, Wildwood, Florissant or
+    other legacy markets until approved.
+- **Review Spotlight and Team & Community** stay blocked. They wait on
+  two future generic Compass capabilities: a governed review record, and a
+  consent / usage record for people in photos. Neither delays the first
+  Lucas pilot.
+
+### Done on Sept 28 2026 (production)
+
+1. **v3 logo imported** through brand-scan's import mode as brand asset
+   `0c945d6f-c1ff-4b94-8c2b-afa777366e35`:
+   - kind `logo_primary`, `is_primary`
+   - source: link, `https://lucasconstructionmo.com/lucas-logo-v3.png`
+   - 579,396 bytes, PNG, 1200×886
+2. **Hashed by `source-assets`** from the stored copy: SHA-256
+   `4f835f2c1d24434e8aeb5726ca0b74fe2284e99da119e7966c58770c17479a43`.
+   This is the same hash as the file fetched independently from the site.
+   The asset's notes record that it is a raster made for dark grounds, and
+   that the vector original is requested. It is `unreviewed`: a teammate
+   approves it on Creative use.
+3. **The previous square mark is kept.** `81a697a7-63ce-4517-8565-98e8f9dfe545`
+   is relabelled "Legacy square mark (old WordPress site icon, 512px)", with
+   kind `logo_icon`. Its bytes, hash and review are unchanged. The 192 px
+   icon is untouched, and nothing was deleted.
+4. **TOM task opened:** "Get the original vector logo from Lucas", key
+   `logo_vector`.
+5. **The Creative use page** now shows, on every card:
+   - the file name and host
+   - the full hash and hash date
+   - quality warnings: below hero size, heavily compressed, re-cropped or
+     enlarged from a smaller file, a Facebook download, WhatsApp
+     recompression, a raster logo
+   - the asset's notes
+   - an "Open full size" link
+
+   Its focal-point picker now takes the photo's own shape, so a click lands
+   on the same point of the image. Before, portrait photos were letterboxed
+   in a square and the x coordinate was off.
+
+Nothing was approved. No template, renderer, policy, creative, post or
+publishing.
+
 This report is read-only: nothing was written to the CRM, Canva or the Lucas
 site. No renderer code, template rows, creative assets, social posts,
 approvals or publishing. It asks what stands between the seven approved

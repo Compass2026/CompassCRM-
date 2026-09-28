@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   fileBlockers, fileStatus, historyLine, parseFocal, parseSubjects, readSuggestions,
-  reviewCounts, sameReviewSnapshot, validateReview,
+  qualityWarnings, reviewCounts, sameReviewSnapshot, sourceDetails, validateReview,
 } from "../src/lib/creative-use.ts";
 
 const H = "a".repeat(64);
@@ -98,4 +98,43 @@ test("counts and history lines", () => {
   assert.match(historyLine({ action: "approved", actor_kind: "team", note: null, changes: { approved_content_hash: H } }, "Tom"), /^Tom approved it .*aaaaaaaaaaaa/);
   assert.match(historyLine({ action: "hashed", actor_kind: "hasher", note: null, changes: { content_hash: { from: null, to: H } } }, null), /^Source hashing recorded/);
   assert.match(historyLine({ action: "excluded", actor_kind: "team", note: "Stock photo", changes: {} }, null), /excluded it: Stock photo/);
+});
+
+// Quality warnings and the source line, on Lucas's real files (Sept 28 2026).
+const W = "https://lucasconstructionmo.com/wp-content/uploads/";
+const photo = (file, width, height, bytes) => asset({ url: W + file, width, height, content_measurement: { bytes, content_type: "image/jpeg" } });
+const codes = (a) => qualityWarnings(a).map((w) => w.code);
+
+test("quality warnings: hero size, compression, resized files, Facebook and WhatsApp names", () => {
+  assert.deepEqual(codes(photo("2025/06/IMG_7051.jpg", 1536, 2048, 844169)), []);
+  assert.deepEqual(codes(photo("2025/06/PHOTO-2025-05-08-11-21-29.jpg", 1366, 2048, 205636)), []);
+  assert.deepEqual(codes(photo("2025/06/WhatsApp-Image-2025-05-08-at-11.19.55-1.jpeg", 1066, 1600, 137774)), ["below_hero", "messaging_app"]);
+  assert.deepEqual(codes(photo("2025/02/306120824_628177022035700_6078777510455938484_n-980x1307-1.jpg", 980, 1307, 233909)), ["below_hero", "facebook_download"]);
+  assert.deepEqual(codes(photo("2025/06/485607860_1117556233719243_1199546148253592065_n.jpg", 950, 1200, 63872)), ["below_hero", "heavily_compressed", "facebook_download"]);
+  assert.deepEqual(codes(photo("2025/06/Lucas-Construction-03-480x360-1.jpg", 950, 1200, 148650)), ["below_hero", "resized_from_smaller"]);
+  assert.deepEqual(codes(photo("2025/06/6-2-480x360-2.jpg", 950, 1200, 145092)), ["below_hero", "resized_from_smaller"]);
+  const below = qualityWarnings(photo("2025/06/x.jpg", 1066, 1600, 200000))[0];
+  assert.match(below.text, /1066 px.*1080 px/);
+});
+
+test("quality warnings never block or decide a review", () => {
+  const a = photo("2025/06/485607860_1117556233719243_1199546148253592065_n.jpg", 950, 1200, 63872);
+  assert.ok(qualityWarnings(a).length > 0);
+  assert.equal(validateReview(a, input()).ok, true);
+  assert.deepEqual(fileBlockers(a), []);
+});
+
+test("quality warnings: a raster logo is flagged, an SVG is not; missing data warns nothing", () => {
+  const logo = (type) => asset({ kind: "logo_primary", width: 1200, height: 886, content_measurement: { bytes: 579396, content_type: type } });
+  assert.match(qualityWarnings(logo("image/png"))[0].text, /Raster logo \(PNG, 1200×886\)/);
+  assert.deepEqual(qualityWarnings(logo("image/svg+xml")), []);
+  assert.deepEqual(qualityWarnings(asset({ width: null, height: null, url: null })), []);
+  assert.deepEqual(qualityWarnings(asset({ content_measurement: "nonsense", width: 1536, height: 2048 })), []);
+});
+
+test("source details: label, host and original file name", () => {
+  assert.deepEqual(sourceDetails(photo("2025/06/IMG_7051.jpg", 1, 1, 1)), { label: "Website scan", host: "lucasconstructionmo.com", fileName: "IMG_7051.jpg" });
+  assert.deepEqual(sourceDetails({ source: "link", url: "https://www.lucasconstructionmo.com/lucas-logo-v3.png" }), { label: "Imported from a link", host: "lucasconstructionmo.com", fileName: "lucas-logo-v3.png" });
+  assert.deepEqual(sourceDetails({ source: "upload", url: null }), { label: "Uploaded", host: null, fileName: null });
+  assert.deepEqual(sourceDetails({ source: "website_scan", url: "not a url" }), { label: "Website scan", host: null, fileName: null });
 });

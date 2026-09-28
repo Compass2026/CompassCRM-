@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { reviewCreativeUseAction, type ReviewAnswer } from "@/app/creative-use-actions";
 import {
-  fileBlockers, fileStatus, fileStatusLabel, isPhoto, readSuggestions, useLabels,
+  fileBlockers, fileStatus, fileStatusLabel, isPhoto, qualityWarnings, readSuggestions, sourceDetails, useLabels,
   type CreativeUse, type ReviewAsset,
 } from "@/lib/creative-use";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,11 @@ export function ReviewCard({ clientId, asset, imageUrl, history }: {
   const blockers = fileBlockers(asset);
   const photo = isPhoto(asset);
   const sugg = readSuggestions(asset.creative_suggestions);
+  const warnings = qualityWarnings(asset);
+  const src = sourceDetails(asset);
+  // The preview box takes the file's own shape, so a click maps to the same
+  // point of the image (a letterboxed box would shift the focal point).
+  const shape = asset.width && asset.height ? `${asset.width} / ${asset.height}` : "1 / 1";
 
   const pickFocal = (e: React.MouseEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -65,7 +70,8 @@ export function ReviewCard({ clientId, asset, imageUrl, history }: {
     <li className="surface grid gap-4 p-4 md:grid-cols-[minmax(0,220px)_1fr]" data-asset={asset.id} data-use={use} data-file={status}>
       <div className="space-y-2">
         <div
-          className={cn("relative aspect-square w-full overflow-hidden rounded-md border bg-white", imageUrl && "cursor-crosshair")}
+          className={cn("relative w-full overflow-hidden rounded-md border", photo ? "bg-white" : "bg-neutral-500", imageUrl && "cursor-crosshair")}
+          style={{ aspectRatio: shape }}
           onClick={imageUrl ? pickFocal : undefined}
           data-focal-picker
           title={imageUrl ? "Click to set the focal point" : undefined}
@@ -83,14 +89,22 @@ export function ReviewCard({ clientId, asset, imageUrl, history }: {
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
           <dt className="text-muted-foreground">Kind</dt><dd>{asset.kind}</dd>
-          <dt className="text-muted-foreground">Source</dt><dd>{asset.source === "website_scan" ? "Website scan" : asset.source}</dd>
+          <dt className="text-muted-foreground">Source</dt>
+          <dd className="min-w-0 break-words" data-source>{src.label}{src.host ? ` · ${src.host}` : ""}</dd>
+          {src.fileName && <><dt className="text-muted-foreground">File</dt><dd className="min-w-0 break-all" data-file-name>{src.fileName}</dd></>}
           <dt className="text-muted-foreground">Size</dt><dd data-dimensions>{asset.width && asset.height ? `${asset.width}×${asset.height}` : "unknown"}</dd>
           <dt className="text-muted-foreground">SHA-256</dt>
-          <dd className="break-all" data-hash-status={status}>
-            {status === "hashed" ? <span className="font-mono">{asset.content_hash!.slice(0, 16)}…</span> : fileStatusLabel[status]}
+          <dd className="min-w-0 break-all" data-hash-status={status}>
+            {status === "hashed"
+              ? <span className="font-mono" title={asset.content_hash!} data-hash={asset.content_hash!}>{asset.content_hash}</span>
+              : fileStatusLabel[status]}
           </dd>
+          {status === "hashed" && asset.content_hashed_at && <><dt className="text-muted-foreground">Hashed</dt><dd>{asset.content_hashed_at.slice(0, 10)}</dd></>}
         </dl>
-        {asset.url && <a className="block truncate text-xs underline underline-offset-2" href={asset.url} target="_blank" rel="noreferrer">Original link ↗</a>}
+        <div className="flex flex-wrap gap-x-3 text-xs">
+          {imageUrl && <a className="underline underline-offset-2" href={imageUrl} target="_blank" rel="noreferrer" data-full-size>Open full size ↗</a>}
+          {asset.url && <a className="max-w-full truncate underline underline-offset-2" href={asset.url} target="_blank" rel="noreferrer" title="The address the file was taken from; it may no longer answer. The stored copy is what you review.">Original address ↗</a>}
+        </div>
       </div>
 
       <div className="min-w-0 space-y-3">
@@ -98,6 +112,13 @@ export function ReviewCard({ clientId, asset, imageUrl, history }: {
           <h3 className="min-w-0 flex-1 break-words text-sm font-semibold">{asset.label}</h3>
           <Badge variant="outline" className={useBadge[use]} data-use-badge>{useLabels[use]}</Badge>
         </div>
+
+        {warnings.length > 0 && (
+          <ul className="space-y-0.5 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900" data-quality-warnings>
+            {warnings.map((w) => <li key={w.code} data-quality-warning={w.code}>{w.text}</li>)}
+          </ul>
+        )}
+        {asset.notes && <p className="text-xs text-muted-foreground" data-asset-notes>{asset.notes}</p>}
 
         {/* Governed values, as stored */}
         <div className="grid gap-1 text-xs sm:grid-cols-2" data-governed>

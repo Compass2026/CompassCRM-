@@ -30,6 +30,10 @@ export type ReviewAsset = {
   creative_review_note: string | null;
   creative_reviewed_at: string | null;
   creative_suggestions: unknown;
+  // Optional context for the reviewer: what source-assets measured, and the
+  // asset's own notes. Neither decides anything.
+  content_measurement?: unknown;
+  notes?: string | null;
 };
 
 export const SUBJECT_RE = /^[a-z0-9][a-z0-9 -]{0,39}$/;
@@ -103,6 +107,77 @@ export type ReviewPatch = {
   focal_y: number | null;
   creative_review_note: string | null;
 };
+
+// Where the file came from, for the reviewer: the scan or import, the host
+// and the original file name (the stored copy is what is reviewed; the
+// original address may no longer answer).
+const SOURCE_LABELS: Record<string, string> = {
+  website_scan: "Website scan", link: "Imported from a link", upload: "Uploaded",
+};
+export function sourceDetails(a: Pick<ReviewAsset, "source" | "url">): { label: string; host: string | null; fileName: string | null } {
+  const label = SOURCE_LABELS[a.source] ?? a.source;
+  if (!a.url) return { label, host: null, fileName: null };
+  try {
+    const u = new URL(a.url);
+    const last = u.pathname.split("/").filter(Boolean).pop() ?? null;
+    return { label, host: u.hostname.replace(/^www\./, ""), fileName: last ? decodeURIComponent(last) : null };
+  } catch {
+    return { label, host: null, fileName: null };
+  }
+}
+
+// Quality warnings: facts about the stored file a reviewer should weigh.
+// They never block a decision and never decide one; the Creative Engine's
+// own quality gate (docs/canva-integration.md) applies at render time.
+export const HERO_MIN_SHORT_SIDE = 1080;
+export const LOW_BYTES_PER_PIXEL = 0.06;
+export type QualityWarning = { code: "below_hero" | "heavily_compressed" | "resized_from_smaller" | "facebook_download" | "messaging_app" | "raster_logo"; text: string };
+
+function measuredBytes(m: unknown): number | null {
+  if (!m || typeof m !== "object" || Array.isArray(m)) return null;
+  const b = (m as Record<string, unknown>).bytes;
+  return typeof b === "number" && b > 0 ? b : null;
+}
+function measuredType(m: unknown): string | null {
+  if (!m || typeof m !== "object" || Array.isArray(m)) return null;
+  const t = (m as Record<string, unknown>).content_type;
+  return typeof t === "string" ? t : null;
+}
+
+export function qualityWarnings(a: Pick<ReviewAsset, "kind" | "url" | "width" | "height" | "content_measurement">): QualityWarning[] {
+  const out: QualityWarning[] = [];
+  const { fileName } = sourceDetails({ source: "", url: a.url });
+  const w = a.width ?? 0, h = a.height ?? 0;
+  if (isPhoto(a)) {
+    const short = Math.min(w, h);
+    if (w && h && short < HERO_MIN_SHORT_SIDE) {
+      out.push({ code: "below_hero", text: `Below hero size: the short side is ${short} px (a hero photo needs ${HERO_MIN_SHORT_SIDE} px). Usable as a grid or mosaic cell only.` });
+    }
+    const bytes = measuredBytes(a.content_measurement);
+    if (bytes && w && h && bytes / (w * h) < LOW_BYTES_PER_PIXEL) {
+      out.push({ code: "heavily_compressed", text: `Heavily compressed (${Math.round(bytes / 1024)} KB for ${w}×${h}). Check for blocking or smearing at full size.` });
+    }
+    const named = fileName?.match(/-(\d{2,5})x(\d{2,5})(?:-\d+)?\.[a-z0-9]+$/i);
+    if (named && w && h) {
+      const [nw, nh] = [Number(named[1]), Number(named[2])];
+      if (w > nw || h > nh || (nw > nh) !== (w > h)) {
+        out.push({ code: "resized_from_smaller", text: `The original file name says ${nw}×${nh}, but the stored file is ${w}×${h}: it was probably re-cropped or enlarged. Check sharpness at full size.` });
+      }
+    }
+    if (fileName && /^\d{6,}_\d{6,}_\d+_[a-z]\b/i.test(fileName)) {
+      out.push({ code: "facebook_download", text: "The file name is a Facebook download. Confirm it is the client's own job, not a shared or customer post, before answering own work." });
+    }
+    if (fileName && /whatsapp/i.test(fileName)) {
+      out.push({ code: "messaging_app", text: "Sent through WhatsApp, which recompresses photos. Check detail at full size." });
+    }
+  } else if (isLogo(a)) {
+    const type = measuredType(a.content_measurement);
+    if (type && type !== "image/svg+xml") {
+      out.push({ code: "raster_logo", text: `Raster logo (${type.replace("image/", "").toUpperCase()}${w && h ? `, ${w}×${h}` : ""}): fine at logo-tile size, not a vector master.` });
+    }
+  }
+  return out;
+}
 
 // The governed values a decision writes, or why it cannot be made.
 export function validateReview(a: ReviewAsset, input: ReviewInput): { ok: true; patch: ReviewPatch } | { ok: false; errors: string[] } {

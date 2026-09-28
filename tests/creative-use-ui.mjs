@@ -182,6 +182,15 @@ try {
   await page.waitForFunction((a) => document.querySelector(`[data-asset="${a}"] img`)?.naturalWidth === 8, P1);
   ok("Every image shows its preview, source, dimensions and SHA-256 status (hashed / not hashed / link only)");
 
+  assert.equal(await card(P1).locator("[data-source]").innerText(), "Website scan · lucas.example.test");
+  assert.equal(await card(P1).locator("[data-file-name]").innerText(), "1.jpg");
+  assert.equal(await card(P1).locator("[data-hash]").innerText(), H1);
+  assert.match(await card(P1).locator('[data-quality-warning="below_hero"]').innerText(), /short side is 1066 px/);
+  assert.equal(await card(LINK).locator("[data-quality-warnings]").count(), 0);
+  const pick = await card(P1).locator("[data-focal-picker]").boundingBox();
+  assert.ok(Math.abs(pick.width / pick.height - 1066 / 1600) < 0.02, `picker ${pick.width}×${pick.height}`);
+  ok("Each card shows the file name, the full hash and quality warnings; the focal picker takes the photo's own shape");
+
   const sugg = card(P1).locator("[data-suggestions]");
   assert.match(await sugg.innerText(), /AI suggestions — not reviewed \(sandbox-vision\)/);
   assert.match(await sugg.innerText(), /suggested yes — decide it yourself/);

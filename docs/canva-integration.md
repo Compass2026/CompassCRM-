@@ -174,8 +174,8 @@ ground, one accent and a logo tile.
 
 | Magnolia | Lucas equivalent |
 |---|---|
-| Dark brown ground | Charcoal / black ground |
-| Gold accent | Lucas blue `#3ca8f0` |
+| Dark brown ground | Charcoal `#0d0f10` ground |
+| Gold accent | Lucas blue `#128fb1` / sky `#72d2e4` |
 | Cream text and logo tile | White text; the black Lucas logo tile |
 
 The logo tile needs a thin white or Lucas-blue keyline on charcoal, or it
@@ -203,21 +203,52 @@ disappears (DAG5u2I9Lhk does this).
 - **Photos are approved own work only** (`brand_assets.creative_use =
   'approved'`, `depicts_own_work = true`, focal point set). No stock, no
   AI imagery, no photo presented as a job that is not one.
+- **Project location** (Tom, Sept 28 2026): an approved city or
+  service-area page is not evidence that a job happened there. A caption
+  names a city only when that photo or project has a governed or
+  human-confirmed location. Project geography is never inferred from the
+  client's general service area.
 - **People** (owner headshot, crew, team) only with consent recorded.
-- **CTA** is the brand board's standing CTA, "Request a quote", until a
-  different one is approved. "Free quote" is not usable: the claim "Free
-  quotes offered" is `unverified`.
-- **Type:** Montserrat ExtraBold / Black caps for headlines (≤ 6 words),
-  Poppins for supporting text and contact (brand board). No script faces,
-  no ghost text, no paragraph over ~25 words.
-- **Palette:** charcoal / black panels, Lucas blue `#3ca8f0` accents,
-  white type; roof brown `#9c603c` only inside the logo. The legacy Canva
-  teal is normalised to the recorded Lucas blue (see Gaps).
+- **CTA** (approved Sept 28 2026): "Request a Quote", the brand board's
+  standing CTA. The phone and website come from the governed client record.
+- **Unavailable unless separately confirmed:**
+  - Free Quote, Free Estimate and Free Inspection
+  - 24/7 and same-day response, and any "emergency" language
+  - licensed / bonded
+  - 500+ roofs
+  - since 2018
+  - review counts
+  - Lifetime Workmanship Warranty (flagged for owner confirmation)
+- **Type** (approved Sept 28 2026):
+  - **Montserrat** (ExtraBold / Black caps) is the primary / headline face,
+    for headlines of ≤ 6 words.
+  - **Poppins** is for supporting text and contact.
+  - No script faces, no ghost text, no paragraph over ~25 words.
+  - This is the creative typography only: the website keeps Inter.
+- **Palette** (approved Sept 28 2026):
+
+  | Colour | Hex | Use |
+  |---|---|---|
+  | Charcoal | `#0d0f10` | Ground |
+  | Panel | `#1a1d1f` | Raised panels, cards |
+  | Lucas blue | `#128fb1` | Rules, keylines, pills, icons; white text on it only at ≥ 24 px bold |
+  | Sky blue | `#72d2e4` | Filled CTA pill with charcoal text, accent words, the phone |
+  | Text | `#f0f4f8` | Type |
+  | Muted text | `#8fa3b1` | Supporting lines |
+
+  - Brown stays in the logo artwork only, unless separately approved.
+  - The legacy red / cyan / grey creative palette is retired from Lucas
+    templates: `#ed202b`, `#03bed7`, `#3ca8f0`, `#9c603c`, `#222222` and
+    `#777777`.
+  - The legacy Canva teal normalises to Lucas blue / sky.
+  - Where "Lucas blue" appears elsewhere in this document, it means
+    `#128fb1`.
 - **Sizes:** each family ships a 4:3 landscape master for Google Business
   Profile (the legacy "Lucas Google" designs are 1200×1000, close to it) and
   a 4:5 portrait master for Facebook / Instagram; the square is optional.
-- **Logo:** the black Lucas logo tile, always on its tile, never directly on
-  a busy photo; bottom-right on landscape, top-left on portrait unless the
+- **Logo:** the v3 wordmark (`brand_assets` `0c945d6f-c1ff-4b94-8c2b-afa777366e35`,
+  once a teammate approves it on Creative use) on the charcoal logo tile,
+  always on its tile, never directly on a busy photo; bottom-right on landscape, top-left on portrait unless the
   family says otherwise. On charcoal it carries a thin white or Lucas-blue
   keyline.
 - **Shared components** (from the benchmark), identical in every family:
@@ -529,7 +560,8 @@ Adds a light-background layout, so the feed isn't all black panels.
    Roof Repairs, which aren't in the approved taxonomy.
 5. **Palette.** Black is Lucas's dominant panel colour in Canva but isn't a
    recorded brand colour, and the Canva teal differs from the recorded
-   Lucas blue `#3ca8f0`. Confirm the panel colour and accent.
+   Lucas blue. *Resolved Sept 28 2026:* the creative palette under "Rules
+   every family follows" (`docs/lucas-creative-readiness.md`).
 6. **Reviews.** There's no review record in the CRM, so Review Spotlight
    stays blocked.
 7. **Offers.** There are no offers, so Offer mode stays disabled.

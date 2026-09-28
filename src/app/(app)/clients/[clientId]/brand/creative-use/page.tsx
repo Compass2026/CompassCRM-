@@ -9,7 +9,7 @@ import { ReviewCard } from "@/components/creative-use/review-card";
 // only from the source-assets function; AI suggestions are shown apart and
 // never decide anything. Generated creative never appears here.
 
-const COLUMNS = "id, kind, source, label, storage_path, url, width, height, content_hash, content_hashed_at, creative_use, depicts_own_work, subjects, focal_x, focal_y, creative_review_note, creative_reviewed_at, creative_suggestions, sort_order, created_at";
+const COLUMNS = "id, kind, source, label, storage_path, url, width, height, content_hash, content_hashed_at, creative_use, depicts_own_work, subjects, focal_x, focal_y, creative_review_note, creative_reviewed_at, creative_suggestions, content_measurement, notes, sort_order, created_at";
 const REVIEWABLE = ["photo", "logo_primary", "logo_alt", "logo_icon", "wordmark"] as const;
 
 export default async function CreativeUsePage({ params }: { params: Promise<{ clientId: string }> }) {
