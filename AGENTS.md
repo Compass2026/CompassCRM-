@@ -202,6 +202,13 @@ the Dashboard surfaces those under "Payments past due". UI: Billing tab
 (subscription card, payment history, lifetime paid, pause/resume, open in
 Stripe) plus a setup card on the Plan tab.
 
+**Billing & Financial Operations rework (Sept 28 2026, audit only):**
+`docs/billing-audit.md` inventories the build above (never used: no
+secrets, zero rows in production) and proposes the replacement — package
+catalog on Stripe Prices, Checkout + Customer Portal, a ledgered
+fetch-on-event webhook, invoice mirror, reconciliation, entitlements.
+Nothing of it is built; decisions in its §7 come first.
+
 ## Brand board (spec §6.2b)
 
 Every client has a brand board on the **Brand** tab — the team's visual
