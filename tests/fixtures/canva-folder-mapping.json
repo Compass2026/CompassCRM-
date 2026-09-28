@@ -1,0 +1,35 @@
+{
+  "source": "Read-only Canva reconciliation of Sept 28 2026, confirmed by Tom (Show Me Design and Show Me Electrical included). Folder names are display labels recorded for review only; ids are the keys.",
+  "clients": [
+    { "client_id": "3eaa3389-2a33-4004-837c-8aef90404410", "client_name": "BHG Safety Partners", "canva_folder_id": "FAHWhNkklNQ", "canva_folder_label": "BHG Safety Partners", "canva_used_folder_id": "FAHWhHij2r8", "canva_used_folder_label": "BHG Used" },
+    { "client_id": "db9009c2-a04b-4e93-843f-e20c49263b5b", "client_name": "Ginger Huff Interiors", "canva_folder_id": "FAFkWjGulG4", "canva_folder_label": "Ginger Huff Interiors", "canva_used_folder_id": "FAF50sDs_zY", "canva_used_folder_label": "Ginger Huff Used" },
+    { "client_id": "70211d71-d9f4-46ab-abe2-ef39c41591fb", "client_name": "Logic Solar", "canva_folder_id": "FAF3N2KiA2c", "canva_folder_label": "Logic Solar", "canva_used_folder_id": "FAF50jAeWzI", "canva_used_folder_label": "Logic Used" },
+    { "client_id": "102d3b20-2795-44ae-bd64-d1e43916291c", "client_name": "Lucas Construction", "canva_folder_id": "FAFgsbtQBMU", "canva_folder_label": "Lucas Construction", "canva_used_folder_id": "FAF50gfFIFo", "canva_used_folder_label": "Lucas Used" },
+    { "client_id": "1e12fc47-731a-4d84-a4f1-4aed777db451", "client_name": "Pensacola Equipment Rentals", "canva_folder_id": "FAFm0L4SN3I", "canva_folder_label": "Pensacola Equipment Rentals", "canva_used_folder_id": "FAF50oq0gLs", "canva_used_folder_label": "Pensacola Used" },
+    { "client_id": "a88f5ce2-30ac-508b-b217-cf22d277b278", "client_name": "Shewmaker Brothers Masonry", "canva_folder_id": "FAHWhKRTBmM", "canva_folder_label": "Shewmaker Brothers Masonry", "canva_used_folder_id": "FAHWhFz-WfY", "canva_used_folder_label": "Shewmaker Used" },
+    { "client_id": "d94cfde2-0751-4002-a149-c83b4c6c956d", "client_name": "Show Me Design", "canva_folder_id": "FAF1yAflBAI", "canva_folder_label": "ShowMe Design+Build", "canva_used_folder_id": "FAF50vURLLI", "canva_used_folder_label": "Show Me Designs Used" },
+    { "client_id": "9a8e05f5-3d28-4839-9735-79bcdd0e277d", "client_name": "Show Me Electrical", "canva_folder_id": "FAFmufa_fQo", "canva_folder_label": "Show Me Electric", "canva_used_folder_id": "FAF50si5M04", "canva_used_folder_label": "Show Me Used" }
+  ],
+  "unmapped_clients": [
+    { "client_id": "67f110bd-fb6e-4432-8536-7f192df92532", "client_name": "Compass Activation Test (fictional)", "reason": "offboarded, fictional" }
+  ],
+  "canva_only_folders": [
+    { "id": "FAFx93DuXNg", "label": "All-American" },
+    { "id": "FAFgsRu4_l8", "label": "AllN1Plumbing" },
+    { "id": "FAFgsSkSRAw", "label": "House Plan Central" },
+    { "id": "FAF0kbxL0WE", "label": "Hudson" },
+    { "id": "FAFtGAXTjGM", "label": "Mad Lab Hair" },
+    { "id": "FAF50o1Thgo", "label": "Mad Hair Used" },
+    { "id": "FAHAfqDEVD0", "label": "MTKM Contracting" },
+    { "id": "FAFm0cwmBNo", "label": "Premier Building Solutions" },
+    { "id": "FAF50niyKaE", "label": "Premier Used" },
+    { "id": "FAFgsUeShZo", "label": "Silverback Plumbing" },
+    { "id": "FAF50gE50nM", "label": "Silverback Used" },
+    { "id": "FAFvbhk1pEA", "label": "Solar Scapes" },
+    { "id": "FAFPNKjVvv8", "label": "Logos" },
+    { "id": "FAFRVPZH7rs", "label": "Tech Allies Logos" },
+    { "id": "FAFxbyVX600", "label": "Templates" },
+    { "id": "FAFndGJujHo", "label": "Untitled (1000 x 1000 px) (1200 x 400 px) (Calendar) (Resized May 14, 2025)" },
+    { "id": "uploads", "label": "Uploads (Canva system folder)" }
+  ]
+}

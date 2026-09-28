@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0054` (Creative Engine schema) was applied Sept 28
+  **not yet applied**; `0056` (Canva folder ids on the client record) was
+  applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
   2026 as `20260928184831`; `0053` (Authority → AI Drafter hand-off) was applied Sept
@@ -1180,6 +1181,57 @@ scheduled or published by any of it.
   lifecycles), and generated creative is never stored in `brand_assets` (a
   future `creative_assets` model; approval will bind copy and the exact
   creative version). Nothing of the Creative Engine is built.
+
+## Canva folder mapping (0056, applied Sept 28 2026 as `20260928212948`)
+
+Every Compass client keeps its designs in one primary Canva folder with one
+"Used" subfolder inside it. `clients.canva_folder_id` /
+`canva_used_folder_id` (nullable text; a client without Canva has neither)
+record their **ids**, which are the integration key. Canva folder names are
+display labels and are never stored or matched ("Show Me Used" belongs to
+Show Me Electrical only because its id sits inside that client's folder).
+
+- **Rules:** an id looks like a Canva folder id (`^FA[A-Za-z0-9_-]{6,62}$`:
+  no names, no `root` / `uploads`, no design ids); a Used folder needs a
+  primary folder and differs from it; no two clients that are not offboarded
+  share a folder in either column (partial unique indexes
+  `clients_canva_folder_id_live` / `clients_canva_used_folder_id_live`, plus
+  the security-definer `clients_canva_folders_guard` for cross-column reuse,
+  23505 naming the client that holds it). Reactivating an offboarded client
+  whose folders a live client holds is refused.
+- **Read model:** `client_canva_folders(p_client_id default null)` (invoker
+  rights; team and service role) and `src/lib/canva-folders.ts`
+  (`loadClientCanvaFolders`). `client_intelligence_input` / `authority_input`
+  are deliberately not extended: Authority fingerprints the intelligence
+  document, so new fields there would mark every run stale.
+- **Seed:** the eight active clients from the confirmed Sept 28 2026
+  reconciliation (`tests/fixtures/canva-folder-mapping.json`), by client id.
+  Compass Activation Test (fictional, offboarded) and every Canva-only
+  folder stay unmapped. The backfill refuses a partial set, an offboarded
+  client or a different existing mapping, and seeds nothing on a database
+  without those clients.
+- **Not built:** Canva asset discovery / sync, moving designs, creative
+  generation or publishing from Canva. Nothing reads the columns but the read
+  model.
+- **Tests:** the sandbox's `client_canva_folders.test.sql` (the replay
+  inserts the nine production-shaped clients before 0056 through
+  `supabase/tests/sandbox/replay/0056.before.sql`, and `0056.after.sql`
+  snapshots the backfill and removes them), `tests/canva-folders.test.mjs`.
+- **Verified on production after applying:** recorded SQL identical to the
+  file (md5 `a75f5e61…`), both function bodies match (md5), grants /
+  indexes / constraints / trigger as designed; the eight mappings exact and
+  the activation test client unmapped (table and read model). Rolled-back
+  probes as a teammate: duplicate primary, duplicate Used and both
+  cross-column reuses refused (23505 naming the holder), a folder name,
+  `uploads` and a Used folder without a primary refused (23514), reactivating
+  an offboarded client on a live client's folders refused; with the guard
+  disabled both unique indexes refuse duplicates on their own; anon is denied
+  the read model and a non-team sign-in sees and updates nothing. Before and
+  after the apply, for all nine clients, the Authority fingerprint, stale
+  sections, `client_intelligence_input` and `authority_input` are identical,
+  as are posts, creative / drafter / publisher / Authority counts and the
+  publisher switch (off). `database.types.ts` regenerated from production is
+  identical to the reviewed file.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 

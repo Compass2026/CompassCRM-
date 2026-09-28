@@ -1379,6 +1379,8 @@ export type Database = {
         Row: {
           address_line1: string | null
           business_type: Database["public"]["Enums"]["business_type"] | null
+          canva_folder_id: string | null
+          canva_used_folder_id: string | null
           city: string | null
           created_at: string
           dba: string | null
@@ -1408,6 +1410,8 @@ export type Database = {
         Insert: {
           address_line1?: string | null
           business_type?: Database["public"]["Enums"]["business_type"] | null
+          canva_folder_id?: string | null
+          canva_used_folder_id?: string | null
           city?: string | null
           created_at?: string
           dba?: string | null
@@ -1437,6 +1441,8 @@ export type Database = {
         Update: {
           address_line1?: string | null
           business_type?: Database["public"]["Enums"]["business_type"] | null
+          canva_folder_id?: string | null
+          canva_used_folder_id?: string | null
           city?: string | null
           created_at?: string
           dba?: string | null
@@ -5079,6 +5085,17 @@ export type Database = {
       authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
       brand_asset_record_hash: { Args: { p: Json }; Returns: Json }
+      client_canva_folders: {
+        Args: { p_client_id?: string }
+        Returns: {
+          canva_enabled: boolean
+          canva_folder_id: string
+          canva_used_folder_id: string
+          client_id: string
+          client_name: string
+          client_status: string
+        }[]
+      }
       client_intelligence_input: {
         Args: { p_client_id: string }
         Returns: Json

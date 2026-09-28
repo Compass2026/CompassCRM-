@@ -56,7 +56,15 @@ for f in "$ROOT"/supabase/migrations/*.sql; do
   if [ -n "$late" ]; then LATE+=("$f"); else MIGRATIONS+=("$f"); fi
 done
 [ -n "${APPLY_LAST:-}" ] && echo "replay order: file order, then ${APPLY_LAST} last"
+# supabase/tests/sandbox/replay/<number>.before.sql / .after.sql run as
+# postgres around that migration (0056: production-shaped clients so its
+# backfill runs, then snapshotted and removed before the suites).
+HOOKS="$ROOT/supabase/tests/sandbox/replay"
 for f in "${MIGRATIONS[@]}" ${LATE[@]+"${LATE[@]}"}; do
+  num="$(basename "$f")"; num="${num%%_*}"
+  if [ -f "$HOOKS/$num.before.sql" ]; then
+    psql_as postgres -d sandbox -f "$HOOKS/$num.before.sql" -o /dev/null
+  fi
   sed -E 's/^create extension if not exists pg_(cron|net);/-- sandbox: pg_\1 stubbed/' "$f" \
     | psql_as postgres -d sandbox --single-transaction -v VERBOSITY=terse -o /dev/null 2>"$WORK/err" \
     || { echo "FAILED applying $(basename "$f")"; cat "$WORK/err"; exit 1; }
@@ -66,6 +74,9 @@ for f in "${MIGRATIONS[@]}" ${LATE[@]+"${LATE[@]}"}; do
     echo "FAILED $(basename "$f"): it opens or commits its own transaction"; cat "$WORK/err"; exit 1
   fi
   echo "applied $(basename "$f")"
+  if [ -f "$HOOKS/$num.after.sql" ]; then
+    psql_as postgres -d sandbox -f "$HOOKS/$num.after.sql" -o /dev/null
+  fi
 done
 
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /dev/null
@@ -114,3 +125,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/creative_engine.tes
 # 0055: source-asset hashing provenance (only the source-assets function
 # records a hash; file changes clear it) and the stricter creative-use review.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/source_asset_hashing.test.sql"
+# 0056: Canva folder ids on the client record (the backfill as the replay hook
+# saw it, formats, no shared folders between live clients, the read model,
+# nothing else reads them).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folders.test.sql"
