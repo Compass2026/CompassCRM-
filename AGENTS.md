@@ -25,8 +25,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0054` (Creative Engine schema) is written and
-  sandbox-tested but **not yet applied** (awaiting review); `0053` (Authority → AI Drafter hand-off) was applied Sept
+  **not yet applied**; `0054` (Creative Engine schema) was applied Sept 28
+  2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
+  enabled); `0053` (Authority → AI Drafter hand-off) was applied Sept
   27 2026 as `20260927224214` (app and `post-drafter` v2 deployed with it: PR
   #79); `0052` (reconciliation writes bound to their preview) was
   applied Sept 27 2026 as `20260927212625` (app deployed with it: PR #77); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
@@ -1113,7 +1114,7 @@ scheduled or published by any of it.
   answers 2 with `authority_mode`). Verified read-only on Lucas (brief and
   check; the deployed brief hash equals the reviewed code's). The next step is
   a teammate pressing Draft with AI.
-- **Creative Engine, step 1 (0054, written Sept 28 2026, NOT applied):**
+- **Creative Engine, step 1 (0054, applied Sept 28 2026 as `20260928021735`):**
   the database only — source-image governance on `brand_assets`
   (`creative_use` unreviewed / approved / excluded, own-work flag, subjects,
   focal point, reviewer; AI suggestions in `creative_suggestions`, never
@@ -1130,7 +1131,14 @@ scheduled or published by any of it.
   `creative_fail_run`, `creative_register_template`); governance is a
   signed-in teammate's. `drafter_write` leaves a post whose policy is
   `required` as a draft for its creative. No renderer, template or policy
-  exists yet. Tests: the sandbox's `creative_engine.test.sql`.
+  exists yet. Tests: the sandbox's `creative_engine.test.sql`. Verified on
+  production after applying: recorded SQL identical to the file (md5), all 38
+  function bodies match, grants / RLS / storage policy as designed, 27
+  rolled-back probes refused (worker SQL, SET ROLE service_role, SET ROLE
+  authenticated + team JWT, a portal contact, anon), existing posts, approval
+  hashes and brand assets unchanged; `database.types.ts` regenerated (the post
+  page lists brand-asset links only, since `post_assets.brand_asset_id` is now
+  nullable).
 - **Architecture decisions (Sept 28 2026; `docs/client-intelligence.md`,
   "Content architecture decisions"):** one Authority opportunity per
   publishing channel (GBP, Facebook, Instagram each their own lifecycle; a
