@@ -534,8 +534,17 @@ export type Database = {
       brand_assets: {
         Row: {
           client_id: string
+          content_hash: string | null
           created_at: string
+          creative_review_note: string | null
+          creative_reviewed_at: string | null
+          creative_reviewed_by: string | null
+          creative_suggestions: Json | null
+          creative_use: string
+          depicts_own_work: boolean | null
           file_name: string | null
+          focal_x: number | null
+          focal_y: number | null
           height: number | null
           id: string
           is_primary: boolean
@@ -547,14 +556,24 @@ export type Database = {
           sort_order: number
           source: Database["public"]["Enums"]["brand_asset_source"]
           storage_path: string | null
+          subjects: string[]
           uploaded_by: string | null
           url: string | null
           width: number | null
         }
         Insert: {
           client_id: string
+          content_hash?: string | null
           created_at?: string
+          creative_review_note?: string | null
+          creative_reviewed_at?: string | null
+          creative_reviewed_by?: string | null
+          creative_suggestions?: Json | null
+          creative_use?: string
+          depicts_own_work?: boolean | null
           file_name?: string | null
+          focal_x?: number | null
+          focal_y?: number | null
           height?: number | null
           id?: string
           is_primary?: boolean
@@ -566,14 +585,24 @@ export type Database = {
           sort_order?: number
           source?: Database["public"]["Enums"]["brand_asset_source"]
           storage_path?: string | null
+          subjects?: string[]
           uploaded_by?: string | null
           url?: string | null
           width?: number | null
         }
         Update: {
           client_id?: string
+          content_hash?: string | null
           created_at?: string
+          creative_review_note?: string | null
+          creative_reviewed_at?: string | null
+          creative_reviewed_by?: string | null
+          creative_suggestions?: Json | null
+          creative_use?: string
+          depicts_own_work?: boolean | null
           file_name?: string | null
+          focal_x?: number | null
+          focal_y?: number | null
           height?: number | null
           id?: string
           is_primary?: boolean
@@ -585,6 +614,7 @@ export type Database = {
           sort_order?: number
           source?: Database["public"]["Enums"]["brand_asset_source"]
           storage_path?: string | null
+          subjects?: string[]
           uploaded_by?: string | null
           url?: string | null
           width?: number | null
@@ -602,6 +632,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_assets_creative_reviewed_by_fkey"
+            columns: ["creative_reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -1044,6 +1081,140 @@ export type Database = {
           },
         ]
       }
+      client_creative_settings: {
+        Row: {
+          channel: Database["public"]["Enums"]["social_platform"]
+          client_id: string
+          creative_policy: string
+          generated_imagery: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["social_platform"]
+          client_id: string
+          creative_policy?: string
+          generated_imagery?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["social_platform"]
+          client_id?: string
+          creative_policy?: string
+          generated_imagery?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_creative_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_creative_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_creative_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_creative_templates: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          client_id: string
+          created_at: string
+          id: string
+          note: string | null
+          preview_asset_id: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          status: string
+          template_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          preview_asset_id?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          template_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          preview_asset_id?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_creative_templates_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_preview_asset_id_client_id_fkey"
+            columns: ["preview_asset_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "creative_assets"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "creative_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_pipelines: {
         Row: {
           client_id: string
@@ -1354,6 +1525,411 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      creative_asset_sources: {
+        Row: {
+          brand_asset_id: string | null
+          client_id: string
+          creative_asset_id: string
+          crop: Json | null
+          focal: Json | null
+          governance: Json
+          ordinal: number
+          role: string
+          source_content_hash: string
+          source_height: number
+          source_storage_path: string
+          source_width: number
+        }
+        Insert: {
+          brand_asset_id?: string | null
+          client_id: string
+          creative_asset_id: string
+          crop?: Json | null
+          focal?: Json | null
+          governance: Json
+          ordinal: number
+          role: string
+          source_content_hash: string
+          source_height: number
+          source_storage_path: string
+          source_width: number
+        }
+        Update: {
+          brand_asset_id?: string | null
+          client_id?: string
+          creative_asset_id?: string
+          crop?: Json | null
+          focal?: Json | null
+          governance?: Json
+          ordinal?: number
+          role?: string
+          source_content_hash?: string
+          source_height?: number
+          source_storage_path?: string
+          source_width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_asset_sources_brand_asset_id_client_id_fkey"
+            columns: ["brand_asset_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "brand_assets"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "creative_asset_sources_creative_asset_id_client_id_fkey"
+            columns: ["creative_asset_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "creative_assets"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      creative_assets: {
+        Row: {
+          alt_text: string | null
+          client_id: string
+          content_hash: string
+          created_at: string
+          format: string
+          generation: Json
+          height: number
+          id: string
+          mime_type: string
+          overlay: Json
+          provenance: Json
+          purpose: string
+          run_id: string | null
+          size_bytes: number
+          storage_bucket: string
+          storage_path: string
+          strategy: string
+          template_id: string | null
+          template_spec_hash: string | null
+          uploaded_by: string | null
+          width: number
+          withdrawn_at: string | null
+          withdrawn_by: string | null
+          withdrawn_reason: string | null
+        }
+        Insert: {
+          alt_text?: string | null
+          client_id: string
+          content_hash: string
+          created_at?: string
+          format: string
+          generation?: Json
+          height: number
+          id?: string
+          mime_type: string
+          overlay?: Json
+          provenance?: Json
+          purpose: string
+          run_id?: string | null
+          size_bytes: number
+          storage_bucket?: string
+          storage_path: string
+          strategy: string
+          template_id?: string | null
+          template_spec_hash?: string | null
+          uploaded_by?: string | null
+          width: number
+          withdrawn_at?: string | null
+          withdrawn_by?: string | null
+          withdrawn_reason?: string | null
+        }
+        Update: {
+          alt_text?: string | null
+          client_id?: string
+          content_hash?: string
+          created_at?: string
+          format?: string
+          generation?: Json
+          height?: number
+          id?: string
+          mime_type?: string
+          overlay?: Json
+          provenance?: Json
+          purpose?: string
+          run_id?: string | null
+          size_bytes?: number
+          storage_bucket?: string
+          storage_path?: string
+          strategy?: string
+          template_id?: string | null
+          template_spec_hash?: string | null
+          uploaded_by?: string | null
+          width?: number
+          withdrawn_at?: string | null
+          withdrawn_by?: string | null
+          withdrawn_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_assets_run_fk"
+            columns: ["run_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "creative_runs"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "creative_assets_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "creative_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_assets_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_assets_withdrawn_by_fkey"
+            columns: ["withdrawn_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_governance_events: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_kind: string
+          changes: Json
+          client_id: string
+          created_at: string
+          id: number
+          note: string | null
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_kind: string
+          changes?: Json
+          client_id: string
+          created_at?: string
+          id?: never
+          note?: string | null
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_kind?: string
+          changes?: Json
+          client_id?: string
+          created_at?: string
+          id?: never
+          note?: string | null
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_governance_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_governance_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_governance_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_runs: {
+        Row: {
+          brief: Json
+          brief_hash: string
+          client_id: string
+          copy_hash: string | null
+          created_at: string
+          creative_asset_id: string | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          post_id: string | null
+          purpose: string
+          reason: string
+          renderer: string
+          requested_by: string | null
+          requested_via: string
+          status: string
+          strategy: string
+          template_id: string
+          template_spec_hash: string
+        }
+        Insert: {
+          brief: Json
+          brief_hash: string
+          client_id: string
+          copy_hash?: string | null
+          created_at?: string
+          creative_asset_id?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          post_id?: string | null
+          purpose: string
+          reason: string
+          renderer: string
+          requested_by?: string | null
+          requested_via: string
+          status?: string
+          strategy: string
+          template_id: string
+          template_spec_hash: string
+        }
+        Update: {
+          brief?: Json
+          brief_hash?: string
+          client_id?: string
+          copy_hash?: string | null
+          created_at?: string
+          creative_asset_id?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          post_id?: string | null
+          purpose?: string
+          reason?: string
+          renderer?: string
+          requested_by?: string | null
+          requested_via?: string
+          status?: string
+          strategy?: string
+          template_id?: string
+          template_spec_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_runs_asset_fk"
+            columns: ["creative_asset_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "creative_assets"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "creative_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_runs_post_fk"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "creative_runs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_runs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "creative_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_templates: {
+        Row: {
+          channel: Database["public"]["Enums"]["social_platform"]
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          mime_type: string
+          name: string
+          output_height: number
+          output_width: number
+          retired_at: string | null
+          spec: Json
+          spec_hash: string
+          status: string
+          version: number
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["social_platform"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          mime_type: string
+          name: string
+          output_height: number
+          output_width: number
+          retired_at?: string | null
+          spec: Json
+          spec_hash: string
+          status?: string
+          version: number
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["social_platform"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          mime_type?: string
+          name?: string
+          output_height?: number
+          output_width?: number
+          retired_at?: string | null
+          spec?: Json
+          spec_hash?: string
+          status?: string
+          version?: number
+        }
+        Relationships: []
       }
       decisions: {
         Row: {
@@ -2598,27 +3174,39 @@ export type Database = {
       }
       post_assets: {
         Row: {
-          brand_asset_id: string
+          brand_asset_id: string | null
           client_id: string
           content_hash: string | null
+          copy_hash: string | null
           created_at: string
+          creative_asset_id: string | null
+          id: string
           post_id: string
+          role: string
           sort_order: number
         }
         Insert: {
-          brand_asset_id: string
+          brand_asset_id?: string | null
           client_id: string
           content_hash?: string | null
+          copy_hash?: string | null
           created_at?: string
+          creative_asset_id?: string | null
+          id?: string
           post_id: string
+          role?: string
           sort_order?: number
         }
         Update: {
-          brand_asset_id?: string
+          brand_asset_id?: string | null
           client_id?: string
           content_hash?: string | null
+          copy_hash?: string | null
           created_at?: string
+          creative_asset_id?: string | null
+          id?: string
           post_id?: string
+          role?: string
           sort_order?: number
         }
         Relationships: [
@@ -2627,6 +3215,13 @@ export type Database = {
             columns: ["brand_asset_id", "client_id"]
             isOneToOne: false
             referencedRelation: "brand_assets"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "post_assets_creative_fkey"
+            columns: ["creative_asset_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "creative_assets"
             referencedColumns: ["id", "client_id"]
           },
           {
@@ -3208,6 +3803,9 @@ export type Database = {
           copy: string | null
           created_at: string
           created_by: string | null
+          creative_policy: string
+          creative_status: string
+          creative_version: number
           crm_facts_only: boolean
           cta_type: string | null
           cta_url: string | null
@@ -3226,6 +3824,7 @@ export type Database = {
           publish_status: string
           published_at: string | null
           published_url: string | null
+          rejection_category: string | null
           review_note: string | null
           review_status: string
           review_task_id: string | null
@@ -3247,6 +3846,9 @@ export type Database = {
           copy?: string | null
           created_at?: string
           created_by?: string | null
+          creative_policy?: string
+          creative_status?: string
+          creative_version?: number
           crm_facts_only?: boolean
           cta_type?: string | null
           cta_url?: string | null
@@ -3265,6 +3867,7 @@ export type Database = {
           publish_status?: string
           published_at?: string | null
           published_url?: string | null
+          rejection_category?: string | null
           review_note?: string | null
           review_status?: string
           review_task_id?: string | null
@@ -3286,6 +3889,9 @@ export type Database = {
           copy?: string | null
           created_at?: string
           created_by?: string | null
+          creative_policy?: string
+          creative_status?: string
+          creative_version?: number
           crm_facts_only?: boolean
           cta_type?: string | null
           cta_url?: string | null
@@ -3304,6 +3910,7 @@ export type Database = {
           publish_status?: string
           published_at?: string | null
           published_url?: string | null
+          rejection_category?: string | null
           review_note?: string | null
           review_status?: string
           review_task_id?: string | null
@@ -4480,6 +5087,37 @@ export type Database = {
         Returns: number
       }
       create_weekly_blog_tasks: { Args: never; Returns: number }
+      creative_actor_kind: { Args: never; Returns: string }
+      creative_begin_run: { Args: { p: Json }; Returns: Json }
+      creative_caller_is_teammate: { Args: never; Returns: boolean }
+      creative_diff: {
+        Args: { p_fields: string[]; p_new: Json; p_old: Json }
+        Returns: Json
+      }
+      creative_fail_run: { Args: { p: Json }; Returns: Json }
+      creative_governance_log: {
+        Args: {
+          p_action: string
+          p_changes: Json
+          p_client: string
+          p_note?: string
+          p_subject: string
+          p_type: string
+        }
+        Returns: undefined
+      }
+      creative_overlay_problems: {
+        Args: { p_client: string; p_overlay: Json; p_post_id: string }
+        Returns: string[]
+      }
+      creative_policy_for: {
+        Args: { p_channel: string; p_client: string }
+        Returns: string
+      }
+      creative_register_template: { Args: { p: Json }; Returns: Json }
+      creative_session_active: { Args: never; Returns: boolean }
+      creative_spec_hash: { Args: { p_spec: Json }; Returns: string }
+      creative_write: { Args: { p: Json }; Returns: Json }
       drafter_caller_is_service: { Args: never; Returns: boolean }
       drafter_caller_is_superuser: { Args: never; Returns: boolean }
       drafter_copy_hash: { Args: { p_copy: string }; Returns: string }
@@ -4518,6 +5156,10 @@ export type Database = {
       recompute_location_indexes: {
         Args: { p_client_id?: string; p_period?: string }
         Returns: number
+      }
+      request_new_creative: {
+        Args: { p_note: string; p_post_id: string }
+        Returns: Json
       }
       retry_failed_fires: { Args: never; Returns: number }
       secret_present: { Args: { secret_name: string }; Returns: boolean }

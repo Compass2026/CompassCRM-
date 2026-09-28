@@ -107,3 +107,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_bind_prev
 # 0053: Authority → AI Drafter hand-off (request_draft, retry-safe starts,
 # drafter_write's Authority refusals, the linked post's lifecycle, recurring cycles).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_drafter_handoff.test.sql"
+# 0054: Creative Engine (source governance, templates and client approvals,
+# runs, immutable content-addressed assets and sources, creative links,
+# approval binding, request new creative, manual uploads, the creative bucket).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/creative_engine.test.sql"

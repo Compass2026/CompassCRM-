@@ -74,7 +74,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       post.review_task_id
         ? supabase.from("tasks").select("id, title, status").eq("id", post.review_task_id).maybeSingle()
         : Promise.resolve({ data: null }),
-      supabase.from("post_assets").select("brand_asset_id, sort_order, brand_assets(label, kind, storage_path, url)").eq("post_id", postId).order("sort_order"),
+      supabase.from("post_assets").select("brand_asset_id, sort_order, brand_assets(label, kind, storage_path, url)").eq("post_id", postId).not("brand_asset_id", "is", null).order("sort_order"),
     ]);
   const isGbp = post.platform === "google_business";
   const [{ data: runs }, { data: publisherRow }] = isGbp || post.publish_status !== "not_scheduled"
@@ -112,7 +112,9 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const problems = readiness.data ?? [];
   const actions = availableActions(post);
   const topic = topicProblem(post);
-  const linkedAssetIds = new Set((assets ?? []).map((a) => a.brand_asset_id));
+  // Brand-asset links only; creative links (0054) are not shown here yet.
+  const brandLinks = (assets ?? []).flatMap((a) => (a.brand_asset_id ? [{ ...a, brand_asset_id: a.brand_asset_id }] : []));
+  const linkedAssetIds = new Set(brandLinks.map((a) => a.brand_asset_id));
   const linkedIds = new Set((linked ?? []).map((l) => l.claim_id));
   const usableToLink = (claims ?? []).filter(
     (c) => !linkedIds.has(c.id) && (c.status === "confirmed" || (c.status === "sourced" && (c.source ?? "").trim() !== ""))
@@ -288,11 +290,11 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       {/* Media: brand assets, in order. */}
       <section className="surface space-y-3 p-4 sm:p-5">
         <h3 className="text-sm font-semibold">Media</h3>
-        {(assets ?? []).length === 0 ? (
+        {brandLinks.length === 0 ? (
           <p className="text-sm text-muted-foreground">No brand assets on this post.</p>
         ) : (
           <ol className="space-y-1 text-sm">
-            {(assets ?? []).map((a) => (
+            {brandLinks.map((a) => (
               <li key={a.brand_asset_id} className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-muted-foreground tabular-nums">{a.sort_order}.</span>
                 <span className="min-w-0 flex-1">
