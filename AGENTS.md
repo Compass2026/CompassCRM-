@@ -1210,9 +1210,18 @@ Show Me Electrical only because its id sits inside that client's folder).
   folder stay unmapped. The backfill refuses a partial set, an offboarded
   client or a different existing mapping, and seeds nothing on a database
   without those clients.
-- **Not built:** Canva asset discovery / sync, moving designs, creative
+- **Not built:** Canva asset sync (`canva_assets`), moving designs, creative
   generation or publishing from Canva. Nothing reads the columns but the read
   model.
+- **Integration rules** (`docs/canva-integration.md`, from the Sept 28 2026
+  read-only discovery): folder listing is safe for metadata; reading a
+  design's content or metadata through the connector updates Canva's
+  modified time even with no edit (a thumbnail-only read does not), so
+  capture listing metadata first, prefer thumbnail-only reads, and never read
+  a post-read modified time as a human edit. Current vs Used comes from the
+  parent folder id, never the title. The same doc holds the discovery counts,
+  the Lucas template-family shortlist (planning only; no template registered)
+  and the governance gaps it found.
 - **Tests:** the sandbox's `client_canva_folders.test.sql` (the replay
   inserts the nine production-shaped clients before 0056 through
   `supabase/tests/sandbox/replay/0056.before.sql`, and `0056.after.sql`
