@@ -203,7 +203,8 @@ begin
   -- dismissal needs a reason; the date is optional and must be in the future
   e := au.try(format($q$select authority_decide(%L, 'dismiss', '{}')$q$, au.opp_id(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial')));
   perform au.ok('H6 a dismissal without a reason is refused', e like '22023%', e);
-  e := au.try(format($q$select authority_decide(%L, 'dismiss', jsonb_build_object('reason', 'x', 'until', current_date))$q$,
+  -- "today" is the agency's (Chicago) day, as authority_decide judges it, not the session's UTC date
+  e := au.try(format($q$select authority_decide(%L, 'dismiss', jsonb_build_object('reason', 'x', 'until', (now() at time zone 'America/Chicago')::date))$q$,
        au.opp_id(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial')));
   perform au.ok('H7 dismissed_until must be in the future', e like '22023%', e);
   perform authority_decide(au.opp_id(a, 'gbp_post:00000000-0000-4000-e000-0000000000a1:commercial'), 'dismiss',

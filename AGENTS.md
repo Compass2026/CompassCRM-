@@ -26,8 +26,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0053` (Authority → AI Drafter hand-off) was applied Sept
-  27 2026 as `20260927224214` (the app and `post-drafter` v2 that use it are
-  not deployed yet); `0052` (reconciliation writes bound to their preview) was
+  27 2026 as `20260927224214` (app and `post-drafter` v2 deployed with it: PR
+  #79); `0052` (reconciliation writes bound to their preview) was
   applied Sept 27 2026 as `20260927212625` (app deployed with it: PR #77); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
   `20260927193245`;
   `0050` (Authority reconciliation + `content_posts.origin`)
@@ -1033,7 +1033,7 @@ it to 0045's human review. It never approves, schedules or publishes.
   files, `src/lib/client-intelligence.ts` and `post-publisher/channel.ts`
   it imports); the two Lucas pilot runs used it.
 
-## Authority → AI Drafter hand-off (0053 applied Sept 27 2026 as `20260927224214`; `post-drafter` v2 and the app NOT deployed)
+## Authority → AI Drafter hand-off (0053 applied Sept 27 2026 as `20260927224214`; live since PR #79)
 
 A teammate asks the AI Drafter for the Business Profile post a Ready
 Authority opportunity recommends. Authority chooses what to create; the
@@ -1105,8 +1105,20 @@ scheduled or published by any of it.
   ("Roofing, siding, guttering, fascia and soffit contractor", "Installs
   Owens Corning Duration shingles") are Drafter-eligible and recommended;
   no request exists. **No Lucas draft has been requested, no worker run
-  started and no post created.** To go live: deploy `post-drafter` v2,
-  deploy the app, then a teammate presses Draft with AI.
+  started and no post created.**
+- **Live (Sept 27 2026):** PR #79 merged as `8a2312c`, deployed to Vercel
+  production; `post-drafter` v2 deployed from it through
+  `deploy-supabase-function.yml` (Supabase deployment version 2; `version`
+  answers 2 with `authority_mode`). Verified read-only on Lucas (brief and
+  check; the deployed brief hash equals the reviewed code's). The next step is
+  a teammate pressing Draft with AI.
+- **Architecture decisions (Sept 28 2026; `docs/client-intelligence.md`,
+  "Content architecture decisions"):** one Authority opportunity per
+  publishing channel (GBP, Facebook, Instagram each their own lifecycle; a
+  future `content_group_id` may group sibling variants without merging their
+  lifecycles), and generated creative is never stored in `brand_assets` (a
+  future `creative_assets` model; approval will bind copy and the exact
+  creative version). Nothing of the Creative Engine is built.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 

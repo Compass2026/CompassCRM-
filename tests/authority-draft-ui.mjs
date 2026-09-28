@@ -43,6 +43,12 @@ const COPY_A =
   "replacement we complete is backed by our Lifetime Workmanship Warranty. When you're ready, request a quote and we'll " +
   "set up a time to look at your roof together.";
 
+const COPY_B =
+  "A roof replacement is one of the bigger projects a Wentzville homeowner takes on, and Draft Roofing wants the decision to " +
+  "feel clear rather than rushed. As an Owens Corning Preferred Contractor, we can walk you through your options before " +
+  "anything is scheduled. Our roof replacement page explains what to expect, and when you're ready, request a quote to get " +
+  "started with a local team.";
+
 const b64 = (v) => Buffer.from(typeof v === "string" ? v : JSON.stringify(v)).toString("base64url");
 const sign = (claims) => { const h = `${b64({ alg: "HS256", typ: "JWT" })}.${b64(claims)}`; return `${h}.${createHmac("sha256", JWT_SECRET).update(h).digest("base64url")}`; };
 function verify(token) {
@@ -264,7 +270,37 @@ try {
   assert.equal(sql(`select status from tasks where id = '${second.id}'`), "open");
   ok("A blocked request shows the worker's reason; Draft with AI again reopens and restarts the same request");
 
-  // 7. Phone width: the control fits.
+  // 7. Approved → completed this cycle: out of Ready now and the Ready count; a new cycle brings it back.
+  const summaryReady = () => page.locator('[data-summary="ready"] [data-count]').innerText();
+  await load();
+  assert.equal(await summaryReady(), "2", "before: the transactional post and the one waiting on cadence");
+  const b2 = await worker({ mode: "brief", client_id: C, authority_opportunity_id: opp(TX).id });
+  assert.equal(b2.status, 200, JSON.stringify(b2.body));
+  const s2 = await worker({ mode: "submit", client_id: C, authority_opportunity_id: opp(TX).id, brief_hash: b2.body.brief_hash, draft: { copy: COPY_B, claim_ids: [OC] }, runtime: "sandbox-model" });
+  assert.equal(s2.status, 201, JSON.stringify(s2.body));
+  const appr = await asTeam.from("social_posts").update({ review_status: "approved" }).eq("id", s2.body.post_id);
+  assert.equal(appr.error, null, appr.error?.message);
+  assert.equal(opp(TX).effective_status, "completed");
+  await page.goto(url, { waitUntil: "networkidle" });
+  assert.equal(await page.locator("#ready-completed").evaluate((d) => d.open), false, "collapsed by default");
+  await load();
+  assert.equal(await page.locator("#ready-now").count(), 0, "nothing actionable is left in Ready now");
+  assert.equal(await page.locator(`#ready-completed article[data-key="${TX}"]`).count(), 1);
+  assert.match(await page.locator("#ready-completed > summary").innerText(), /Completed this cycle/);
+  assert.equal(await summaryReady(), "1");
+  await card(TX).locator("[data-draft=completed]").waitFor();
+  assert.equal(await card(TX).locator("[data-open-draft]").count(), 0);
+  await shot("authority-ready-completed-desktop");
+  // The engine reports it eligible again: a new cadence cycle, Ready now again (the approved post no longer counts).
+  await analysis();
+  assert.equal(opp(TX).effective_status, "open");
+  await load();
+  assert.equal(await page.locator(`#ready-now article[data-key="${TX}"]`).count(), 1);
+  assert.equal(await page.locator("#ready-completed").count(), 0);
+  assert.equal(await summaryReady(), "2");
+  ok("Approved → Completed this cycle (collapsed, out of Ready now and the Ready count); a new cadence cycle makes it Ready again");
+
+  // 8. Phone width: the control fits.
   const phone = await (await contextFor(browser, TEAM, { width: 390, height: 844 })).newPage();
   await phone.goto(url, { waitUntil: "networkidle" });
   await phone.locator("details[data-group]").evaluateAll((els) => els.forEach((d) => { d.open = true; }));
@@ -275,8 +311,9 @@ try {
 
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpected, []);
-  assert.equal(sql(`select count(*) from social_posts where client_id = '${C}' and (publish_status <> 'not_scheduled' or review_status = 'approved')`), "0");
-  ok("No page errors, no calls outside the sandbox, nothing approved, scheduled or published");
+  assert.equal(sql(`select count(*) from social_posts where client_id = '${C}' and publish_status <> 'not_scheduled'`), "0");
+  assert.equal(sql(`select count(*) from social_posts where client_id = '${C}' and review_status = 'approved'`), "1", "only the post a teammate approved");
+  ok("No page errors, no calls outside the sandbox, nothing scheduled or published");
   console.log(`Authority Draft with AI browser checks passed (${checks.length}).`);
 } finally {
   await browser?.close();

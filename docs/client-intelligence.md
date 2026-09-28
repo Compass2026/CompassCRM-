@@ -38,6 +38,39 @@ go-live (`docs/portal-reconciliation.md`).
   and calls. They are not presented as a guarantee of rankings or topical
   authority; results are reported as measured, through the scorecard.
 
+## Content architecture decisions (Sept 28 2026)
+
+Recorded before the Creative Engine and the Facebook / Instagram channels
+are built, so today's work does not have to be undone. Nothing here is built
+yet; the GBP Authority → AI Drafter pilot is unchanged.
+
+1. **One Authority opportunity per publishing channel.** GBP, Facebook and
+   Instagram each get their own Authority opportunity (`gbp_post:…` today;
+   channel-specific keys for the others) with its own lifecycle. Cadence,
+   drafting, review, approval and publishing stay channel-specific — 0053's
+   "one active or approved post per opportunity per cycle" and the 21-day
+   live cadence are per opportunity, and stay correct because an
+   opportunity is one channel. A future `content_group_id` on posts may
+   group sibling platform variants into one broader content concept or
+   campaign (reviewed side by side) without merging their individual
+   lifecycle states: each variant keeps its own approval, publishing and
+   Authority link.
+2. **Generated creative is never stored in `brand_assets`.** `brand_assets`
+   stays the governed source library (logos, real photos, uploads, scans).
+   Generated or composed media belongs in a separate, future
+   `creative_assets` model that supports immutable / versioned storage, a
+   required content hash, provenance (the run, the opportunity), the source
+   brand assets it used, template / generation metadata, dimensions, format
+   and alt text. Approval will then bind both the written-content snapshot
+   and the exact reviewed creative asset version.
+
+Approved as future architecture, not built: a Creative Engine (its own
+governed write path and runs, separate from `post-drafter`, which never
+generates images), a media step in the review gate (a post waits for its
+creative before it can be approved), Facebook / Instagram workflows and
+publisher support, and re-hashing approved posts when the approval snapshot
+gains media fields.
+
 ## Sequence to a one-client pilot
 
 1. **Readiness and topics (this branch).** The client **Intelligence** tab
