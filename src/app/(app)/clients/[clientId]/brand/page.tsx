@@ -16,7 +16,9 @@ import {
   updateColorAction,
   upsertBrandAction,
 } from "@/app/brand-actions";
+import Link from "next/link";
 import { BrandBoard } from "@/components/brand-board";
+import { reviewCounts, type ReviewAsset } from "@/lib/creative-use";
 import { BrandAssetUploader } from "@/components/brand-asset-uploader";
 import { BrandScanButton } from "@/components/brand-scan-button";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +58,9 @@ export default async function BrandPage({
 
   const { client, brand, colors, fonts, assets, task } = data;
   const approved = !!brand.approved_at;
+  const creative = reviewCounts(
+    (assets as unknown as ReviewAsset[]).filter((a) => a.kind === "photo" || a.kind.startsWith("logo") || a.kind === "wordmark"),
+  );
 
   const saveIdentity = upsertBrandAction.bind(null, clientId);
   const addColor = addColorAction.bind(null, clientId);
@@ -115,6 +120,19 @@ export default async function BrandPage({
               </form>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Creative use (0054 / 0055) ───────────────────────────────── */}
+      <Card data-creative-use-summary>
+        <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <span className="font-medium">Creative use</span>
+          <span className="text-muted-foreground">
+            {creative.approved} approved · {creative.excluded} excluded · {creative.unreviewed} unreviewed · {creative.hashed} of {creative.total} hashed
+          </span>
+          <Link href={`/clients/${clientId}/brand/creative-use`} className="ml-auto text-sm underline underline-offset-2">
+            Review photos and logos →
+          </Link>
         </CardContent>
       </Card>
 
