@@ -91,6 +91,59 @@ and icon-label rows only. It is **not** a reference for imagery or claims:
   are unsupported superlatives.
 - Its busy multi-colour look is not Lucas.
 
+**Tom's second batch** of four posts. Tom: "These should be the floor; all
+ours need to be better than these."
+
+| Post | Strengths to match | Weaknesses Compass must not repeat |
+|---|---|---|
+| Roy, Scott & James, "Holding the Powerful Accountable" | Real people photographed well; an authoritative serif headline; logo top-left; a high-contrast phone bar; a three-card credibility row | "Millions Recovered" and "Proven Results" are unsupported. The Louisiana-map icon sits over "Free Case Review", which it doesn't match. The cards are offset unevenly, and the courtroom background is a composite. |
+| Roy, Scott & James, "Did You Know?" | An educational hook; hedged, accurate wording ("may", "depending on the circumstances"); scannable bullets; a clear CTA block with phone and website | A stock photo. About 70 words on the image, in two paragraphs. The red text block adds nothing. Several unrelated fonts. |
+| Louisiana Foundation Repair, "Uneven floors or cracks in your walls?" | A problem-question hook; an explanatory visual (piers under the house); a three-icon benefit row; a strong two-colour footer | The visual is a render, not a real job. "Safety restored / stronger foundation" are outcome promises. There's a paragraph on the image, and red, blue and black all compete. |
+| Louisiana Foundation Repair, "Our Services" | A real branded truck and trailer, the best authenticity signal in the set; a service trio of labelled photos; a clear footer | A script "and much more!"; the cliché "No job too big or too small"; the caption claims "20+ years" and "the best in Central Louisiana" without support; clutter. |
+
+**The floor, all nine examples.** Every Compass graphic must at least match
+their strengths:
+
+- A readable hook headline.
+- A named service.
+- A benefit or icon row.
+- A visible logo.
+- A footer with phone and website.
+- One clear CTA.
+
+It must also avoid every weakness they show:
+
+- AI or stock imagery presented as real.
+- Unsupported superlatives, results and outcome promises.
+- Paragraphs on the image.
+- Script and mismatched fonts.
+- Competing accent colours.
+- Clichés.
+- Icons that don't match their labels.
+
+**Better than the floor** means both conditions at once, plus the Magnolia
+system traits below. Magnolia is the strongest of the nine and remains the
+target.
+
+Patterns from the second batch worth adopting for Lucas:
+
+- **The educational split ("Did You Know?")** feeds Trust & Know-How's
+  educational mode. Keep the hedged wording; cut to one line and three
+  bullets.
+- **The problem-question hook** ("Uneven floors…?") feeds Service
+  Spotlight headlines, for example a storm-damage question. The answer must
+  be a governed service, never an outcome promise.
+- **The branded vehicle with a service trio** ("Our Services") becomes a
+  Services Overview layout in Service Light. Lucas has real branded trucks
+  in its photos (DAGdypS7ZU4, DAG3B9q8YVE, DAGsgGZS5KA), plus labelled real
+  photos of approved services.
+- **The credibility row** (Roy, Scott & James) feeds Trust & Know-How
+  authority mode, filled only from sourced claims such as Owens Corning
+  Preferred Contractor, BBB Accredited and Lifetime Workmanship Warranty.
+- **Explanatory diagrams** (roof layers, how a leak happens) are a future
+  asset type. They would have to be labelled as illustrations and never
+  pass as a job photo. Nothing is planned for them yet.
+
 What the Magnolia set does, which every Lucas template must also do:
 
 1. **It is one recognisable system.** The same dark ground, one accent,
@@ -439,6 +492,11 @@ Adds a light-background layout, so the feed isn't all black panels.
 - **Layout:** a light grey or white ground with one hero photo and two
   supporting photos in rounded frames. A blue caps headline sits beside
   three icon service rows, with the logo tile and a CTA pill with contact.
+- **Services Overview variant** (from the floor set's "Our Services"): a
+  real branded Lucas truck or crew photo as the hero, an angled Lucas-blue
+  "Our services" banner, and three labelled own-work photos, one per
+  approved service. Then the footer band. No "and much more" or "no job too
+  big".
 - **Variables:** as Service Spotlight.
 - **Do not carry forward:**
   - The "Get a free quote today" starburst.
@@ -482,11 +540,12 @@ Adds a light-background layout, so the feed isn't all black panels.
    governed import.
 9. **People.** The owner headshot and the team photos need consent
    recorded before use.
-10. **Benchmark.** The benchmark examples were supplied in the conversation
-    as screenshots (three Magnolia posts, two Wireless Wizard) and are
-    described under Quality benchmark. They are not in Canva, Drive or the
-    repo. More contractor examples would sharpen it, kept in a benchmark
-    folder outside every client folder.
+10. **Benchmark.** Nine benchmark posts were supplied in the conversation
+    as screenshots and are described under Quality benchmark: Magnolia ×3,
+    Wireless Wizard ×2, Roy, Scott & James ×2 and Louisiana Foundation
+    Repair ×2. They are not in Canva, Drive or the repo. Together they are
+    the floor, and every Compass graphic must beat them. More examples
+    belong in a benchmark folder outside every client folder.
 
 ## Designs in Lucas's folder that are not Lucas's
 
