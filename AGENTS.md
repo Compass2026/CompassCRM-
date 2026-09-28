@@ -1172,8 +1172,18 @@ scheduled or published by any of it.
   rolled-back probes refused the worker's SQL (also with the flag, SET ROLE
   service_role and SET ROLE authenticated + team JWT), a portal contact, a
   non-team sign-in and anon; every brand asset unchanged and unreviewed;
-  `database.types.ts` regenerated. Nothing has been hashed or reviewed on
-  production.
+  `database.types.ts` regenerated. **Lucas (Sept 28 2026):**
+  - All 15 of Lucas's brand assets are hashed; none is reviewed.
+  - The website's v3 wordmark was imported as `logo_primary`; the old
+    square mark is kept as a legacy `logo_icon`.
+  - The Creative use cards now show the file name, the full hash, the
+    asset's notes and quality warnings (`qualityWarnings` in
+    `src/lib/creative-use.ts`: hero size < 1080 px, compression, enlarged
+    crops, Facebook / WhatsApp files, raster logos). Warnings never block
+    or decide.
+  - The focal picker keeps the photo's shape, so clicks map to the image.
+  - Decisions and the Lucas creative palette / type:
+    `docs/lucas-creative-readiness.md`.
 - **Architecture decisions (Sept 28 2026; `docs/client-intelligence.md`,
   "Content architecture decisions"):** one Authority opportunity per
   publishing channel (GBP, Facebook, Instagram each their own lifecycle; a
