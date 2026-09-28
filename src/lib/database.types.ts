@@ -5078,6 +5078,7 @@ export type Database = {
       }
       authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
+      brand_asset_record_hash: { Args: { p: Json }; Returns: Json }
       client_intelligence_input: {
         Args: { p_client_id: string }
         Returns: Json
@@ -5096,7 +5097,6 @@ export type Database = {
       creative_actor_kind: { Args: never; Returns: string }
       creative_begin_run: { Args: { p: Json }; Returns: Json }
       creative_caller_is_teammate: { Args: never; Returns: boolean }
-      creative_subjects_valid: { Args: { p: string[] }; Returns: boolean }
       creative_diff: {
         Args: { p_fields: string[]; p_new: Json; p_old: Json }
         Returns: Json
@@ -5124,6 +5124,7 @@ export type Database = {
       creative_register_template: { Args: { p: Json }; Returns: Json }
       creative_session_active: { Args: never; Returns: boolean }
       creative_spec_hash: { Args: { p_spec: Json }; Returns: string }
+      creative_subjects_valid: { Args: { p: string[] }; Returns: boolean }
       creative_write: { Args: { p: Json }; Returns: Json }
       drafter_caller_is_service: { Args: never; Returns: boolean }
       drafter_caller_is_superuser: { Args: never; Returns: boolean }
@@ -5195,6 +5196,7 @@ export type Database = {
         Args: { p: Database["public"]["Tables"]["social_posts"]["Row"] }
         Returns: Json
       }
+      source_hash_session_active: { Args: never; Returns: boolean }
       task_actor: { Args: never; Returns: string }
     }
     Enums: {

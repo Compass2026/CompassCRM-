@@ -27,8 +27,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
-  enabled); `0055` (source-asset hashing) is written and
-  sandbox-tested but **not yet applied** (awaiting review); `0053` (Authority → AI Drafter hand-off) was applied Sept
+  enabled); `0055` (source-asset hashing) was applied Sept 28
+  2026 as `20260928184831`; `0053` (Authority → AI Drafter hand-off) was applied Sept
   27 2026 as `20260927224214` (app and `post-drafter` v2 deployed with it: PR
   #79); `0052` (reconciliation writes bound to their preview) was
   applied Sept 27 2026 as `20260927212625` (app deployed with it: PR #77); `0051` (atomic Home re-home cleanup) was applied Sept 27 2026 as
@@ -1140,8 +1140,7 @@ scheduled or published by any of it.
   hashes and brand assets unchanged; `database.types.ts` regenerated (the post
   page lists brand-asset links only, since `post_assets.brand_asset_id` is now
   nullable).
-- **Source Asset Governance (0055 written Sept 28 2026, NOT applied;
-  `source-assets` Edge Function written, NOT deployed):** a hash is a
+- **Source Asset Governance (0055 applied Sept 28 2026 as `20260928184831`):** a hash is a
   measurement of the stored bytes, so `brand_assets.content_hash` /
   `content_hashed_at` / `content_measurement` are written only by
   `brand_asset_record_hash()` in the source-assets function's service session
@@ -1166,8 +1165,14 @@ scheduled or published by any of it.
   suggestions shown apart and only prefill subjects / focal point on request.
   Tests: `tests/source-assets.test.mjs`, `tests/creative-use.test.mjs`, the
   sandbox's `source_asset_hashing.test.sql`, `npm run test:creative-use-ui`.
-  Deploying `source-assets` needs it added to the deploy workflow's function
-  list. Nothing has been hashed or reviewed on production.
+  `source-assets` is on the deploy workflow's function list. Verified on
+  production after applying 0055: recorded SQL identical to the file (md5),
+  all 6 function bodies match, grants / constraints / triggers as designed,
+  rolled-back probes refused the worker's SQL (also with the flag, SET ROLE
+  service_role and SET ROLE authenticated + team JWT), a portal contact, a
+  non-team sign-in and anon; every brand asset unchanged and unreviewed;
+  `database.types.ts` regenerated. Nothing has been hashed or reviewed on
+  production.
 - **Architecture decisions (Sept 28 2026; `docs/client-intelligence.md`,
   "Content architecture decisions"):** one Authority opportunity per
   publishing channel (GBP, Facebook, Instagram each their own lifecycle; a
