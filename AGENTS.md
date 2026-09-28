@@ -25,8 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0056` (Canva folder ids on the client record) is
-  written but **not yet applied**; `0054` (Creative Engine schema) was applied Sept 28
+  **not yet applied**; `0056` (Canva folder ids on the client record) was
+  applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
   2026 as `20260928184831`; `0053` (Authority → AI Drafter hand-off) was applied Sept
@@ -1182,7 +1182,7 @@ scheduled or published by any of it.
   future `creative_assets` model; approval will bind copy and the exact
   creative version). Nothing of the Creative Engine is built.
 
-## Canva folder mapping (0056, written Sept 28 2026, **not applied**)
+## Canva folder mapping (0056, applied Sept 28 2026 as `20260928212948`)
 
 Every Compass client keeps its designs in one primary Canva folder with one
 "Used" subfolder inside it. `clients.canva_folder_id` /
@@ -1217,6 +1217,21 @@ Show Me Electrical only because its id sits inside that client's folder).
   inserts the nine production-shaped clients before 0056 through
   `supabase/tests/sandbox/replay/0056.before.sql`, and `0056.after.sql`
   snapshots the backfill and removes them), `tests/canva-folders.test.mjs`.
+- **Verified on production after applying:** recorded SQL identical to the
+  file (md5 `a75f5e61…`), both function bodies match (md5), grants /
+  indexes / constraints / trigger as designed; the eight mappings exact and
+  the activation test client unmapped (table and read model). Rolled-back
+  probes as a teammate: duplicate primary, duplicate Used and both
+  cross-column reuses refused (23505 naming the holder), a folder name,
+  `uploads` and a Used folder without a primary refused (23514), reactivating
+  an offboarded client on a live client's folders refused; with the guard
+  disabled both unique indexes refuse duplicates on their own; anon is denied
+  the read model and a non-team sign-in sees and updates nothing. Before and
+  after the apply, for all nine clients, the Authority fingerprint, stale
+  sections, `client_intelligence_input` and `authority_input` are identical,
+  as are posts, creative / drafter / publisher / Authority counts and the
+  publisher switch (off). `database.types.ts` regenerated from production is
+  identical to the reviewed file.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
