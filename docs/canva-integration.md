@@ -59,6 +59,88 @@ tile, black-and-blue palette and bold caps headlines, and fixes what held the
 legacy designs back: long paragraphs, script and ghost-text type, stock
 photos, and copy that was never grounded.
 
+### Quality benchmark (Tom's examples, Sept 28 2026)
+
+Tom supplied five Facebook posts as the minimum finished quality. They are
+**references only**: third-party work, never copied, never stored as
+templates or assets. The screenshots are not committed to this repo.
+
+**Magnolia Home Inspections** is the benchmark to meet or beat:
+
+- **"New Doesn't Mean Perfect."** A dark panel with a thin gold rule on the
+  left edge. A gold category pill heads a 3-line condensed off-white
+  headline, then one subline and two gold-check bullets. A real photo sits
+  in a thin gold frame on the right. A gold divider separates the footer:
+  cream logo tile, "CALL TODAY" with the phone in large gold, and the
+  website.
+- **"Louisiana Humidity Breeds Mold."** A full-bleed real crawlspace photo
+  under a dark vignette. Centred: an outlined gold pill, a huge 3-line local
+  hook, one benefit line, a gold CTA pill ("Schedule an Inspection"), the
+  cream logo tile, then phone and website.
+- **"A Safer View From Above."** Portrait. A real photo in the top ~55%
+  inside a double gold frame with corner brackets. Below, on a dark panel: a
+  gold eyebrow, a 2-line headline, a subline, an outlined CTA with an icon,
+  and 2×2 outlined feature cards (icon, word, two-word descriptor). The
+  same footer as the first post.
+
+**Wireless Wizard** (two posts) is a reference for thumb-stop headline scale
+and icon-label rows only. It is **not** a reference for imagery or claims:
+
+- Its phone splash and store interior read as AI-generated renders.
+- "Mississippi's #1 Phone Repair Shop" and "Fast / Reliable / Affordable"
+  are unsupported superlatives.
+- Its busy multi-colour look is not Lucas.
+
+What the Magnolia set does, which every Lucas template must also do:
+
+1. **It is one recognisable system.** The same dark ground, one accent,
+   one light tone, the same logo tile and the same footer on every post.
+   You can tell whose post it is before reading.
+2. **An eyebrow names the service.** A small caps pill or label above the
+   headline (NEW CONSTRUCTION, MOLD INSPECTIONS, DRONE INSPECTIONS).
+3. **The headline dominates.** 3–5 words over at most three lines, in a
+   heavy condensed or geometric face, off-white not pure white, taking
+   roughly a quarter to a third of the canvas height.
+4. **There is one supporting line**, a single sentence of benefit.
+5. **Support items are few and short.** At most four, each 2–4 words, with
+   an accent-colour check or icon.
+6. **There is one real photo** showing the problem or the result. It is
+   framed with a thin accent keyline, or full-bleed under a vignette, and
+   never a collage of mixed-quality shots.
+7. **There is one CTA**, verb-led, in an accent-filled or outlined pill.
+8. **The footer band is fixed:** logo tile, "Call today" with the phone in
+   the accent colour, and the website. Same place every time.
+9. **The palette is at most three colours** plus the photo.
+10. **Margins are generous.** Nothing crowds the edges, and thin rules and
+    frames give the polish.
+11. **The caption carries the detail and the image carries the hook**
+    (hook line, then detail, then CTA, then hashtags).
+
+Mapped onto Lucas, Magnolia's system fits the legacy look closely: dark
+ground, one accent and a logo tile.
+
+| Magnolia | Lucas equivalent |
+|---|---|
+| Dark brown ground | Charcoal / black ground |
+| Gold accent | Lucas blue `#3ca8f0` |
+| Cream text and logo tile | White text; the black Lucas logo tile |
+
+The logo tile needs a thin white or Lucas-blue keyline on charcoal, or it
+disappears (DAG5u2I9Lhk does this).
+
+**Quality gate the renderer will check** (to be encoded later, not built):
+
+- One headline of ≤ 5 words and ≤ 3 lines, the largest element.
+- Overlay copy ≤ 25 words, not counting the footer.
+- At most one eyebrow, one subline, four support items and one CTA.
+- At most three colours plus the photo.
+- One approved photo of at least 1080 px on its short side.
+- The fixed footer band is present.
+- Text contrast of at least 4.5:1 for small text.
+- A safe margin of at least 5% on every edge.
+- The headline stays legible when the post is shown at the width of a phone
+  feed.
+
 ### Rules every family follows
 
 - **Copy is governed.** Overlay text comes from the Drafter / approved post,
@@ -83,7 +165,16 @@ photos, and copy that was never grounded.
   a 4:5 portrait master for Facebook / Instagram; the square is optional.
 - **Logo:** the black Lucas logo tile, always on its tile, never directly on
   a busy photo; bottom-right on landscape, top-left on portrait unless the
-  family says otherwise.
+  family says otherwise. On charcoal it carries a thin white or Lucas-blue
+  keyline.
+- **Shared components** (from the benchmark), identical in every family:
+  - **Eyebrow:** a Lucas-blue caps pill or label naming the service or
+    topic.
+  - **Footer band:** logo tile, "Call today" with the phone in Lucas blue,
+    and the website, in the same place every time.
+  - **CTA:** one, verb-led, in a Lucas-blue pill (filled or outlined).
+  - The families differ in their middle section only.
+- **Every render passes the quality gate** above.
 
 ### 1. Service Spotlight (service / promotional)
 
@@ -91,11 +182,18 @@ photos, and copy that was never grounded.
   - DAG193AlLyE (Current): the services-checklist structure.
   - DAGeF8pz5_c (Current): the photo hero with a black contact band.
   - DAG3B9q8YVE (Used): the rounded full-bleed photo card with a blue CTA bar.
-- **Layout:** one approved photo in the top 55–60%, with a charcoal
-  gradient scrim at the bottom-left. A blue service chip sits above a caps
-  headline over the scrim. Below is a charcoal panel with up to three
-  bullets and a full-width contact band: blue CTA pill, phone, website,
-  logo tile.
+- **Layout:**
+  - **Landscape (Google Business Profile)** follows the structure of
+    Magnolia's "New Doesn't Mean Perfect". On a charcoal ground: a thin
+    Lucas-blue rule on the left edge; the eyebrow, headline, one subline and
+    up to three checked bullets on the left; one approved photo in a thin
+    blue keyline frame on the right; then the footer band.
+  - **Portrait (Facebook / Instagram)** follows the Lucas photo hero. One
+    approved photo in the top 55–60% under a charcoal scrim, with the
+    eyebrow and headline over it; then the bullets, CTA and footer band.
+  - The legacy references supply the Lucas look: the checklist from
+    DAG193AlLyE, the black band from DAGeF8pz5_c and the photo card from
+    DAG3B9q8YVE.
 - **Logo:** tile in the contact band, bottom-right.
 - **Headline:** ≤ 6 words, white caps on the scrim. Optional subheadline of
   ≤ 12 words.
@@ -133,10 +231,16 @@ photos, and copy that was never grounded.
   - DAGoMRbPsR8 (Used): hero roof, white info band, three-photo strip.
   - DAGhcapfunU (Used): 2×2 icon checklist. Layout only; its stock
     hail-in-hand photo is excluded.
-- **Layout:** photo in the top half, with an angled blue title ribbon across
-  the seam. Below is a charcoal panel with three or four icon points (≤ 5
-  words each), an optional one-sentence explainer and a rounded contact bar.
-  Two modes:
+- **Layout:** follows the structure of Magnolia's "A Safer View From Above",
+  in the Lucas look of DAHBDkX484I. A framed own-work photo fills the top
+  half, with an angled blue title ribbon or eyebrow at the seam. Below, on a
+  charcoal panel: a 2-line headline, one subline, and three or four
+  outlined point cards (icon, 1–2 words, 2-word descriptor) or a checklist.
+  Then the CTA and footer band. An educational "hook" variant follows
+  "Louisiana Humidity Breeds Mold": a full-bleed own-work photo under a
+  vignette, a centred local hook headline, one line, the CTA pill and a
+  centred logo tile. Its headline copy must be governed, informational and
+  free of fear-selling. Two modes:
   - **Authority:** points are sourced credentials.
   - **Educational:** points are a checklist from approved educational
     content, with no claims.
@@ -378,8 +482,11 @@ Adds a light-background layout, so the feed isn't all black panels.
    governed import.
 9. **People.** The owner headshot and the team photos need consent
    recorded before use.
-10. **Benchmark.** The Magnolia benchmark examples were not found in Canva,
-    Drive or the repo.
+10. **Benchmark.** The benchmark examples were supplied in the conversation
+    as screenshots (three Magnolia posts, two Wireless Wizard) and are
+    described under Quality benchmark. They are not in Canva, Drive or the
+    repo. More contractor examples would sharpen it, kept in a benchmark
+    folder outside every client folder.
 
 ## Designs in Lucas's folder that are not Lucas's
 
