@@ -125,12 +125,53 @@ once at least one of them is approved as own work. Families using grids
 
 ### More real Lucas photos in Canva (import later, not now)
 
-The Sept 28 discovery found real Lucas project photos in 58 of the 88
-Lucas designs. The account-wide Canva uploads folder holds many phone-camera
-photos (`PXL_…` filenames). The inventory of that folder is in progress
-(metadata only), and this section will list the candidates. Nothing is
-imported until Tom approves a governed import (brand-scan import →
-`source-assets` hash → Creative use review).
+Found through read-only listings only. Nothing was imported, approved or
+moved.
+
+**Where the real job photos are:**
+
+- **Inside Lucas's designs.** The Sept 28 discovery found real Lucas
+  project photos in 58 of the 88 designs in Lucas's two folders. This is
+  the strongest pool: the photos are already used as Lucas's own work.
+  They exist in Canva as images embedded in those designs.
+- **The Canva uploads folder.** This is account-wide, shared by every
+  client: 1,385 images. Names that point at Lucas:
+
+  | Canva image id | Name | Uploaded | Thumbnail shape |
+  |---|---|---|---|
+  | `MAGoHrxmC3c` | `lucas roof.jpg` | 2025-05-21 | portrait 3:4 |
+  | `MAGprvO4Yb8` | `Lucas-Construction-01-480x360.jpg` | 2025-06-07 | landscape 4:3 (480×360 by its name, too small for a hero) |
+
+- **The PXL_ batch.** There are 59 phone-camera photos (`PXL_YYYYMMDD…`),
+  taken between 2020-12 and 2025-06: 44 landscape and 15 portrait.
+  - They were all uploaded on 2026-07-29 in one batch of 78 images,
+    together with 14 `IMG_` phone photos and three numbered files.
+  - The filenames don't say which client they belong to, and the uploads
+    folder mixes every client. So these are **possible** Lucas job photos,
+    not confirmed ones.
+
+**What a later governed import needs:**
+
+1. A person identifies each photo as a Lucas job, from the thumbnail.
+2. The original file comes out of Canva. The connector can't give the
+   bytes directly, so either Tom downloads the originals or they are
+   exported from the designs. Then the brand-scan import mode stores them
+   in `brand-assets`.
+3. `source-assets` hashes each one.
+4. It is reviewed on Creative use exactly like the 12 above, with own
+   work, subjects and a focal point.
+
+**Constraints for that import:**
+
+- Canva thumbnails are 200 px and never a source.
+- Reading a design's content bumps its modified date. Identifying the
+  embedded photos must use thumbnail-only reads
+  (`docs/canva-integration.md`).
+
+**Not Lucas's.** The uploads folder also holds images for Logic Solar,
+Show Me Electric, Pensacola Equipment Rental, BHG Safety Partners, Ginger
+Huff, Silverback Plumbing, All Star Demo and several non-clients. It is
+not a Lucas source by default.
 
 ## 2. Logo
 
@@ -139,7 +180,9 @@ imported until Tom approves a governed import (brand-scan import →
 | **`lucas-logo-v3.png`** (recommended) | Live site, `https://lucasconstructionmo.com/lucas-logo-v3.png` (header and footer of every page) | Raster PNG, RGBA, transparent background | 1200×886, 579,396 bytes, SHA-256 `4f835f2c1d24…` as fetched Sept 28 | Yes (see below) | **Appropriate on dark grounds only**, at tile size |
 | CRM `logo_primary` `81a697a7-63ce-4517-8565-98e8f9dfe545` | Old WordPress site icon (`cropped-Untitled-design-27.png`) | Raster PNG | 512×512, 11,271 bytes | A square site-icon crop (the `cropped-` prefix and its 192 px twin) | **Not appropriate.** It is superseded by v3; keep it as the record of the old icon. |
 | CRM `logo_icon` `c387232b-b9fe-490c-be0a-39f6b686a8ca` | 192 px twin of the above | PNG | 192×192 | No | Favicon-scale only |
-| Canva "Logos" folder `FAFPNKjVvv8` | Canva | — | — | It holds only an icon and unrelated "Crush" images; **no Lucas wordmark** | — |
+| Canva "Logos" folder `FAFPNKjVvv8` | Canva | — | — | It holds only an icon and unrelated "Crush" images; **no Lucas wordmark** in that folder | — |
+| Canva uploads `MAGdn5Q3Uo4` / `MAGpuUwrNBM` "LUCAS CONSTRUCTION LOGO.png" | Canva uploads (2025-01-29, re-uploaded 2025-06-08) | PNG; full size unknown from the listing | Thumbnail about 2.15:1, a wide horizontal lockup, a different shape from v3 (1.35:1) | Probably the earlier wordmark, from before v3; not checked | Tom to say whether it or v3 is current. v3 is what the live site uses. |
+| Canva uploads `MAGfamwMZDw` "LucasConstructionLogo100-980x435.png" | Canva uploads (2025-02-18) | PNG, 980×435 by its name | — | The old WordPress-era header logo | Superseded |
 | Canva brand kit "Lucas Construction" (`kAGghPt26-4`) | Canva | — | — | The connector lists its name and thumbnail only; its logo files can't be read through the listing | Ask Tom whether it holds an original or vector file |
 | Logo tile inside legacy designs | Canva designs, e.g. DAG5u2I9Lhk | Embedded in designs | — | The same mark on a black tile | A layout reference, not a source file |
 
