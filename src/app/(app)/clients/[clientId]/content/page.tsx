@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { plannedQuantity } from "@/lib/billing";
 import {
   addContentPostAction,
   deleteContentPostAction,
@@ -58,9 +59,10 @@ export default async function ContentPage({
         .eq("is_active", true)
         .order("keyword"),
       supabase
-        .from("plans")
-        .select("blog_posts_per_month")
+        .from("client_entitlements")
+        .select("enabled, quantity")
         .eq("client_id", clientId)
+        .eq("service_key", "blog_posts")
         .maybeSingle(),
       supabase
         .from("content_posts")
@@ -99,7 +101,7 @@ export default async function ContentPage({
         ))}
         <span className="ml-auto text-sm text-muted-foreground">
           Published this month: <span className="font-medium text-foreground">{publishedThisMonth}</span>
-          {plan?.blog_posts_per_month != null && ` / ${plan.blog_posts_per_month} planned`}
+          {plannedQuantity(plan) != null && ` / ${plannedQuantity(plan)} planned`}
         </span>
       </div>
 

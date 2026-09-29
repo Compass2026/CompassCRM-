@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { plannedQuantity } from "@/lib/billing";
 import { PostDraftForm } from "@/components/post-forms";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +37,7 @@ export default async function SocialPage({
       .select("id, platform, post_type, search_intent, copy, review_status, publish_status, scheduled_at, published_at, submitted_at, author_kind, created_at, drafter_run_id")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
-    supabase.from("plans").select("social_posts_per_month").eq("client_id", clientId).maybeSingle(),
+    supabase.from("client_entitlements").select("enabled, quantity").eq("client_id", clientId).eq("service_key", "social_posts").maybeSingle(),
     supabase.from("services").select("id, name").eq("client_id", clientId).eq("status", "approved").order("sort_order"),
     supabase.from("offers").select("id, title, status").eq("client_id", clientId).neq("status", "retired").order("title"),
     supabase.from("keywords").select("id, keyword").eq("client_id", clientId).eq("is_tracked", true).order("keyword"),
@@ -88,7 +89,7 @@ export default async function SocialPage({
         </Link>
         <span className="ml-auto text-sm text-muted-foreground">
           Published in {monthStr}: <span className="font-medium text-foreground">{publishedThisMonth}</span>
-          {plan?.social_posts_per_month != null && ` / ${plan.social_posts_per_month} planned`}
+          {plannedQuantity(plan) != null && ` / ${plannedQuantity(plan)} planned`}
         </span>
       </div>
 

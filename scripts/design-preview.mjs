@@ -99,8 +99,10 @@ const tasks = [
   task(7, { title: "Collect six job-site photos from the owner", owner: "DELEGATED", clients: C(3), due_date: "2026-10-02", client_stages: { stages: { name: "Brand Build" } } }),
 ];
 
-const subscriptions = [
-  { id: uid(500), client_id: C(5).id, amount: 1450, current_period_end: "2026-09-12T00:00:00Z", paid_status: "past_due", clients: C(5) },
+// The derived billing read model (0057): Stripe says past due, Compass flags it.
+const clientBillingStatus = [
+  { client_id: C(5).id, billing_state: "past_due", billing_attention: true, attention_reasons: ["subscription_past_due", "invoice_overdue"],
+    latest_invoice_remaining_cents: 145000, latest_invoice_currency: "usd" },
 ];
 
 const measurement = (n, metric, value, period, extra = {}) => ({
@@ -164,7 +166,7 @@ const tables = {
   client_pipelines: clients.flatMap((c) => c.client_pipelines),
   client_stages: blockedStages,
   tasks,
-  subscriptions,
+  client_billing_status: clientBillingStatus,
   team_members: [ME, JESS].map((m) => ({ ...m, auth_user_id: m === ME ? USER.id : null })),
   report_measurements: reportMeasurements,
   monthly_cycles: monthlyCycles,

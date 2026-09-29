@@ -129,3 +129,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/source_asset_hashin
 # saw it, formats, no shared folders between live clients, the read model,
 # nothing else reads them).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folders.test.sql"
+# 0057: billing foundation (Stripe mirror is team read-only and service-role
+# written, client / customer / subscription / invoice belong together, the
+# catalog's package ↔ price rules, entitlements and overrides, the derived
+# billing status in test and live mode, portal / stranger / anon see nothing).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_foundation.test.sql"

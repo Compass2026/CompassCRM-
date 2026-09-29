@@ -531,6 +531,174 @@ export type Database = {
           },
         ]
       }
+      billing_one_time_items: {
+        Row: {
+          active: boolean
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          name: string
+          sort_order: number
+          stripe_product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          name: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          name?: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_one_time_items_stripe_product_id_fkey"
+            columns: ["stripe_product_id"]
+            isOneToOne: true
+            referencedRelation: "stripe_products"
+            referencedColumns: ["stripe_product_id"]
+          },
+        ]
+      }
+      billing_package_prices: {
+        Row: {
+          active: boolean
+          client_id: string | null
+          created_at: string
+          id: string
+          is_default: boolean
+          notes: string | null
+          package_id: string
+          package_kind: string
+          price_type: string
+          stripe_price_id: string
+          stripe_product_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          notes?: string | null
+          package_id: string
+          package_kind: string
+          price_type?: string
+          stripe_price_id: string
+          stripe_product_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          notes?: string | null
+          package_id?: string
+          package_kind?: string
+          price_type?: string
+          stripe_price_id?: string
+          stripe_product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_package_prices_package_id_stripe_product_id_packag_fkey"
+            columns: ["package_id", "stripe_product_id", "package_kind"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id", "stripe_product_id", "kind"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_stripe_price_id_stripe_product_id_p_fkey"
+            columns: ["stripe_price_id", "stripe_product_id", "price_type"]
+            isOneToOne: false
+            referencedRelation: "stripe_prices"
+            referencedColumns: ["stripe_price_id", "stripe_product_id", "type"]
+          },
+        ]
+      }
+      billing_packages: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          kind: string
+          name: string
+          sort_order: number
+          stripe_product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          kind: string
+          name: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          kind?: string
+          name?: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_packages_stripe_product_id_fkey"
+            columns: ["stripe_product_id"]
+            isOneToOne: true
+            referencedRelation: "stripe_products"
+            referencedColumns: ["stripe_product_id"]
+          },
+        ]
+      }
       brand_assets: {
         Row: {
           client_id: string
@@ -877,6 +1045,114 @@ export type Database = {
           },
         ]
       }
+      checkout_sessions: {
+        Row: {
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          line_items: Json
+          livemode: boolean
+          mode: string
+          package_id: string | null
+          payment_status: string | null
+          status: string
+          stripe_checkout_session_id: string
+          stripe_created_at: string | null
+          stripe_customer_id: string
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_subscription_id: string | null
+          stripe_synced_at: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          line_items?: Json
+          livemode: boolean
+          mode: string
+          package_id?: string | null
+          payment_status?: string | null
+          status: string
+          stripe_checkout_session_id: string
+          stripe_created_at?: string | null
+          stripe_customer_id: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_synced_at: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          line_items?: Json
+          livemode?: boolean
+          mode?: string
+          package_id?: string | null
+          payment_status?: string | null
+          status?: string
+          stripe_checkout_session_id?: string
+          stripe_created_at?: string | null
+          stripe_customer_id?: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_synced_at?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkout_sessions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claims: {
         Row: {
           claim: string
@@ -1217,6 +1493,68 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "creative_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_entitlement_overrides: {
+        Row: {
+          client_id: string
+          enabled: boolean
+          quantity: number | null
+          reason: string
+          service_key: string
+          service_kind: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          enabled: boolean
+          quantity?: number | null
+          reason: string
+          service_key: string
+          service_kind: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          enabled?: boolean
+          quantity?: number | null
+          reason?: string
+          service_key?: string
+          service_kind?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_entitlement_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_service_key_service_kind_fkey"
+            columns: ["service_key", "service_kind"]
+            isOneToOne: false
+            referencedRelation: "service_catalog"
+            referencedColumns: ["key", "kind"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -2473,6 +2811,211 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_line_items: {
+        Row: {
+          amount_cents: number
+          client_id: string
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          invoice_id: string
+          period_end: string | null
+          period_start: string | null
+          proration: boolean
+          quantity: number | null
+          stripe_line_item_id: string
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          stripe_subscription_item_id: string | null
+          stripe_synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          client_id: string
+          created_at?: string
+          currency: string
+          description?: string | null
+          id?: string
+          invoice_id: string
+          period_end?: string | null
+          period_start?: string | null
+          proration?: boolean
+          quantity?: number | null
+          stripe_line_item_id: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_subscription_item_id?: string | null
+          stripe_synced_at: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          client_id?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          invoice_id?: string
+          period_end?: string | null
+          period_start?: string | null
+          proration?: boolean
+          quantity?: number | null
+          stripe_line_item_id?: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_subscription_item_id?: string | null
+          stripe_synced_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_line_items_invoice_id_client_id_fkey"
+            columns: ["invoice_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount_due_cents: number
+          amount_paid_cents: number
+          amount_remaining_cents: number
+          attempt_count: number
+          attempted: boolean
+          billing_reason: string | null
+          client_id: string
+          collection_method: string
+          created_at: string
+          currency: string
+          due_date: string | null
+          finalized_at: string | null
+          hosted_invoice_url: string | null
+          id: string
+          invoice_pdf: string | null
+          livemode: boolean
+          marked_uncollectible_at: string | null
+          next_payment_attempt: string | null
+          number: string | null
+          paid_at: string | null
+          paid_out_of_band: boolean
+          period_end: string | null
+          period_start: string | null
+          status: string
+          stripe_created_at: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_subscription_id: string | null
+          stripe_synced_at: string
+          subtotal_cents: number
+          total_cents: number
+          updated_at: string
+          voided_at: string | null
+        }
+        Insert: {
+          amount_due_cents: number
+          amount_paid_cents: number
+          amount_remaining_cents: number
+          attempt_count?: number
+          attempted?: boolean
+          billing_reason?: string | null
+          client_id: string
+          collection_method: string
+          created_at?: string
+          currency: string
+          due_date?: string | null
+          finalized_at?: string | null
+          hosted_invoice_url?: string | null
+          id?: string
+          invoice_pdf?: string | null
+          livemode: boolean
+          marked_uncollectible_at?: string | null
+          next_payment_attempt?: string | null
+          number?: string | null
+          paid_at?: string | null
+          paid_out_of_band?: boolean
+          period_end?: string | null
+          period_start?: string | null
+          status: string
+          stripe_created_at: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_subscription_id?: string | null
+          stripe_synced_at: string
+          subtotal_cents: number
+          total_cents: number
+          updated_at?: string
+          voided_at?: string | null
+        }
+        Update: {
+          amount_due_cents?: number
+          amount_paid_cents?: number
+          amount_remaining_cents?: number
+          attempt_count?: number
+          attempted?: boolean
+          billing_reason?: string | null
+          client_id?: string
+          collection_method?: string
+          created_at?: string
+          currency?: string
+          due_date?: string | null
+          finalized_at?: string | null
+          hosted_invoice_url?: string | null
+          id?: string
+          invoice_pdf?: string | null
+          livemode?: boolean
+          marked_uncollectible_at?: string | null
+          next_payment_attempt?: string | null
+          number?: string | null
+          paid_at?: string | null
+          paid_out_of_band?: boolean
+          period_end?: string | null
+          period_start?: string | null
+          status?: string
+          stripe_created_at?: string
+          stripe_customer_id?: string
+          stripe_invoice_id?: string
+          stripe_subscription_id?: string | null
+          stripe_synced_at?: string
+          subtotal_cents?: number
+          total_cents?: number
+          updated_at?: string
+          voided_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
+          },
+          {
+            foreignKeyName: "invoices_stripe_subscription_id_client_id_fkey"
+            columns: ["stripe_subscription_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["stripe_subscription_id", "client_id"]
+          },
+        ]
+      }
       keywords: {
         Row: {
           city: string | null
@@ -2841,6 +3384,51 @@ export type Database = {
           },
         ]
       }
+      package_entitlements: {
+        Row: {
+          enabled: boolean
+          notes: string | null
+          package_id: string
+          quantity: number | null
+          service_key: string
+          service_kind: string
+          updated_at: string
+        }
+        Insert: {
+          enabled: boolean
+          notes?: string | null
+          package_id: string
+          quantity?: number | null
+          service_key: string
+          service_kind: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          notes?: string | null
+          package_id?: string
+          quantity?: number | null
+          service_key?: string
+          service_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_entitlements_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_entitlements_service_key_service_kind_fkey"
+            columns: ["service_key", "service_kind"]
+            isOneToOne: false
+            referencedRelation: "service_catalog"
+            referencedColumns: ["key", "kind"]
+          },
+        ]
+      }
       page_groups: {
         Row: {
           city_tier: Database["public"]["Enums"]["city_tier"] | null
@@ -2907,52 +3495,82 @@ export type Database = {
       }
       payments: {
         Row: {
-          amount: number
+          amount_cents: number
+          amount_refunded_cents: number
           client_id: string
+          created_at: string
+          currency: string
+          external_method: string | null
+          failure_code: string | null
+          failure_message: string | null
           id: string
-          method: Database["public"]["Enums"]["payment_method"] | null
+          livemode: boolean | null
           notes: string | null
           paid_at: string | null
-          period_end: string | null
-          period_start: string | null
+          payment_method_type: string | null
           recorded_by: string | null
           reference: string | null
-          source: Database["public"]["Enums"]["payment_source"]
+          source: string
+          status: string
+          stripe_charge_id: string | null
+          stripe_created_at: string | null
+          stripe_customer_id: string | null
           stripe_invoice_id: string | null
           stripe_payment_intent_id: string | null
-          subscription_id: string | null
+          stripe_synced_at: string | null
+          updated_at: string
         }
         Insert: {
-          amount: number
+          amount_cents: number
+          amount_refunded_cents?: number
           client_id: string
+          created_at?: string
+          currency: string
+          external_method?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
           id?: string
-          method?: Database["public"]["Enums"]["payment_method"] | null
+          livemode?: boolean | null
           notes?: string | null
           paid_at?: string | null
-          period_end?: string | null
-          period_start?: string | null
+          payment_method_type?: string | null
           recorded_by?: string | null
           reference?: string | null
-          source?: Database["public"]["Enums"]["payment_source"]
+          source: string
+          status: string
+          stripe_charge_id?: string | null
+          stripe_created_at?: string | null
+          stripe_customer_id?: string | null
           stripe_invoice_id?: string | null
           stripe_payment_intent_id?: string | null
-          subscription_id?: string | null
+          stripe_synced_at?: string | null
+          updated_at?: string
         }
         Update: {
-          amount?: number
+          amount_cents?: number
+          amount_refunded_cents?: number
           client_id?: string
+          created_at?: string
+          currency?: string
+          external_method?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
           id?: string
-          method?: Database["public"]["Enums"]["payment_method"] | null
+          livemode?: boolean | null
           notes?: string | null
           paid_at?: string | null
-          period_end?: string | null
-          period_start?: string | null
+          payment_method_type?: string | null
           recorded_by?: string | null
           reference?: string | null
-          source?: Database["public"]["Enums"]["payment_source"]
+          source?: string
+          status?: string
+          stripe_charge_id?: string | null
+          stripe_created_at?: string | null
+          stripe_customer_id?: string | null
           stripe_invoice_id?: string | null
           stripe_payment_intent_id?: string | null
-          subscription_id?: string | null
+          stripe_synced_at?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -2970,10 +3588,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "payments_subscription_id_fkey"
-            columns: ["subscription_id"]
+            foreignKeyName: "payments_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
             isOneToOne: false
-            referencedRelation: "subscriptions"
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
+          },
+          {
+            foreignKeyName: "payments_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -3072,48 +3697,64 @@ export type Database = {
       }
       plans: {
         Row: {
-          ad_budget_managed: number | null
-          blog_posts_per_month: number | null
           client_id: string
-          gbp_posts_per_month: number | null
+          collection: string
+          external_amount_cents: number | null
+          external_currency: string | null
+          external_interval: string | null
+          external_method: string | null
           id: string
-          monthly_fee: number | null
+          managed_ad_budget_cents: number | null
           notes: string | null
-          package_name: string | null
+          package_id: string | null
           renewal_date: string | null
-          social_posts_per_month: number | null
           start_date: string | null
           term_months: number | null
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
-          ad_budget_managed?: number | null
-          blog_posts_per_month?: number | null
           client_id: string
-          gbp_posts_per_month?: number | null
+          collection?: string
+          external_amount_cents?: number | null
+          external_currency?: string | null
+          external_interval?: string | null
+          external_method?: string | null
           id?: string
-          monthly_fee?: number | null
+          managed_ad_budget_cents?: number | null
           notes?: string | null
-          package_name?: string | null
+          package_id?: string | null
           renewal_date?: string | null
-          social_posts_per_month?: number | null
           start_date?: string | null
           term_months?: number | null
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
-          ad_budget_managed?: number | null
-          blog_posts_per_month?: number | null
           client_id?: string
-          gbp_posts_per_month?: number | null
+          collection?: string
+          external_amount_cents?: number | null
+          external_currency?: string | null
+          external_interval?: string | null
+          external_method?: string | null
           id?: string
-          monthly_fee?: number | null
+          managed_ad_budget_cents?: number | null
           notes?: string | null
-          package_name?: string | null
+          package_id?: string | null
           renewal_date?: string | null
-          social_posts_per_month?: number | null
           start_date?: string | null
           term_months?: number | null
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "plans_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "plans_client_id_fkey"
             columns: ["client_id"]
@@ -3126,6 +3767,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: true
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -3575,6 +4223,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      service_catalog: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          key: string
+          kind: string
+          name: string
+          period: string | null
+          pipeline_key: Database["public"]["Enums"]["pipeline_key"] | null
+          sort_order: number
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          key: string
+          kind: string
+          name: string
+          period?: string | null
+          pipeline_key?: Database["public"]["Enums"]["pipeline_key"] | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          key?: string
+          kind?: string
+          name?: string
+          period?: string | null
+          pipeline_key?: Database["public"]["Enums"]["pipeline_key"] | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       services: {
         Row: {
@@ -4067,113 +4757,429 @@ export type Database = {
         Row: {
           client_id: string
           created_at: string
+          currency: string | null
+          default_payment_method_brand: string | null
+          default_payment_method_last4: string | null
+          default_payment_method_type: string | null
+          deleted_at: string | null
+          email: string | null
           id: string
-          last4: string | null
-          payment_method_type:
-            | Database["public"]["Enums"]["payment_method_type"]
-            | null
+          link_source: string
+          linked_at: string
+          linked_by: string | null
+          livemode: boolean
+          metadata: Json
+          name: string | null
+          stripe_created_at: string | null
           stripe_customer_id: string
+          stripe_synced_at: string
+          unlink_reason: string | null
+          unlinked_at: string | null
+          unlinked_by: string | null
+          updated_at: string
         }
         Insert: {
           client_id: string
           created_at?: string
+          currency?: string | null
+          default_payment_method_brand?: string | null
+          default_payment_method_last4?: string | null
+          default_payment_method_type?: string | null
+          deleted_at?: string | null
+          email?: string | null
           id?: string
-          last4?: string | null
-          payment_method_type?:
-            | Database["public"]["Enums"]["payment_method_type"]
-            | null
+          link_source: string
+          linked_at?: string
+          linked_by?: string | null
+          livemode: boolean
+          metadata?: Json
+          name?: string | null
+          stripe_created_at?: string | null
           stripe_customer_id: string
+          stripe_synced_at: string
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+          updated_at?: string
         }
         Update: {
           client_id?: string
           created_at?: string
+          currency?: string | null
+          default_payment_method_brand?: string | null
+          default_payment_method_last4?: string | null
+          default_payment_method_type?: string | null
+          deleted_at?: string | null
+          email?: string | null
           id?: string
-          last4?: string | null
-          payment_method_type?:
-            | Database["public"]["Enums"]["payment_method_type"]
-            | null
+          link_source?: string
+          linked_at?: string
+          linked_by?: string | null
+          livemode?: boolean
+          metadata?: Json
+          name?: string | null
+          stripe_created_at?: string | null
           stripe_customer_id?: string
+          stripe_synced_at?: string
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "stripe_customers_client_id_fkey"
             columns: ["client_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "stripe_customers_client_id_fkey"
             columns: ["client_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_customers_linked_by_fkey"
+            columns: ["linked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_customers_unlinked_by_fkey"
+            columns: ["unlinked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
       }
       stripe_events: {
         Row: {
+          api_version: string | null
+          attempts: number
+          event_created_at: string
           id: string
+          ignored_reason: string | null
+          last_attempt_at: string | null
+          last_error: string | null
+          livemode: boolean
+          object_id: string | null
+          object_type: string | null
+          processed_at: string | null
           received_at: string
+          status: string
           type: string
         }
         Insert: {
+          api_version?: string | null
+          attempts?: number
+          event_created_at: string
           id: string
+          ignored_reason?: string | null
+          last_attempt_at?: string | null
+          last_error?: string | null
+          livemode: boolean
+          object_id?: string | null
+          object_type?: string | null
+          processed_at?: string | null
           received_at?: string
+          status?: string
           type: string
         }
         Update: {
+          api_version?: string | null
+          attempts?: number
+          event_created_at?: string
           id?: string
+          ignored_reason?: string | null
+          last_attempt_at?: string | null
+          last_error?: string | null
+          livemode?: boolean
+          object_id?: string | null
+          object_type?: string | null
+          processed_at?: string | null
           received_at?: string
+          status?: string
           type?: string
         }
         Relationships: []
       }
-      subscriptions: {
+      stripe_prices: {
         Row: {
-          amount: number | null
-          cancel_at: string | null
-          client_id: string
+          active: boolean
+          billing_scheme: string
           created_at: string
-          current_period_end: string | null
-          current_period_start: string | null
-          id: string
-          interval: string
-          latest_invoice_url: string | null
-          paid_status: Database["public"]["Enums"]["paid_status_type"]
-          status: string | null
-          stripe_price_id: string | null
-          stripe_subscription_id: string | null
+          currency: string
+          deleted_at: string | null
+          livemode: boolean
+          lookup_key: string | null
+          metadata: Json
+          nickname: string | null
+          recurring_interval: string | null
+          recurring_interval_count: number | null
+          recurring_usage_type: string | null
+          stripe_created_at: string | null
+          stripe_price_id: string
+          stripe_product_id: string
+          stripe_synced_at: string
+          tax_behavior: string | null
+          type: string
+          unit_amount_cents: number | null
+          updated_at: string
         }
         Insert: {
-          amount?: number | null
-          cancel_at?: string | null
-          client_id: string
+          active: boolean
+          billing_scheme?: string
           created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          id?: string
-          interval?: string
-          latest_invoice_url?: string | null
-          paid_status?: Database["public"]["Enums"]["paid_status_type"]
-          status?: string | null
-          stripe_price_id?: string | null
-          stripe_subscription_id?: string | null
+          currency: string
+          deleted_at?: string | null
+          livemode: boolean
+          lookup_key?: string | null
+          metadata?: Json
+          nickname?: string | null
+          recurring_interval?: string | null
+          recurring_interval_count?: number | null
+          recurring_usage_type?: string | null
+          stripe_created_at?: string | null
+          stripe_price_id: string
+          stripe_product_id: string
+          stripe_synced_at: string
+          tax_behavior?: string | null
+          type: string
+          unit_amount_cents?: number | null
+          updated_at?: string
         }
         Update: {
-          amount?: number | null
-          cancel_at?: string | null
+          active?: boolean
+          billing_scheme?: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          livemode?: boolean
+          lookup_key?: string | null
+          metadata?: Json
+          nickname?: string | null
+          recurring_interval?: string | null
+          recurring_interval_count?: number | null
+          recurring_usage_type?: string | null
+          stripe_created_at?: string | null
+          stripe_price_id?: string
+          stripe_product_id?: string
+          stripe_synced_at?: string
+          tax_behavior?: string | null
+          type?: string
+          unit_amount_cents?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stripe_prices_stripe_product_id_fkey"
+            columns: ["stripe_product_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_products"
+            referencedColumns: ["stripe_product_id"]
+          },
+        ]
+      }
+      stripe_products: {
+        Row: {
+          active: boolean
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          livemode: boolean
+          metadata: Json
+          name: string
+          stripe_created_at: string | null
+          stripe_product_id: string
+          stripe_synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          active: boolean
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          livemode: boolean
+          metadata?: Json
+          name: string
+          stripe_created_at?: string | null
+          stripe_product_id: string
+          stripe_synced_at: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          livemode?: boolean
+          metadata?: Json
+          name?: string
+          stripe_created_at?: string | null
+          stripe_product_id?: string
+          stripe_synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      subscription_items: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          quantity: number | null
+          stripe_created_at: string | null
+          stripe_price_id: string
+          stripe_subscription_item_id: string
+          stripe_synced_at: string
+          subscription_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          quantity?: number | null
+          stripe_created_at?: string | null
+          stripe_price_id: string
+          stripe_subscription_item_id: string
+          stripe_synced_at: string
+          subscription_id: string
+          updated_at?: string
+        }
+        Update: {
           client_id?: string
           created_at?: string
+          id?: string
+          quantity?: number | null
+          stripe_created_at?: string | null
+          stripe_price_id?: string
+          stripe_subscription_item_id?: string
+          stripe_synced_at?: string
+          subscription_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_items_stripe_price_id_fkey"
+            columns: ["stripe_price_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_prices"
+            referencedColumns: ["stripe_price_id"]
+          },
+          {
+            foreignKeyName: "subscription_items_subscription_id_client_id_fkey"
+            columns: ["subscription_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          billing_cycle_anchor: string | null
+          cancel_at: string | null
+          cancel_at_period_end: boolean
+          canceled_at: string | null
+          cancellation_comment: string | null
+          cancellation_feedback: string | null
+          cancellation_reason: string | null
+          client_id: string
+          collection_method: string
+          created_at: string
+          currency: string
+          current_period_end: string | null
+          current_period_start: string | null
+          days_until_due: number | null
+          default_payment_method_type: string | null
+          ended_at: string | null
+          id: string
+          latest_stripe_invoice_id: string | null
+          livemode: boolean
+          metadata: Json
+          pause_collection_behavior: string | null
+          pause_collection_resumes_at: string | null
+          start_date: string | null
+          status: string
+          stripe_created_at: string | null
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          stripe_synced_at: string
+          trial_end: string | null
+          trial_start: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_cycle_anchor?: string | null
+          cancel_at?: string | null
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          cancellation_comment?: string | null
+          cancellation_feedback?: string | null
+          cancellation_reason?: string | null
+          client_id: string
+          collection_method: string
+          created_at?: string
+          currency: string
           current_period_end?: string | null
           current_period_start?: string | null
+          days_until_due?: number | null
+          default_payment_method_type?: string | null
+          ended_at?: string | null
           id?: string
-          interval?: string
-          latest_invoice_url?: string | null
-          paid_status?: Database["public"]["Enums"]["paid_status_type"]
-          status?: string | null
-          stripe_price_id?: string | null
-          stripe_subscription_id?: string | null
+          latest_stripe_invoice_id?: string | null
+          livemode: boolean
+          metadata?: Json
+          pause_collection_behavior?: string | null
+          pause_collection_resumes_at?: string | null
+          start_date?: string | null
+          status: string
+          stripe_created_at?: string | null
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          stripe_synced_at: string
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_cycle_anchor?: string | null
+          cancel_at?: string | null
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          cancellation_comment?: string | null
+          cancellation_feedback?: string | null
+          cancellation_reason?: string | null
+          client_id?: string
+          collection_method?: string
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          days_until_due?: number | null
+          default_payment_method_type?: string | null
+          ended_at?: string | null
+          id?: string
+          latest_stripe_invoice_id?: string | null
+          livemode?: boolean
+          metadata?: Json
+          pause_collection_behavior?: string | null
+          pause_collection_resumes_at?: string | null
+          start_date?: string | null
+          status?: string
+          stripe_created_at?: string | null
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          stripe_synced_at?: string
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -4189,6 +5195,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_client"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
           },
         ]
       }
@@ -4712,6 +5725,67 @@ export type Database = {
           },
         ]
       }
+      client_billing_status: {
+        Row: {
+          agreement_package_id: string | null
+          attention_reasons: string[] | null
+          billing_attention: boolean | null
+          billing_state: string | null
+          cancel_at: string | null
+          cancel_at_period_end: boolean | null
+          canceled_at: string | null
+          checkout_expires_at: string | null
+          checkout_url: string | null
+          client_id: string | null
+          collection: string | null
+          currency: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          default_payment_method_brand: string | null
+          default_payment_method_last4: string | null
+          default_payment_method_type: string | null
+          latest_invoice_currency: string | null
+          latest_invoice_due_date: string | null
+          latest_invoice_id: string | null
+          latest_invoice_remaining_cents: number | null
+          latest_invoice_status: string | null
+          latest_invoice_total_cents: number | null
+          latest_invoice_url: string | null
+          live_subscription_count: number | null
+          livemode: boolean | null
+          mrr_cents: number | null
+          mrr_incomplete: boolean | null
+          next_billing_at: string | null
+          open_invoice_count: number | null
+          outstanding_cents_by_currency: Json | null
+          overdue_invoice_count: number | null
+          pause_collection_behavior: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_package_ids: string[] | null
+          subscription_status: string | null
+        }
+        Relationships: []
+      }
+      client_entitlements: {
+        Row: {
+          client_id: string | null
+          enabled: boolean | null
+          override_reason: string | null
+          package_enabled: boolean | null
+          package_id: string | null
+          package_quantity: number | null
+          period: string | null
+          quantity: number | null
+          service_key: string | null
+          service_kind: string | null
+          service_name: string | null
+          sort_order: number | null
+          source: string | null
+          unit: string | null
+        }
+        Relationships: []
+      }
       portal_client: {
         Row: {
           city: string | null
@@ -5084,6 +6158,16 @@ export type Database = {
       }
       authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
+      billing_livemode: { Args: never; Returns: boolean }
+      billing_monthly_cents: {
+        Args: {
+          p_amount: number
+          p_interval: string
+          p_interval_count: number
+          p_quantity: number
+        }
+        Returns: number
+      }
       brand_asset_record_hash: { Args: { p: Json }; Returns: Json }
       client_canva_folders: {
         Args: { p_client_id?: string }
@@ -5158,7 +6242,6 @@ export type Database = {
       get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
       is_team: { Args: never; Returns: boolean }
-      mark_past_due_subscriptions: { Args: never; Returns: undefined }
       normalize_tracked_keywords: {
         Args: { p_client_id: string; p_target?: number }
         Returns: number
@@ -5279,10 +6362,6 @@ export type Database = {
       keyword_priority: "p1" | "p2" | "p3"
       owner_type: "TOM" | "CLAUDE" | "CLAUDE_APPROVAL" | "DELEGATED" | "WAITING"
       page_group_type: "home" | "service" | "city" | "hub" | "other"
-      paid_status_type: "paid" | "processing" | "open" | "past_due"
-      payment_method: "card" | "stripe_ach" | "external_ach" | "check"
-      payment_method_type: "card" | "us_bank_account" | "external_ach"
-      payment_source: "stripe" | "manual"
       pipeline_key:
         | "foundation"
         | "seo"
@@ -5514,10 +6593,6 @@ export const Constants = {
       keyword_priority: ["p1", "p2", "p3"],
       owner_type: ["TOM", "CLAUDE", "CLAUDE_APPROVAL", "DELEGATED", "WAITING"],
       page_group_type: ["home", "service", "city", "hub", "other"],
-      paid_status_type: ["paid", "processing", "open", "past_due"],
-      payment_method: ["card", "stripe_ach", "external_ach", "check"],
-      payment_method_type: ["card", "us_bank_account", "external_ach"],
-      payment_source: ["stripe", "manual"],
       pipeline_key: [
         "foundation",
         "seo",

@@ -3,8 +3,9 @@
 Written Sept 28 2026, before any billing changes. It covers what already
 exists in the repo and in production (`compass-client-platform`), what
 can be kept, what has to change and why, and a proposed normalized schema
-and build order for review. **Nothing in this document has been built,
-applied or deployed.**
+and build order for review. The decisions of Sept 28 2026 are recorded in
+`AGENTS.md`; what was built from this audit, and its status, is in
+`docs/billing.md`.
 
 Principle it is written against: **Stripe is the financial source of
 truth; Compass is the operational source of truth.** Stripe owns

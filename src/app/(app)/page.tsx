@@ -16,6 +16,7 @@ import {
   WorkflowIcon,
 } from "lucide-react";
 import { clientStatusStyles, ownerLabels } from "@/lib/labels";
+import { attentionLabel, billingState, billingStateLabels, formatMoney } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 
 export default async function DashboardPage() {
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
     { data: clients },
     { data: blockedStages },
     { data: attentionTasks },
-    { data: pastDueSubs },
+    { data: billingAttention },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -46,13 +47,16 @@ export default async function DashboardPage() {
       .or(`owner.eq.CLAUDE_APPROVAL,due_date.lt.${new Date().toISOString().slice(0, 10)}`)
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(20),
+    // Derived from Stripe's own state (0057); Stripe decides past due.
     supabase
-      .from("subscriptions")
-      .select("id, client_id, amount, current_period_end, clients(id, name)")
-      .eq("paid_status", "past_due"),
+      .from("client_billing_status")
+      .select("client_id, billing_state, attention_reasons, latest_invoice_remaining_cents, latest_invoice_currency")
+      .eq("billing_attention", true),
   ]);
 
-  const pastDueClientIds = new Set((pastDueSubs ?? []).map((s) => s.client_id));
+  const clientName = new Map((clients ?? []).map((c) => [c.id, c.name]));
+  const billingAlerts = (billingAttention ?? []).filter((b) => b.client_id);
+  const pastDueClientIds = new Set(billingAlerts.map((b) => b.client_id));
 
   const allClients = clients ?? [];
   const launching = allClients.filter((c) => c.status === "launching").length;
@@ -121,28 +125,30 @@ export default async function DashboardPage() {
       <section id="needs-attention" className="scroll-mt-24 space-y-3">
         <SectionHeading title="Needs attention" />
         <div className="grid gap-4 lg:grid-cols-2">
-          {(pastDueSubs ?? []).length > 0 && (
+          {billingAlerts.length > 0 && (
             <Card className="lg:col-span-2 ring-red-200">
               <CardHeader>
-                <PanelTitle icon={<CreditCardIcon />} tone="alert" count={(pastDueSubs ?? []).length}>
-                  Payments past due
+                <PanelTitle icon={<CreditCardIcon />} tone="alert" count={billingAlerts.length}>
+                  Billing needs attention
                 </PanelTitle>
               </CardHeader>
               <CardContent>
                 <ul className="divide-y text-sm">
-                  {(pastDueSubs ?? []).map((s) => (
-                    <li key={s.id} className="flex flex-wrap items-center gap-x-2 py-2 first:pt-0 last:pb-0">
+                  {billingAlerts.map((b) => (
+                    <li key={b.client_id} className="flex flex-wrap items-center gap-x-2 py-2 first:pt-0 last:pb-0">
                       <Link
                         className="font-medium hover:underline"
-                        href={`/clients/${s.client_id}/billing`}
+                        href={`/clients/${b.client_id}/billing`}
                       >
-                        {s.clients?.name}
+                        {clientName.get(b.client_id!) ?? "Client"}
                       </Link>
                       <span className="text-muted-foreground">
-                        {s.amount != null ? `$${s.amount}/mo` : ""}
-                        {s.current_period_end
-                          ? ` — period ended ${s.current_period_end.slice(0, 10)}`
+                        {billingStateLabels[billingState(b.billing_state)]}
+                        {b.latest_invoice_remaining_cents
+                          ? ` — ${formatMoney(b.latest_invoice_remaining_cents, b.latest_invoice_currency)} open`
                           : ""}
+                        {" · "}
+                        {(b.attention_reasons ?? []).map(attentionLabel).join("; ")}
                       </span>
                     </li>
                   ))}

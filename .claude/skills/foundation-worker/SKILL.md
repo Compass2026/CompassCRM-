@@ -1522,8 +1522,10 @@ everything from the CRM first:
   Compass's work), `social_posts`
   with verified publication dates (social `scheduled_at` alone is not proof),
   GBP posts (count the `gbp_posts` task's notes if Tom recorded a verified number,
-  else not measured), against `plans.gbp_posts_per_month` /
-  `blog_posts_per_month` / `social_posts_per_month`.
+  else not measured), against the client's agreement: `client_entitlements`
+  rows `gbp_posts` / `blog_posts` / `social_posts` (`quantity` when
+  `enabled`; a row that is not enabled means none are planned). Billing
+  state never changes what is planned — report the work, not the invoice.
 - **Off-page:** `backlinks_timeseries_summary` (bare host, `date_from` = the
   first of the prior period, `group_range = 'month'`): referring domains and
   backlinks, this month vs last. One call.

@@ -43,7 +43,8 @@ until then use sourced manual entries or explicit unavailable states.
    run at the home city: set their Keyword Research stages to *Not started*
    so the worker city-tags the lists (and tops Show Me Electrical up to 50).
 3. **Stripe secrets** (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — billing
-   is built and inert.
+   is being rebuilt (`docs/billing.md`); add **test-mode** keys only once B2's
+   webhook is deployed, never before.
 4. **Pensacola**: blend the `compass-astro` branch into `main` (Launch is
    blocked on it) and create the Search Console property.
 5. **Delete `Compass2026/zz-sitepush-smoke`, `Compass2026/lucasconstruction`

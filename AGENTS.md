@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0056` (Canva folder ids on the client record) was
+  **not yet applied**; `0057` (billing foundation, B1) is written but **not yet
+  applied** (it takes its number at merge time); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -202,12 +203,25 @@ the Dashboard surfaces those under "Payments past due". UI: Billing tab
 (subscription card, payment history, lifetime paid, pause/resume, open in
 Stripe) plus a setup card on the Plan tab.
 
-**Billing & Financial Operations rework (Sept 28 2026, audit only):**
-`docs/billing-audit.md` inventories the build above (never used: no
-secrets, zero rows in production) and proposes the replacement — package
-catalog on Stripe Prices, Checkout + Customer Portal, a ledgered
-fetch-on-event webhook, invoice mirror, reconciliation, entitlements.
-Nothing of it is built; decisions in its §7 come first.
+**Billing & Financial Operations rework** (audit Sept 28 2026,
+`docs/billing-audit.md`; architecture and status `docs/billing.md`).
+Decisions: standard packages + custom retainers + one-time work; link
+existing Stripe customers, never duplicate; card + ACH debit, external
+arrangements representable; Stripe owns dunning (Compass derives
+`billing_attention` only); entitlements now, never switched off by billing;
+Checkout link copied by a teammate. **B1 = migration 0057, written and
+sandbox-tested, not applied**: rebuilds the Stripe mirror (team read-only,
+service-role written, money in minor units, `livemode` on every row),
+adds the package / price / one-time catalog, `service_catalog`,
+`package_entitlements`, `client_entitlement_overrides`, turns `plans` into
+the agreement (package + Stripe or external collection; the fee and the
+quantity columns are gone), and the `client_entitlements` /
+`client_billing_status` read models; retires the 3-day sweep and
+`paid_status`. The Plan / Billing tabs and the Dashboard read the new
+model; nothing calls Stripe yet. **Until B2 ships, do not add the Stripe
+secrets or deploy `stripe-billing` / `stripe-webhook`** (the deployed ones
+are the 0008 code). No tenant model yet (flagged as debt in
+`docs/billing.md`).
 
 ## Brand board (spec §6.2b)
 
