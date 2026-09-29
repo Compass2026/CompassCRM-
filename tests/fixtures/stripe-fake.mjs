@@ -1,7 +1,8 @@
-// A fake Stripe for the billing sync tests (B2): an in-memory object store
-// behind the same StripeApi interface the sync layer uses (get / list, with
-// `expand` and cursor-free listing), injectable failures, and signed webhook
-// events. Objects are written in the pinned "basil" API shapes (the
+// A fake Stripe for the billing tests (B2, B3): an in-memory object store
+// behind the same StripeApi interface the sync layer and stripe-billing use
+// (get / list, with `expand` and cursor-free listing; customer search; the
+// creates stripe-billing makes, with Stripe's idempotency-key semantics),
+// injectable failures, and signed webhook events. Objects are written in the pinned "basil" API shapes (the
 // subscription period on its items, invoice.parent.subscription_details,
 // invoice.payments, line.pricing). Fictional ids and addresses only.
 import { StripeApiError } from "../../supabase/functions/_shared/stripe/api.ts";
@@ -10,11 +11,77 @@ import { stripeSignature } from "../../supabase/functions/_shared/stripe/signatu
 const clone = (o) => JSON.parse(JSON.stringify(o));
 export const T0 = 1790000000; // 2026-09-21T14:13:20Z
 
-export function fakeStripe({ mode = "test" } = {}) {
+// searchLag: customers created through the API stay out of search results
+// (Stripe's search index lags writes by up to a minute).
+export function fakeStripe({ mode = "test", achAvailable = true, searchLag = false } = {}) {
   const objects = new Map();
   const failures = [];
   const calls = [];
+  const idempotency = new Map();
+  const unindexed = new Set();
   let eventN = 0;
+  let seq = 0;
+  const livemode = mode === "live";
+  const rand = () => `${(++seq).toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  const now = () => Math.floor(Date.now() / 1000);
+  const subscriptionsOf = (cus) => ({ object: "list", data: [...objects.values()].filter((o) => o.object === "subscription" && o.customer === cus).map(clone) });
+  const bad = (path, message, extra = {}) => new StripeApiError(400, { error: { type: "invalid_request_error", message, ...extra } }, path);
+
+  // The creates stripe-billing makes. Each returns the stored object.
+  function create(path, params) {
+    if (path === "/v1/customers") {
+      return { id: `cus_${rand()}`, object: "customer", livemode, name: params.name ?? null, email: params.email ?? null,
+        currency: null, invoice_settings: { default_payment_method: null }, metadata: params.metadata ?? {}, created: now() };
+    }
+    if (path === "/v1/prices") {
+      const product = objects.get(params.product);
+      if (!product) throw bad(path, `No such product: '${params.product}'`, { param: "product" });
+      return { id: `price_${rand()}`, object: "price", livemode, product: params.product, active: true, type: params.recurring ? "recurring" : "one_time",
+        currency: params.currency, unit_amount: Number(params.unit_amount), billing_scheme: "per_unit",
+        recurring: params.recurring ? { interval: params.recurring.interval, interval_count: Number(params.recurring.interval_count ?? 1), usage_type: "licensed" } : null,
+        nickname: params.nickname ?? null, metadata: params.metadata ?? {}, created: now() };
+    }
+    if (path === "/v1/checkout/sessions") {
+      if (!achAvailable && params.payment_method_types?.includes("us_bank_account")) {
+        throw bad(path, "The payment method type `us_bank_account` is invalid. Please ensure the provided type is activated in your dashboard.",
+          { param: "payment_method_types" });
+      }
+      for (const li of params.line_items ?? []) if (!objects.has(li.price)) throw bad(path, `No such price: '${li.price}'`, { param: "line_items[0][price]" });
+      const id = `cs_${mode}_${rand()}`;
+      return { id, object: "checkout.session", livemode, mode: params.mode, customer: params.customer, client_reference_id: params.client_reference_id ?? null,
+        status: "open", payment_status: "unpaid", url: `https://checkout.stripe.com/c/pay/${id}`, expires_at: now() + 86400,
+        metadata: params.metadata ?? {}, subscription: null, invoice: null, payment_intent: null, created: now(),
+        payment_method_types: params.payment_method_types, success_url: params.success_url, cancel_url: params.cancel_url,
+        line_items_requested: params.line_items, subscription_data: params.subscription_data ?? null };
+    }
+    const expire = path.match(/^\/v1\/checkout\/sessions\/([^/]+)\/expire$/);
+    if (expire) {
+      const cs = objects.get(expire[1]);
+      if (!cs) throw new StripeApiError(404, { error: { code: "resource_missing", message: "No such session" } }, path);
+      if (cs.status !== "open") throw bad(path, `This Checkout Session is already in a terminal state: ${cs.status}`);
+      return { ...cs, status: "expired", url: null };
+    }
+    if (path === "/v1/billing_portal/configurations") {
+      return { id: `bpc_${rand()}`, object: "billing_portal.configuration", livemode, active: true, is_default: false,
+        business_profile: params.business_profile ?? {}, default_return_url: params.default_return_url ?? null,
+        features: {
+          customer_update: { enabled: !!params.features?.customer_update?.enabled, allowed_updates: params.features?.customer_update?.allowed_updates ?? [] },
+          invoice_history: { enabled: !!params.features?.invoice_history?.enabled },
+          payment_method_update: { enabled: !!params.features?.payment_method_update?.enabled },
+          subscription_cancel: { enabled: !!params.features?.subscription_cancel?.enabled },
+          subscription_update: { enabled: !!params.features?.subscription_update?.enabled },
+        },
+        metadata: params.metadata ?? {}, created: now() };
+    }
+    if (path === "/v1/billing_portal/sessions") {
+      if (!objects.has(params.customer)) throw bad(path, `No such customer: '${params.customer}'`, { param: "customer" });
+      if (params.configuration && !objects.has(params.configuration)) throw bad(path, "No such configuration", { param: "configuration" });
+      const id = `bps_${rand()}`;
+      return { id, object: "billing_portal.session", livemode, customer: params.customer, configuration: params.configuration,
+        return_url: params.return_url, url: `https://billing.stripe.com/p/session/${mode}_${rand()}`, created: now() };
+    }
+    throw new Error(`fake Stripe: no POST ${path}`);
+  }
 
   function expandInto(o, parts) {
     if (!o || parts.length === 0) return;
@@ -43,14 +110,54 @@ export function fakeStripe({ mode = "test" } = {}) {
       const id = path.split("/").pop();
       if (!objects.has(id)) throw new StripeApiError(404, { error: { code: "resource_missing", message: `No such object: ${id}` } }, path);
       const o = clone(objects.get(id));
+      if (o.object === "customer" && (params.expand ?? []).includes("subscriptions")) o.subscriptions = subscriptionsOf(o.id);
       for (const e of params.expand ?? []) expandInto(o, e.split("."));
       return o;
+    },
+    // Stripe's search: exact email, name substring, or a metadata value.
+    async search(path, query, opts = {}) {
+      calls.push(`${path}?query=${query}`);
+      maybeFail(path);
+      if (path !== "/v1/customers/search") throw new Error(`fake Stripe: no search ${path}`);
+      const unq = (v) => v.replace(/\\'/g, "'").replace(/\\\\/g, "\\");
+      let m;
+      let pred;
+      if ((m = query.match(/^email:'(.*)'$/))) pred = (c) => (c.email ?? "").toLowerCase() === unq(m[1]).toLowerCase();
+      else if ((m = query.match(/^name~'(.*)'$/))) pred = (c) => (c.name ?? "").toLowerCase().includes(unq(m[1]).toLowerCase());
+      else if ((m = query.match(/^metadata\['([a-z_]+)'\]:'(.*)'$/))) pred = (c) => c.metadata?.[m[1]] === unq(m[2]);
+      else throw new StripeApiError(400, { error: { type: "invalid_request_error", message: `bad query ${query}` } }, path);
+      return byKind("customer").filter((c) => !c.deleted && !unindexed.has(c.id) && pred(c)).slice(0, opts.limit ?? 10).map((c) => {
+        const o = clone(c);
+        if ((opts.expand ?? []).includes("data.subscriptions")) o.subscriptions = subscriptionsOf(c.id);
+        return o;
+      });
+    },
+    // Creates, with Stripe's idempotency: the same key and parameters return
+    // the first answer; the same key with other parameters is refused.
+    async post(path, params = {}, opts = {}) {
+      calls.push(`POST ${path}`);
+      maybeFail(path);
+      const key = opts.idempotencyKey;
+      const sig = JSON.stringify([path, params]);
+      if (key && idempotency.has(key)) {
+        const prior = idempotency.get(key);
+        if (prior.sig !== sig) {
+          throw new StripeApiError(400, { error: { type: "idempotency_error", message: "Keys for idempotent requests can only be used with the same parameters they were first used with." } }, path);
+        }
+        return clone(prior.result);
+      }
+      const o = create(path, params);
+      objects.set(o.id, clone(o));
+      if (searchLag && o.object === "customer") unindexed.add(o.id);
+      if (key) idempotency.set(key, { sig, result: clone(o) });
+      return clone(o);
     },
     async list(path, params = {}) {
       calls.push(`${path}?${new URLSearchParams(Object.entries(params).filter(([, v]) => !Array.isArray(v))).toString()}`);
       maybeFail(path);
       const lines = path.match(/^\/v1\/invoices\/([^/]+)\/lines$/);
       if (lines) return clone(objects.get(lines[1])?.lines_data ?? []);
+      if (path === "/v1/prices") return byKind("price").filter((p) => p.product === params.product).map(clone);
       if (path === "/v1/refunds") return byKind("refund").filter((r) => r.payment_intent === params.payment_intent).map(clone);
       if (path === "/v1/subscriptions") return byKind("subscription").filter((s) => s.customer === params.customer).map(clone);
       if (path === "/v1/invoices") return byKind("invoice").filter((s) => s.customer === params.customer).map(clone);
@@ -66,6 +173,43 @@ export function fakeStripe({ mode = "test" } = {}) {
     patch(id, fields) { const o = { ...objects.get(id), ...fields }; objects.set(id, o); return clone(o); },
     remove(id) { objects.delete(id); },
     get(id) { return clone(objects.get(id)); },
+    all(kind) { return byKind(kind).map(clone); },
+    // The customer pays a Checkout Session: Stripe creates the subscription,
+    // its first invoice and the payment, and completes the session.
+    complete(sessionId, { status = "active", paymentStatus = "paid" } = {}) {
+      const cs = objects.get(sessionId);
+      const li = cs.line_items_requested[0];
+      const price = objects.get(li.price);
+      const n = rand();
+      const t = now();
+      const sub = { id: `sub_${n}`, object: "subscription", livemode, customer: cs.customer, status, collection_method: "charge_automatically",
+        currency: price.currency, cancel_at_period_end: false, cancel_at: null, canceled_at: null, ended_at: null, pause_collection: null,
+        cancellation_details: { reason: null, feedback: null, comment: null }, start_date: t, billing_cycle_anchor: t,
+        latest_invoice: `in_${n}`, default_payment_method: null, metadata: cs.subscription_data?.metadata ?? {}, created: t,
+        items: { object: "list", data: [{ id: `si_${n}`, object: "subscription_item", price: price.id, quantity: li.quantity,
+          current_period_start: t, current_period_end: t + 30 * 86400, created: t }] } };
+      const amount = price.unit_amount * li.quantity;
+      const paid = paymentStatus === "paid";
+      const pi = { id: `pi_${n}`, object: "payment_intent", livemode, customer: cs.customer, status: paid ? "succeeded" : "processing", amount,
+        currency: price.currency, latest_charge: paid ? `ch_${n}` : null, payment_method_types: ["card"], last_payment_error: null, created: t };
+      const ch = { id: `ch_${n}`, object: "charge", livemode, payment_intent: pi.id, amount, amount_refunded: 0, created: t, payment_method_details: { type: "card" } };
+      const inv = { id: `in_${n}`, object: "invoice", livemode, customer: cs.customer, number: `C-${n}`, status: paid ? "paid" : "open",
+        billing_reason: "subscription_create", collection_method: "charge_automatically", currency: price.currency, subtotal: amount, total: amount,
+        amount_due: amount, amount_paid: paid ? amount : 0, amount_remaining: paid ? 0 : amount, attempt_count: 1, attempted: true,
+        next_payment_attempt: null, due_date: null, period_start: t, period_end: t + 30 * 86400,
+        hosted_invoice_url: `https://invoice.stripe.com/i/in_${n}`, invoice_pdf: `https://pay.stripe.com/invoice/in_${n}/pdf`,
+        paid_out_of_band: false, created: t, status_transitions: { finalized_at: t, paid_at: paid ? t : null },
+        parent: { type: "subscription_details", subscription_details: { subscription: sub.id } },
+        payments: { object: "list", data: [{ payment: { type: "payment_intent", payment_intent: pi.id } }] },
+        lines_data: [{ id: `il_${n}`, object: "line_item", amount, currency: price.currency, quantity: li.quantity, description: price.nickname ?? "Package",
+          period: { start: t, end: t + 30 * 86400 }, pricing: { price_details: { price: price.id, product: price.product } },
+          parent: { type: "subscription_item_details", subscription_item_details: { subscription_item: `si_${n}`, proration: false } } }] };
+      for (const o of [sub, pi, ch, inv]) objects.set(o.id, o);
+      if (!paid) objects.delete(ch.id);
+      objects.set(sessionId, { ...cs, status: "complete", payment_status: paymentStatus === "paid" ? "paid" : "unpaid", url: null,
+        subscription: sub.id, invoice: inv.id });
+      return { subscription: sub.id, invoice: inv.id, payment_intent: pi.id };
+    },
     fail(match, times = 1, status = 500) { failures.push({ match, times, status }); },
     // An event carrying a snapshot of the object (possibly stale by delivery time).
     event(type, obj, { livemode = mode === "live", created = T0 + ++eventN } = {}) {

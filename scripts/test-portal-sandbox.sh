@@ -140,3 +140,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_foundation.
 # the customer link, stale reads, item / line replacement, refunds, test/live)
 # and the webhook ledger (claim, lease, fail, retry, finish).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_sync.test.sql"
+# 0059: billing operations (Checkout records, admin-only external payments with
+# idempotency and void corrections, the append-only billing audit trail; only
+# the stripe-billing function's session can call them).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_operations.test.sql"

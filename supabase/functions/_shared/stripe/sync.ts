@@ -110,6 +110,16 @@ export function createStripeSync(deps: { api: StripeApi; store: SyncStore; now?:
     return store.apply(ops);
   }
 
+  // A product and every price on it, read now: importing a Stripe Product
+  // into the Compass catalog (B3) and reconciling the catalog (B4).
+  async function syncProductWithPrices(id: string): Promise<OpResult[]> {
+    const at = stamp();
+    const p = await retrieve(`/v1/products/${id}`);
+    if (!p || p.deleted) return store.apply([{ op: "deleted", object: "product", id, at }]);
+    const prices = await api.list("/v1/prices", { product: id });
+    return store.apply([{ op: "product", row: productRow(p, at) }, ...prices.map((pr) => ({ op: "price", row: priceRow(pr, at) }))]);
+  }
+
   async function syncCustomer(id: string): Promise<OpResult[]> {
     const at = stamp();
     const c = await retrieve(`/v1/customers/${id}`, { expand: ["invoice_settings.default_payment_method"] });
@@ -260,7 +270,7 @@ export function createStripeSync(deps: { api: StripeApi; store: SyncStore; now?:
   }
 
   return {
-    syncEvent, syncProduct, syncPrice, syncCustomer, syncSubscription, syncInvoice, syncPaymentIntent,
+    syncEvent, syncProduct, syncProductWithPrices, syncPrice, syncCustomer, syncSubscription, syncInvoice, syncPaymentIntent,
     syncCharge, syncRefund, syncCheckoutSession, resyncCustomer, linkCustomer,
   };
 }

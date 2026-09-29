@@ -249,6 +249,10 @@ export function refundRow(r: StripeObject, livemode: boolean, syncedAt: string):
 export function checkoutSessionRow(cs: StripeObject, syncedAt: string): Row {
   return clean({
     stripe_checkout_session_id: cs.id,
+    stripe_customer_id: idOf(cs.customer) ?? undefined,
+    livemode: cs.livemode ?? undefined,
+    mode: cs.mode ?? undefined,
+    stripe_created_at: ts(cs.created) ?? undefined,
     status: cs.status,
     payment_status: cs.payment_status ?? null,
     url: cs.status === "open" ? (cs.url ?? null) : null,
