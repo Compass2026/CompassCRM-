@@ -18,14 +18,16 @@
 --        stripe_products, stripe_prices   the Stripe catalog as Stripe says it is
 --        checkout_sessions the Checkout links Compass generates
 --        subscriptions, subscription_items, invoices, invoice_line_items,
---        payments          what Stripe billed and collected; money in integer
---                          minor units with a currency on every row
+--        payments, stripe_refunds  what Stripe billed, collected and refunded
+--                          (every partial refund its own row); money in
+--                          integer minor units with a currency on every row
 --        stripe_events     the webhook ledger: received → processed | ignored,
 --                          or failed (retried); never "done" before the work is
 --      Every mirror table is team READ-only. Writes come from the Stripe Edge
 --      Functions (service role) in B2 / B3; no teammate, portal contact or
 --      anon can write financial state through the API.
---   3. The Compass catalog (team-editable, operational):
+--   3. The Compass catalog (team-readable; admin-only writes, like the billing
+--      mode and team roles: team_members.role is the authorization model):
 --        service_catalog        what Compass delivers (features and monthly quotas)
 --        billing_packages       standard packages and custom-retainer products,
 --                               each bound to one Stripe Product
@@ -165,7 +167,8 @@ create index on stripe_prices (stripe_product_id);
 
 -- ── 5. Compass catalog ───────────────────────────────────────────────────────
 -- What Compass delivers. `key` is the contract code reads (entitlement keys);
--- a quota is a monthly quantity, a feature is on or off.
+-- a quota is a monthly quantity, a feature is on or off. The seed is the
+-- initial catalog, not a closed list: an admin adds services as Compass sells them.
 create table service_catalog (
   key text primary key check (key ~ '^[a-z][a-z0-9_]{1,62}$'),
   name text not null,
@@ -183,19 +186,20 @@ create table service_catalog (
 );
 
 insert into service_catalog (key, name, kind, unit, period, pipeline_key, sort_order, description) values
-  ('seo',              'SEO',                          'feature', null,    null,    'seo',       10, 'Search engine optimisation programme'),
-  ('website',          'Website',                      'feature', null,    null,    'website',   20, 'Website build and management'),
-  ('gbp',              'Google Business Profile',      'feature', null,    null,    null,        30, 'Business Profile management'),
-  ('social',           'Social media',                 'feature', null,    null,    'social',    40, 'Social media management'),
-  ('paid_ads',         'Paid ads',                     'feature', null,    null,    'paid_ads',  50, 'Paid advertising management'),
-  ('crm',              'CRM',                          'feature', null,    null,    'crm',       60, 'CRM setup and management'),
-  ('reporting',        'Monthly reporting',            'feature', null,    null,    'reporting', 70, 'Monthly performance report'),
-  ('client_portal',    'Client portal',                'feature', null,    null,    null,        80, 'Client portal access'),
-  ('blog_posts',       'Blog posts',                   'quota',   'posts', 'month', null,       110, 'Blog posts per month'),
-  ('website_pages',    'New website pages',            'quota',   'pages', 'month', null,       120, 'New website pages per month'),
-  ('website_refreshes','Website page refreshes',       'quota',   'pages', 'month', null,       130, 'Existing pages refreshed per month'),
-  ('gbp_posts',        'Business Profile posts',       'quota',   'posts', 'month', null,       140, 'Google Business Profile posts per month'),
-  ('social_posts',     'Social posts',                 'quota',   'posts', 'month', null,       150, 'Social media posts per month');
+  ('seo',               'SEO',                           'feature', null,    null,    'seo',       10, 'Search engine optimisation programme'),
+  ('website',           'Website Management',            'feature', null,    null,    'website',   20, 'Recurring website management (one-time website projects are billing_one_time_items)'),
+  ('gbp',               'Google Business Profile',       'feature', null,    null,    null,        30, 'Business Profile management'),
+  ('social',            'Social Media',                  'feature', null,    null,    'social',    40, 'Social media management'),
+  ('paid_ads',          'Paid Advertising',              'feature', null,    null,    'paid_ads',  50, 'Paid advertising management'),
+  ('crm',               'CRM',                           'feature', null,    null,    'crm',       60, 'CRM setup and management'),
+  ('reporting',         'Monthly Reporting',             'feature', null,    null,    'reporting', 70, 'Monthly performance report'),
+  ('client_portal',     'Client Portal',                 'feature', null,    null,    null,        80, 'Client portal access'),
+  ('hosting',           'Website Hosting',               'feature', null,    null,    null,        90, 'Website hosting'),
+  ('blog_posts',        'Blog Posts',                    'quota',   'posts', 'month', null,       110, 'Blog posts per month'),
+  ('website_pages',     'New Website Pages',             'quota',   'pages', 'month', null,       120, 'New website pages per month'),
+  ('website_refreshes', 'Website Page Refreshes',        'quota',   'pages', 'month', null,       130, 'Existing pages refreshed per month'),
+  ('gbp_posts',         'Google Business Profile Posts', 'quota',   'posts', 'month', null,       140, 'Google Business Profile posts per month'),
+  ('social_posts',      'Social Media Posts',            'quota',   'posts', 'month', null,       150, 'Social media posts per month');
 
 -- Recurring agreements. `standard` packages have their own Stripe Product with
 -- standard Prices; a `custom` package (e.g. "Compass Custom Retainer") is a
@@ -526,8 +530,10 @@ create table invoice_line_items (
   foreign key (invoice_id, client_id) references invoices (id, client_id) on delete cascade
 );
 
--- Money movements. `stripe` rows mirror PaymentIntents (card, ACH debit,
--- refunds via the charge); `external` rows are an externally paid
+-- Money movements. `stripe` rows mirror PaymentIntents and their charge (card,
+-- ACH debit); amount_refunded_cents is Stripe's own aggregate from the charge,
+-- kept for display, and every individual refund is its own stripe_refunds row;
+-- `external` rows are an externally paid
 -- arrangement recorded by the team (check, wire, manually received ACH) —
 -- the schema allows them, and B3 / B5 decide who records them and how.
 create table payments (
@@ -557,6 +563,7 @@ create table payments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (stripe_customer_id, client_id) references stripe_customers (stripe_customer_id, client_id),
+  unique (id, client_id, source),
   check (amount_refunded_cents <= amount_cents),
   check (status <> 'succeeded' or paid_at is not null),
   check (case source
@@ -569,6 +576,33 @@ create table payments (
   end)
 );
 create index on payments (client_id, paid_at desc);
+
+-- Every Stripe refund, one row each: a payment may have several partial
+-- refunds, and none of that history is folded into an aggregate. A refund
+-- belongs to its payment and to the payment's client.
+create table stripe_refunds (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references clients on delete restrict,
+  payment_id uuid not null,
+  payment_source text not null default 'stripe' check (payment_source = 'stripe'),
+  stripe_refund_id text not null unique check (stripe_refund_id ~ '^(re|pyr)_[A-Za-z0-9]+$'),
+  stripe_payment_intent_id text check (stripe_payment_intent_id ~ '^pi_[A-Za-z0-9]+$'),
+  stripe_charge_id text check (stripe_charge_id ~ '^(ch|py)_[A-Za-z0-9]+$'),
+  livemode boolean not null,
+  amount_cents bigint not null check (amount_cents >= 0),
+  currency text not null check (currency ~ '^[a-z]{3}$'),
+  -- Stripe's refund status verbatim.
+  status text not null check (status in ('pending', 'requires_action', 'succeeded', 'failed', 'canceled')),
+  reason text,          -- duplicate, fraudulent, requested_by_customer, expired_uncaptured_charge, …
+  failure_reason text,  -- set by Stripe when a refund fails
+  stripe_created_at timestamptz not null,
+  stripe_synced_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  foreign key (payment_id, client_id, payment_source) references payments (id, client_id, source),
+  check (stripe_payment_intent_id is not null or stripe_charge_id is not null)
+);
+create index on stripe_refunds (payment_id);
 
 -- The webhook ledger. An event is `processed` (or `ignored`, with the reason)
 -- only after its work committed; a failure stays `failed` with the error and
@@ -601,7 +635,8 @@ declare t text;
 begin
   foreach t in array array['stripe_products', 'stripe_prices', 'service_catalog', 'billing_packages',
     'billing_one_time_items', 'billing_package_prices', 'package_entitlements', 'stripe_customers',
-    'checkout_sessions', 'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments'] loop
+    'checkout_sessions', 'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments',
+    'stripe_refunds'] loop
     execute format('create trigger %I before update on %I for each row execute function set_updated_at()',
       t || '_updated_at', t);
   end loop;
@@ -621,28 +656,82 @@ create trigger invoice_line_items_owner before update on invoice_line_items
   for each row execute function billing_owner_immutable('stripe_line_item_id');
 create trigger payments_owner before update on payments
   for each row execute function billing_owner_immutable('stripe_payment_intent_id');
+create trigger stripe_refunds_owner before update on stripe_refunds
+  for each row execute function billing_owner_immutable('stripe_refund_id');
 create trigger billing_package_prices_owner before update on billing_package_prices
   for each row execute function billing_owner_immutable('stripe_price_id');
 
 -- ── 9. Access ────────────────────────────────────────────────────────────────
+-- Financial configuration is an admin's: the existing team_members.role
+-- ('admin' | 'member', 0001) is the authorization model, read by
+-- is_team_admin(). Invoker rights: a teammate can read team_members (so the
+-- answer is theirs); anyone else reads nothing and is not an admin.
+create function is_team_admin() returns boolean
+language sql stable set search_path = public as $$
+  select exists (select 1 from team_members where auth_user_id = auth.uid() and role = 'admin')
+$$;
+revoke all on function is_team_admin() from public, anon;
+grant execute on function is_team_admin() to authenticated, service_role;
+comment on function is_team_admin() is
+  'Whether the signed-in user is a Compass admin (team_members.role). Gates financial configuration: the Stripe catalog mapping, packages, billing mode.';
+
+-- Admin rights mean nothing if a member can grant them: a signed-in
+-- non-admin cannot create an admin, change anyone's role, or edit or remove
+-- an admin's row (re-pointing its auth_user_id would take the role over).
+-- Sessions with no signed-in user (Supabase Auth's own linking trigger, the
+-- service role, the worker's SQL, migrations) are not gated here.
+create function team_members_admin_guard() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if auth.uid() is null or is_team_admin() then
+    return coalesce(new, old);
+  end if;
+  if (tg_op in ('INSERT', 'UPDATE') and new.role = 'admin')
+     or (tg_op in ('UPDATE', 'DELETE') and old.role = 'admin')
+     or (tg_op = 'UPDATE' and new.role is distinct from old.role) then
+    raise exception 'Only an admin can grant, change or remove an admin''s access' using errcode = '42501';
+  end if;
+  return coalesce(new, old);
+end $$;
+revoke all on function team_members_admin_guard() from public, anon, authenticated;
+create trigger team_members_admin_guard before insert or update or delete on team_members
+  for each row execute function team_members_admin_guard();
+
+-- The billing mode (app_settings 'billing…' keys): everyone on the team reads
+-- it (the read models depend on it), only an admin writes it.
+create policy "billing settings: admin writes" on app_settings as restrictive for insert to authenticated
+  with check (key not like 'billing%' or (select is_team_admin()));
+create policy "billing settings: admin updates" on app_settings as restrictive for update to authenticated
+  using (key not like 'billing%' or (select is_team_admin()))
+  with check (key not like 'billing%' or (select is_team_admin()));
+create policy "billing settings: admin deletes" on app_settings as restrictive for delete to authenticated
+  using (key not like 'billing%' or (select is_team_admin()));
+
 -- Financial mirror: team reads, only the service role (Stripe functions) writes.
 do $$
 declare t text;
 begin
   foreach t in array array['stripe_products', 'stripe_prices', 'stripe_customers', 'checkout_sessions',
-    'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_events'] loop
+    'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_refunds',
+    'stripe_events'] loop
     execute format('alter table %I enable row level security', t);
     execute format('create policy "team read" on %I for select to authenticated using ((select is_team()))', t);
     execute format('revoke all on %I from public, anon, authenticated', t);
     execute format('grant select on %I to authenticated', t);
     execute format('grant all on %I to service_role', t);
   end loop;
-  -- Compass catalog and agreement: the team edits them.
+  -- The catalog (services, packages, their Stripe product / price mapping,
+  -- one-time items, what a package includes): the team reads, an admin edits.
   foreach t in array array['service_catalog', 'billing_packages', 'billing_package_prices',
-    'billing_one_time_items', 'package_entitlements', 'client_entitlement_overrides'] loop
+    'billing_one_time_items', 'package_entitlements'] loop
     execute format('alter table %I enable row level security', t);
-    execute format('create policy "team full access" on %I for all to authenticated using ((select is_team())) with check ((select is_team()))', t);
+    execute format('create policy "team read" on %I for select to authenticated using ((select is_team()))', t);
+    execute format('create policy "admin manages" on %I for all to authenticated using ((select is_team()) and (select is_team_admin())) with check ((select is_team()) and (select is_team_admin()))', t);
   end loop;
+  -- A client's agreement and its entitlement overrides: the team edits them.
+  alter table client_entitlement_overrides enable row level security;
+  create policy "team full access" on client_entitlement_overrides for all to authenticated
+    using ((select is_team())) with check ((select is_team()));
   foreach t in array array['service_catalog', 'billing_packages', 'billing_package_prices',
     'billing_one_time_items', 'package_entitlements', 'client_entitlement_overrides', 'plans'] loop
     execute format('revoke all on %I from public, anon, authenticated', t);
@@ -723,11 +812,18 @@ sub_money as (
   left join billing_package_prices bpp on bpp.stripe_price_id = si.stripe_price_id and bpp.active
   group by si.subscription_id
 ),
+-- An open invoice is overdue once its due date passed or a collection
+-- attempt failed — but not while a payment for it is still settling (an ACH
+-- debit sits in `processing` for days with the invoice open and attempted).
 open_invoices as (
   select i.client_id,
          count(*) as open_count,
-         count(*) filter (where i.due_date < now() or i.attempt_count > 0) as overdue_count
-  from invoices i, mode
+         count(*) filter (where (i.due_date < now() or i.attempt_count > 0) and not x.settling) as overdue_count,
+         count(*) filter (where x.settling) as settling_count
+  from invoices i
+  cross join mode
+  cross join lateral (select exists (select 1 from payments p where p.stripe_invoice_id = i.stripe_invoice_id
+                                     and p.status = 'processing') as settling) x
   where i.livemode = mode.live and i.status = 'open'
   group by i.client_id
 ),
@@ -776,6 +872,7 @@ base as (
     coalesce(lc.n, 0) as live_subscription_count,
     coalesce(oi.open_count, 0) as open_invoice_count,
     coalesce(oi.overdue_count, 0) as overdue_invoice_count,
+    coalesce(oi.settling_count, 0) as settling_invoice_count,
     li.stripe_invoice_id as latest_invoice_id,
     li.status as latest_invoice_status,
     li.total_cents as latest_invoice_total_cents,
@@ -822,6 +919,7 @@ select
   b.live_subscription_count,
   b.open_invoice_count,
   b.overdue_invoice_count,
+  b.settling_invoice_count,
   (select coalesce(jsonb_object_agg(o.currency, o.cents), '{}') from outstanding o
     where o.client_id = b.client_id) as outstanding_cents_by_currency,
   b.latest_invoice_id,
@@ -874,8 +972,8 @@ do $$
 declare t text;
 begin
   foreach t in array array['stripe_products', 'stripe_prices', 'stripe_customers', 'checkout_sessions',
-    'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_events',
-    'service_catalog', 'billing_packages', 'billing_package_prices', 'billing_one_time_items',
+    'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_refunds',
+    'stripe_events', 'service_catalog', 'billing_packages', 'billing_package_prices', 'billing_one_time_items',
     'package_entitlements', 'client_entitlement_overrides', 'plans'] loop
     if not (select relrowsecurity from pg_class where oid = ('public.' || t)::regclass) then
       raise exception '0057: RLS is off on %', t;
@@ -889,7 +987,8 @@ begin
     end if;
   end loop;
   foreach t in array array['stripe_products', 'stripe_prices', 'stripe_customers', 'checkout_sessions',
-    'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_events'] loop
+    'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_refunds',
+    'stripe_events'] loop
     if has_table_privilege('authenticated', 'public.' || t, 'insert,update,delete,truncate,references,trigger')
        or exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and cmd <> 'SELECT') then
       raise exception '0057: the financial mirror % is writable through the API', t;
@@ -903,6 +1002,13 @@ begin
     if has_table_privilege('anon', 'public.' || t, 'select')
        or has_table_privilege('authenticated', 'public.' || t, 'insert,update,delete') then
       raise exception '0057: view % grants more than authenticated SELECT', t;
+    end if;
+  end loop;
+  foreach t in array array['service_catalog', 'billing_packages', 'billing_package_prices',
+    'billing_one_time_items', 'package_entitlements'] loop
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and cmd <> 'SELECT'
+               and coalesce(with_check, qual) not like '%is_team_admin()%') then
+      raise exception '0057: the catalog table % is writable by a non-admin', t;
     end if;
   end loop;
   if exists (select 1 from cron.job where jobname = 'billing-daily-past-due') then

@@ -25,8 +25,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0057` (billing foundation, B1) is written but **not yet
-  applied** (it takes its number at merge time); `0056` (Canva folder ids on the client record) was
+  **not yet applied**; `0057` (billing foundation, B1) and `0058` (Stripe sync
+  boundary, B2) are written but **not yet applied** (they take their numbers at
+  merge time; `docs/billing-cutover.md`); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -204,7 +205,33 @@ the Dashboard surfaces those under "Payments past due". UI: Billing tab
 Stripe) plus a setup card on the Plan tab.
 
 **Billing & Financial Operations rework** (audit Sept 28 2026,
-`docs/billing-audit.md`; architecture and status `docs/billing.md`).
+`docs/billing-audit.md`; architecture and status `docs/billing.md`; cutover
+`docs/billing-cutover.md`; draft PR Compass2026/CompassCRM-#86 — do not
+merge or deploy without the runbook). Decisions: standard packages + custom
+retainers + one-time work; link existing Stripe customers, never duplicate;
+card + ACH debit, external arrangements representable (admin-recorded in
+B3); Stripe owns dunning (Compass derives `billing_attention` only);
+entitlements now, never switched off by billing; Checkout link copied by a
+teammate. **B1 = 0057** (written, sandbox-tested, **not applied**): the
+Stripe mirror (team read-only, money in minor units, `livemode` on every
+row, `stripe_refunds` one row per refund), the package / price / one-time
+catalog, the 14-service `service_catalog`, `package_entitlements`,
+`client_entitlement_overrides`, `plans` as the agreement, the
+`client_entitlements` / `client_billing_status` read models; the 3-day
+sweep and `paid_status` retired. **Financial configuration is admin-only**
+(`team_members.role` via `is_team_admin()`): the catalog and its Stripe
+mapping, the billing mode (`app_settings` `billing…`), and team roles
+(members cannot mint or take over an admin). **B2 = 0058 +
+`supabase/functions/_shared/stripe/` + `stripe-webhook`** (written and
+tested, **not applied / not deployed**): one shared sync layer
+(fetch-on-event, pinned API version, newest read wins) behind the webhook
+and future reconciliation; a claim / lease / fail ledger; the mirror
+writable only inside the sync functions by an authenticator + service_role
+session (the worker's SQL is refused). Every Edge Function shares the
+service-role key, so isolation between functions is code review — a
+production-blocking follow-up in `docs/billing.md`. `stripe-billing` is a
+410 stub until B3. **Do not add Stripe secrets or deploy either function
+outside the runbook.** No tenant model yet (debt, `docs/billing.md`).
 Decisions: standard packages + custom retainers + one-time work; link
 existing Stripe customers, never duplicate; card + ACH debit, external
 arrangements representable; Stripe owns dunning (Compass derives

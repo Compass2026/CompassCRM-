@@ -4866,6 +4866,7 @@ export type Database = {
           ignored_reason: string | null
           last_attempt_at: string | null
           last_error: string | null
+          lease_expires_at: string | null
           livemode: boolean
           object_id: string | null
           object_type: string | null
@@ -4882,6 +4883,7 @@ export type Database = {
           ignored_reason?: string | null
           last_attempt_at?: string | null
           last_error?: string | null
+          lease_expires_at?: string | null
           livemode: boolean
           object_id?: string | null
           object_type?: string | null
@@ -4898,6 +4900,7 @@ export type Database = {
           ignored_reason?: string | null
           last_attempt_at?: string | null
           last_error?: string | null
+          lease_expires_at?: string | null
           livemode?: boolean
           object_id?: string | null
           object_type?: string | null
@@ -5026,6 +5029,88 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      stripe_refunds: {
+        Row: {
+          amount_cents: number
+          client_id: string
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          id: string
+          livemode: boolean
+          payment_id: string
+          payment_source: string
+          reason: string | null
+          status: string
+          stripe_charge_id: string | null
+          stripe_created_at: string
+          stripe_payment_intent_id: string | null
+          stripe_refund_id: string
+          stripe_synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          client_id: string
+          created_at?: string
+          currency: string
+          failure_reason?: string | null
+          id?: string
+          livemode: boolean
+          payment_id: string
+          payment_source?: string
+          reason?: string | null
+          status: string
+          stripe_charge_id?: string | null
+          stripe_created_at: string
+          stripe_payment_intent_id?: string | null
+          stripe_refund_id: string
+          stripe_synced_at: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          client_id?: string
+          created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          livemode?: boolean
+          payment_id?: string
+          payment_source?: string
+          reason?: string | null
+          status?: string
+          stripe_charge_id?: string | null
+          stripe_created_at?: string
+          stripe_payment_intent_id?: string | null
+          stripe_refund_id?: string
+          stripe_synced_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stripe_refunds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_payment_id_client_id_payment_source_fkey"
+            columns: ["payment_id", "client_id", "payment_source"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id", "client_id", "source"]
+          },
+        ]
       }
       subscription_items: {
         Row: {
@@ -5760,6 +5845,7 @@ export type Database = {
           outstanding_cents_by_currency: Json | null
           overdue_invoice_count: number | null
           pause_collection_behavior: string | null
+          settling_invoice_count: number | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_package_ids: string[] | null
@@ -6158,6 +6244,38 @@ export type Database = {
       }
       authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
+      billing_caller_is_service: { Args: never; Returns: boolean }
+      billing_caller_is_superuser: { Args: never; Returns: boolean }
+      billing_event_begin: {
+        Args: {
+          p: Json
+          p_lease_seconds?: number
+        }
+        Returns: Json
+      }
+      billing_event_fail: {
+        Args: {
+          p_attempt: number
+          p_error: string
+          p_id: string
+        }
+        Returns: Json
+      }
+      billing_event_finish: {
+        Args: {
+          p_attempt: number
+          p_id: string
+          p_reason?: string
+          p_status: string
+        }
+        Returns: Json
+      }
+      billing_link_customer: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
       billing_livemode: { Args: never; Returns: boolean }
       billing_monthly_cents: {
         Args: {
@@ -6167,6 +6285,33 @@ export type Database = {
           p_quantity: number
         }
         Returns: number
+      }
+      billing_owner: {
+        Args: { p_customer: string; p_livemode: boolean }
+        Returns: Record<string, unknown>
+      }
+      billing_sync_active: { Args: never; Returns: boolean }
+      billing_sync_apply: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_update: {
+        Args: {
+          p_key: string
+          p_row: Json
+          p_table: string
+        }
+        Returns: string
+      }
+      billing_upsert: {
+        Args: {
+          p_keys: string[]
+          p_row: Json
+          p_table: string
+        }
+        Returns: Json
       }
       brand_asset_record_hash: { Args: { p: Json }; Returns: Json }
       client_canva_folders: {
@@ -6242,6 +6387,7 @@ export type Database = {
       get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
       is_team: { Args: never; Returns: boolean }
+      is_team_admin: { Args: never; Returns: boolean }
       normalize_tracked_keywords: {
         Args: { p_client_id: string; p_target?: number }
         Returns: number

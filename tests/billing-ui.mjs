@@ -97,13 +97,16 @@ async function contextFor(browser, user) {
   return context;
 }
 const sql = (q) => execFileSync("/bin/sh", ["-c", `${PSQL} -c "$Q"`], { env: { ...process.env, Q: q } }).toString().trim();
+// The Stripe mirror is written only by the sync functions (0058); fixtures load
+// it as the cluster superuser, which the guard exempts (as 0047's fixtures).
+const sqlAdmin = (q) => execFileSync("/bin/sh", ["-c", `${process.env.PSQL_ADMIN} -c "$Q"`], { env: { ...process.env, Q: q } }).toString().trim();
 
 
 // The Stripe catalog and client A's Stripe state, as the functions will write them.
-sql(`insert into stripe_products (stripe_product_id, livemode, name, active, stripe_synced_at) values
+sqlAdmin(`insert into stripe_products (stripe_product_id, livemode, name, active, stripe_synced_at) values
   ('prod_UiStd', false, 'Compass Marketing Package', true, now()),
   ('prod_UiWeb', false, 'Website project', true, now())`);
-sql(`insert into stripe_prices (stripe_price_id, stripe_product_id, livemode, active, type, currency, unit_amount_cents,
+sqlAdmin(`insert into stripe_prices (stripe_price_id, stripe_product_id, livemode, active, type, currency, unit_amount_cents,
   recurring_interval, recurring_interval_count, recurring_usage_type, stripe_synced_at) values
   ('price_UiStdM', 'prod_UiStd', false, true, 'recurring', 'usd', 150000, 'month', 1, 'licensed', now()),
   ('price_UiWeb', 'prod_UiWeb', false, true, 'one_time', 'usd', 500000, null, null, null, now())`);
@@ -116,26 +119,26 @@ sql(`insert into package_entitlements (package_id, service_key, service_kind, en
   ('00000000-0000-4000-c000-0000000000b1', 'gbp', 'feature', true, null),
   ('00000000-0000-4000-c000-0000000000b1', 'blog_posts', 'quota', true, 4),
   ('00000000-0000-4000-c000-0000000000b1', 'paid_ads', 'feature', false, null)`);
-sql(`insert into stripe_customers (client_id, stripe_customer_id, livemode, link_source, stripe_synced_at,
+sqlAdmin(`insert into stripe_customers (client_id, stripe_customer_id, livemode, link_source, stripe_synced_at,
   default_payment_method_type, default_payment_method_last4)
   values ('${CLIENT}', 'cus_UiA', false, 'linked_existing', now(), 'us_bank_account', '6789')`);
-sql(`insert into subscriptions (client_id, stripe_customer_id, stripe_subscription_id, livemode, status, collection_method,
+sqlAdmin(`insert into subscriptions (client_id, stripe_customer_id, stripe_subscription_id, livemode, status, collection_method,
   currency, current_period_start, current_period_end, stripe_created_at, stripe_synced_at)
   values ('${CLIENT}', 'cus_UiA', 'sub_UiA', false, 'past_due', 'charge_automatically', 'usd', '2026-09-01', '2026-10-01', '2026-08-01', now())`);
-sql(`insert into subscription_items (subscription_id, client_id, stripe_subscription_item_id, stripe_price_id, quantity, stripe_synced_at)
+sqlAdmin(`insert into subscription_items (subscription_id, client_id, stripe_subscription_item_id, stripe_price_id, quantity, stripe_synced_at)
   select id, client_id, 'si_UiA', 'price_UiStdM', 2, now() from subscriptions where stripe_subscription_id = 'sub_UiA'`);
-sql(`insert into invoices (client_id, stripe_customer_id, stripe_invoice_id, stripe_subscription_id, livemode, number, status,
+sqlAdmin(`insert into invoices (client_id, stripe_customer_id, stripe_invoice_id, stripe_subscription_id, livemode, number, status,
   collection_method, currency, subtotal_cents, total_cents, amount_due_cents, amount_paid_cents, amount_remaining_cents,
   attempt_count, attempted, hosted_invoice_url, period_start, period_end, stripe_created_at, stripe_synced_at) values
   ('${CLIENT}', 'cus_UiA', 'in_UiAug', 'sub_UiA', false, 'UI-0001', 'paid', 'charge_automatically', 'usd', 300000, 300000,
    300000, 300000, 0, 1, true, 'https://invoice.stripe.com/i/ui_aug', '2026-08-01', '2026-09-01', '2026-08-01', now()),
   ('${CLIENT}', 'cus_UiA', 'in_UiSep', 'sub_UiA', false, 'UI-0002', 'open', 'charge_automatically', 'usd', 300000, 300000,
    300000, 0, 300000, 2, true, 'https://invoice.stripe.com/i/ui_sep', '2026-09-01', '2026-10-01', '2026-09-01', now())`);
-sql(`insert into invoices (client_id, stripe_customer_id, stripe_invoice_id, livemode, number, status, collection_method,
+sqlAdmin(`insert into invoices (client_id, stripe_customer_id, stripe_invoice_id, livemode, number, status, collection_method,
   currency, subtotal_cents, total_cents, amount_due_cents, amount_paid_cents, amount_remaining_cents, stripe_created_at, stripe_synced_at)
   values ('${CLIENT}', 'cus_UiA', 'in_UiWeb', false, 'UI-WEB-1', 'paid', 'send_invoice', 'usd', 500000, 500000, 500000, 500000, 0,
   '2026-07-15', now())`);
-sql(`insert into payments (client_id, source, stripe_customer_id, stripe_payment_intent_id, stripe_invoice_id, livemode, status,
+sqlAdmin(`insert into payments (client_id, source, stripe_customer_id, stripe_payment_intent_id, stripe_invoice_id, livemode, status,
   payment_method_type, amount_cents, currency, paid_at, stripe_synced_at)
   values ('${CLIENT}', 'stripe', 'cus_UiA', 'pi_UiAug', 'in_UiAug', false, 'succeeded', 'us_bank_account', 300000, 'usd', '2026-08-04', now())`);
 
@@ -185,7 +188,7 @@ try {
 
   // Entitlements: the package's, then an override with its reason.
   await team.goto(`${base}/clients/${CLIENT}/plan`, { waitUntil: "networkidle" });
-  const blogRow = team.locator("tr", { hasText: "Blog posts" });
+  const blogRow = team.locator("tr", { hasText: "Blog Posts" });
   assert.match(await blogRow.textContent(), /4 posts \/ month.*4 posts \/ month/);
   await blogRow.locator("summary").click();
   await blogRow.locator('input[name="quantity"]').fill("6");
@@ -194,9 +197,9 @@ try {
   await until(team, () => sql(`select quantity from client_entitlement_overrides where client_id = '${CLIENT}' and service_key = 'blog_posts'`),
     (v) => v === "6", "override saved");
   await team.goto(`${base}/clients/${CLIENT}/plan`, { waitUntil: "networkidle" });
-  const blogAfter = (await team.locator("tr", { hasText: "Blog posts" }).textContent()).replace(/\s+/g, " ");
+  const blogAfter = (await team.locator("tr", { hasText: "Blog Posts" }).textContent()).replace(/\s+/g, " ");
   assert.match(blogAfter, /4 posts \/ month6 posts \/ monthOverride: Two extra posts agreed in September/, blogAfter);
-  assert.match((await team.locator("tr", { hasText: "Paid ads" }).textContent()), /Not included/);
+  assert.match((await team.locator("tr", { hasText: "Paid Advertising" }).textContent()), /Not included/);
   ok("Plan: package entitlements shown; an override replaces blogs 4 → 6 with its reason");
 
   // An override without a reason is refused.

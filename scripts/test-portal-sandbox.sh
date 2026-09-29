@@ -134,3 +134,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folder
 # catalog's package ↔ price rules, entitlements and overrides, the derived
 # billing status in test and live mode, portal / stranger / anon see nothing).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_foundation.test.sql"
+# 0058: the Stripe sync write boundary (only the sync functions, called by an
+# authenticator + service_role session, write the mirror; the worker's SQL,
+# teammates, portal contacts and anon cannot), the sync ops (ownership from
+# the customer link, stale reads, item / line replacement, refunds, test/live)
+# and the webhook ledger (claim, lease, fail, retry, finish).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_sync.test.sql"

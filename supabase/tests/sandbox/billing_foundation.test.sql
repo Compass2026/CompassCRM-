@@ -9,11 +9,16 @@
 --   portal    psql as authenticator, role authenticated, portal JWT (client A's contact)
 --   stranger  psql as authenticator, role authenticated, a sign-in on no team / portal row
 --   anon      psql as authenticator, role anon
+--   fixtures  psql as supabase_admin: the Stripe mirror is written only by the
+--             Stripe sync functions (0058, billing_sync.test.sql); these
+--             checks are about 0057's constraints, so its rows are loaded as
+--             the cluster superuser, which 0058's guard exempts (as 0047's).
 
 \set team   '00000000-0000-4000-a000-000000000001'
 \set pa     '00000000-0000-4000-a000-000000000011'
 \set strngr '00000000-0000-4000-a000-000000000014'
 \set ca     '00000000-0000-4000-b000-00000000000a'
+\set member '00000000-0000-4000-a000-0000000000e1'
 
 \o /dev/null
 create schema bl;
@@ -46,6 +51,12 @@ $$;
 grant execute on all functions in schema bl to anon, authenticated, service_role, authenticator;
 
 -- ── Fixtures (fictional), as the worker ─────────────────────────────────────
+-- A second teammate who is a member, not an admin (the sandbox's team user is
+-- an admin, as 0036 seeds production's first sign-in).
+insert into auth.users (id, email, email_confirmed_at) values
+  ('00000000-0000-4000-a000-0000000000e1', 'sandbox-member@compassmarketing.ai', now());
+insert into team_members (auth_user_id, name, email, role) values
+  ('00000000-0000-4000-a000-0000000000e1', 'Sandbox Member', 'sandbox-member@compassmarketing.ai', 'member');
 insert into clients (id, name, city, state, status) values
   (bl.id('c1'), 'Billing Roofing', 'Wentzville', 'MO', 'active'),
   (bl.id('c2'), 'Billing Plumbing', 'Columbia', 'MO', 'launching'),
@@ -67,19 +78,25 @@ begin
       where table_schema = 'public' and data_type in ('numeric', 'double precision', 'real')
         and table_name in ('stripe_prices', 'stripe_customers', 'checkout_sessions', 'subscriptions',
           'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'plans')));
-  perform bl.ok('S5 the service catalog holds the thirteen seeded services (8 features, 5 monthly quotas)',
-    (select count(*) filter (where kind = 'feature') = 8 and count(*) filter (where kind = 'quota') = 5
+  perform bl.ok('S5 the service catalog holds the fourteen seeded services (9 features, 5 monthly quotas)',
+    (select count(*) filter (where kind = 'feature') = 9 and count(*) filter (where kind = 'quota') = 5
      from service_catalog));
+  perform bl.ok('S5b ...with the agreed names, website as Website Management and hosting as its own feature',
+    (select jsonb_object_agg(key, name) from service_catalog) = '{
+      "seo": "SEO", "website": "Website Management", "gbp": "Google Business Profile", "social": "Social Media",
+      "paid_ads": "Paid Advertising", "crm": "CRM", "reporting": "Monthly Reporting", "client_portal": "Client Portal",
+      "hosting": "Website Hosting", "blog_posts": "Blog Posts", "website_pages": "New Website Pages",
+      "website_refreshes": "Website Page Refreshes", "gbp_posts": "Google Business Profile Posts",
+      "social_posts": "Social Media Posts"}'::jsonb
+    and (select kind from service_catalog where key = 'hosting') = 'feature');
   perform bl.ok('S6 plans no longer carries a fee or quantities',
     not exists (select 1 from information_schema.columns where table_name = 'plans'
       and column_name in ('monthly_fee', 'package_name', 'gbp_posts_per_month', 'blog_posts_per_month',
                           'social_posts_per_month', 'ad_budget_managed')));
 end $$;
 
--- ── W. The Stripe functions (service role) write the mirror ─────────────────
-\c - authenticator
-set role service_role;
-select bl.as_user('service_role', null);
+-- ── W. The Stripe mirror, loaded as Stripe sync would write it ──────────────
+\c - supabase_admin
 do $$
 declare e text;
 begin
@@ -100,7 +117,7 @@ begin
     ('price_CrmY', 'prod_Crm', false, true, 'recurring', 'usd', 2400000, 'year', 1, 'licensed', now()),
     ('price_Web', 'prod_Web', false, true, 'one_time', 'usd', 500000, null, null, null, now()),
     ('price_LiveStdM', 'prod_LiveStd', true, true, 'recurring', 'usd', 150000, 'month', 1, 'licensed', now());
-  perform bl.ok('W1 the service role writes the Stripe catalog mirror', true);
+  perform bl.ok('W1 the Stripe catalog mirror loads', true);
 
   e := bl.try($q$insert into stripe_prices (stripe_price_id, stripe_product_id, livemode, active, type, currency,
       unit_amount_cents, stripe_synced_at) values ('price_Bad', 'prod_Std', false, true, 'recurring', 'usd', 1, now())$q$);
@@ -204,6 +221,44 @@ begin
       values (%L, 'external', 'check', 'succeeded', 120000, 'usd', '2026-09-10', 'check 1042')$q$, bl.id('c3')));
   perform bl.ok('P5 an externally paid arrangement can be represented (check, no Stripe ids)', e is null, e);
 
+  -- Refunds: every partial refund is its own row.
+  insert into stripe_refunds (client_id, payment_id, stripe_refund_id, stripe_payment_intent_id, stripe_charge_id,
+      livemode, amount_cents, currency, status, reason, stripe_created_at, stripe_synced_at)
+  select client_id, id, 'pyr_One', 'pi_C1Sep', 'py_C1Sep', false, 100000, 'usd', 'succeeded', 'requested_by_customer', now(), now()
+  from payments where stripe_payment_intent_id = 'pi_C1Sep';
+  insert into stripe_refunds (client_id, payment_id, stripe_refund_id, stripe_payment_intent_id, stripe_charge_id,
+      livemode, amount_cents, currency, status, failure_reason, stripe_created_at, stripe_synced_at)
+  select client_id, id, 'pyr_Two', 'pi_C1Sep', 'py_C1Sep', false, 50000, 'usd', 'failed', 'expired_or_canceled_card', now(), now()
+  from payments where stripe_payment_intent_id = 'pi_C1Sep';
+  insert into stripe_refunds (client_id, payment_id, stripe_refund_id, stripe_payment_intent_id,
+      livemode, amount_cents, currency, status, stripe_created_at, stripe_synced_at)
+  select client_id, id, 're_Three', 'pi_C1Sep', false, 25000, 'usd', 'pending', now(), now()
+  from payments where stripe_payment_intent_id = 'pi_C1Sep';
+  update payments set amount_refunded_cents = 100000 where stripe_payment_intent_id = 'pi_C1Sep';
+  perform bl.ok('F1 a payment keeps each partial refund (succeeded, failed with its reason, pending) as its own row',
+    (select count(*) = 3 and sum(r.amount_cents) filter (where r.status = 'succeeded') = 100000
+       and bool_or(r.failure_reason = 'expired_or_canceled_card')
+     from stripe_refunds r join payments p on p.id = r.payment_id where p.stripe_payment_intent_id = 'pi_C1Sep'));
+  e := bl.try(format($q$insert into stripe_refunds (client_id, payment_id, stripe_refund_id, stripe_payment_intent_id,
+      livemode, amount_cents, currency, status, stripe_created_at, stripe_synced_at)
+      select %L, id, 're_Cross', 'pi_C1Sep', false, 1, 'usd', 'succeeded', now(), now()
+      from payments where stripe_payment_intent_id = 'pi_C1Sep'$q$, bl.id('c3')));
+  perform bl.ok('F2 a refund belongs to its payment''s client', e like '23503%', e);
+  e := bl.try($q$insert into stripe_refunds (client_id, payment_id, stripe_refund_id, stripe_payment_intent_id,
+      livemode, amount_cents, currency, status, stripe_created_at, stripe_synced_at)
+      select client_id, id, 're_Ext', 'pi_Nope', false, 1, 'usd', 'succeeded', now(), now()
+      from payments where source = 'external'$q$);
+  perform bl.ok('F3 an external payment has no Stripe refunds', e like '23503%', e);
+  e := bl.try($q$update stripe_refunds set status = 'reversed' where stripe_refund_id = 're_Three'$q$);
+  perform bl.ok('F4 a refund status is one of Stripe''s', e like '23514%', e);
+  e := bl.try($q$update stripe_refunds set stripe_refund_id = 're_Other' where stripe_refund_id = 're_Three'$q$);
+  perform bl.ok('F5 a refund never changes its Stripe id', e like '23514%', e);
+  e := bl.try($q$insert into stripe_refunds (client_id, payment_id, stripe_refund_id,
+      livemode, amount_cents, currency, status, stripe_created_at, stripe_synced_at)
+      select client_id, id, 're_Orphan', false, 1, 'usd', 'succeeded', now(), now()
+      from payments where stripe_payment_intent_id = 'pi_C1Sep'$q$);
+  perform bl.ok('F6 a refund names its PaymentIntent or charge', e like '23514%', e);
+
   insert into stripe_events (id, type, livemode, event_created_at, object_type, object_id)
   values ('evt_One', 'invoice.paid', false, now(), 'invoice', 'in_C1Sep');
   e := bl.try($q$update stripe_events set status = 'processed' where id = 'evt_One'$q$);
@@ -218,7 +273,8 @@ begin
   update stripe_events set status = 'processed', attempts = 2, processed_at = now(), last_attempt_at = now() where id = 'evt_One';
   perform bl.ok('E5 a failed event can be retried to processed', (select status from stripe_events where id = 'evt_One') = 'processed');
 end $$;
-reset role;
+
+\c - authenticator
 
 -- ── T. A teammate: reads the mirror, never writes it; edits the catalog ──────
 set role authenticated;
@@ -229,7 +285,8 @@ begin
   perform bl.ok('T1 a teammate reads the mirror', (select count(*) from subscriptions where client_id = bl.id('c1')) = 1
     and (select count(*) from invoices where client_id = bl.id('c1')) = 2);
   foreach t in array array['stripe_products', 'stripe_prices', 'stripe_customers', 'checkout_sessions',
-      'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_events'] loop
+      'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_refunds',
+      'stripe_events'] loop
     e := bl.try(format('update %I set updated_at = updated_at', t));
     if t = 'stripe_events' then e := bl.try('update stripe_events set attempts = attempts'); end if;
     perform bl.ok('T2 a teammate cannot update ' || t, e like '42501%', e);
@@ -254,7 +311,7 @@ begin
     (bl.id('pkg_custom'), 'custom_retainer', 'Compass Custom Retainer', 'custom', 'prod_Custom');
   insert into billing_one_time_items (key, name, category, stripe_product_id) values
     ('website_project', 'Website project', 'website_project', 'prod_Web');
-  perform bl.ok('K1 a teammate creates standard, custom and one-time catalog entries', true);
+  perform bl.ok('K1 an admin creates standard, custom and one-time catalog entries', true);
 
   e := bl.try($q$insert into billing_one_time_items (key, name, category, stripe_product_id)
       values ('std_again', 'x', 'other', 'prod_Std')$q$);
@@ -366,7 +423,7 @@ begin
     (select array_agg(service_key order by service_key) from client_entitlements where client_id = bl.id('c4') and enabled)
     = array['seo', 'website_pages']);
   perform bl.ok('R6 a client without an agreement has every service off',
-    (select bool_and(not enabled) and count(*) = 13 from client_entitlements where client_id = bl.id('c2')));
+    (select bool_and(not enabled) and count(*) = 14 from client_entitlements where client_id = bl.id('c2')));
 
   s := bl.status(bl.id('c1'));
   perform bl.ok('R7 c1 is active, test mode, with its customer and subscription',
@@ -389,9 +446,8 @@ begin
 end $$;
 reset role;
 
--- Stripe changes things; the mirror follows (as the functions will in B2).
-set role service_role;
-select bl.as_user('service_role', null);
+-- Stripe changes things; the mirror follows (as the sync functions will, 0058).
+\c - supabase_admin
 do $$
 begin
   -- c1 goes past due, with an open invoice Stripe has already retried.
@@ -419,9 +475,10 @@ begin
   values (bl.id('c2'), 'cus_C2b', 'cs_test_C2', false, 'subscription', 'open',
           'https://checkout.stripe.com/c/pay/cs_test_C2', now() + interval '23 hours', bl.id('pkg_std'),
           '[{"price": "price_StdM", "quantity": 1}]', now());
-  perform bl.ok('W7 the service role writes subscriptions, invoices and checkout sessions as Stripe changes', true);
+  perform bl.ok('W7 subscriptions, invoices and checkout sessions follow Stripe''s changes', true);
 end $$;
-reset role;
+
+\c - authenticator
 
 set role authenticated;
 select bl.as_user('authenticated', :'team');
@@ -432,6 +489,8 @@ begin
   perform bl.ok('R15 Stripe''s past_due is mirrored as billing_state past_due with attention',
     s ->> 'billing_state' = 'past_due' and (s ->> 'billing_attention')::boolean
     and s -> 'attention_reasons' @> '["subscription_past_due", "invoice_overdue"]', s ->> 'attention_reasons');
+  perform bl.ok('R16a an overdue open invoice with no payment in flight counts as overdue',
+    (s ->> 'overdue_invoice_count')::int = 1 and (s ->> 'settling_invoice_count')::int = 0, s::text);
   perform bl.ok('R16 ...showing the outstanding amount and the open invoice link Stripe issued',
     s -> 'outstanding_cents_by_currency' = '{"usd": 300000}' and s ->> 'latest_invoice_url' = 'https://invoice.stripe.com/i/test_C1Oct', s::text);
   perform bl.ok('R17 billing state never changes entitlements: c1 keeps SEO and 6 blogs while past due',
@@ -467,6 +526,90 @@ begin
 end $$;
 reset role;
 
+-- An ACH debit for the October invoice is settling: not overdue while it does.
+\c - supabase_admin
+insert into payments (client_id, source, stripe_customer_id, stripe_payment_intent_id, stripe_invoice_id, livemode, status,
+    payment_method_type, amount_cents, currency, stripe_synced_at)
+values (bl.id('c1'), 'stripe', 'cus_C1', 'pi_C1Oct', 'in_C1Oct', false, 'processing', 'us_bank_account', 300000, 'usd', now());
+\c - authenticator
+set role authenticated;
+select bl.as_user('authenticated', :'team');
+do $$
+declare s jsonb := bl.status(bl.id('c1'));
+begin
+  perform bl.ok('R26 an open invoice whose ACH debit is still processing is settling, not overdue (no false invoice_overdue)',
+    (s ->> 'settling_invoice_count')::int = 1 and (s ->> 'overdue_invoice_count')::int = 0
+    and not (s -> 'attention_reasons' @> '["invoice_overdue"]'), s::text);
+end $$;
+reset role;
+
+-- ── A. Admin-only financial configuration; a member edits agreements ─────────
+set role authenticated;
+select bl.as_user('authenticated', :'member');
+do $$
+declare e text; t text; n bigint;
+begin
+  perform bl.ok('A1 a member is on the team but not an admin', is_team() and not is_team_admin());
+  perform bl.ok('A2 a member reads the catalog and its Stripe mapping',
+    (select count(*) from billing_packages) = 3 and (select count(*) from billing_package_prices) = 4
+    and (select count(*) from service_catalog) = 14);
+  e := bl.try($q$insert into billing_packages (key, name, kind) values ('member_pkg', 'x', 'standard')$q$);
+  perform bl.ok('A3 a member cannot create a package', e like '42501%', e);
+  foreach t in array array['billing_packages', 'billing_package_prices', 'billing_one_time_items',
+      'package_entitlements', 'service_catalog'] loop
+    execute format('with u as (update %I set updated_at = updated_at returning 1) select count(*) from u', t) into n;
+    perform bl.ok('A4 a member''s update of ' || t || ' touches nothing', n = 0, n::text);
+    execute format('with d as (delete from %I returning 1) select count(*) from d', t) into n;
+    perform bl.ok('A5 a member''s delete from ' || t || ' touches nothing', n = 0, n::text);
+  end loop;
+  e := bl.try($q$insert into billing_package_prices (package_id, package_kind, stripe_product_id, stripe_price_id)
+      select id, 'standard', 'prod_Crm', 'price_CrmY' from billing_packages where key = 'marketing_crm'$q$);
+  perform bl.ok('A6 a member cannot map a Stripe price to a package', e like '42501%', e);
+  e := bl.try($q$insert into service_catalog (key, name, kind) values ('member_svc', 'x', 'feature')$q$);
+  perform bl.ok('A7 a member cannot add a catalog service', e like '42501%', e);
+  e := bl.try($q$insert into app_settings (key, value) values ('billing', '{"livemode": true}')$q$);
+  perform bl.ok('A8 a member cannot switch billing to live mode', e like '42501%', e);
+  perform bl.ok('A9 ...and billing_livemode() still reads test mode for the member', not billing_livemode());
+  e := bl.try($q$insert into app_settings (key, value) values ('member_note', '{}')$q$);
+  perform bl.ok('A10 other settings are unchanged for a member', e is null, e);
+  delete from app_settings where key = 'member_note';
+  -- Agreements and overrides stay the team's.
+  e := bl.try(format($q$update plans set term_months = 24 where client_id = %L$q$, bl.id('c1')));
+  perform bl.ok('A11 a member edits a client''s agreement', e is null
+    and (select term_months from plans where client_id = bl.id('c1')) = 24, e);
+  e := bl.try(format($q$insert into client_entitlement_overrides (client_id, service_key, service_kind, enabled, reason)
+      values (%L, 'hosting', 'feature', true, 'Hosting added')$q$, bl.id('c1')));
+  perform bl.ok('A12 a member sets a client entitlement override (hosting)', e is null, e);
+  -- Nobody makes themselves an admin.
+  e := bl.try($q$update team_members set role = 'admin' where auth_user_id = auth.uid()$q$);
+  perform bl.ok('A13 a member cannot make themselves an admin', e like '42501%', e);
+  e := bl.try($q$update team_members set auth_user_id = auth.uid() where role = 'admin'$q$);
+  perform bl.ok('A14 a member cannot take over an admin''s row', e like '42501%', e);
+  e := bl.try($q$delete from team_members where role = 'admin'$q$);
+  perform bl.ok('A15 a member cannot remove an admin', e like '42501%', e);
+  e := bl.try($q$insert into team_members (name, email, role) values ('New', 'new-admin@compassmarketing.ai', 'admin')$q$);
+  perform bl.ok('A16 a member cannot create an admin', e like '42501%', e);
+  e := bl.try($q$update team_members set name = 'Sandbox Member (renamed)' where auth_user_id = auth.uid()$q$);
+  perform bl.ok('A17 a member can still edit a member row''s details', e is null, e);
+end $$;
+reset role;
+
+set role authenticated;
+select bl.as_user('authenticated', :'team');
+do $$
+declare e text;
+begin
+  perform bl.ok('A18 the admin is an admin', is_team_admin());
+  e := bl.try($q$insert into app_settings (key, value) values ('billing', '{"livemode": false}')$q$);
+  perform bl.ok('A19 an admin sets the billing mode', e is null, e);
+  delete from app_settings where key = 'billing';
+  e := bl.try($q$update team_members set role = 'admin' where email = 'sandbox-member@compassmarketing.ai'$q$);
+  perform bl.ok('A20 an admin can promote a member', e is null, e);
+  e := bl.try($q$update team_members set role = 'member' where email = 'sandbox-member@compassmarketing.ai'$q$);
+  perform bl.ok('A21 ...and demote them again', e is null, e);
+end $$;
+reset role;
+
 -- ── P. Portal contact, stranger, anon: nothing ───────────────────────────────
 set role authenticated;
 select bl.as_user('authenticated', :'pa');
@@ -474,8 +617,8 @@ do $$
 declare e text; t text; n bigint;
 begin
   foreach t in array array['stripe_products', 'stripe_prices', 'stripe_customers', 'checkout_sessions',
-      'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_events',
-      'service_catalog', 'billing_packages', 'billing_package_prices', 'billing_one_time_items',
+      'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_refunds',
+      'stripe_events', 'service_catalog', 'billing_packages', 'billing_package_prices', 'billing_one_time_items',
       'package_entitlements', 'client_entitlement_overrides', 'plans', 'client_entitlements', 'client_billing_status'] loop
     execute format('select count(*) from %I', t) into n;
     perform bl.ok('P6 a portal contact reads nothing from ' || t || ' (not even their own client''s)', n = 0, n::text);
@@ -523,14 +666,13 @@ select set_config('request.jwt.claims', '', false);
 do $$
 declare e text;
 begin
-  perform bl.ok('I1 only 0057''s own functions mention billing, plans or Stripe',
-    (select array_agg(proname::text order by proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
+  perform bl.ok('I1 only the billing functions (0057 / 0058) mention billing, plans, invoices or Stripe',
+    not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname not like 'billing\_%'
        and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%' or p.prosrc ilike '%billing%'
-            or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%'))
-    = array['billing_livemode', 'billing_product_single_owner'],
+            or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')),
     (select string_agg(proname, ', ') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public' and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%'
+     where n.nspname = 'public' and p.proname not like 'billing\_%' and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%'
        or p.prosrc ilike '%billing%' or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')));
   perform bl.ok('I2 only 0057''s two read models are views over billing tables',
     (select array_agg(viewname::text order by viewname) from pg_views where schemaname = 'public'
@@ -539,9 +681,10 @@ begin
   perform bl.ok('I3 no portal view reads billing', not exists (select 1 from pg_views where schemaname = 'public'
     and viewname like 'portal\_%' and (definition ilike '%stripe%' or definition ilike '%invoice%' or definition ~* '\mplans\M'
     or definition ilike '%entitlement%')));
-  perform bl.ok('I4 no authenticated-executable security-definer function was added',
+  perform bl.ok('I4 no billing security-definer function is callable by a signed-in user or anon',
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.prosecdef and p.proname like 'billing%'));
+      where n.nspname = 'public' and p.prosecdef and p.proname like 'billing%'
+        and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))));
   e := bl.try(format('delete from clients where id = %L', bl.id('c1')));
   perform bl.ok('I5 a client with billing history cannot be deleted (offboard it instead)', e like '23503%', e);
   e := bl.try(format('delete from clients where id = %L', bl.id('c2')));
