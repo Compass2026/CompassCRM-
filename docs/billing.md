@@ -24,7 +24,7 @@ Reconciliation (B4) ──┴→ _shared sync → Stripe mirror (service role on
 | --- | --- | --- |
 | B1 | Schema: mirror, catalog, agreement, entitlements, read models | **0057 written, not applied**; review changes made (14-service catalog, `stripe_refunds`, admin-only financial configuration) |
 | B2 | Shared Stripe sync layer + corrected webhook | **0058 + `_shared/stripe/` + `stripe-webhook` written and tested, not applied / not deployed** |
-| B3 | Checkout, link existing customer, Customer Portal, billing screens | not started |
+| B3 | Checkout, link existing customer, Customer Portal, billing screens | **0059 + `stripe-billing` + app screens written and tested, not applied / not deployed** |
 | B4 | Reconciliation | not started |
 | B5 | Entitlement interface for the Five Layers + portal billing | not started |
 
@@ -32,7 +32,8 @@ Everything stays in Stripe **test mode** until reviewed. **Do not add the
 Stripe secrets to Vault and do not deploy `stripe-billing` or
 `stripe-webhook` outside the cutover in `docs/billing-cutover.md`**: the
 deployed v2 / v1 are the 0008 code, which writes columns 0057 drops (both
-answer 500 without secrets, so today they do nothing). Draft PR:
+answer 500 without secrets, so today they do nothing). 0057, 0058 and 0059
+ship together with the app and both functions. Draft PR:
 Compass2026/CompassCRM-#86.
 
 ## B1: migration 0057
@@ -381,3 +382,209 @@ Also out of scope (as 0047): a deliberate schema change by the table owner
   partial refunds, test / live and cross-client isolation, unauthorized
   writes by a teammate / the service role / the worker, and a canonical
   resync after a missed webhook).
+
+## B3: billing operations (migration 0059, `stripe-billing`, the app)
+
+### What was built
+
+- **0059** (`supabase/migrations/0059_billing_operations.sql`, not applied):
+  `billing_record_checkout` (a Checkout Session the handler created, keyed
+  by its Stripe id, audited in the same transaction),
+  `billing_record_external_payment` / `billing_void_external_payment`
+  (admin-recorded check / wire / manual ACH / other; `client_request_id`
+  makes a retry a no-op; the row is immutable except for one void with who,
+  when and why; nothing is deleted), and `billing_audit_events`, an
+  append-only history of every billing action (team-readable; no API
+  writes; update / delete refused even to the service role). All are
+  security definer, callable only from an `authenticator` + `service_role`
+  session, and write through 0058's mirror guard. The same shared-key
+  residual applies: any Edge Function could call them.
+- **`stripe-billing`** (`supabase/functions/stripe-billing/`: `handler.ts`
+  factory, `store.ts`, `index.ts`; deployed with `verify_jwt = true`): the
+  410 stub is replaced by explicit actions. Every Stripe write is followed
+  by the shared B2 sync (`_shared/stripe/sync.ts`), so linking, Checkout and
+  prices land in the mirror exactly as a webhook would put them. There is no
+  separate import logic.
+- **App:** the Billing tab (`src/app/(app)/clients/[clientId]/billing/page.tsx`,
+  actions in `src/app/billing-actions.ts`), Settings › Billing catalog
+  (`src/app/(app)/settings/billing/page.tsx`, `src/app/billing-catalog-actions.ts`),
+  the public Checkout return pages (`src/app/checkout/complete`,
+  `/checkout/canceled`, exact paths let through by `src/proxy.ts`), pure
+  helpers in `src/lib/billing-ops.ts` and the function call in
+  `src/lib/stripe-billing-call.ts` (the signed-in person's own JWT; no
+  Stripe key is ever in the app).
+
+### Authorization (the existing `team_members.role`; no new framework)
+
+| Action | Admin | Member | Portal contact | Enforced by |
+| --- | --- | --- | --- | --- |
+| Search Stripe customers, link an existing one, create one | yes | no | no | function (role), 0058 |
+| Import a Stripe Product into the catalog | yes | no | no | function |
+| Create a client's Custom Retainer price | yes | no | no | function |
+| Create / expire a payment link (Checkout) | yes | no | no | function |
+| Copy / open / send an existing payment link | yes | yes | no | RLS (team read) |
+| Configure the Customer Portal | yes | no | no | function |
+| Open the Customer Portal for a client | yes | no | own client only (derived from the sign-in; B5 adds the button) | function |
+| Record / void an external payment | yes | no | no | function + 0059 (recorder must be an admin) |
+| Re-read a customer from Stripe | yes | yes | no | function |
+| Packages, entitlement defaults, one-time items, price mappings, billing mode, team roles | yes | read | no | RLS (`is_team_admin()`, 0057) |
+| Client agreement and entitlement overrides | yes | yes | no | RLS (`is_team()`) |
+| Read billing (mirror, records, audit) | yes | yes | no | RLS |
+
+The UI shows admin controls to admins only; the function and the database
+refuse them for anyone else regardless.
+
+### Stripe API calls
+
+Reads (the sync layer): `GET /v1/customers/:id`, `/v1/customers/search`,
+`/v1/products/:id`, `/v1/prices` (`?product=`), `/v1/prices/:id`,
+`/v1/subscriptions` (`?customer=&status=all`), `/v1/subscriptions/:id`,
+`/v1/invoices`, `/v1/invoices/:id`, `/v1/invoices/:id/lines`,
+`/v1/payment_intents`, `/v1/payment_intents/:id`, `/v1/charges/:id`,
+`/v1/refunds`, `/v1/refunds/:id`, `/v1/checkout/sessions/:id`,
+`/v1/billing_portal/configurations/:id`.
+
+Writes (only `stripe-billing`): `POST /v1/customers`, `POST /v1/prices`,
+`POST /v1/checkout/sessions`, `POST /v1/checkout/sessions/:id/expire`,
+`POST /v1/billing_portal/configurations`, `POST /v1/billing_portal/sessions`.
+Nothing else in Stripe is changed by Compass: no subscription update,
+cancel, pause, refund or invoice action.
+
+### Idempotency
+
+| Stripe create | Idempotency key | Compass record |
+| --- | --- | --- |
+| Customer | `compass-customer-<client>-<mode>-<n>` (n = the client's past links in that mode) | one active link per client and mode (unique index); a customer Compass created but never linked is found by its `compass_client_id` metadata and offered for linking instead |
+| Custom price | `compass-price-<request id>` | `billing_package_prices` unique on the Stripe price |
+| Checkout Session | `compass-checkout-<client>-<request id>` (`-card` for the card-only fallback) | `checkout_sessions` unique on the session id |
+| Session expiry | `compass-expire-<session>` | synced |
+| Portal configuration | `compass-portal-config-v<version>-<mode>-<previous id>` | `app_settings.billing_portal` |
+| External payment | (no Stripe object) | `payments.client_request_id` unique |
+
+Request ids are generated when the page renders (a hidden field), so a
+double click or a retried submit sends the same id. Reusing a key with
+different parameters is refused by Stripe (`idempotency_error`); the
+function turns that into a plain refusal.
+
+### Customers
+
+- **Link existing:** search by name (substring), email (exact) or `cus_` id;
+  each result shows name, email, created date, mode, subscriptions and any
+  client it is already linked to. Nothing links on a match: the admin ticks
+  "This is <client>'s Stripe customer" and presses Link. Refused: a deleted
+  customer, the wrong mode, a customer linked to another client, a second
+  active customer for the client, and a customer whose `compass_client_id`
+  metadata names another client. Linking never writes to Stripe. The shared
+  `linkCustomer` then imports the customer, subscriptions (with items,
+  products and prices), invoices (with lines), payments and every refund.
+- **Create:** name and billing email (prefilled from the primary contact),
+  metadata `compass_client_id` / `compass_client_name`, then linked
+  (`link_source = created`) and synced the same way.
+
+### Catalog
+
+Admins add packages (standard or custom retainer), import each package's
+Stripe Product (`import_product` syncs the product and all its prices),
+approve which recurring Prices sell a standard package (one default), set
+what each package includes, and add one-time items with their own Products.
+No amount is typed in the catalog: standard prices are created in Stripe and
+approved here. A **custom retainer** is one general Product ("Compass Custom
+Retainer"); its Prices are created per client by an admin on that client's
+Billing tab (`create_custom_price`: integer cents, USD, month or year,
+nickname, metadata naming the client) and reserved to that client
+(`billing_package_prices.client_id`). One-time items are never part of a
+recurring price; selling them through Checkout is not in B3 (invoice them in
+Stripe; the mirror records the invoice).
+
+### Checkout and duplicate protection
+
+`create_checkout` takes only `{client_id, package_price_id, request_id}`.
+The function resolves the approved mapping, re-reads the price from Stripe
+(an archive in the dashboard is honoured), and refuses unless: the mapping
+is active and (for a custom package) this client's; the agreement's package
+is that package and is collected through Stripe; the price is active,
+recurring, licensed, fixed-amount and in the current mode; the client has an
+active customer link. It then lists the customer's subscriptions in Stripe
+(`status=all`, synced) and the mirror's for the client: any `active`,
+`trialing`, `past_due`, `unpaid`, `incomplete` or `paused` subscription
+refuses the sale (409 `subscription_exists`, listing them). The mirror can
+still represent several subscriptions (Stripe may have them); only creation
+is blocked. An open, unexpired link for the client is refused too
+(`checkout_open`, returning it), except the same request, which returns the
+same session.
+
+The session: `mode=subscription`, the linked customer, `client_reference_id`
+and metadata naming the client, package, mapping and request,
+`subscription_data.metadata` naming the client and package, one line item
+(the approved price, quantity 1), `payment_method_types` card +
+`us_bank_account` (retried card-only when the account cannot take ACH, and
+reported), success / cancel URLs `<APP_BASE_URL>/checkout/complete` /
+`/checkout/canceled`. Those pages are static and public: they read no
+session or data. Reaching them proves nothing; the webhook's
+`checkout.session.completed` (and, for ACH, the later payment events) is
+what the mirror records.
+
+**Payment Link Ready** (Billing tab): client, package, price and interval,
+expiry, mode, who created it, the URL, **Copy Payment Link** (clipboard),
+**Open Payment Link**, and (admin) **Expire link**. Sending it is the
+teammate's (a Send Payment Link action is later work).
+
+### Customer Portal
+
+`configure_portal` (admin, Settings › Billing catalog) creates Compass's
+configuration: update payment method, invoice history (view / download),
+update email, address, phone and tax id. Cancellation, plan / quantity
+changes and pausing are **off**; the configuration id is stored per mode in
+`app_settings.billing_portal`. Before every session the function reads the
+configuration from Stripe and refuses (`portal_config_unsafe`) if someone
+widened it in the dashboard. Sessions are created server-side only, for the
+client's active linked customer: a teammate names the client (admin only;
+**Manage Billing in Stripe** on the Billing tab); a portal contact names
+nothing — the client comes from their sign-in, and any other client id is
+refused. The session URL is returned to the caller and not stored. Every
+session is audited with its actor.
+
+### External payments
+
+Admin only. Client, amount (integer cents), currency, date received, method
+(check / wire / manually received ACH / other), reference, required note.
+Recorded as `source = external`, `status = succeeded`, with the admin's
+name; idempotent by request id. Never edited or deleted: a mistake is
+voided with a reason (shown struck through with who and why) and the correct
+payment recorded. Stripe is not involved.
+
+### Test / live
+
+B3 creates Stripe objects in **test mode only**. The function refuses a live
+key unless `app_settings.billing` is `{"livemode": true}`, and refuses a test
+key once it is (so the screens never show one mode while the function writes
+the other). Only an admin can write that setting (0057); there is no mode
+switch in the UI. Every billing screen carries a mode banner.
+
+### Five Layers
+
+Nothing in B3 touches the Authority Engine, Client Intelligence, the
+Drafter, the Publisher or the Creative Engine, and billing state never
+changes an entitlement or stops work.
+
+### Tests (B3)
+
+- `npm test`: `tests/stripe-billing-handler.test.mjs` (22: form encoding,
+  search queries, portal configuration rules, Checkout price rules,
+  authorization for every action, portal-contact scoping, mode refusals,
+  search, linking rules, create-customer idempotency including the
+  lagging-search window, catalog import, standard Checkout, injection
+  ignored, agreement / archive / no-customer refusals, each blocking
+  subscription status, card-only fallback, expiry, Custom Retainer, portal
+  sessions and a widened configuration, external payments);
+  `tests/billing-ops.test.mjs` (the app's form readers and wording).
+- `npm run test:sandbox`: `billing_operations.test.sql` (34: the worker's
+  SQL and every non-service session refused, external payment rules,
+  idempotency, admin-only, void rules, immutability, append-only audit,
+  cross-client Checkout records refused, reads).
+- `npm run test:stripe-billing`: the real handler, sync layer, webhook and
+  stores over PostgREST + the replay with the fake Stripe (14 end-to-end
+  checks).
+- `npm run test:billing-ops-ui`: the screens in Chromium with the real
+  handler and webhook behind the gateway (13 checks); screenshots in
+  `docs/screenshots/billing/`.

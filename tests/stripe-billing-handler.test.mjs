@@ -247,6 +247,8 @@ test("authorization: no sign-in 401, stranger 403, member refused every admin ac
   assert.equal((await t.call("member", { action: "create_portal_session", client_id: A })).status, 403);
   assert.deepEqual(t.s.calls, []);
   assert.equal((await t.call("admin", { action: "nope" })).status, 400);
+  assert.equal((await t.call("", { action: "nope" })).status, 401, "nothing is said to a caller who is not signed in");
+  assert.equal((await t.call("stranger", { action: "nope" })).status, 403);
 });
 
 test("a portal contact opens only their own client's portal; every other action is refused", async () => {

@@ -373,8 +373,8 @@ export default async function PlanPage({
             <Link href={`/clients/${clientId}/billing`} className="underline">
               Billing tab
             </Link>
-            . Checkout links and the Stripe customer portal arrive with the
-            next billing release.
+: the Stripe customer, payment links, the Customer Portal and
+            external payments.
           </p>
         </CardContent>
       </Card>

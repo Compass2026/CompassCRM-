@@ -224,11 +224,12 @@ export function createStripeBilling(deps: {
     }
     if (!body || typeof body !== "object" || Array.isArray(body)) return json(400, { error: "invalid_request", detail: "body must be an object" });
     const action = body.action as Action;
-    if (!(ACTIONS as readonly string[]).includes(action)) return json(400, { error: "unknown_action", actions: ACTIONS });
 
     try {
       const caller = await store.caller(jwt);
       if (caller === "none") return json(401, { error: "not_signed_in" });
+      if (!caller) return json(403, { error: "forbidden", detail: "Billing is for the Compass team and the client's own portal contacts." });
+      if (!(ACTIONS as readonly string[]).includes(action)) return json(400, { error: "unknown_action" });
       authorize(action, caller, body);
       if (action === "version") return json(200, { version: STRIPE_BILLING_VERSION, actions: ACTIONS });
 

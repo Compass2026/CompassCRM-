@@ -531,6 +531,74 @@ export type Database = {
           },
         ]
       }
+      billing_audit_events: {
+        Row: {
+          action: string
+          actor_kind: string
+          actor_portal_user_id: string | null
+          actor_team_member_id: string | null
+          client_id: string | null
+          created_at: string
+          detail: Json
+          id: string
+          livemode: boolean | null
+          subject: string | null
+        }
+        Insert: {
+          action: string
+          actor_kind: string
+          actor_portal_user_id?: string | null
+          actor_team_member_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          livemode?: boolean | null
+          subject?: string | null
+        }
+        Update: {
+          action?: string
+          actor_kind?: string
+          actor_portal_user_id?: string | null
+          actor_team_member_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          livemode?: boolean | null
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_actor_portal_user_id_fkey"
+            columns: ["actor_portal_user_id"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_actor_team_member_id_fkey"
+            columns: ["actor_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_one_time_items: {
         Row: {
           active: boolean
@@ -3498,6 +3566,7 @@ export type Database = {
           amount_cents: number
           amount_refunded_cents: number
           client_id: string
+          client_request_id: string | null
           created_at: string
           currency: string
           external_method: string | null
@@ -3519,11 +3588,15 @@ export type Database = {
           stripe_payment_intent_id: string | null
           stripe_synced_at: string | null
           updated_at: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           amount_cents: number
           amount_refunded_cents?: number
           client_id: string
+          client_request_id?: string | null
           created_at?: string
           currency: string
           external_method?: string | null
@@ -3545,11 +3618,15 @@ export type Database = {
           stripe_payment_intent_id?: string | null
           stripe_synced_at?: string | null
           updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           amount_cents?: number
           amount_refunded_cents?: number
           client_id?: string
+          client_request_id?: string | null
           created_at?: string
           currency?: string
           external_method?: string | null
@@ -3571,6 +3648,9 @@ export type Database = {
           stripe_payment_intent_id?: string | null
           stripe_synced_at?: string | null
           updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -3597,6 +3677,13 @@ export type Database = {
           {
             foreignKeyName: "payments_recorded_by_fkey"
             columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_voided_by_fkey"
+            columns: ["voided_by"]
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
@@ -6244,6 +6331,12 @@ export type Database = {
       }
       authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
+      billing_audit: {
+        Args: {
+          p: Json
+        }
+        Returns: string
+      }
       billing_caller_is_service: { Args: never; Returns: boolean }
       billing_caller_is_superuser: { Args: never; Returns: boolean }
       billing_event_begin: {
@@ -6290,6 +6383,19 @@ export type Database = {
         Args: { p_customer: string; p_livemode: boolean }
         Returns: Record<string, unknown>
       }
+      billing_record_checkout: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_record_external_payment: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_require_service: { Args: never; Returns: undefined }
       billing_sync_active: { Args: never; Returns: boolean }
       billing_sync_apply: {
         Args: {
@@ -6310,6 +6416,12 @@ export type Database = {
           p_keys: string[]
           p_row: Json
           p_table: string
+        }
+        Returns: Json
+      }
+      billing_void_external_payment: {
+        Args: {
+          p: Json
         }
         Returns: Json
       }

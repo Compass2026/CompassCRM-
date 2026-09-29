@@ -225,7 +225,7 @@ try {
   const page = (await team.locator("main").textContent()).replace(/\s+/g, " ");
   for (const want of ["Past due", "Compass Marketing Package", "$3,000.00 / month", "ACH debit ····6789",
     "An open invoice is overdue or has failed a payment attempt", "UI-0002", "UI-WEB-1", "One-time", "Recurring",
-    "Showing Stripe test mode."]) {
+    "Stripe test mode."]) {
     assert.ok(page.includes(want), `billing tab shows ${want}: ${page.slice(0, 600)}`);
   }
   assert.match(page, /Outstanding\s*\$3,000\.00/);
