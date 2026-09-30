@@ -666,24 +666,34 @@ select set_config('request.jwt.claims', '', false);
 do $$
 declare e text;
 begin
-  perform bl.ok('I1 only the billing functions (0057 – 0060) mention billing, plans, invoices or Stripe',
+  -- 0061 adds the entitlement contract, the planning that follows it, the
+  -- agreement history and the portal's row functions; that none of them reads
+  -- a Stripe / billing table is billing_entitlements_portal.test.sql X1.
+  perform bl.ok('I1 only the billing functions (0057 – 0060) and 0061''s entitlement / portal functions mention billing, plans, invoices or Stripe',
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname not like 'billing\_%'
+       and p.proname not in ('client_entitlements_for', 'client_quota_usage', 'create_weekly_blog_tasks', 'fire_website_updates',
+                             'record_client_agreement_event', 'portal_billing_summary_row', 'portal_entitlement_rows')
        and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%' or p.prosrc ilike '%billing%'
             or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')),
     (select string_agg(proname, ', ') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public' and p.proname not like 'billing\_%' and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%'
+     where n.nspname = 'public' and p.proname not like 'billing\_%'
+       and p.proname not in ('client_entitlements_for', 'client_quota_usage', 'create_weekly_blog_tasks', 'fire_website_updates',
+                             'record_client_agreement_event', 'portal_billing_summary_row', 'portal_entitlement_rows')
+       and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%'
        or p.prosrc ilike '%billing%' or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')));
-  perform bl.ok('I2 only the billing read models (0057, 0060) are views over billing tables',
+  perform bl.ok('I2 only the billing read models (0057, 0060) and the portal billing views (0061) are views over billing tables',
     (select array_agg(viewname::text order by viewname) from pg_views where schemaname = 'public'
        and (definition ilike '%stripe%' or definition ilike '%entitlement%' or definition ~* '\mplans\M'))
-    = array['billing_sync_health', 'client_billing_reconciliation', 'client_billing_status', 'client_entitlements']);
-  perform bl.ok('I3 no portal view reads billing', not exists (select 1 from pg_views where schemaname = 'public'
-    and viewname like 'portal\_%' and (definition ilike '%stripe%' or definition ilike '%invoice%' or definition ~* '\mplans\M'
+    = array['billing_sync_health', 'client_billing_reconciliation', 'client_billing_status', 'client_entitlements',
+            'portal_billing_invoices', 'portal_entitlements']);
+  perform bl.ok('I3 no portal view but 0061''s three billing views reads billing', not exists (select 1 from pg_views where schemaname = 'public'
+    and viewname like 'portal\_%' and viewname not in ('portal_billing_summary', 'portal_billing_invoices', 'portal_entitlements') and (definition ilike '%stripe%' or definition ilike '%invoice%' or definition ~* '\mplans\M'
     or definition ilike '%entitlement%')));
-  perform bl.ok('I4 no billing security-definer function is callable by a signed-in user or anon',
+  -- billing_livemode (0061) returns only the billing-mode boolean.
+  perform bl.ok('I4 no billing security-definer function but billing_livemode is callable by a signed-in user or anon',
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.prosecdef and p.proname like 'billing%'
+      where n.nspname = 'public' and p.prosecdef and p.proname like 'billing%' and p.proname <> 'billing_livemode'
         and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))));
   e := bl.try(format('delete from clients where id = %L', bl.id('c1')));
   perform bl.ok('I5 a client with billing history cannot be deleted (offboard it instead)', e like '23503%', e);

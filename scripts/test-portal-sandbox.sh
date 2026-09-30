@@ -80,7 +80,11 @@ for f in "${MIGRATIONS[@]}" ${LATE[@]+"${LATE[@]}"}; do
 done
 
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /dev/null
+# Billing rows for the portal clients while the generic portal checks run
+# (0061's views are portal views too), removed straight after.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_access.test.sql"
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_teardown.sql" -o /dev/null
 # 0043: task assignment, history, comments (same replay, own harness schema).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/task_assignment.test.sql"
 # 0041: scorecard ledger (same replay, own harness schema).
@@ -149,3 +153,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_operations.
 # abandoned runs closed, fingerprints that ignore bookkeeping, the health and
 # last-reconciled read models, the unscheduled fire function).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_reconciliation.test.sql"
+# 0061: the entitlement contract (package + overrides, disabled / missing = 0,
+# billing state never changes it), monthly quota accounting and planning
+# within the agreement (fail safe, mid-month changes, nothing deleted, people
+# may exceed it), agreement history, no Five Layer function reads billing,
+# and billing in the client portal (own client only, client-safe fields,
+# read-only, external arrangements, live / test mode).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_entitlements_portal.test.sql"

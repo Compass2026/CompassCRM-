@@ -531,6 +531,57 @@ export type Database = {
           },
         ]
       }
+      automation_entitlement_log: {
+        Row: {
+          allocation: number | null
+          automation: string
+          client_id: string
+          created_at: string
+          decision: string
+          id: string
+          reason: string
+          service_key: string
+          used: number | null
+        }
+        Insert: {
+          allocation?: number | null
+          automation: string
+          client_id: string
+          created_at?: string
+          decision: string
+          id?: string
+          reason: string
+          service_key: string
+          used?: number | null
+        }
+        Update: {
+          allocation?: number | null
+          automation?: string
+          client_id?: string
+          created_at?: string
+          decision?: string
+          id?: string
+          reason?: string
+          service_key?: string
+          used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_entitlement_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_entitlement_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_audit_events: {
         Row: {
           action: string
@@ -1456,6 +1507,64 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_agreement_events: {
+        Row: {
+          action: string
+          actor_team_member_id: string | null
+          after: Json | null
+          before: Json | null
+          client_id: string
+          created_at: string
+          id: string
+          service_key: string | null
+          subject: string
+        }
+        Insert: {
+          action: string
+          actor_team_member_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_id: string
+          created_at?: string
+          id?: string
+          service_key?: string | null
+          subject: string
+        }
+        Update: {
+          action?: string
+          actor_team_member_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          service_key?: string | null
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_agreement_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agreement_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agreement_events_actor_team_member_id_fkey"
+            columns: ["actor_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -6143,6 +6252,38 @@ export type Database = {
         }
         Relationships: []
       }
+      portal_billing_invoices: {
+        Row: {
+          amount_paid_cents: number | null
+          amount_remaining_cents: number | null
+          client_id: string | null
+          currency: string | null
+          due_date: string | null
+          hosted_invoice_url: string | null
+          invoice_date: string | null
+          invoice_pdf: string | null
+          number: string | null
+          period_end: string | null
+          period_start: string | null
+          status: string | null
+          total_cents: number | null
+        }
+        Relationships: []
+      }
+      portal_billing_summary: {
+        Row: {
+          can_manage_billing: boolean | null
+          client_id: string | null
+          collection: string | null
+          currency: string | null
+          ends_at: string | null
+          monthly_amount_cents: number | null
+          next_billing_at: string | null
+          plan_name: string | null
+          status: string | null
+        }
+        Relationships: []
+      }
       portal_client: {
         Row: {
           city: string | null
@@ -6170,6 +6311,19 @@ export type Database = {
           state?: string | null
           status?: never
           website_url?: string | null
+        }
+        Relationships: []
+      }
+      portal_entitlements: {
+        Row: {
+          client_id: string | null
+          kind: string | null
+          period: string | null
+          quantity: number | null
+          service_key: string | null
+          service_name: string | null
+          sort_order: number | null
+          unit: string | null
         }
         Relationships: []
       }
@@ -6659,9 +6813,40 @@ export type Database = {
           client_status: string
         }[]
       }
+      client_entitlements_for: {
+        Args: { p_client_id?: string }
+        Returns: {
+          client_id: string
+          enabled: boolean
+          kind: string
+          package_id: string
+          period: string
+          quantity: number
+          service_key: string
+          service_name: string
+          sort_order: number
+          source: string
+          unit: string
+        }[]
+      }
       client_intelligence_input: {
         Args: { p_client_id: string }
         Returns: Json
+      }
+      client_quota_usage: {
+        Args: { p_client_id?: string; p_month?: string }
+        Returns: {
+          allocation: number
+          client_id: string
+          completed: number
+          month: string
+          over_allocation: number
+          planned: number
+          remaining: number
+          service_key: string
+          service_name: string
+          used: number
+        }[]
       }
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
@@ -6726,7 +6911,34 @@ export type Database = {
         Args: { p_client_id: string; p_target?: number }
         Returns: number
       }
+      portal_billing_summary_row: {
+        Args: never
+        Returns: {
+          can_manage_billing: boolean
+          client_id: string
+          collection: string
+          currency: string
+          ends_at: string
+          monthly_amount_cents: number
+          next_billing_at: string
+          plan_name: string
+          status: string
+        }[]
+      }
       portal_client_id: { Args: never; Returns: string }
+      portal_entitlement_rows: {
+        Args: never
+        Returns: {
+          client_id: string
+          kind: string
+          period: string
+          quantity: number
+          service_key: string
+          service_name: string
+          sort_order: number
+          unit: string
+        }[]
+      }
       portal_seen: { Args: never; Returns: undefined }
       post_caller_is_human: { Args: never; Returns: boolean }
       post_caller_kind: { Args: never; Returns: string }
