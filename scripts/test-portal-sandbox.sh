@@ -144,3 +144,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_sync.test.s
 # idempotency and void corrections, the append-only billing audit trail; only
 # the stripe-billing function's session can call them).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_operations.test.sql"
+# 0060: billing reconciliation (run history and per-client results written
+# only by the stripe-reconcile function's session, one running run per mode,
+# abandoned runs closed, fingerprints that ignore bookkeeping, the health and
+# last-reconciled read models, the unscheduled fire function).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_reconciliation.test.sql"

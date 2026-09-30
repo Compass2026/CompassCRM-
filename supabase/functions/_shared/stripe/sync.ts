@@ -204,9 +204,12 @@ export function createStripeSync(deps: { api: StripeApi; store: SyncStore; now?:
   }
 
   // Everything Stripe holds for one customer, read now: the resync behind
-  // linking an existing customer, reconciliation and a manual resync.
+  // linking an existing customer, reconciliation (B4) and a manual resync.
+  // Every list is paginated by the API client.
   async function resyncCustomer(customerId: string): Promise<OpResult[]> {
     const results = await syncCustomer(customerId);
+    // Deleted (or gone) in Stripe: recorded as deleted; there is nothing more to list.
+    if (results.some((r) => r.op === "deleted")) return results;
     for (const s of await api.list("/v1/subscriptions", { customer: customerId, status: "all" })) {
       results.push(...await syncSubscription(s.id));
     }

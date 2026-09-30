@@ -75,23 +75,62 @@ function query(params: Record<string, string | number | string[]> = {}): string 
   return s ? `?${s}` : "";
 }
 
+// Transient Stripe answers are retried a bounded number of times: 429 (rate
+// limited), 5xx, a 409 Stripe marks retryable, and network errors. Reads are
+// always safe to retry; a create only when it carries an idempotency key.
+// Stripe's Retry-After (seconds) is honoured, capped; otherwise exponential
+// backoff with jitter. `Stripe-Should-Retry: false` is never retried.
+export type RetryOptions = { maxRetries?: number; baseDelayMs?: number; maxDelayMs?: number; sleep?: (ms: number) => Promise<void> };
+
+export function retryDelayMs(attempt: number, retryAfter: string | null, o: RetryOptions = {}): number {
+  const max = o.maxDelayMs ?? 10_000;
+  const secs = retryAfter != null ? Number(retryAfter) : NaN;
+  if (Number.isFinite(secs) && secs >= 0) return Math.min(secs * 1000, max);
+  const base = (o.baseDelayMs ?? 500) * 2 ** attempt;
+  return Math.min(base + Math.floor(Math.random() * base * 0.25), max);
+}
+
 export function createStripeApi(opts: {
   secretKey: string;
   fetch?: typeof fetch;
   apiVersion?: string;
   base?: string;
+  retry?: RetryOptions;
 }): StripeApi {
   const doFetch = opts.fetch ?? fetch;
   const base = opts.base ?? "https://api.stripe.com";
+  const retry = opts.retry ?? {};
+  const maxRetries = retry.maxRetries ?? 2;
+  const sleep = retry.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const headers = {
     authorization: `Bearer ${opts.secretKey}`,
     "stripe-version": opts.apiVersion ?? STRIPE_API_VERSION,
   };
-  async function get(path: string, params?: Params) {
-    const res = await doFetch(`${base}${path}${query(params)}`, { headers });
-    const body = await res.json().catch(() => null);
-    if (!res.ok) throw new StripeApiError(res.status, body, path);
-    return body as StripeObject;
+  async function send(path: string, url: string, init: RequestInit, retryable: boolean): Promise<StripeObject> {
+    for (let attempt = 0; ; attempt++) {
+      let res: Response;
+      try {
+        res = await doFetch(url, init);
+      } catch (e) {
+        if (retryable && attempt < maxRetries) {
+          await sleep(retryDelayMs(attempt, null, retry));
+          continue;
+        }
+        throw e;
+      }
+      const body = await res.json().catch(() => null);
+      if (res.ok) return body as StripeObject;
+      const should = res.headers?.get?.("stripe-should-retry") ?? null;
+      const transient = res.status === 429 || res.status >= 500 || should === "true";
+      if (retryable && transient && should !== "false" && attempt < maxRetries) {
+        await sleep(retryDelayMs(attempt, res.headers?.get?.("retry-after") ?? null, retry));
+        continue;
+      }
+      throw new StripeApiError(res.status, body, path);
+    }
+  }
+  function get(path: string, params?: Params) {
+    return send(path, `${base}${path}${query(params)}`, { headers }, true);
   }
   return {
     mode: keyMode(opts.secretKey),
@@ -100,8 +139,8 @@ export function createStripeApi(opts: {
       const body = await get(path, { query: q, limit: o.limit ?? 10, ...(o.expand ? { expand: o.expand } : {}) });
       return (body.data ?? []) as StripeObject[];
     },
-    async post(path, params = {}, o = {}) {
-      const res = await doFetch(`${base}${path}`, {
+    post(path, params = {}, o = {}) {
+      return send(path, `${base}${path}`, {
         method: "POST",
         headers: {
           ...headers,
@@ -109,10 +148,7 @@ export function createStripeApi(opts: {
           ...(o.idempotencyKey ? { "idempotency-key": o.idempotencyKey } : {}),
         },
         body: formEncode(params),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new StripeApiError(res.status, body, path);
-      return body as StripeObject;
+      }, !!o.idempotencyKey);
     },
     // Every page of a list endpoint (Stripe's cursor pagination, 100 at a time).
     async list(path, params = {}) {

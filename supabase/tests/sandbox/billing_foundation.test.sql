@@ -666,7 +666,7 @@ select set_config('request.jwt.claims', '', false);
 do $$
 declare e text;
 begin
-  perform bl.ok('I1 only the billing functions (0057 / 0058) mention billing, plans, invoices or Stripe',
+  perform bl.ok('I1 only the billing functions (0057 – 0060) mention billing, plans, invoices or Stripe',
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname not like 'billing\_%'
        and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%' or p.prosrc ilike '%billing%'
@@ -674,10 +674,10 @@ begin
     (select string_agg(proname, ', ') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname not like 'billing\_%' and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%'
        or p.prosrc ilike '%billing%' or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')));
-  perform bl.ok('I2 only 0057''s two read models are views over billing tables',
+  perform bl.ok('I2 only the billing read models (0057, 0060) are views over billing tables',
     (select array_agg(viewname::text order by viewname) from pg_views where schemaname = 'public'
        and (definition ilike '%stripe%' or definition ilike '%entitlement%' or definition ~* '\mplans\M'))
-    = array['client_billing_status', 'client_entitlements']);
+    = array['billing_sync_health', 'client_billing_reconciliation', 'client_billing_status', 'client_entitlements']);
   perform bl.ok('I3 no portal view reads billing', not exists (select 1 from pg_views where schemaname = 'public'
     and viewname like 'portal\_%' and (definition ilike '%stripe%' or definition ilike '%invoice%' or definition ~* '\mplans\M'
     or definition ilike '%entitlement%')));

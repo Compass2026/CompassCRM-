@@ -107,6 +107,8 @@ export function fakeStripe({ mode = "test", achAvailable = true, searchLag = fal
     async get(path, params = {}) {
       calls.push(path);
       maybeFail(path);
+      // GET /v1/customers?limit=1: the reconciliation's key check.
+      if (path === "/v1/customers") return { object: "list", data: byKind("customer").slice(0, params.limit ?? 10).map(clone), has_more: false };
       const id = path.split("/").pop();
       if (!objects.has(id)) throw new StripeApiError(404, { error: { code: "resource_missing", message: `No such object: ${id}` } }, path);
       const o = clone(objects.get(id));
@@ -211,6 +213,7 @@ export function fakeStripe({ mode = "test", achAvailable = true, searchLag = fal
       return { subscription: sub.id, invoice: inv.id, payment_intent: pi.id };
     },
     fail(match, times = 1, status = 500) { failures.push({ match, times, status }); },
+    clearFailures() { failures.length = 0; },
     // An event carrying a snapshot of the object (possibly stale by delivery time).
     event(type, obj, { livemode = mode === "live", created = T0 + ++eventN } = {}) {
       return { id: `evt_${type.replace(/[^A-Za-z0-9]/g, "")}${eventN}${Math.random().toString(36).slice(2, 8)}`, object: "event", type,
