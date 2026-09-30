@@ -1,7 +1,15 @@
 # Billing and the shared service-role credential — options and recommendation
 
-Production-readiness review, Sept 30 2026. Status: **decision required from
-Tom (and ChatGPT's review). Nothing here is implemented yet.**
+Production-readiness review, Sept 30 2026.
+
+> **DECISION (approved Sept 30 2026 by Tom and ChatGPT):** Option A is
+> accepted **for Stripe TEST MODE only**. **Hard go-live rule:** no live
+> Stripe secret may ever be placed in the shared Supabase Edge Function /
+> Vault architecture. Before any real client billing (a recurring charge,
+> a card payment or an ACH debit), Option B must be implemented and
+> reviewed: a dedicated billing runtime, billing-only Stripe credentials
+> and a dedicated least-privilege database role. Option B is not
+> implemented yet and stays a production go-live blocker.
 
 ## The problem, exactly
 

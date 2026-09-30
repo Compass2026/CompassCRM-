@@ -417,10 +417,14 @@ automation log. On any red: Reconcile This Client, then read the result.
 
 ## 16. Remaining blockers
 
-1. **Agreements.** No client's terms are known (§ 4–5). Hard gate for 0062.
-2. **The service-role decision** (§ 8). Option A needs Tom's written
-   acceptance for test mode; Option B is required before live.
-3. **Stripe test credentials, the webhook endpoint and ACH** (§ 10). Tom.
+1. **Agreements.** No client's terms are known (§ 4–5). Hard gate for 0062;
+   the questions are in `docs/active-client-agreement-questions.md`. No
+   production agreement is created until Tom provides the terms.
+2. **The service-role decision** (§ 8). Decided Sept 30 2026: Option A is
+   approved for test mode only. **Option B remains a hard go-live blocker**:
+   no live Stripe secret may go into the shared Supabase architecture.
+3. **Stripe test credentials, the webhook endpoint and ACH** (§ 10). Tom,
+   following `docs/stripe-test-mode-operator-checklist.md`.
 4. **`BILLING_RECONCILE_SECRET`** in Vault. Tom generates it.
 5. **Production type regeneration** after the migrations. The branch types
    were matched by hand against the replay.
@@ -493,7 +497,7 @@ signed off by Tom.
 | Active client agreements entered | BLOCKED | no terms known (§ 4–5); Tom |
 | Entitlements verified | MANUAL ACTION REQUIRED | `04_validate.sql` on production after the agreements |
 | Security-definer audit passed | PASS | § 7; 18 regression checks; hardening in 0062 |
-| Service-role isolation decision made | BLOCKED | Tom + ChatGPT review of `docs/billing-service-role.md` |
+| Service-role isolation decision made | PASS (test mode) / BLOCKED (live) | Approved Sept 30 2026: Option A for Stripe TEST MODE only. Hard rule: no live Stripe secret in the shared Edge Function / Vault architecture. Option B (dedicated billing runtime, billing-only Stripe credentials, least-privilege database role) must be built and reviewed before any real billing. |
 | Stripe test lifecycle passed | BLOCKED | rehearsal PASS (17); the real test-mode run waits on deployment and keys |
 | Failure-path tests passed | BLOCKED | rehearsal PASS; real test mode pending |
 | Portal tests passed | BLOCKED | browser + sandbox PASS; real test mode pending |

@@ -279,8 +279,13 @@ pins `search_path = public, pg_temp` —, the tested rollback in
 test:billing-rehearsal`, the deployment order and the go-live checklist);
 `docs/billing-agreement-inventory.md` (no client's terms are recorded
 anywhere yet); `docs/billing-service-role.md` (the Stripe key is in Vault,
-readable by every Edge Function and the worker's SQL: Option A for test
-mode, Option B before live — not yet decided). Every Edge Function
+readable by every Edge Function and the worker's SQL). **Decided Sept 30
+2026: Option A for Stripe TEST MODE only; no live Stripe secret may ever go
+into the shared Edge Function / Vault architecture — Option B (dedicated
+billing runtime, billing-only Stripe credentials, least-privilege database
+role) is a hard go-live blocker, not yet built.** Operator steps:
+`docs/stripe-test-mode-operator-checklist.md`; open questions:
+`docs/active-client-agreement-questions.md`. Every Edge Function
 shares the service-role key, so isolation between functions is code review
 — a production-blocking follow-up in `docs/billing.md`. **Do not add Stripe
 secrets or deploy either function outside the runbook; test mode only.** No
