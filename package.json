@@ -11,6 +11,7 @@
     "test:reporting-ui": "node tests/reporting-ui.mjs",
     "build-brief": "node --no-warnings scripts/build-brief.mjs",
     "test:sandbox": "scripts/test-portal-sandbox.sh",
+    "test:billing-rollback": "scripts/test-billing-rollback.sh",
     "test:tasks-ui": "scripts/test-tasks-ui.sh",
     "test:posts-ui": "UI_SPEC=tests/posts-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-use-ui": "UI_SPEC=tests/creative-use-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
