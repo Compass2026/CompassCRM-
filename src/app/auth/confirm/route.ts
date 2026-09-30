@@ -1,16 +1,22 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { UPDATE_PASSWORD_PATH, safeNextPath } from "@/lib/password-recovery";
 
 // Handles both Supabase auth callback styles:
 // - PKCE flow (default email templates): ?code=...
 // - token-hash links (customized templates): ?token_hash=...&type=...
+// A password-reset link carries next=/update-password; a token-hash recovery
+// link goes there whatever next says. next is only ever a same-site path.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = searchParams.get("next") ?? "/";
+  const next =
+    type === "recovery"
+      ? UPDATE_PASSWORD_PATH
+      : safeNextPath(searchParams.get("next"));
 
   const supabase = await createClient();
 
