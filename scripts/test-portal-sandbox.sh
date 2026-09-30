@@ -160,3 +160,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_reconciliat
 # and billing in the client portal (own client only, client-safe fields,
 # read-only, external arrangements, live / test mode).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_entitlements_portal.test.sql"
+# Security-definer hardening (production-readiness review): pinned
+# search_path with pg_temp last (temp tables cannot shadow), no PUBLIC / anon
+# execution, signed-in users reach only the self-scoping helpers, service-only
+# functions re-check their session, the planners are not API-callable.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_security_definer.test.sql"

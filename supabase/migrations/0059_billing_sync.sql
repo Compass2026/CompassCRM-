@@ -55,16 +55,16 @@ create index stripe_events_pending on stripe_events (received_at) where status i
 -- PostgREST's login with the service role: an Edge Function. The worker's SQL
 -- (session_user postgres) never is, whatever role it switches to.
 create function billing_caller_is_service() returns boolean
-language sql stable set search_path = public as $$
+language sql stable set search_path = public, pg_temp as $$
   select session_user = 'authenticator' and coalesce(current_setting('role', true), '') = 'service_role'
 $$;
 -- ...inside a billing sync function's transaction.
 create function billing_sync_active() returns boolean
-language sql stable set search_path = public as $$
+language sql stable set search_path = public, pg_temp as $$
   select billing_caller_is_service() and coalesce(current_setting('compass.billing_sync', true), '') = 'on'
 $$;
 create function billing_caller_is_superuser() returns boolean
-language sql stable set search_path = public, pg_catalog as $$
+language sql stable set search_path = pg_catalog, public, pg_temp as $$
   select coalesce((select rolsuper from pg_roles where rolname = session_user), false)
 $$;
 revoke all on function billing_caller_is_service() from public, anon, authenticated;
@@ -73,7 +73,7 @@ revoke all on function billing_caller_is_superuser() from public, anon, authenti
 
 -- ── 3. The mirror guard ──────────────────────────────────────────────────────
 create function billing_mirror_guard() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if billing_sync_active() or billing_caller_is_superuser() then
     return case when tg_level = 'ROW' then coalesce(new, old) end;
@@ -105,7 +105,7 @@ end $$;
 -- time the object was read from Stripe): concurrent or reordered syncs
 -- converge on the newest read. Returns the written row (NULL when stale).
 create function billing_upsert(p_table text, p_keys text[], p_row jsonb)
-returns jsonb language plpgsql set search_path = public as $$
+returns jsonb language plpgsql set search_path = public, pg_temp as $$
 declare
   cols text[];
   v_written jsonb;
@@ -131,7 +131,7 @@ end $$;
 -- sessions exist because Compass linked or created them. Returns
 -- 'written' | 'stale' | 'missing'.
 create function billing_update(p_table text, p_key text, p_row jsonb)
-returns text language plpgsql set search_path = public as $$
+returns text language plpgsql set search_path = public, pg_temp as $$
 declare
   cols text[];
   n int;
@@ -157,7 +157,7 @@ end $$;
 -- whose customer is not linked (or unlinked) is not Compass's and is
 -- skipped; one whose mode differs from its customer's is refused.
 create function billing_owner(p_customer text, p_livemode boolean, out client_id uuid, out outcome text)
-language plpgsql stable set search_path = public as $$
+language plpgsql stable set search_path = public, pg_temp as $$
 declare c record;
 begin
   select sc.client_id, sc.livemode, sc.unlinked_at into c from stripe_customers sc where sc.stripe_customer_id = p_customer;
@@ -189,7 +189,7 @@ revoke all on function billing_owner(text, boolean) from public, anon, authentic
 -- Returns [{op, id, result}] with result written | stale | unlinked |
 -- mode_mismatch | missing | missing_payment | kept_not_draft | deleted.
 create function billing_sync_apply(p jsonb) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   o jsonb;
   r jsonb;
@@ -322,7 +322,7 @@ end $$;
 -- active link for the client in that mode (23505); an offboarded client is
 -- refused. Subscriptions and invoices are imported by the sync layer after.
 create function billing_link_customer(p jsonb) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_client uuid := (p ->> 'client_id')::uuid;
   v_row jsonb := p -> 'row';
@@ -352,7 +352,7 @@ end $$;
 -- transaction's start). Returns {claimed: true, attempt} to the one
 -- delivery that may work it, or {claimed: false, state: done | in_progress}.
 create function billing_event_begin(p jsonb, p_lease_seconds int default 300) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_attempt int;
   v_status text;
@@ -384,7 +384,7 @@ end $$;
 -- reason. {ok: false} when the claim was lost (its lease expired and another
 -- delivery took it); the work was idempotent either way.
 create function billing_event_finish(p_id text, p_attempt int, p_status text, p_reason text default null) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare n int;
 begin
   if not billing_caller_is_service() then
@@ -406,7 +406,7 @@ end $$;
 -- Fail the attempt that holds the claim: the error is kept and the event is
 -- open for Stripe's retry (or reconciliation's replay).
 create function billing_event_fail(p_id text, p_attempt int, p_error text) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare n int;
 begin
   if not billing_caller_is_service() then

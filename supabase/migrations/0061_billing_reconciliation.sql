@@ -94,7 +94,7 @@ end $$;
 -- A result is a record of what happened: never changed or removed. A run is
 -- changed only while it is running (by billing_reconcile_finish).
 create function billing_reconciliation_immutable() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if billing_caller_is_superuser() then return coalesce(new, old); end if;
   if tg_table_name = 'billing_reconciliation_runs' and tg_op = 'UPDATE' and old.status = 'running' then
@@ -113,7 +113,7 @@ create trigger billing_reconciliation_results_immutable before update or delete 
 -- for 30 minutes is closed as failed first (its function died); a live run in
 -- the same mode refuses the new one (55P03).
 create function billing_reconcile_begin(p jsonb) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_id uuid;
   v_live boolean := (p ->> 'livemode')::boolean;
@@ -148,7 +148,7 @@ end $$;
 -- changes, objects_examined, attention_reasons, warnings, error}. The client
 -- must own that customer in the run's mode.
 create function billing_reconcile_client(p jsonb) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_live boolean;
 begin
   perform billing_require_service();
@@ -176,7 +176,7 @@ end $$;
 -- objects_examined, records_changed, warnings, failures, events_recovered,
 -- summary, error}. Only a running run is finished, once.
 create function billing_reconcile_finish(p jsonb) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare n int;
 begin
   perform billing_require_service();
@@ -207,12 +207,12 @@ end $$;
 -- mean Stripe's data did not change. A subscription's digest includes its
 -- items, an invoice's its lines, so one changed object counts once.
 create function billing_row_digest(r jsonb) returns text
-language sql immutable set search_path = public as $$
+language sql immutable set search_path = public, pg_temp as $$
   select md5((r - array['id', 'created_at', 'updated_at', 'stripe_synced_at', 'subscription_id', 'invoice_id'])::text)
 $$;
 
 create function billing_mirror_fingerprint(p_client uuid, p_livemode boolean) returns jsonb
-language sql stable set search_path = public as $$
+language sql stable set search_path = public, pg_temp as $$
   select jsonb_build_object(
     'customer', coalesce((select jsonb_object_agg(c.stripe_customer_id, billing_row_digest(to_jsonb(c)))
       from stripe_customers c where c.client_id = p_client and c.livemode = p_livemode), '{}'),
@@ -235,7 +235,7 @@ $$;
 -- The Stripe Products the catalog maps (packages and one-time items) in a
 -- mode, and every Price on them.
 create function billing_catalog_fingerprint(p_livemode boolean) returns jsonb
-language sql stable set search_path = public as $$
+language sql stable set search_path = public, pg_temp as $$
   with mapped as (
     select stripe_product_id from billing_packages where stripe_product_id is not null
     union select stripe_product_id from billing_one_time_items where stripe_product_id is not null)
@@ -281,7 +281,7 @@ grant select on client_billing_reconciliation, billing_sync_health to authentica
 -- BILLING_RECONCILE_SECRET (the function's own check). Without the secret it
 -- does nothing. docs/billing-cutover.md schedules it daily after cutover.
 create function billing_fire_reconciliation() returns bigint
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 declare
   v_secret text := get_secret('BILLING_RECONCILE_SECRET');
   v_request bigint;

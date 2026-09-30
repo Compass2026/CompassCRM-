@@ -47,7 +47,7 @@ returns table (
   package_id uuid,
   sort_order int
 )
-language sql stable security invoker set search_path = public as $$
+language sql stable security invoker set search_path = public, pg_temp as $$
   select e.client_id,
          e.service_key,
          e.service_name,
@@ -109,7 +109,7 @@ returns table (
   remaining int,
   over_allocation int
 )
-language sql stable security invoker set search_path = public as $$
+language sql stable security invoker set search_path = public, pg_temp as $$
   with b as (
     select m as m_start, (m + interval '1 month')::date as m_end
     from (select date_trunc('month', coalesce(p_month, (now() at time zone 'America/Chicago')::date))::date as m) x
@@ -209,7 +209,7 @@ comment on table automation_entitlement_log is
 -- agreement, a disabled quota or a used-up allocation → no task, logged.
 create or replace function create_weekly_blog_tasks()
 returns integer
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_client record;
   v_usage record;
@@ -264,7 +264,7 @@ revoke execute on function create_weekly_blog_tasks() from public, anon, authent
 -- way, for a person to act on.
 create or replace function fire_website_updates(p_period date default date_trunc('month', now())::date)
 returns integer
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_cycle record;
   v_alloc int;
@@ -336,7 +336,7 @@ revoke all on client_agreement_events from public, anon, authenticated;
 grant select on client_agreement_events to authenticated;
 
 create function record_client_agreement_event() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_row jsonb := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
   v_before jsonb;
@@ -395,7 +395,7 @@ returns table (
   ends_at timestamptz,
   can_manage_billing boolean
 )
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select
     b.client_id,
     pl.collection,
@@ -440,7 +440,7 @@ returns table (
   period text,
   sort_order int
 )
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select e.client_id, e.service_key, e.service_name, e.kind, e.quantity, e.unit, e.period, e.sort_order
   from client_entitlements_for(portal_client_id()) e
   where portal_client_id() is not null and e.enabled
@@ -491,6 +491,24 @@ begin
   end loop;
 end $$;
 
+-- ── Part 3: security-definer hardening (production-readiness review) ────────
+-- Every billing function pins search_path to `public, pg_temp` (0058 – 0062):
+-- with pg_temp named last, a session's temporary objects can never shadow a
+-- public table or function inside a security-definer body (Postgres searches
+-- pg_temp first for relations when it is not named). The planners and the
+-- agreement-history trigger run only from pg_cron (as the owner) or as a
+-- trigger, so no API role needs to execute them — not even service_role,
+-- whose default grant is removed here.
+revoke all on function create_weekly_blog_tasks() from public, anon, authenticated, service_role;
+revoke all on function fire_website_updates(date) from public, anon, authenticated, service_role;
+revoke all on function record_client_agreement_event() from public, anon, authenticated, service_role;
+alter function create_weekly_blog_tasks() set search_path = public, pg_temp;
+alter function fire_website_updates(date) set search_path = public, pg_temp;
+-- The two identity helpers every portal view and every team policy rests on
+-- (0036, 0037) get the same pin; their bodies are unchanged.
+alter function portal_client_id() set search_path = public, pg_temp;
+alter function is_team() set search_path = public, pg_temp;
+
 -- ── Verify ───────────────────────────────────────────────────────────────────
 do $$
 declare v_bad text;
@@ -533,6 +551,29 @@ begin
   if v_bad is not null then raise exception '0062: a planning function reads billing: %', v_bad; end if;
   if pg_get_viewdef('client_entitlements'::regclass) ~* '(stripe_|subscriptions|invoices|payments|billing_status|billing_attention)' then
     raise exception '0062: client_entitlements reads billing';
+  end if;
+
+  -- Security-definer rules for everything billing (0058 – 0062) and the
+  -- planners: search_path ends in pg_temp; PUBLIC and anon never execute; a
+  -- signed-in user executes only the three read helpers that answer for
+  -- themselves (billing_livemode, and the portal row functions scoped to
+  -- portal_client_id()).
+  select string_agg(p.proname, ', ') into v_bad
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.prosecdef
+    and (p.proname like 'billing\_%' or p.proname like 'portal\_billing%' or p.proname like 'portal\_entitlement%'
+         or p.proname in ('create_weekly_blog_tasks', 'fire_website_updates', 'record_client_agreement_event'))
+    and (p.proconfig is null
+         or not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%pg\_temp')
+         or has_function_privilege('anon', p.oid, 'execute')
+         or exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                    where a.grantee = 0 and a.privilege_type = 'EXECUTE')
+         or (has_function_privilege('authenticated', p.oid, 'execute')
+             and p.proname not in ('billing_livemode', 'portal_billing_summary_row', 'portal_entitlement_rows')));
+  if v_bad is not null then raise exception '0062: security-definer function outside the hardened pattern: %', v_bad; end if;
+  if has_function_privilege('service_role', 'create_weekly_blog_tasks()', 'execute')
+     or has_function_privilege('service_role', 'fire_website_updates(date)', 'execute') then
+    raise exception '0062: the planners are callable through the API';
   end if;
 
   if has_function_privilege('anon', 'client_entitlements_for(uuid)', 'execute')

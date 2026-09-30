@@ -37,7 +37,7 @@ alter table payments
 -- An external payment never changes after it is recorded, except to be voided
 -- once. (Stripe payments follow Stripe through the sync.)
 create function billing_external_payment_immutable() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if old.source = 'external' and (
        (to_jsonb(new) - array['voided_at', 'voided_by', 'void_reason', 'updated_at'])
@@ -85,7 +85,7 @@ create trigger billing_audit_events_sync_guard_truncate before truncate on billi
   for each statement execute function billing_mirror_guard();
 
 create function billing_audit_append_only() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if billing_caller_is_superuser() then return coalesce(new, old); end if;
   raise exception 'The billing audit trail is append-only' using errcode = 'check_violation';
@@ -96,7 +96,7 @@ create trigger billing_audit_events_append_only before update or delete on billi
 
 -- ── 3. Functions (Edge Function session only) ────────────────────────────────
 create function billing_require_service() returns void
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if not billing_caller_is_service() then
     raise exception 'Billing operations are for the Stripe functions only' using errcode = '42501';
@@ -107,7 +107,7 @@ revoke all on function billing_require_service() from public, anon, authenticate
 
 -- p = {client_id, action, actor_kind, actor_team_member_id | actor_portal_user_id, livemode, subject, detail}
 create function billing_audit(p jsonb) returns uuid
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_id uuid;
 begin
   perform billing_require_service();
@@ -126,7 +126,7 @@ end $$;
 -- customer must be the client's (composite key); the audit row is written in
 -- the same transaction.
 create function billing_record_checkout(p jsonb) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_id uuid;
 begin
   perform billing_require_service();
@@ -153,7 +153,7 @@ end $$;
 -- currency, paid_at, external_method, reference, notes, recorded_by,
 -- client_request_id}. The same request id twice records one payment.
 create function billing_record_external_payment(p jsonb) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_id uuid;
   v_existing uuid;
@@ -190,7 +190,7 @@ end $$;
 -- Void an external payment (the correction path). p = {client_id,
 -- payment_id, voided_by, reason}.
 create function billing_void_external_payment(p jsonb) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare n int;
 begin
   perform billing_require_service();

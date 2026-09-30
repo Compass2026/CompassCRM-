@@ -87,7 +87,7 @@ drop type payment_method;
 -- ── 3. Mode ──────────────────────────────────────────────────────────────────
 -- Which Stripe mode the read models show. Test unless exactly {"livemode": true}.
 create function billing_livemode() returns boolean
-language sql stable set search_path = public as $$
+language sql stable set search_path = public, pg_temp as $$
   select coalesce((select value ->> 'livemode' = 'true' from app_settings where key = 'billing'), false)
 $$;
 comment on function billing_livemode() is
@@ -95,7 +95,7 @@ comment on function billing_livemode() is
 
 -- Monthly-normalised amount of one price line, for MRR. NULL for one-time prices.
 create function billing_monthly_cents(p_amount bigint, p_quantity int, p_interval text, p_interval_count int)
-returns numeric language sql immutable set search_path = public as $$
+returns numeric language sql immutable set search_path = public, pg_temp as $$
   -- periods per year / 12, kept as an exact fraction (a year is 1/12 of a month's rate).
   select p_amount::numeric * coalesce(p_quantity, 1)
          * case p_interval when 'month' then 12 when 'year' then 1 when 'week' then 52 when 'day' then 365 end
@@ -104,7 +104,7 @@ $$;
 
 -- Stamps updated_at and the signed-in teammate (NULL for a function or the worker).
 create function billing_stamp_updated() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   new.updated_at := now();
   new.updated_by := (select id from team_members where auth_user_id = auth.uid());
@@ -114,7 +114,7 @@ end $$;
 -- A client-owned billing row never changes client, and its Stripe id never
 -- changes (argument: the id column). A customer belongs to one client forever.
 create function billing_owner_immutable() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if new.client_id is distinct from old.client_id
      or to_jsonb(new) ->> tg_argv[0] is distinct from to_jsonb(old) ->> tg_argv[0] then
@@ -234,7 +234,7 @@ create table billing_one_time_items (
 
 -- A Stripe Product belongs to at most one Compass catalog entry.
 create function billing_product_single_owner() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if new.stripe_product_id is not null and (
        (tg_table_name = 'billing_packages'
@@ -667,7 +667,7 @@ create trigger billing_package_prices_owner before update on billing_package_pri
 -- is_team_admin(). Invoker rights: a teammate can read team_members (so the
 -- answer is theirs); anyone else reads nothing and is not an admin.
 create function is_team_admin() returns boolean
-language sql stable set search_path = public as $$
+language sql stable set search_path = public, pg_temp as $$
   select exists (select 1 from team_members where auth_user_id = auth.uid() and role = 'admin')
 $$;
 revoke all on function is_team_admin() from public, anon;
@@ -681,7 +681,7 @@ comment on function is_team_admin() is
 -- Sessions with no signed-in user (Supabase Auth's own linking trigger, the
 -- service role, the worker's SQL, migrations) are not gated here.
 create function team_members_admin_guard() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql set search_path = public, pg_temp as $$
 begin
   if auth.uid() is null or is_team_admin() then
     return coalesce(new, old);

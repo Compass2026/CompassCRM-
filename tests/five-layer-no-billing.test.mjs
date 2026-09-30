@@ -17,6 +17,7 @@ const FIVE_LAYER = [
   "supabase/functions/post-drafter",
   "supabase/functions/post-publisher",
   "supabase/functions/source-assets",
+  "supabase/functions/creative-engine",   // Creative Engine step 2 (its own branch; checked once it lands)
   "src/components/authority",
   "src/components/creative-use",
   "src/lib/client-intelligence.ts",
@@ -30,6 +31,7 @@ const FIVE_LAYER = [
   "src/lib/authority-view.ts",
   "src/lib/drafter-run.ts",
   "src/lib/creative-use.ts",
+  "src/lib/creative-preview.ts",
   "src/lib/publisher.ts",
   "src/lib/social-posts.ts",
   "src/lib/entitlements.ts",
