@@ -26,8 +26,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0057` (billing foundation, B1), `0058` (Stripe sync
-  boundary, B2) and `0059` (billing operations, B3) are written but **not yet
-  applied** (they take their numbers at merge time; `docs/billing-cutover.md`); `0056` (Canva folder ids on the client record) was
+  boundary, B2), `0059` (billing operations, B3) and `0060` (billing
+  reconciliation, B4) are written but **not yet applied** (they take their numbers at merge time; `docs/billing-cutover.md`); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -238,7 +238,19 @@ append-only; Billing tab (Payment Link Ready, customer, entitlements with
 source, invoices, payments with individual refunds, history), Settings ›
 Billing catalog, public `/checkout/complete` and `/checkout/canceled`.
 Members read everything and edit agreements / overrides; portal contacts
-can only open their own client's Customer Portal. Every Edge Function
+can only open their own client's Customer Portal. **B4 = 0060 +
+`stripe-reconcile`** (written and tested, **not applied / not deployed**):
+the safety net behind the webhook, reusing the shared sync (never a second
+one) — mapped catalog products and prices, every linked customer
+(`resyncCustomer`, invoices Stripe no longer lists, non-final Checkout
+Sessions), then failed / stale webhook events re-synced from Stripe's
+current state; repairs measured by mirror fingerprints; per-run and
+per-client history (`billing_reconciliation_runs` / `_results`,
+`client_billing_reconciliation`, `billing_sync_health`); callers are the
+scheduler (`BILLING_RECONCILE_SECRET`; daily schedule enabled only at
+cutover) or an admin (Settings › Run Billing Reconciliation, Billing tab ›
+Reconcile This Client). Stripe wins; nothing is written to Stripe, and
+agreements, entitlements and external payments are never touched. Every Edge Function
 shares the service-role key, so isolation between functions is code review
 — a production-blocking follow-up in `docs/billing.md`. **Do not add Stripe
 secrets or deploy either function outside the runbook; test mode only.** No

@@ -20,6 +20,7 @@ on:
           - client-provision
           - portal-invite
           - stripe-billing
+          - stripe-reconcile
           - source-assets
       expected_sha:
         description: "Exact main commit SHA approved for deployment"

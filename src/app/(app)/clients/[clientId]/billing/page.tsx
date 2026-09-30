@@ -24,7 +24,9 @@ import {
   resyncStripeCustomerAction,
   voidExternalPaymentAction,
 } from "@/app/billing-actions";
+import { reconcileClientAction } from "@/app/billing-reconcile-actions";
 import { CopyLinkButton } from "@/components/billing/copy-link-button";
+import { StripeSyncCard } from "@/components/billing/stripe-sync-card";
 import { CustomerLinkSearch } from "@/components/billing/customer-link-search";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -147,6 +149,10 @@ export default async function BillingPage({
       .order("created_at", { ascending: false })
       .limit(20),
     supabase.from("app_settings").select("value").eq("key", "billing_portal").maybeSingle(),
+  ]);
+  const [{ data: syncHealth }, { data: reconciled }] = await Promise.all([
+    supabase.from("billing_sync_health").select("*").maybeSingle(),
+    supabase.from("client_billing_reconciliation").select("*").eq("client_id", clientId).maybeSingle(),
   ]);
 
   // Prices approved for the agreed package: the package's standard prices, or
@@ -275,6 +281,15 @@ export default async function BillingPage({
           </CardContent>
         </Card>
       </div>
+
+      <StripeSyncCard
+        health={syncHealth}
+        result={reconciled}
+        livemode={livemode}
+        scope="client"
+        action={isAdmin && customer && !offboarded ? reconcileClientAction.bind(null, clientId) : undefined}
+        actionLabel="Reconcile This Client"
+      />
 
       {/* ── Stripe customer ───────────────────────────────────────────── */}
       <Card data-card="customer">

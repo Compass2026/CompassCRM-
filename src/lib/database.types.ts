@@ -767,6 +767,155 @@ export type Database = {
           },
         ]
       }
+      billing_reconciliation_results: {
+        Row: {
+          attention_reasons: string[]
+          changes: Json
+          checked_at: string
+          client_id: string
+          error: string | null
+          livemode: boolean
+          objects_examined: number
+          records_changed: number
+          run_id: string
+          status: string
+          stripe_customer_id: string
+          warnings: string[]
+        }
+        Insert: {
+          attention_reasons?: string[]
+          changes?: Json
+          checked_at?: string
+          client_id: string
+          error?: string | null
+          livemode: boolean
+          objects_examined?: number
+          records_changed?: number
+          run_id: string
+          status: string
+          stripe_customer_id: string
+          warnings?: string[]
+        }
+        Update: {
+          attention_reasons?: string[]
+          changes?: Json
+          checked_at?: string
+          client_id?: string
+          error?: string | null
+          livemode?: boolean
+          objects_examined?: number
+          records_changed?: number
+          run_id?: string
+          status?: string
+          stripe_customer_id?: string
+          warnings?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_reconciliation_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "billing_reconciliation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_reconciliation_runs: {
+        Row: {
+          completed_at: string | null
+          customers_examined: number
+          customers_repaired: number
+          error: string | null
+          events_recovered: number
+          failures: number
+          id: string
+          livemode: boolean
+          objects_examined: number
+          records_changed: number
+          requested_by: string | null
+          scope_client_id: string | null
+          started_at: string
+          status: string
+          summary: Json
+          trigger: string
+          warnings: number
+        }
+        Insert: {
+          completed_at?: string | null
+          customers_examined?: number
+          customers_repaired?: number
+          error?: string | null
+          events_recovered?: number
+          failures?: number
+          id?: string
+          livemode: boolean
+          objects_examined?: number
+          records_changed?: number
+          requested_by?: string | null
+          scope_client_id?: string | null
+          started_at?: string
+          status?: string
+          summary?: Json
+          trigger: string
+          warnings?: number
+        }
+        Update: {
+          completed_at?: string | null
+          customers_examined?: number
+          customers_repaired?: number
+          error?: string | null
+          events_recovered?: number
+          failures?: number
+          id?: string
+          livemode?: boolean
+          objects_examined?: number
+          records_changed?: number
+          requested_by?: string | null
+          scope_client_id?: string | null
+          started_at?: string
+          status?: string
+          summary?: Json
+          trigger?: string
+          warnings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
+            columns: ["scope_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
+            columns: ["scope_client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_runs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_assets: {
         Row: {
           client_id: string
@@ -5897,6 +6046,41 @@ export type Database = {
           },
         ]
       }
+      billing_sync_health: {
+        Row: {
+          failed_events: number | null
+          last_event_at: string | null
+          last_run_completed_at: string | null
+          last_run_customers: number | null
+          last_run_failures: number | null
+          last_run_id: string | null
+          last_run_records_changed: number | null
+          last_run_started_at: string | null
+          last_run_status: string | null
+          last_run_trigger: string | null
+          last_run_warnings: number | null
+          livemode: boolean | null
+          stuck_events: number | null
+        }
+        Relationships: []
+      }
+      client_billing_reconciliation: {
+        Row: {
+          attention_reasons: string[] | null
+          changes: Json | null
+          checked_at: string | null
+          client_id: string | null
+          error: string | null
+          livemode: boolean | null
+          records_changed: number | null
+          run_id: string | null
+          status: string | null
+          stripe_customer_id: string | null
+          trigger: string | null
+          warnings: string[] | null
+        }
+        Relationships: []
+      }
       client_billing_status: {
         Row: {
           agreement_package_id: string | null
@@ -6339,6 +6523,12 @@ export type Database = {
       }
       billing_caller_is_service: { Args: never; Returns: boolean }
       billing_caller_is_superuser: { Args: never; Returns: boolean }
+      billing_catalog_fingerprint: {
+        Args: {
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
       billing_event_begin: {
         Args: {
           p: Json
@@ -6363,6 +6553,7 @@ export type Database = {
         }
         Returns: Json
       }
+      billing_fire_reconciliation: { Args: never; Returns: number }
       billing_link_customer: {
         Args: {
           p: Json
@@ -6370,6 +6561,13 @@ export type Database = {
         Returns: Json
       }
       billing_livemode: { Args: never; Returns: boolean }
+      billing_mirror_fingerprint: {
+        Args: {
+          p_client: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
       billing_monthly_cents: {
         Args: {
           p_amount: number
@@ -6382,6 +6580,24 @@ export type Database = {
       billing_owner: {
         Args: { p_customer: string; p_livemode: boolean }
         Returns: Record<string, unknown>
+      }
+      billing_reconcile_begin: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_reconcile_client: {
+        Args: {
+          p: Json
+        }
+        Returns: undefined
+      }
+      billing_reconcile_finish: {
+        Args: {
+          p: Json
+        }
+        Returns: undefined
       }
       billing_record_checkout: {
         Args: {
@@ -6396,6 +6612,12 @@ export type Database = {
         Returns: Json
       }
       billing_require_service: { Args: never; Returns: undefined }
+      billing_row_digest: {
+        Args: {
+          r: Json
+        }
+        Returns: string
+      }
       billing_sync_active: { Args: never; Returns: boolean }
       billing_sync_apply: {
         Args: {

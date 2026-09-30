@@ -1,7 +1,7 @@
-# Billing cutover runbook (B1 + B2 + B3, test mode)
+# Billing cutover runbook (B1 – B4, test mode)
 
-How migrations 0057 / 0058 / 0059, the app, and the Stripe Edge Functions
-go to production together. Nothing here has been run. Architecture:
+How migrations 0057 / 0058 / 0059 / 0060, the app, and the Stripe Edge
+Functions go to production together. Nothing here has been run. Architecture:
 `docs/billing.md`; review: draft PR Compass2026/CompassCRM-#86.
 
 **Why this must be coordinated.** 0057 drops `subscriptions.paid_status`,
@@ -19,13 +19,14 @@ link from the app, all in Stripe test mode.
 ## 0. Preconditions (all must hold)
 
 1. PR #86 reviewed and approved; the Five Layer / Authority migrations are
-   reconciled and 0057 / 0058 / 0059 renumbered after the last applied migration
+   reconciled and 0057 – 0060 renumbered after the last applied migration
    (rename the files, rerun `npm run test:sandbox`; nothing inside them
    depends on their number).
 2. CI green on the final head: `npm test`, lint, `tsc`, build. Locally:
    `npm run test:sandbox`, `npm run test:stripe-webhook`,
-   `npm run test:stripe-billing`, `npm run test:billing-ui`,
-   `npm run test:billing-ops-ui`.
+   `npm run test:stripe-billing`, `npm run test:stripe-reconcile`,
+   `npm run test:billing-ui`, `npm run test:billing-ops-ui`,
+   `npm run test:billing-reconcile-ui`.
 3. Production billing tables still empty. 0057 refuses to run otherwise;
    check first:
    `select (select count(*) from stripe_customers) + (select count(*) from subscriptions) + (select count(*) from payments) + (select count(*) from stripe_events) + (select count(*) from plans);`
@@ -41,9 +42,9 @@ link from the app, all in Stripe test mode.
 
 ## 1. Database (Supabase MCP `apply_migration`, one migration at a time)
 
-1. Apply 0057, then 0058, then 0059. Each runs its own verify block and
-   aborts on any deviation.
-2. Record the three versions in `docs/portal-reconciliation.md` and `AGENTS.md`.
+1. Apply 0057, then 0058, then 0059, then 0060. Each runs its own verify
+   block and aborts on any deviation.
+2. Record the four versions in `docs/portal-reconciliation.md` and `AGENTS.md`.
 3. Verify on production:
    - The recorded SQL equals the files (md5), including every function body.
    - `cron.job` has no `billing-daily-past-due`.
@@ -57,6 +58,10 @@ link from the app, all in Stripe test mode.
      - The worker's SQL, a team JWT and anon calling
        `billing_record_external_payment`, `billing_record_checkout` or
        `billing_audit`, or writing `billing_audit_events`.
+     - The same callers starting a reconciliation run
+       (`billing_reconcile_begin`) or writing `billing_reconciliation_runs`.
+   - `select count(*) from cron.job where command like '%reconcil%'` returns 0
+     (the schedule is enabled in section 4, not by the migration).
    - `select count(*) from service_catalog` returns 14.
    - The single production admin still reads `is_team_admin()` = true.
 
@@ -94,6 +99,9 @@ link from the app, all in Stripe test mode.
      list in a reviewed PR first.
 3. Check it with an unsigned POST: the answer should be `503
    stripe_not_configured` until the secrets exist.
+4. **`stripe-reconcile`**: deploy with the default `verify_jwt = true`
+   through `deploy-supabase-function.yml` (on its function list). Check it:
+   a POST with no secret and no JWT answers 401; with a member's JWT 403.
 
 ## 4. Stripe (test mode) and secrets
 
@@ -116,6 +124,8 @@ link from the app, all in Stripe test mode.
    - `APP_BASE_URL` (optional): the app's https origin for the Checkout
      return pages and the portal's return link. Default
      `https://compass-crm-ten.vercel.app`.
+   - `BILLING_RECONCILE_SECRET`: a new random value (32+ bytes), used only
+     by the scheduler's call to `stripe-reconcile`.
 3. Leave `app_settings.billing` absent (test mode). A live key is refused
    (503) until an admin sets `{"livemode": true}`.
 4. In the Stripe dashboard (test mode) enable **ACH Direct Debit**
@@ -127,6 +137,12 @@ link from the app, all in Stripe test mode.
    Billing catalog: adds the packages, imports each product, approves the
    standard prices (one default), sets what each package includes, adds the
    one-time items, and presses **Configure Customer Portal**.
+6. **Reconciliation.** An admin presses Run Billing Reconciliation in
+   Settings › Billing; the run should complete with no failures. Then
+   schedule it daily (reconciliation is the safety net; do not make it more
+   frequent):
+   `select cron.schedule('billing-reconcile-daily', '17 7 * * *', 'select billing_fire_reconciliation()');`
+   The next morning the run table shows a Scheduled run.
 
 ## 5. Test-mode verification
 
@@ -143,6 +159,9 @@ link from the app, all in Stripe test mode.
    - that a second payment link for the subscribed client is refused
    - Manage Billing in Stripe opens the portal without cancel / plan change
    - an external payment recorded and voided, and `billing_audit_events`
+   - change a test subscription in the Stripe dashboard with the webhook
+     endpoint disabled, then Reconcile This Client: the change is repaired
+     and counted; a second run reports no differences
 4. Break it on purpose: pause the database or send a wrong signature. The
    events should read `failed` or return 400, and Stripe's retry (or the
    dashboard's "Resend") should recover them.
@@ -155,8 +174,10 @@ Write the down script and test it in the sandbox **before** cutover
 (`supabase/tests/sandbox` replay, then down, then the 0056 suites). It must
 restore 0056's state exactly:
 
-- Drop the 0059 functions, triggers, `billing_audit_events` and the new
-  `payments` columns, then the 0058 functions and triggers, then the 0057 views, functions,
+- Unschedule `billing-reconcile-daily` if it was scheduled, drop 0060's
+  views, functions and the two reconciliation tables, then the 0059
+  functions, triggers, `billing_audit_events` and the new `payments`
+  columns, then the 0058 functions and triggers, then the 0057 views, functions,
   triggers, restrictive `app_settings` policies, the `team_members` guard,
   and the new tables.
 - Recreate `stripe_customers`, `subscriptions`, `payments` and
@@ -177,6 +198,8 @@ The order depends on how far you got:
   - Disable the endpoint in the Stripe dashboard.
   - Redeploy `stripe-billing` as the 410 stub (the file is in git history
     at the B2 commit); the 0008 code is not to be redeployed.
+  - `stripe-reconcile` needs nothing: without the key it answers 503, and
+    the schedule is gone with its migration.
 - **Stripe:** B3 creates only test-mode objects (customers, prices, Checkout
   Sessions, a portal configuration); leave or archive them. Stripe keeps the
   events it could not deliver for three days.

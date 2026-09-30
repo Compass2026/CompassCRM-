@@ -8,13 +8,23 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 // and refuses anything their role does not allow. A plain server module, not
 // an action: callers are server actions that have already checked the caller.
 // Nothing about Stripe is decided here, and no Stripe key is ever in the app.
-export async function callStripeBilling(supabase: Supabase, body: Record<string, unknown>): Promise<BillingAnswer> {
+export function callStripeBilling(supabase: Supabase, body: Record<string, unknown>): Promise<BillingAnswer> {
+  return callBillingFunction(supabase, "stripe-billing", body);
+}
+
+// stripe-reconcile (B4) with the admin's own JWT: the same engine the
+// scheduler runs. It answers 202 {run_id} and works in the background.
+export function callStripeReconcile(supabase: Supabase, body: Record<string, unknown>): Promise<BillingAnswer> {
+  return callBillingFunction(supabase, "stripe-reconcile", body);
+}
+
+async function callBillingFunction(supabase: Supabase, name: "stripe-billing" | "stripe-reconcile", body: Record<string, unknown>): Promise<BillingAnswer> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session) return { status: 401, body: { error: "not_signed_in" } };
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stripe-billing`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/${name}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${session.access_token}`,

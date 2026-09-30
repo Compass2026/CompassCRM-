@@ -25,15 +25,15 @@ Reconciliation (B4) ──┴→ _shared sync → Stripe mirror (service role on
 | B1 | Schema: mirror, catalog, agreement, entitlements, read models | **0057 written, not applied**; review changes made (14-service catalog, `stripe_refunds`, admin-only financial configuration) |
 | B2 | Shared Stripe sync layer + corrected webhook | **0058 + `_shared/stripe/` + `stripe-webhook` written and tested, not applied / not deployed** |
 | B3 | Checkout, link existing customer, Customer Portal, billing screens | **0059 + `stripe-billing` + app screens written and tested, not applied / not deployed** |
-| B4 | Reconciliation | not started |
+| B4 | Reconciliation | **0060 + `stripe-reconcile` + Stripe sync screens written and tested, not applied / not deployed** |
 | B5 | Entitlement interface for the Five Layers + portal billing | not started |
 
 Everything stays in Stripe **test mode** until reviewed. **Do not add the
 Stripe secrets to Vault and do not deploy `stripe-billing` or
 `stripe-webhook` outside the cutover in `docs/billing-cutover.md`**: the
 deployed v2 / v1 are the 0008 code, which writes columns 0057 drops (both
-answer 500 without secrets, so today they do nothing). 0057, 0058 and 0059
-ship together with the app and both functions. Draft PR:
+answer 500 without secrets, so today they do nothing). 0057 – 0060 ship
+together with the app and the three functions. Draft PR:
 Compass2026/CompassCRM-#86.
 
 ## B1: migration 0057
@@ -588,3 +588,167 @@ changes an entitlement or stops work.
 - `npm run test:billing-ops-ui`: the screens in Chromium with the real
   handler and webhook behind the gateway (13 checks); screenshots in
   `docs/screenshots/billing/`.
+
+## B4: reconciliation (migration 0060, `stripe-reconcile`)
+
+Webhooks are the real-time path; reconciliation is the safety net that makes
+Compass converge on Stripe after a missed or failed webhook, an outage, an
+interrupted deployment, a change made by hand in Stripe, a customer linked
+with history, a Checkout Session that expired unseen, or a catalog change.
+It is **not a second sync**: every Stripe read and mirror write goes through
+the shared B2 layer (`_shared/stripe/sync.ts` → `billing_sync_apply`).
+Stripe wins; reconciliation never writes to Stripe and never changes an
+agreement, an entitlement or an external payment.
+
+### Architecture
+
+```
+scheduler (pg_cron → billing_fire_reconciliation, daily, after cutover)
+admin: Run Billing Reconciliation / Reconcile This Client
+   └→ stripe-reconcile (202 + background)
+        1. catalog: every mapped Stripe Product + all its Prices     ┐ fingerprint
+        2. each linked customer: resyncCustomer, invoices Stripe no   │ before / after
+           longer lists, non-final Checkout Sessions                  ┘ = repairs
+        3. webhook ledger: failed + stale-lease events, re-synced from Stripe now
+   └→ billing_reconciliation_runs / _results (0060)
+   └→ client_billing_status (unchanged) raises attention from the repaired mirror
+```
+
+- **`supabase/functions/stripe-reconcile/`**: `handler.ts` (who may call,
+  mode checks, begin, 202, background), `engine.ts` (the three passes, change
+  measurement, failure handling; pure helpers unit-tested), `store.ts` (the
+  stripe-billing store plus reconciliation reads and the 0060 functions),
+  `index.ts`. Deployed with `verify_jwt = true`.
+- **Measuring repairs without a second sync.** 0060's
+  `billing_mirror_fingerprint(client, mode)` returns one digest per mirrored
+  object (the row minus `id`, timestamps and `stripe_synced_at`; a
+  subscription includes its items, an invoice its lines), and
+  `billing_catalog_fingerprint(mode)` the same for mapped products and their
+  prices. The engine takes one before and one after re-reading; the
+  difference, by category (`subscription_updated`, `invoice_imported`,
+  `invoice_removed`, `payment_imported`, `refund_imported`,
+  `checkout_updated`, `catalog_product_updated`, `catalog_price_updated`, …),
+  is what the run repaired. A re-read that finds nothing new changes no digest,
+  so a second run reports zero. No Stripe payload is stored. A webhook that
+  lands during a run may be counted as a repair (documented, harmless).
+
+### Scheduling and authorization
+
+| Caller | How | Scope |
+| --- | --- | --- |
+| Scheduler | `billing_fire_reconciliation()` (0060) posts with the anon key (gateway) and header `x-billing-reconcile-secret` = Vault `BILLING_RECONCILE_SECRET` (compared in constant time). **Not scheduled yet**: the cutover runbook schedules it daily. | agency-wide |
+| Admin | their own JWT (`team_members.role = admin`), Settings › Billing **Run Billing Reconciliation** | agency-wide |
+| Admin | their own JWT, the client's Billing tab **Reconcile This Client** | one client |
+| Member, portal contact, stranger, anon | refused (403 / 401) before Stripe is called | — |
+
+The dedicated secret narrows who can trigger a run compared with the shared
+`SYNC_CRON_SECRET`, but anything that can read Vault (the service role, the
+worker's SQL as `postgres`) can read it; a run only re-reads Stripe and is
+idempotent, so the exposure is Stripe API usage. The shared service-role key
+residual (above) applies to 0060's functions too. One run at a time per
+mode (409 `run_in_progress`); a run left running 30 minutes is closed as
+failed when the next begins. A live key is refused until billing is switched
+to live, a test key once it is.
+
+### Run history (0060)
+
+- `billing_reconciliation_runs`: mode, trigger (`schedule` / `admin` /
+  `admin_client`), who, scope, status (`running`, `completed`,
+  `completed_with_errors`, `partial`, `failed`), started / completed,
+  `customers_examined`, `customers_repaired`, `objects_examined`,
+  `records_changed`, `warnings`, `failures`, `events_recovered`, `error`, and
+  `summary` (JSON: objects examined by kind, changes by category, the ledger
+  pass, up to 50 warnings and failures, customers skipped by the time limit).
+- `billing_reconciliation_results`: one row per client per run: customer,
+  status (`healthy` / `repaired` / `attention` / `failed`),
+  `records_changed`, `changes` by category, `objects_examined`, the client's
+  `attention_reasons` after the run (from `client_billing_status`),
+  warnings (`customer_deleted_in_stripe`, `checkout_missing:<id>`), error.
+- Both team-read, append-only (a run changes only while running), written
+  only by `billing_reconcile_begin` / `_client` / `_finish` in the function's
+  session through 0058's guard.
+- Read models: `client_billing_reconciliation` (each client's latest result
+  in the current mode: "Last reconciled", "Result") and `billing_sync_health`
+  (failed and stuck webhook events, the last agency-wide run).
+
+### What is reconciled
+
+1. **Catalog** (agency-wide runs): every Stripe Product a package or one-time
+   item maps, in the current mode, and every Price on it (paginated). An
+   archived / deleted product or price is mirrored as such; the Compass
+   mapping is **kept** and a warning (`catalog_price_archived`,
+   `catalog_product_archived`, `catalog_product_other_mode`) is shown on the
+   run for an admin.
+2. **Customers**: every active linked customer in the mode, least recently
+   reconciled first, **two at a time**. `resyncCustomer` re-reads the
+   customer, every subscription (`status=all`) with items, products and
+   prices, every invoice with its lines, every PaymentIntent with its latest
+   charge and every refund (all paginated). Then the invoices Compass holds
+   that Stripe no longer lists (re-read one by one: a deleted draft is
+   removed, as the webhook's `invoice.deleted` would), and Compass-created
+   Checkout Sessions that are open (whatever the local expiry says: Stripe
+   decides) or complete with the payment still settling. A customer deleted in
+   Stripe is marked deleted, flagged, and not listed further.
+3. **Webhook ledger** (agency-wide runs, last): up to 100 `failed` events and
+   `processing` events whose lease expired, oldest first, claimed through
+   `billing_event_begin`, re-synced from the object id (the stored payload is
+   never replayed; deletions use the existing deleted-object handling) and
+   finished `processed` / `ignored`, or failed again with the reason.
+   Unsupported events are `ignored`, never failures.
+
+Stripe faithfully mirrored means: two live subscriptions are both kept and
+raise `multiple_live_subscriptions`; a subscription on another package's
+price raises `package_mismatch`; past due / unpaid follow Stripe. Nothing is
+deleted or rewritten to resolve them.
+
+### Failure handling, rate limits, scale
+
+- **Per customer:** an error is recorded on that client (`failed`, with the
+  reason) and the run continues; the run ends `completed_with_errors`.
+- **Systemic:** a Stripe 401 / 403 / authentication error, a database error
+  while recording, or three customers failing in a row fails the run with
+  the reason. A preflight read checks the key first.
+- **Time budget:** 300 s by default; customers not reached are counted
+  (`summary.skipped`) and the run is `partial`. The next run starts with them.
+- **Rate limits:** the Stripe client (`_shared/stripe/api.ts`) retries 429,
+  5xx, a retryable 409 and network errors up to twice, honouring
+  `Retry-After` (capped at 10 s), else exponential backoff with jitter; it
+  never retries `Stripe-Should-Retry: false`, and retries a create only when
+  it carries an idempotency key. Concurrency is two customers.
+
+### UI
+
+- **Settings › Billing:** Stripe sync (webhook health, last agency-wide run,
+  mode), **Run Billing Reconciliation** (admin), and the last ten runs
+  (started, completed, status, mode, by, customers, repairs, warnings,
+  failures, with the warnings and failures behind a disclosure).
+- **Client Billing tab:** Stripe sync (webhook health, last reconciled,
+  result — "No differences", "Repaired N billing records", "· needs
+  attention", "Failed" — what changed, the attention reasons) and **Reconcile
+  This Client** (admin). Members see everything but the buttons.
+- The admin actions call the same function the scheduler does and wait up to
+  20 s for the run to say what it found.
+
+### Tests (B4)
+
+- `npm test`: `tests/stripe-reconcile-handler.test.mjs` (fingerprint diffs,
+  statuses, bounded concurrency, the secret, pagination over three pages,
+  retries for 429 / 5xx / network / should-retry / auth / creates, every
+  caller refused or admitted, one run at a time, mode, one customer failing,
+  an authentication failure, three in a row, the time budget) and
+  `tests/billing-reconcile.test.mjs` (the screens' wording).
+- `npm run test:sandbox`: `billing_reconciliation.test.sql` (44: the worker's
+  SQL and every non-service session refused, one running run per mode,
+  abandoned runs, results bound to the client's own customer in the run's
+  mode, append-only history, fingerprints ignore bookkeeping and count one
+  change per object, external payments excluded, live / test views, portal
+  isolation, the unscheduled fire function).
+- `npm run test:stripe-reconcile`: 19 end-to-end checks over PostgREST with
+  the fake Stripe (healthy and idempotent runs, missed subscription / invoice
+  / payment / refund / Checkout / product / price, failed and stale webhook
+  recovery, deleted objects, multiple subscriptions, package mismatch,
+  external payments and entitlements untouched, test / live and cross-client
+  isolation, unauthorized callers, admin runs, one customer failing, a
+  global failure, run counts, last reconciled).
+- `npm run test:billing-reconcile-ui`: 4 browser checks; screenshots in
+  `docs/screenshots/billing/reconcile-*.png`.

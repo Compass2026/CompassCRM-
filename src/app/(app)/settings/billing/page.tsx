@@ -14,6 +14,9 @@ import {
   setPackageActiveAction,
   setPackagePriceAction,
 } from "@/app/billing-catalog-actions";
+import { runBillingReconciliationAction } from "@/app/billing-reconcile-actions";
+import { StripeSyncCard } from "@/components/billing/stripe-sync-card";
+import { runLooksStuck, runStatusLabels, runStatusStyles, triggerLabels, warningText } from "@/lib/billing-reconcile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +74,14 @@ export default async function BillingCatalogPage({
     supabase.from("stripe_prices").select("stripe_price_id, stripe_product_id, unit_amount_cents, currency, type, recurring_interval, recurring_interval_count, nickname, active, livemode"),
     supabase.from("app_settings").select("value").eq("key", "billing_portal").maybeSingle(),
   ]);
+  const [{ data: syncHealth }, { data: runs }] = await Promise.all([
+    supabase.from("billing_sync_health").select("*").maybeSingle(),
+    supabase
+      .from("billing_reconciliation_runs")
+      .select("id, livemode, trigger, status, started_at, completed_at, customers_examined, records_changed, warnings, failures, events_recovered, error, summary, clients!billing_reconciliation_runs_scope_client_id_fkey(name), team_members(name)")
+      .order("started_at", { ascending: false })
+      .limit(10),
+  ]);
   const live = livemode === true;
   const productOf = (id: string | null) => (products ?? []).find((p) => p.stripe_product_id === id);
   const pricesOf = (id: string | null) => ((prices ?? []) as Price[]).filter((p) => p.stripe_product_id === id);
@@ -92,6 +103,78 @@ export default async function BillingCatalogPage({
       </div>
       {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>}
       {notice && <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">{notice}</div>}
+
+      <StripeSyncCard
+        health={syncHealth}
+        livemode={live}
+        scope="agency"
+        action={isAdmin ? runBillingReconciliationAction : undefined}
+        actionLabel="Run Billing Reconciliation"
+      />
+
+      <Card data-card="reconciliation-runs">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Recent reconciliation runs</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Daily once the schedule is on (after cutover); an admin can run one at any time. Each run re-reads the
+            mapped catalog, every linked customer and any webhook that failed, and repairs Compass to match Stripe.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {(runs ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No runs yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Started</TableHead>
+                  <TableHead>Completed</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>By</TableHead>
+                  <TableHead>Customers</TableHead>
+                  <TableHead>Repairs</TableHead>
+                  <TableHead>Warnings</TableHead>
+                  <TableHead>Failures</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(runs ?? []).map((r) => {
+                  const summary = (r.summary ?? {}) as { warnings?: { code: string; detail?: string }[]; failures?: { error: string }[] };
+                  const notes = [
+                    ...(summary.warnings ?? []).map((w) => `${warningText(w.code)}${w.detail ? ` (${w.detail})` : ""}`),
+                    ...(summary.failures ?? []).map((f) => f.error),
+                    ...(r.error ? [r.error] : []),
+                  ];
+                  return (
+                    <TableRow key={r.id} data-run={r.id}>
+                      <TableCell>{new Date(r.started_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</TableCell>
+                      <TableCell>{r.completed_at ? new Date(r.completed_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={runStatusStyles[r.status]}>
+                          {runLooksStuck(r) ? "Stuck" : (runStatusLabels[r.status] ?? r.status)}
+                        </Badge>
+                        {notes.length > 0 && (
+                          <details className="mt-1 text-xs text-muted-foreground">
+                            <summary className="cursor-pointer">{notes.length} note{notes.length === 1 ? "" : "s"}</summary>
+                            <ul className="list-disc pl-4">{notes.slice(0, 10).map((n, i) => <li key={i}>{n}</li>)}</ul>
+                          </details>
+                        )}
+                      </TableCell>
+                      <TableCell>{r.livemode ? "Live" : "Test"}</TableCell>
+                      <TableCell>{triggerLabels[r.trigger] ?? r.trigger}{r.team_members?.name ? ` · ${r.team_members.name}` : ""}{r.clients?.name ? ` · ${r.clients.name}` : ""}</TableCell>
+                      <TableCell>{r.customers_examined}</TableCell>
+                      <TableCell>{r.records_changed}</TableCell>
+                      <TableCell>{r.warnings}</TableCell>
+                      <TableCell>{r.failures}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">
