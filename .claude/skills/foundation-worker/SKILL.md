@@ -1764,7 +1764,7 @@ the notes.
 ### Weekly blog post (PB7, weekly — the `blog_post` task)
 
 One post per client per week, within the agreement's `blog_posts`
-allocation: `create_weekly_blog_tasks()` (0061) opens the task only while
+allocation: `create_weekly_blog_tasks()` (0062) opens the task only while
 the month has room and logs every skip in `automation_entitlement_log`, so
 the task in hand is either planned within the allocation or added by a
 person — do it; never open another. If `client_quota_usage('<client_id>')`

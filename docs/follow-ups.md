@@ -46,7 +46,7 @@ until then use sourced manual entries or explicit unavailable states.
    is being rebuilt (`docs/billing.md`); add **test-mode** keys only during
    the cutover in `docs/billing-cutover.md`, never before. Billing work
    left after B5: record every active client's agreement at cutover (from
-   0061 the weekly blog and website updates follow it); versioned
+   0062 the weekly blog and website updates follow it); versioned
    agreements (effective dates; today a past month shows today's terms);
    the Authority Engine could take the allocation as a planning input once
    agreements are versioned (today the Authority tab marks work outside the

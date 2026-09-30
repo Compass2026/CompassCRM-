@@ -1,5 +1,5 @@
 // stripe-webhook request boundary (B2) over a fake Stripe and an in-memory
-// store that follows the ledger rules of 0058 (claim with a lease, finish or
+// store that follows the ledger rules of 0059 (claim with a lease, finish or
 // fail only by the claiming attempt). The real database: tests/stripe-webhook-integration.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";

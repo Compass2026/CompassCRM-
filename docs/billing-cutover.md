@@ -1,10 +1,10 @@
 # Billing cutover runbook (B1 – B5, test mode)
 
-How migrations 0057 / 0058 / 0059 / 0060 / 0061, the app, and the Stripe Edge
+How migrations 0058 / 0059 / 0060 / 0061 / 0062, the app, and the Stripe Edge
 Functions go to production together. Nothing here has been run. Architecture:
 `docs/billing.md`; review: draft PR Compass2026/CompassCRM-#86.
 
-**Why this must be coordinated.** 0057 drops `subscriptions.paid_status`,
+**Why this must be coordinated.** 0058 drops `subscriptions.paid_status`,
 the `plans` fee / quantity columns and the 0008 tables' shapes. The app on
 `main` reads them (Plan, Billing, Dashboard, Clients, Content, Social); the
 app on this branch reads the new model. Neither app works against the other
@@ -19,7 +19,10 @@ link from the app, all in Stripe test mode.
 ## 0. Preconditions (all must hold)
 
 1. PR #86 reviewed and approved; the Five Layer / Authority migrations are
-   reconciled and 0057 – 0061 renumbered after the last applied migration
+   reconciled. Final numbers (Sept 30 2026): billing is 0058 – 0062; 0057 is
+   held by the Creative Engine's overlay-roles migration on its own branch.
+   Recheck against `supabase/migrations` on `main` at merge; if anything else
+   has landed, renumber after the last applied migration
    (rename the files, rerun `npm run test:sandbox`; nothing inside them
    depends on their number).
 2. CI green on the final head: `npm test`, lint, `tsc`, build. Locally:
@@ -28,7 +31,7 @@ link from the app, all in Stripe test mode.
    `npm run test:billing-ui`, `npm run test:billing-ops-ui`,
    `npm run test:billing-reconcile-ui`, `npm run test:portal-billing-ui`,
    `npm run test:entitlements-ui`.
-3. Production billing tables still empty. 0057 refuses to run otherwise;
+3. Production billing tables still empty. 0058 refuses to run otherwise;
    check first:
    `select (select count(*) from stripe_customers) + (select count(*) from subscriptions) + (select count(*) from payments) + (select count(*) from stripe_events) + (select count(*) from plans);`
    The expected answer is 0.
@@ -40,13 +43,13 @@ link from the app, all in Stripe test mode.
    test mode, or re-host the sync. This is required before live mode, and
    recommended before test mode too.
 6. A tested rollback script (section 6) is in hand.
-7. **Agreements before automation (B5).** From 0061 on, the weekly blog
+7. **Agreements before automation (B5).** From 0062 on, the weekly blog
    task and the monthly website updates are planned **only within each
    client's agreement**: a client with no agreement gets none (logged
    `not_in_agreement` in `automation_entitlement_log`). No client has an
-   agreement today, and 0057 cannot hold one before it is applied, so
+   agreement today, and 0058 cannot hold one before it is applied, so
    decide one of:
-   - apply 0057 – 0061 and, in the same sitting, record each active
+   - apply 0058 – 0062 and, in the same sitting, record each active
      client's package (Plan tab) with its blog posts, pages and refreshes
      before the next Wednesday 09:00 UTC / 2nd-of-month 09:00 UTC run; or
    - accept that weekly blog tasks and website updates pause until each
@@ -59,7 +62,7 @@ link from the app, all in Stripe test mode.
 
 ## 1. Database (Supabase MCP `apply_migration`, one migration at a time)
 
-1. Apply 0057, then 0058, then 0059, then 0060, then 0061. Each runs its
+1. Apply 0058, then 0059, then 0060, then 0061, then 0062. Each runs its
    own verify block and aborts on any deviation.
 2. Record the five versions in `docs/portal-reconciliation.md` and `AGENTS.md`.
 3. Verify on production:
@@ -80,7 +83,7 @@ link from the app, all in Stripe test mode.
    - `select count(*) from cron.job where command like '%reconcil%'` returns 0
      (the schedule is enabled in section 4, not by the migration).
    - `select count(*) from service_catalog` returns 14.
-   - 0061:
+   - 0062:
      - `client_entitlements_for` / `client_quota_usage` are refused to anon.
      - As a portal contact (rolled back), `portal_billing_summary`,
        `portal_billing_invoices` and `portal_entitlements` return only that
@@ -211,15 +214,15 @@ restore 0056's state exactly:
 
 - Restore 0035's `create_weekly_blog_tasks()` and `fire_website_updates()`
   (the planners without the agreement gate), set `billing_livemode()` back
-  to security invoker, and drop 0061's portal views, row functions,
+  to security invoker, and drop 0062's portal views, row functions,
   `client_entitlements_for`, `client_quota_usage`, the agreement-history
   triggers and function, `client_agreement_events` and
   `automation_entitlement_log`. The weekly blog then resumes for every
   active client, as before.
-- Unschedule `billing-reconcile-daily` if it was scheduled, drop 0060's
-  views, functions and the two reconciliation tables, then the 0059
+- Unschedule `billing-reconcile-daily` if it was scheduled, drop 0061's
+  views, functions and the two reconciliation tables, then the 0060
   functions, triggers, `billing_audit_events` and the new `payments`
-  columns, then the 0058 functions and triggers, then the 0057 views, functions,
+  columns, then the 0059 functions and triggers, then the 0058 views, functions,
   triggers, restrictive `app_settings` policies, the `team_members` guard,
   and the new tables.
 - Recreate `stripe_customers`, `subscriptions`, `payments` and

@@ -82,7 +82,7 @@ export function webhookText(h: { failed_events: number | null; stuck_events: num
   return { ok: false, text: `${parts.join(", ")} — the next reconciliation retries them` };
 }
 
-// A run that is still running after this long is shown as stuck (0060 closes
+// A run that is still running after this long is shown as stuck (0061 closes
 // it as failed when the next run begins, after 30 minutes).
 export function runLooksStuck(r: { status: string; started_at: string }, now = new Date()): boolean {
   return r.status === "running" && now.getTime() - Date.parse(r.started_at) > 30 * 60_000;

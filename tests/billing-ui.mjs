@@ -1,4 +1,4 @@
-// Browser check for the billing foundation (0057, B1). Run by
+// Browser check for the billing foundation (0058, B1). Run by
 // `npm run test:billing-ui` (scripts/test-tasks-ui.sh with UI_SPEC set): a
 // real Postgres replay behind PostgREST, `next dev` and Chromium. Nothing
 // leaves the machine and nothing calls Stripe: the Stripe mirror is seeded
@@ -97,7 +97,7 @@ async function contextFor(browser, user) {
   return context;
 }
 const sql = (q) => execFileSync("/bin/sh", ["-c", `${PSQL} -c "$Q"`], { env: { ...process.env, Q: q } }).toString().trim();
-// The Stripe mirror is written only by the sync functions (0058); fixtures load
+// The Stripe mirror is written only by the sync functions (0059); fixtures load
 // it as the cluster superuser, which the guard exempts (as 0047's fixtures).
 const sqlAdmin = (q) => execFileSync("/bin/sh", ["-c", `${process.env.PSQL_ADMIN} -c "$Q"`], { env: { ...process.env, Q: q } }).toString().trim();
 

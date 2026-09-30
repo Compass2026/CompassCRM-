@@ -1,8 +1,8 @@
--- 0060 — Billing B4: reconciliation run history and the reads behind it.
+-- 0061 — Billing B4: reconciliation run history and the reads behind it.
 --
 -- Reconciliation (supabase/functions/stripe-reconcile) is not a second sync:
 -- it asks the shared B2 sync layer to re-read what Stripe holds and lets
--- billing_sync_apply (0058) write it, exactly as a webhook would. This
+-- billing_sync_apply (0059) write it, exactly as a webhook would. This
 -- migration only records what each run did, and gives it a way to see what
 -- changed:
 --
@@ -22,7 +22,7 @@
 --      (docs/billing-cutover.md enables it after cutover).
 --
 -- Writes happen only inside these functions, called from an authenticator +
--- service_role session (an Edge Function), through 0058's mirror guard. The
+-- service_role session (an Edge Function), through 0059's mirror guard. The
 -- shared service-role key residual (docs/billing.md) applies unchanged.
 -- Nothing here touches external payments, agreements or entitlements.
 
@@ -320,7 +320,7 @@ begin
     if has_table_privilege('service_role', 'public.' || t, 'insert,update,delete,truncate')
        or has_table_privilege('authenticated', 'public.' || t, 'insert,update,delete,truncate')
        or has_table_privilege('anon', 'public.' || t, 'select') then
-      raise exception '0060: % is writable through the API', t;
+      raise exception '0061: % is writable through the API', t;
     end if;
   end loop;
   foreach t in array array['billing_reconcile_begin(jsonb)', 'billing_reconcile_client(jsonb)',
@@ -328,12 +328,12 @@ begin
     'billing_fire_reconciliation()'] loop
     if has_function_privilege('authenticated', 'public.' || t, 'execute')
        or has_function_privilege('anon', 'public.' || t, 'execute') then
-      raise exception '0060: % is callable by a signed-in user or anon', t;
+      raise exception '0061: % is callable by a signed-in user or anon', t;
     end if;
   end loop;
   if has_table_privilege('anon', 'public.client_billing_reconciliation', 'select')
      or has_table_privilege('anon', 'public.billing_sync_health', 'select')
      or has_table_privilege('authenticated', 'public.billing_sync_health', 'insert') then
-    raise exception '0060: a reconciliation view grants more than authenticated SELECT';
+    raise exception '0061: a reconciliation view grants more than authenticated SELECT';
   end if;
 end $$;

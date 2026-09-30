@@ -99,7 +99,7 @@ const tasks = [
   task(7, { title: "Collect six job-site photos from the owner", owner: "DELEGATED", clients: C(3), due_date: "2026-10-02", client_stages: { stages: { name: "Brand Build" } } }),
 ];
 
-// The derived billing read model (0057): Stripe says past due, Compass flags it.
+// The derived billing read model (0058): Stripe says past due, Compass flags it.
 const clientBillingStatus = [
   { client_id: C(5).id, billing_state: "past_due", billing_attention: true, attention_reasons: ["subscription_past_due", "invoice_overdue"],
     latest_invoice_remaining_cents: 145000, latest_invoice_currency: "usd" },

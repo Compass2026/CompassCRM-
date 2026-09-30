@@ -1,11 +1,11 @@
--- Tests for migration 0061 (billing B5: the entitlement contract, monthly
+-- Tests for migration 0062 (billing B5: the entitlement contract, monthly
 -- quota accounting, planning within the agreement, agreement history, and
 -- billing in the client portal), run by scripts/test-portal-sandbox.sh after
--- the 0060 suite. Own harness schema (be).
+-- the 0061 suite. Own harness schema (be).
 --
 -- Callers: worker (postgres), person (authenticated + team JWT), portal A / B
 -- (authenticated + the fixtures' portal contacts), stranger, anon, fixtures
--- for the Stripe mirror (supabase_admin, exempt from 0058's guard).
+-- for the Stripe mirror (supabase_admin, exempt from 0059's guard).
 --
 -- The portal fixtures' clients are used: A (Stripe-collected, linked
 -- customer, invoices) and B (an external arrangement). E is a new active

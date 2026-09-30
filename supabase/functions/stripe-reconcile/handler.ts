@@ -5,7 +5,7 @@
 // Callers (POST; the function is deployed with verify_jwt = true, so the
 // gateway also wants a JWT — the scheduler sends the anon key):
 //   - the scheduler: header x-billing-reconcile-secret = Vault
-//     BILLING_RECONCILE_SECRET (pg_cron → billing_fire_reconciliation(), 0060;
+//     BILLING_RECONCILE_SECRET (pg_cron → billing_fire_reconciliation(), 0061;
 //     not scheduled until cutover). Agency-wide only.
 //   - an admin, with their own JWT: {} for an agency-wide run (Settings) or
 //     {client_id} for one client (the Billing tab). The same engine either way.

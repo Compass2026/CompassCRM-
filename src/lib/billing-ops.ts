@@ -63,7 +63,7 @@ export type ExternalPaymentInput = {
   request_id: string | null;
 };
 
-// The same rules as the function and 0059, with reasons to act on.
+// The same rules as the function and 0060, with reasons to act on.
 export function readExternalPayment(input: ExternalPaymentInput, today = new Date()):
   | { body: { amount_cents: number; currency: string; method: string; paid_at: string; reference: string | null; notes: string; request_id: string } }
   | { error: string } {

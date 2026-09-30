@@ -1,4 +1,4 @@
--- Tests for migration 0057 (billing foundation, B1), run by
+-- Tests for migration 0058 (billing foundation, B1), run by
 -- scripts/test-portal-sandbox.sh on the same replay after the 0056 suite.
 -- Own harness schema (bl) and its own fictional clients and Stripe ids.
 --
@@ -10,9 +10,9 @@
 --   stranger  psql as authenticator, role authenticated, a sign-in on no team / portal row
 --   anon      psql as authenticator, role anon
 --   fixtures  psql as supabase_admin: the Stripe mirror is written only by the
---             Stripe sync functions (0058, billing_sync.test.sql); these
---             checks are about 0057's constraints, so its rows are loaded as
---             the cluster superuser, which 0058's guard exempts (as 0047's).
+--             Stripe sync functions (0059, billing_sync.test.sql); these
+--             checks are about 0058's constraints, so its rows are loaded as
+--             the cluster superuser, which 0059's guard exempts (as 0047's).
 
 \set team   '00000000-0000-4000-a000-000000000001'
 \set pa     '00000000-0000-4000-a000-000000000011'
@@ -446,7 +446,7 @@ begin
 end $$;
 reset role;
 
--- Stripe changes things; the mirror follows (as the sync functions will, 0058).
+-- Stripe changes things; the mirror follows (as the sync functions will, 0059).
 \c - supabase_admin
 do $$
 begin
@@ -666,10 +666,10 @@ select set_config('request.jwt.claims', '', false);
 do $$
 declare e text;
 begin
-  -- 0061 adds the entitlement contract, the planning that follows it, the
+  -- 0062 adds the entitlement contract, the planning that follows it, the
   -- agreement history and the portal's row functions; that none of them reads
   -- a Stripe / billing table is billing_entitlements_portal.test.sql X1.
-  perform bl.ok('I1 only the billing functions (0057 – 0060) and 0061''s entitlement / portal functions mention billing, plans, invoices or Stripe',
+  perform bl.ok('I1 only the billing functions (0058 – 0061) and 0062''s entitlement / portal functions mention billing, plans, invoices or Stripe',
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname not like 'billing\_%'
        and p.proname not in ('client_entitlements_for', 'client_quota_usage', 'create_weekly_blog_tasks', 'fire_website_updates',
@@ -682,15 +682,15 @@ begin
                              'record_client_agreement_event', 'portal_billing_summary_row', 'portal_entitlement_rows')
        and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%'
        or p.prosrc ilike '%billing%' or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')));
-  perform bl.ok('I2 only the billing read models (0057, 0060) and the portal billing views (0061) are views over billing tables',
+  perform bl.ok('I2 only the billing read models (0058, 0061) and the portal billing views (0062) are views over billing tables',
     (select array_agg(viewname::text order by viewname) from pg_views where schemaname = 'public'
        and (definition ilike '%stripe%' or definition ilike '%entitlement%' or definition ~* '\mplans\M'))
     = array['billing_sync_health', 'client_billing_reconciliation', 'client_billing_status', 'client_entitlements',
             'portal_billing_invoices', 'portal_entitlements']);
-  perform bl.ok('I3 no portal view but 0061''s three billing views reads billing', not exists (select 1 from pg_views where schemaname = 'public'
+  perform bl.ok('I3 no portal view but 0062''s three billing views reads billing', not exists (select 1 from pg_views where schemaname = 'public'
     and viewname like 'portal\_%' and viewname not in ('portal_billing_summary', 'portal_billing_invoices', 'portal_entitlements') and (definition ilike '%stripe%' or definition ilike '%invoice%' or definition ~* '\mplans\M'
     or definition ilike '%entitlement%')));
-  -- billing_livemode (0061) returns only the billing-mode boolean.
+  -- billing_livemode (0062) returns only the billing-mode boolean.
   perform bl.ok('I4 no billing security-definer function but billing_livemode is callable by a signed-in user or anon',
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.prosecdef and p.proname like 'billing%' and p.proname <> 'billing_livemode'

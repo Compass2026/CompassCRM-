@@ -2,7 +2,7 @@
 // every mirror write goes through the shared B2 layer (../_shared/stripe/sync.ts
 // → billing_sync_apply), exactly as a webhook would. The engine only decides
 // what to re-read, measures what changed (a fingerprint of the client's mirror
-// before and after, 0060) and records the run.
+// before and after, 0061) and records the run.
 //
 //   1. Catalog: every Stripe Product the catalog maps, and all its Prices.
 //   2. Customers: every active linked customer in the mode (the least recently

@@ -36,7 +36,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // The client's billing (B3). Stripe is authoritative: everything financial on
-// this page is read from the Stripe mirror (0057 / 0058), which only the
+// this page is read from the Stripe mirror (0058 / 0059), which only the
 // Stripe functions write. The actions call the stripe-billing function with
 // the teammate's own session; admin-only actions are shown to admins only and
 // refused for anyone else by the function and the database.

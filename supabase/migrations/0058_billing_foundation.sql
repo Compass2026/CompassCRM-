@@ -1,4 +1,4 @@
--- 0057 — Billing foundation (B1 of docs/billing-audit.md; decisions of Sept 28 2026).
+-- 0058 — Billing foundation (B1 of docs/billing-audit.md; decisions of Sept 28 2026).
 --
 -- Stripe is the financial source of truth; Compass is the operational one.
 -- This migration is the schema only: nothing here calls Stripe, and nothing
@@ -65,7 +65,7 @@ begin
   foreach t in array array['stripe_customers', 'subscriptions', 'payments', 'stripe_events', 'plans'] loop
     execute format('select count(*) from %I', t) into n;
     if n > 0 then
-      raise exception '0057 rebuilds % but it holds % row(s); migrate them by hand first', t, n;
+      raise exception '0058 rebuilds % but it holds % row(s); migrate them by hand first', t, n;
     end if;
   end loop;
 end $$;
@@ -976,14 +976,14 @@ begin
     'stripe_events', 'service_catalog', 'billing_packages', 'billing_package_prices', 'billing_one_time_items',
     'package_entitlements', 'client_entitlement_overrides', 'plans'] loop
     if not (select relrowsecurity from pg_class where oid = ('public.' || t)::regclass) then
-      raise exception '0057: RLS is off on %', t;
+      raise exception '0058: RLS is off on %', t;
     end if;
     if has_table_privilege('anon', 'public.' || t, 'select,insert,update,delete,truncate,references,trigger') then
-      raise exception '0057: anon holds a privilege on %', t;
+      raise exception '0058: anon holds a privilege on %', t;
     end if;
     if exists (select 1 from pg_policies where schemaname = 'public' and tablename = t
                and (coalesce(qual, '') not like '%is_team()%' or coalesce(with_check, qual) not like '%is_team()%')) then
-      raise exception '0057: a policy on % does not read is_team()', t;
+      raise exception '0058: a policy on % does not read is_team()', t;
     end if;
   end loop;
   foreach t in array array['stripe_products', 'stripe_prices', 'stripe_customers', 'checkout_sessions',
@@ -991,27 +991,27 @@ begin
     'stripe_events'] loop
     if has_table_privilege('authenticated', 'public.' || t, 'insert,update,delete,truncate,references,trigger')
        or exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and cmd <> 'SELECT') then
-      raise exception '0057: the financial mirror % is writable through the API', t;
+      raise exception '0058: the financial mirror % is writable through the API', t;
     end if;
   end loop;
   foreach t in array array['client_entitlements', 'client_billing_status'] loop
     if (select coalesce(reloptions::text, '') not like '%security_invoker=true%' from pg_class
         where oid = ('public.' || t)::regclass) then
-      raise exception '0057: view % must run with the caller''s rights', t;
+      raise exception '0058: view % must run with the caller''s rights', t;
     end if;
     if has_table_privilege('anon', 'public.' || t, 'select')
        or has_table_privilege('authenticated', 'public.' || t, 'insert,update,delete') then
-      raise exception '0057: view % grants more than authenticated SELECT', t;
+      raise exception '0058: view % grants more than authenticated SELECT', t;
     end if;
   end loop;
   foreach t in array array['service_catalog', 'billing_packages', 'billing_package_prices',
     'billing_one_time_items', 'package_entitlements'] loop
     if exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and cmd <> 'SELECT'
                and coalesce(with_check, qual) not like '%is_team_admin()%') then
-      raise exception '0057: the catalog table % is writable by a non-admin', t;
+      raise exception '0058: the catalog table % is writable by a non-admin', t;
     end if;
   end loop;
   if exists (select 1 from cron.job where jobname = 'billing-daily-past-due') then
-    raise exception '0057: the Compass past-due sweep is still scheduled';
+    raise exception '0058: the Compass past-due sweep is still scheduled';
   end if;
 end $$;

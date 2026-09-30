@@ -65,7 +65,7 @@ const refuse = (status: number, code: string, message: string, extra: Record<str
   throw new Refusal(status, code, message, extra);
 };
 
-// What a database refusal means to the caller (0059's functions raise these).
+// What a database refusal means to the caller (0060's functions raise these).
 const DB_REFUSALS: Record<string, [number, string]> = {
   "42501": [403, "forbidden"],
   "23505": [409, "conflict"],

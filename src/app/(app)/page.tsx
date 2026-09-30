@@ -47,7 +47,7 @@ export default async function DashboardPage() {
       .or(`owner.eq.CLAUDE_APPROVAL,due_date.lt.${new Date().toISOString().slice(0, 10)}`)
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(20),
-    // Derived from Stripe's own state (0057); Stripe decides past due.
+    // Derived from Stripe's own state (0058); Stripe decides past due.
     supabase
       .from("client_billing_status")
       .select("client_id, billing_state, attention_reasons, latest_invoice_remaining_cents, latest_invoice_currency")

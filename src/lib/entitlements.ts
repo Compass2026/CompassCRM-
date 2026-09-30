@@ -1,6 +1,6 @@
 // The entitlement contract (B5): what Compass has agreed to deliver to a
 // client, for every Compass system that plans or shows work. It reads one
-// thing — client_entitlements_for() (0061), derived from the agreement's
+// thing — client_entitlements_for() (0062), derived from the agreement's
 // package and the client's overrides — and never billing: a past-due or
 // canceled Stripe subscription does not change what is included, and nothing
 // here knows about Stripe, invoices or payments.
@@ -131,7 +131,7 @@ export function deliverableText(e: Pick<Entitlement, "name" | "quantity" | "peri
   return `${e.quantity ?? 0} ${e.name}${e.period ? ` / ${e.period}` : ""}`;
 }
 
-// ── Monthly quota accounting (client_quota_usage, 0061) ──────────────────
+// ── Monthly quota accounting (client_quota_usage, 0062) ──────────────────
 // completed + planned = used; remaining = max(0, allocation − used) is what
 // automation may still add this month; over_allocation is work beyond the
 // allocation (a person added it, or the allocation was lowered) — kept,

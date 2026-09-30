@@ -4,7 +4,7 @@
 // read never reference Stripe or a billing table, and never import billing
 // code. Billing reaches them only as "what the agreement includes", through
 // client_entitlements_for() (which itself reads no billing table; checked in
-// SQL by billing_entitlements_portal.test.sql X1 and 0061's verify block).
+// SQL by billing_entitlements_portal.test.sql X1 and 0062's verify block).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -41,7 +41,7 @@ const FIVE_LAYER = [
   "src/app/authority-draft-actions.ts",
   "src/app/creative-use-actions.ts",
 ];
-// Billing's tables, views and functions (0057–0060), and Stripe itself.
+// Billing's tables, views and functions (0058–0061), and Stripe itself.
 const FORBIDDEN = /\bstripe|\b(subscriptions|subscription_items|invoices|invoice_line_items|payments|checkout_sessions|client_billing_status|billing_attention|attention_reasons|billing_packages|billing_package_prices|billing_one_time_items|billing_audit_events|billing_reconciliation_\w+|client_billing_reconciliation|billing_sync_health|billing_livemode|plans)\b/i;
 const FORBIDDEN_IMPORT = /from\s+["'][^"']*(billing|stripe)[^"']*["']/i;
 

@@ -1,4 +1,4 @@
-// Billing read model helpers (0057). Pure: shared by the Plan and Billing
+// Billing read model helpers (0058). Pure: shared by the Plan and Billing
 // tabs, the Dashboard, the agreement server actions and the tests.
 //
 // Stripe is the financial source of truth. Everything shown here is read

@@ -5,7 +5,7 @@
 //
 // It never trusts an event's payload as current state: every sync reads the
 // object from Stripe now (fetch-on-event), maps it (map.ts) and hands the
-// rows to the database (store.apply → billing_sync_apply, 0058), which
+// rows to the database (store.apply → billing_sync_apply, 0059), which
 // resolves ownership from the customer link and keeps the newest read. So a
 // late, duplicated or reordered event converges on Stripe's present state.
 // Deleted objects are the exception: Stripe may no longer return them, so

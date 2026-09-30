@@ -3,7 +3,7 @@
 // Settings › Billing catalog (B3): the packages Compass sells, what each
 // includes, the one-time items, and which Stripe Products and Prices they
 // map to. Admin only. Compass rows are written with the admin's own session,
-// so RLS (0057: is_team() and is_team_admin()) refuses a member however the
+// so RLS (0058: is_team() and is_team_admin()) refuses a member however the
 // action is reached; anything that reads or creates a Stripe object goes
 // through the stripe-billing function, which checks the role again.
 // No price amounts are invented here: a standard price is chosen from the

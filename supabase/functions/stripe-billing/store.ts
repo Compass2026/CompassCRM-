@@ -1,7 +1,7 @@
 // stripe-billing's door to the database: supabase-js with the service role,
 // so every call reaches Postgres through PostgREST as authenticator +
 // service_role. The Stripe mirror and the billing records are written only
-// through the billing functions (0058 sync, 0059 operations), never directly;
+// through the billing functions (0059 sync, 0060 operations), never directly;
 // the catalog's Stripe mapping (a package's product, a client's custom price)
 // is written here only after the handler has checked the caller is an admin.
 // Reads are ordinary selects.

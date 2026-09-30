@@ -1,4 +1,4 @@
--- 0058 — Billing B2: the Stripe sync write boundary and the webhook ledger.
+-- 0059 — Billing B2: the Stripe sync write boundary and the webhook ledger.
 --
 -- One door into the Stripe mirror. The shared sync layer
 -- (supabase/functions/_shared/stripe/) is the only writer: webhook
@@ -440,17 +440,17 @@ begin
     'subscriptions', 'subscription_items', 'invoices', 'invoice_line_items', 'payments', 'stripe_refunds',
     'stripe_events'] loop
     if has_table_privilege('service_role', 'public.' || t, 'insert,update,delete,truncate') then
-      raise exception '0058: service_role can write % directly', t;
+      raise exception '0059: service_role can write % directly', t;
     end if;
     if (select count(*) from pg_trigger where tgrelid = ('public.' || t)::regclass
         and tgfoid = 'billing_mirror_guard'::regproc and not tgisinternal) <> 2 then
-      raise exception '0058: % is missing its sync guard', t;
+      raise exception '0059: % is missing its sync guard', t;
     end if;
   end loop;
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
              where n.nspname = 'public' and p.proname like 'billing\_%' and p.prosecdef
                and (has_function_privilege('authenticated', p.oid, 'execute')
                     or has_function_privilege('anon', p.oid, 'execute'))) then
-    raise exception '0058: a billing security-definer function is callable by a signed-in user or anon';
+    raise exception '0059: a billing security-definer function is callable by a signed-in user or anon';
   end if;
 end $$;

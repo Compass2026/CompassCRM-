@@ -1,7 +1,7 @@
 -- Billing rows for the portal fixtures' clients A and B, so portal_access's
 -- generic checks (every portal view returns rows, all the contact's own) cover
--- the 0061 billing views too. Loaded as the cluster superuser (the Stripe
--- mirror is written only by the sync functions, 0058) before
+-- the 0062 billing views too. Loaded as the cluster superuser (the Stripe
+-- mirror is written only by the sync functions, 0059) before
 -- portal_access.test.sql and removed after it by portal_billing_teardown.sql,
 -- so the later billing suites start from the state they expect.
 insert into billing_packages (id, key, name, kind) values

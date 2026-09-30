@@ -1,4 +1,4 @@
-// Stripe object → Compass mirror row (0057 / 0058). Pure; the one place a
+// Stripe object → Compass mirror row (0058 / 0059). Pure; the one place a
 // Stripe shape is read, so the webhook, reconciliation, customer linking and
 // a manual resync all map an object the same way.
 //

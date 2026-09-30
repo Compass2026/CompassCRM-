@@ -24,21 +24,21 @@ Agreement → client_entitlements_for() / client_quota_usage() (B5) → Five Lay
 
 | Step | What | State |
 | --- | --- | --- |
-| B1 | Schema: mirror, catalog, agreement, entitlements, read models | **0057 written, not applied**; review changes made (14-service catalog, `stripe_refunds`, admin-only financial configuration) |
-| B2 | Shared Stripe sync layer + corrected webhook | **0058 + `_shared/stripe/` + `stripe-webhook` written and tested, not applied / not deployed** |
-| B3 | Checkout, link existing customer, Customer Portal, billing screens | **0059 + `stripe-billing` + app screens written and tested, not applied / not deployed** |
-| B4 | Reconciliation | **0060 + `stripe-reconcile` + Stripe sync screens written and tested, not applied / not deployed** |
-| B5 | Entitlement interface for the Five Layers + portal billing | **0061 + app + worker skill written and tested, not applied / not deployed** |
+| B1 | Schema: mirror, catalog, agreement, entitlements, read models | **0058 written, not applied**; review changes made (14-service catalog, `stripe_refunds`, admin-only financial configuration) |
+| B2 | Shared Stripe sync layer + corrected webhook | **0059 + `_shared/stripe/` + `stripe-webhook` written and tested, not applied / not deployed** |
+| B3 | Checkout, link existing customer, Customer Portal, billing screens | **0060 + `stripe-billing` + app screens written and tested, not applied / not deployed** |
+| B4 | Reconciliation | **0061 + `stripe-reconcile` + Stripe sync screens written and tested, not applied / not deployed** |
+| B5 | Entitlement interface for the Five Layers + portal billing | **0062 + app + worker skill written and tested, not applied / not deployed** |
 
 Everything stays in Stripe **test mode** until reviewed. **Do not add the
 Stripe secrets to Vault and do not deploy `stripe-billing` or
 `stripe-webhook` outside the cutover in `docs/billing-cutover.md`**: the
-deployed v2 / v1 are the 0008 code, which writes columns 0057 drops (both
-answer 500 without secrets, so today they do nothing). 0057 – 0061 ship
+deployed v2 / v1 are the 0008 code, which writes columns 0058 drops (both
+answer 500 without secrets, so today they do nothing). 0058 – 0062 ship
 together with the app and the three functions. Draft PR:
 Compass2026/CompassCRM-#86.
 
-## B1: migration 0057
+## B1: migration 0058
 
 ### Tables
 
@@ -153,8 +153,8 @@ rights) reads it. Production has one admin today.
 | --- | --- | --- | --- | --- | --- |
 | Admin | read | read / write | read / write | read / write | read |
 | Member | read | read | read | read / write | read |
-| Stripe sync session (0058) | write, through the sync functions only | — | read | — | read |
-| Worker SQL (`postgres`) | **refused** (0058 guard) | owner | owner | owner | read |
+| Stripe sync session (0059) | write, through the sync functions only | — | read | — | read |
+| Worker SQL (`postgres`) | **refused** (0059 guard) | owner | owner | owner | read |
 | Portal contact / stranger | nothing (their own client's billing included) | nothing | nothing | nothing | nothing |
 | anon | refused | refused | refused | refused | refused |
 
@@ -215,7 +215,7 @@ added later:
   replay (Plan tab agreement / overrides / refusals, Content tab planned
   count, Billing tab, Dashboard, Clients list, API boundaries).
 
-## B2: the Stripe sync layer (migration 0058, `supabase/functions/_shared/stripe/`, `stripe-webhook`)
+## B2: the Stripe sync layer (migration 0059, `supabase/functions/_shared/stripe/`, `stripe-webhook`)
 
 ### Architecture
 
@@ -338,7 +338,7 @@ What was checked (production, Sept 29 2026): the Foundation worker's SQL
 (Supabase project secrets are shared by all functions); the app uses user
 JWTs only.
 
-What 0058 enforces:
+What 0059 enforces:
 
 - The mirror tables (and the ledger) refuse every insert / update / delete /
   truncate unless it runs inside a billing sync function called by an
@@ -385,11 +385,11 @@ Also out of scope (as 0047): a deliberate schema change by the table owner
   writes by a teammate / the service role / the worker, and a canonical
   resync after a missed webhook).
 
-## B3: billing operations (migration 0059, `stripe-billing`, the app)
+## B3: billing operations (migration 0060, `stripe-billing`, the app)
 
 ### What was built
 
-- **0059** (`supabase/migrations/0059_billing_operations.sql`, not applied):
+- **0060** (`supabase/migrations/0059_billing_operations.sql`, not applied):
   `billing_record_checkout` (a Checkout Session the handler created, keyed
   by its Stripe id, audited in the same transaction),
   `billing_record_external_payment` / `billing_void_external_payment`
@@ -399,7 +399,7 @@ Also out of scope (as 0047): a deliberate schema change by the table owner
   append-only history of every billing action (team-readable; no API
   writes; update / delete refused even to the service role). All are
   security definer, callable only from an `authenticator` + `service_role`
-  session, and write through 0058's mirror guard. The same shared-key
+  session, and write through 0059's mirror guard. The same shared-key
   residual applies: any Edge Function could call them.
 - **`stripe-billing`** (`supabase/functions/stripe-billing/`: `handler.ts`
   factory, `store.ts`, `index.ts`; deployed with `verify_jwt = true`): the
@@ -420,16 +420,16 @@ Also out of scope (as 0047): a deliberate schema change by the table owner
 
 | Action | Admin | Member | Portal contact | Enforced by |
 | --- | --- | --- | --- | --- |
-| Search Stripe customers, link an existing one, create one | yes | no | no | function (role), 0058 |
+| Search Stripe customers, link an existing one, create one | yes | no | no | function (role), 0059 |
 | Import a Stripe Product into the catalog | yes | no | no | function |
 | Create a client's Custom Retainer price | yes | no | no | function |
 | Create / expire a payment link (Checkout) | yes | no | no | function |
 | Copy / open / send an existing payment link | yes | yes | no | RLS (team read) |
 | Configure the Customer Portal | yes | no | no | function |
 | Open the Customer Portal for a client | yes | no | own client only (derived from the sign-in; B5 adds the button) | function |
-| Record / void an external payment | yes | no | no | function + 0059 (recorder must be an admin) |
+| Record / void an external payment | yes | no | no | function + 0060 (recorder must be an admin) |
 | Re-read a customer from Stripe | yes | yes | no | function |
-| Packages, entitlement defaults, one-time items, price mappings, billing mode, team roles | yes | read | no | RLS (`is_team_admin()`, 0057) |
+| Packages, entitlement defaults, one-time items, price mappings, billing mode, team roles | yes | read | no | RLS (`is_team_admin()`, 0058) |
 | Client agreement and entitlement overrides | yes | yes | no | RLS (`is_team()`) |
 | Read billing (mirror, records, audit) | yes | yes | no | RLS |
 
@@ -560,7 +560,7 @@ payment recorded. Stripe is not involved.
 B3 creates Stripe objects in **test mode only**. The function refuses a live
 key unless `app_settings.billing` is `{"livemode": true}`, and refuses a test
 key once it is (so the screens never show one mode while the function writes
-the other). Only an admin can write that setting (0057); there is no mode
+the other). Only an admin can write that setting (0058); there is no mode
 switch in the UI. Every billing screen carries a mode banner.
 
 ### Five Layers
@@ -591,7 +591,7 @@ changes an entitlement or stops work.
   handler and webhook behind the gateway (13 checks); screenshots in
   `docs/screenshots/billing/`.
 
-## B4: reconciliation (migration 0060, `stripe-reconcile`)
+## B4: reconciliation (migration 0061, `stripe-reconcile`)
 
 Webhooks are the real-time path; reconciliation is the safety net that makes
 Compass converge on Stripe after a missed or failed webhook, an outage, an
@@ -612,16 +612,16 @@ admin: Run Billing Reconciliation / Reconcile This Client
         2. each linked customer: resyncCustomer, invoices Stripe no   │ before / after
            longer lists, non-final Checkout Sessions                  ┘ = repairs
         3. webhook ledger: failed + stale-lease events, re-synced from Stripe now
-   └→ billing_reconciliation_runs / _results (0060)
+   └→ billing_reconciliation_runs / _results (0061)
    └→ client_billing_status (unchanged) raises attention from the repaired mirror
 ```
 
 - **`supabase/functions/stripe-reconcile/`**: `handler.ts` (who may call,
   mode checks, begin, 202, background), `engine.ts` (the three passes, change
   measurement, failure handling; pure helpers unit-tested), `store.ts` (the
-  stripe-billing store plus reconciliation reads and the 0060 functions),
+  stripe-billing store plus reconciliation reads and the 0061 functions),
   `index.ts`. Deployed with `verify_jwt = true`.
-- **Measuring repairs without a second sync.** 0060's
+- **Measuring repairs without a second sync.** 0061's
   `billing_mirror_fingerprint(client, mode)` returns one digest per mirrored
   object (the row minus `id`, timestamps and `stripe_synced_at`; a
   subscription includes its items, an invoice its lines), and
@@ -638,7 +638,7 @@ admin: Run Billing Reconciliation / Reconcile This Client
 
 | Caller | How | Scope |
 | --- | --- | --- |
-| Scheduler | `billing_fire_reconciliation()` (0060) posts with the anon key (gateway) and header `x-billing-reconcile-secret` = Vault `BILLING_RECONCILE_SECRET` (compared in constant time). **Not scheduled yet**: the cutover runbook schedules it daily. | agency-wide |
+| Scheduler | `billing_fire_reconciliation()` (0061) posts with the anon key (gateway) and header `x-billing-reconcile-secret` = Vault `BILLING_RECONCILE_SECRET` (compared in constant time). **Not scheduled yet**: the cutover runbook schedules it daily. | agency-wide |
 | Admin | their own JWT (`team_members.role = admin`), Settings › Billing **Run Billing Reconciliation** | agency-wide |
 | Admin | their own JWT, the client's Billing tab **Reconcile This Client** | one client |
 | Member, portal contact, stranger, anon | refused (403 / 401) before Stripe is called | — |
@@ -647,12 +647,12 @@ The dedicated secret narrows who can trigger a run compared with the shared
 `SYNC_CRON_SECRET`, but anything that can read Vault (the service role, the
 worker's SQL as `postgres`) can read it; a run only re-reads Stripe and is
 idempotent, so the exposure is Stripe API usage. The shared service-role key
-residual (above) applies to 0060's functions too. One run at a time per
+residual (above) applies to 0061's functions too. One run at a time per
 mode (409 `run_in_progress`); a run left running 30 minutes is closed as
 failed when the next begins. A live key is refused until billing is switched
 to live, a test key once it is.
 
-### Run history (0060)
+### Run history (0061)
 
 - `billing_reconciliation_runs`: mode, trigger (`schedule` / `admin` /
   `admin_client`), who, scope, status (`running`, `completed`,
@@ -668,7 +668,7 @@ to live, a test key once it is.
   warnings (`customer_deleted_in_stripe`, `checkout_missing:<id>`), error.
 - Both team-read, append-only (a run changes only while running), written
   only by `billing_reconcile_begin` / `_client` / `_finish` in the function's
-  session through 0058's guard.
+  session through 0059's guard.
 - Read models: `client_billing_reconciliation` (each client's latest result
   in the current mode: "Last reconciled", "Result") and `billing_sync_health`
   (failed and stuck webhook events, the last agency-wide run).
@@ -755,7 +755,7 @@ deleted or rewritten to resolve them.
 - `npm run test:billing-reconcile-ui`: 4 browser checks; screenshots in
   `docs/screenshots/billing/reconcile-*.png`.
 
-## B5: the entitlement contract and portal billing (migration 0061, the app)
+## B5: the entitlement contract and portal billing (migration 0062, the app)
 
 Two paths, kept apart:
 
@@ -771,10 +771,10 @@ in what Compass plans. Stripe is never called by, and no billing table is
 read by, Client Intelligence, the Authority Engine, the Drafter, the
 Publisher or the Creative Engine.
 
-### The entitlement interface (0061)
+### The entitlement interface (0062)
 
 - **`client_entitlements_for(p_client_id uuid default null)`**: invoker
-  rights over `client_entitlements` (0057); one row per client and catalog
+  rights over `client_entitlements` (0058); one row per client and catalog
   service. Columns: `client_id`, `service_key`, `service_name`, `kind`
   (`feature` | `quota`), `enabled`, `quantity`, `unit`, `period`, `source`
   (`package` | `client_override` | `none`), `package_id`, `sort_order`.
@@ -802,7 +802,7 @@ Publisher or the Creative Engine.
   `website` + `website_refreshes`. A feature that is off means no
   automatic work of that kind, whatever the quota says.
 
-### Monthly quota accounting (0061)
+### Monthly quota accounting (0062)
 
 `client_quota_usage(p_client_id default null, p_month default this month)`
 on the America/Chicago calendar month, for each quota: `allocation` (live
@@ -869,7 +869,7 @@ rejects or reschedules it.
 
 ### Agreement history and versioning
 
-`client_agreement_events` (0061) keeps every change to `plans` and to
+`client_agreement_events` (0062) keeps every change to `plans` and to
 `client_entitlement_overrides`, including a removed override, with before /
 after and the teammate. It is append-only and written only by trigger; no-op
 updates are skipped. The override row itself keeps its reason, `updated_by`
@@ -884,9 +884,9 @@ agreements (effective dates, per-period entitlements) are follow-up work.
   once the client has an agreement (`src/app/portal/billing/page.tsx`,
   `src/components/portal-nav.tsx`). Team members are still sent out of the
   portal by the portal layout, and portal contacts out of the CRM.
-- **Read models (0061)**, 0037's pattern (owner-run views filtered by
+- **Read models (0062)**, 0037's pattern (owner-run views filtered by
   `portal_client_id()`; `revoke all`, then `grant select to
-  authenticated`, checked by 0061's verify block and the sandbox's generic
+  authenticated`, checked by 0062's verify block and the sandbox's generic
   portal checks):
   - `portal_billing_summary`: plan name, collection, status as a
     client-safe code (`active`, `trial`, `payment_attention` for past due

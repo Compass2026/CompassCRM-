@@ -1,6 +1,6 @@
 // End-to-end check of the Stripe sync (B2) against a real database: the full
 // migration replay behind PostgREST, so every write arrives as session_user
-// authenticator / role service_role — the only session 0058 lets write the
+// authenticator / role service_role — the only session 0059 lets write the
 // Stripe mirror. The webhook handler, the shared sync layer and the store are
 // the deployed ones; Stripe is the in-memory fake (tests/fixtures/stripe-fake.mjs).
 //

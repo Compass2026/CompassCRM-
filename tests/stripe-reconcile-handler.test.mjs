@@ -220,7 +220,7 @@ test("the scheduler and an admin start the same engine; one run at a time", asyn
   assert.equal(sched.body.trigger, "schedule");
   assert.equal(t.store.st.runs[0].requested_by, null);
   await t.settle();
-  t.store.st.running = true; // a run in progress (0060 enforces one per mode)
+  t.store.st.running = true; // a run in progress (0061 enforces one per mode)
   assert.equal((await t.call(bearer("admin"))).status, 409, "a second run waits for the first");
   t.store.st.running = false;
   assert.equal(t.store.st.runs[0].status, "completed");

@@ -25,10 +25,10 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0057` (billing foundation, B1), `0058` (Stripe sync
-  boundary, B2), `0059` (billing operations, B3), `0060` (billing
-  reconciliation, B4) and `0061` (entitlement contract + portal billing,
-  B5) are written but **not yet applied** (they take their numbers at merge time; `docs/billing-cutover.md`); `0056` (Canva folder ids on the client record) was
+  **not yet applied**; `0058` (billing foundation, B1), `0059` (Stripe sync
+  boundary, B2), `0060` (billing operations, B3), `0061` (billing
+  reconciliation, B4) and `0062` (entitlement contract + portal billing,
+  B5) are written but **not yet applied** (final numbers set Sept 30 2026; `0057` belongs to the Creative Engine overlay-roles migration on its own branch; `docs/billing-cutover.md`); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -212,7 +212,7 @@ merge or deploy without the runbook). Decisions: standard packages + custom
 retainers + one-time work; link existing Stripe customers, never duplicate;
 card + ACH debit, external arrangements admin-recorded; Stripe owns dunning
 (Compass derives `billing_attention` only); entitlements now, never switched
-off by billing; Checkout link copied by a teammate. **B1 = 0057** (written,
+off by billing; Checkout link copied by a teammate. **B1 = 0058** (written,
 sandbox-tested, **not applied**): the Stripe mirror (team read-only, money
 in minor units, `livemode` on every row, `stripe_refunds` one row per
 refund), the package / price / one-time catalog, the 14-service
@@ -222,13 +222,13 @@ refund), the package / price / one-time catalog, the 14-service
 retired. **Financial configuration is admin-only** (`team_members.role` via
 `is_team_admin()`): the catalog and its Stripe mapping, the billing mode
 (`app_settings` `billing…`), and team roles (members cannot mint or take
-over an admin). **B2 = 0058 + `supabase/functions/_shared/stripe/` +
+over an admin). **B2 = 0059 + `supabase/functions/_shared/stripe/` +
 `stripe-webhook`** (written and tested, **not applied / not deployed**): one
 shared sync layer (fetch-on-event, pinned API version, newest read wins)
 behind the webhook, B3 and future reconciliation; a claim / lease / fail
 ledger; the mirror writable only inside the sync functions by an
 authenticator + service_role session (the worker's SQL is refused). **B3 =
-0059 + `stripe-billing` + the app** (written and tested, **not applied /
+0060 + `stripe-billing` + the app** (written and tested, **not applied /
 not deployed**): explicit admin actions (search / link an existing customer
 with confirmation, create a customer, import a Stripe product, a client's
 Custom Retainer price, Checkout from an approved price only with
@@ -239,7 +239,7 @@ append-only; Billing tab (Payment Link Ready, customer, entitlements with
 source, invoices, payments with individual refunds, history), Settings ›
 Billing catalog, public `/checkout/complete` and `/checkout/canceled`.
 Members read everything and edit agreements / overrides; portal contacts
-can only open their own client's Customer Portal. **B4 = 0060 +
+can only open their own client's Customer Portal. **B4 = 0061 +
 `stripe-reconcile`** (written and tested, **not applied / not deployed**):
 the safety net behind the webhook, reusing the shared sync (never a second
 one) — mapped catalog products and prices, every linked customer
@@ -252,7 +252,7 @@ scheduler (`BILLING_RECONCILE_SECRET`; daily schedule enabled only at
 cutover) or an admin (Settings › Run Billing Reconciliation, Billing tab ›
 Reconcile This Client). Stripe wins; nothing is written to Stripe, and
 agreements, entitlements and external payments are never touched. **B5 =
-0061 + the app + the worker skill** (written and tested, **not applied / not
+0062 + the app + the worker skill** (written and tested, **not applied / not
 deployed**): `client_entitlements_for()` is the one read of what the
 agreement includes (package + client overrides; a disabled or absent quota
 is 0, never unlimited; never reads billing) and `client_quota_usage()` the
@@ -269,7 +269,7 @@ agreement history. Agreements are not versioned. `/portal/billing` shows
 the portal's own plan, status, services and invoices through
 `portal_billing_summary` / `portal_billing_invoices` /
 `portal_entitlements`, and a Manage billing button that sends no client id.
-**From 0061 on, a client with no recorded agreement gets no weekly blog task
+**From 0062 on, a client with no recorded agreement gets no weekly blog task
 or website updates** — the cutover runbook's precondition 7. Every Edge Function
 shares the service-role key, so isolation between functions is code review
 — a production-blocking follow-up in `docs/billing.md`. **Do not add Stripe
@@ -734,7 +734,7 @@ Function change that:
 ## Website Updates and the weekly blog (Sept 14 2026)
 
 Tom's calls: two new pages and two refreshes per client per month, a blog
-post every week (since B5 / 0061, the numbers come from each client's
+post every week (since B5 / 0062, the numbers come from each client's
 agreement — `client_quota_usage()`; see "Billing architecture"), published on Compass-run sites **without a look** (the
 Foundation tab's **Put it back** button is the safety net), Google Docs for
 client-run sites. Migration 0035; playbooks in the worker skill; the plan

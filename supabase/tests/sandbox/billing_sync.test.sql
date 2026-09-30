@@ -1,5 +1,5 @@
--- Tests for migration 0058 (billing B2: the Stripe sync write boundary and the
--- webhook ledger), run by scripts/test-portal-sandbox.sh after the 0057 suite.
+-- Tests for migration 0059 (billing B2: the Stripe sync write boundary and the
+-- webhook ledger), run by scripts/test-portal-sandbox.sh after the 0058 suite.
 -- Own harness schema (bs), fictional clients and Stripe ids.
 --
 -- Callers, as they reach production:

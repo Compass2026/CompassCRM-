@@ -1,6 +1,6 @@
 // End-to-end check of stripe-billing (B3) against a real database: the full
 // migration replay behind PostgREST, so the handler's store reaches Postgres
-// as authenticator / service_role (the session 0058 / 0059 admit), and every
+// as authenticator / service_role (the session 0059 / 0060 admit), and every
 // teammate or portal read and write goes through RLS as that person. The
 // handler, the shared sync layer, the webhook and both stores are the
 // deployed ones; Stripe is the in-memory fake (tests/fixtures/stripe-fake.mjs).

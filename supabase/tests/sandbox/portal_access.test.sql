@@ -124,9 +124,9 @@ begin
   -- authority-run function for accept / link): D11c here, P3 / P5 in
   -- authority.test.sql. authority_draft_start (0053) refuses anyone but a
   -- signed-in teammate or the service: D11e here, Q / I in
-  -- authority_drafter_handoff.test.sql. billing_livemode (0061) returns only
+  -- authority_drafter_handoff.test.sql. billing_livemode (0062) returns only
   -- the billing mode boolean, so the portal's billing views follow it;
-  -- portal_billing_summary_row / portal_entitlement_rows (0061) answer only
+  -- portal_billing_summary_row / portal_entitlement_rows (0062) answer only
   -- for portal_client_id(), with the client-safe columns (billing suite P*).
   perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, secret_present, social_post_readiness among security-definer functions',
     (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace

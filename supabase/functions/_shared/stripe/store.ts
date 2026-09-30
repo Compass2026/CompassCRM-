@@ -1,6 +1,6 @@
 // The Stripe sync layer's only door to the database: supabase-js with the
 // service role, so every call reaches Postgres through PostgREST as
-// authenticator + service_role, the session 0058's write boundary admits.
+// authenticator + service_role, the session 0059's write boundary admits.
 // It writes only through the billing sync functions; it never touches a
 // mirror table directly (service_role has no direct write grant on them).
 

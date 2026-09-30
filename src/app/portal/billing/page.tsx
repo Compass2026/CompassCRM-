@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // The client's billing, in their words (B5). Everything comes from the
-// portal_* views (0061), each filtered to the signed-in contact's own client
+// portal_* views (0062), each filtered to the signed-in contact's own client
 // in the database; nothing here names a client, and no Stripe id, internal
 // code or note is ever selected.
 

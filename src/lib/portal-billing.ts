@@ -1,6 +1,6 @@
 // Client-facing billing wording for the portal (B5). Pure. The portal never
 // sees Stripe ids, internal attention codes or reconciliation state: the
-// portal_billing_summary view (0061) already reduces the billing state to one
+// portal_billing_summary view (0062) already reduces the billing state to one
 // of these client-safe codes.
 
 export type PortalBillingStatus =

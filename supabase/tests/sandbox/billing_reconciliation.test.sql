@@ -1,5 +1,5 @@
--- Tests for migration 0060 (billing B4 reconciliation history, fingerprints and
--- the health read models), run by scripts/test-portal-sandbox.sh after the 0059
+-- Tests for migration 0061 (billing B4 reconciliation history, fingerprints and
+-- the health read models), run by scripts/test-portal-sandbox.sh after the 0060
 -- suite. Own harness schema (br).
 --
 -- Callers: worker (postgres), service (authenticator + service_role: the

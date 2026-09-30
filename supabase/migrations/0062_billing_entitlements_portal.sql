@@ -1,4 +1,4 @@
--- 0061 — Billing B5: the entitlement contract for Compass's own systems, and
+-- 0062 — Billing B5: the entitlement contract for Compass's own systems, and
 -- billing in the client portal.
 --
 -- Two separate paths, kept separate:
@@ -20,7 +20,7 @@
 
 -- ── Part 1: the entitlement contract ─────────────────────────────────────────
 -- One read for every Compass system that plans or shows work. Invoker rights
--- over client_entitlements (0057): a teammate sees every client, the service
+-- over client_entitlements (0058): a teammate sees every client, the service
 -- role and the worker's SQL see every client, a portal contact or anyone else
 -- sees nothing (client_entitlements' base tables are team-only).
 --
@@ -367,7 +367,7 @@ create trigger client_entitlement_overrides_history after insert or update or de
   for each row execute function record_client_agreement_event();
 
 -- ── Part 2: portal billing views ─────────────────────────────────────────────
--- billing_livemode() (0057) ran as its caller, and only the team can read
+-- billing_livemode() (0058) ran as its caller, and only the team can read
 -- app_settings — so inside a portal view it answered "test mode" for a
 -- portal contact even with live mode on. It returns one boolean; run it as
 -- its owner so every caller sees the same mode.
@@ -501,7 +501,7 @@ begin
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'v' and c.relname like 'portal\_%'
     and pg_get_viewdef(c.oid) not like '%portal_client_id()%';
-  if v_bad is not null then raise exception '0061: portal views missing the client filter: %', v_bad; end if;
+  if v_bad is not null then raise exception '0062: portal views missing the client filter: %', v_bad; end if;
 
   select string_agg(distinct g.table_name || ' ' || g.privilege_type, ', ') into v_bad
   from information_schema.role_table_grants g
@@ -510,7 +510,7 @@ begin
   where g.table_schema = 'public' and g.table_name like 'portal\_%'
     and ((g.grantee = 'authenticated' and c.relkind = 'v' and g.privilege_type <> 'SELECT')
       or g.grantee = 'anon' or g.grantee = 'PUBLIC');
-  if v_bad is not null then raise exception '0061: unexpected portal grants: %', v_bad; end if;
+  if v_bad is not null then raise exception '0062: unexpected portal grants: %', v_bad; end if;
 
   -- The portal billing views carry no Stripe id or internal field.
   select string_agg(table_name || '.' || column_name, ', ') into v_bad
@@ -519,10 +519,10 @@ begin
     and table_name in ('portal_billing_summary', 'portal_billing_invoices', 'portal_entitlements')
     and (column_name like 'stripe\_%' or column_name in ('package_id', 'source', 'override_reason', 'attention_reasons',
          'billing_attention', 'livemode', 'notes', 'reference', 'external_method', 'recorded_by'));
-  if v_bad is not null then raise exception '0061: a portal billing view exposes an internal column: %', v_bad; end if;
+  if v_bad is not null then raise exception '0062: a portal billing view exposes an internal column: %', v_bad; end if;
 
   -- The entitlement contract and the planning that follows it never read
-  -- billing (0057's client_entitlements reads only plans.package_id,
+  -- billing (0058's client_entitlements reads only plans.package_id,
   -- package_entitlements and the overrides).
   select string_agg(p.proname, ', ') into v_bad
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -530,9 +530,9 @@ begin
     and p.proname in ('client_entitlements_for', 'client_quota_usage', 'create_weekly_blog_tasks', 'fire_website_updates',
                       'client_intelligence_input', 'authority_input')
     and pg_get_functiondef(p.oid) ~* '(stripe_|subscriptions|invoices|payments|client_billing_status|billing_attention|billing_reconcil|checkout_sessions)';
-  if v_bad is not null then raise exception '0061: a planning function reads billing: %', v_bad; end if;
+  if v_bad is not null then raise exception '0062: a planning function reads billing: %', v_bad; end if;
   if pg_get_viewdef('client_entitlements'::regclass) ~* '(stripe_|subscriptions|invoices|payments|billing_status|billing_attention)' then
-    raise exception '0061: client_entitlements reads billing';
+    raise exception '0062: client_entitlements reads billing';
   end if;
 
   if has_function_privilege('anon', 'client_entitlements_for(uuid)', 'execute')
@@ -540,6 +540,6 @@ begin
      or has_function_privilege('authenticated', 'create_weekly_blog_tasks()', 'execute')
      or has_function_privilege('authenticated', 'fire_website_updates(date)', 'execute')
      or has_function_privilege('authenticated', 'record_client_agreement_event()', 'execute') then
-    raise exception '0061: unexpected function grants';
+    raise exception '0062: unexpected function grants';
   end if;
 end $$;

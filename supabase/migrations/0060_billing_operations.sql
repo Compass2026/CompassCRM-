@@ -1,6 +1,6 @@
--- 0059 — Billing B3: the operations the stripe-billing command handler records.
+-- 0060 — Billing B3: the operations the stripe-billing command handler records.
 --
--- Everything here is written through 0058's boundary: inside a billing
+-- Everything here is written through 0059's boundary: inside a billing
 -- function (SECURITY DEFINER, callable only by an authenticator +
 -- service_role session, i.e. an Edge Function) that sets the sync flag the
 -- mirror guard admits. The handler has already checked who is asking
@@ -9,7 +9,7 @@
 -- payment belongs to the client) so a caller of the function cannot skip it.
 --
 --   1. checkout_sessions rows: billing_record_checkout() records a Checkout
---      Session the handler created in Stripe (0058's sync then keeps it
+--      Session the handler created in Stripe (0059's sync then keeps it
 --      current; it never creates one).
 --   2. External (manual) payments: billing_record_external_payment() —
 --      admin-recorded check / wire / manually received ACH / other; exact
@@ -229,12 +229,12 @@ begin
   if has_table_privilege('service_role', 'public.billing_audit_events', 'insert,update,delete,truncate')
      or has_table_privilege('authenticated', 'public.billing_audit_events', 'insert,update,delete,truncate')
      or has_table_privilege('anon', 'public.billing_audit_events', 'select') then
-    raise exception '0059: billing_audit_events is writable through the API';
+    raise exception '0060: billing_audit_events is writable through the API';
   end if;
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
              where n.nspname = 'public' and p.proname like 'billing\_%' and p.prosecdef
                and (has_function_privilege('authenticated', p.oid, 'execute')
                     or has_function_privilege('anon', p.oid, 'execute'))) then
-    raise exception '0059: a billing security-definer function is callable by a signed-in user or anon';
+    raise exception '0060: a billing security-definer function is callable by a signed-in user or anon';
   end if;
 end $$;

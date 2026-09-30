@@ -1,8 +1,8 @@
 // stripe-reconcile's door to the database: supabase-js with the service role
-// (authenticator + service_role through PostgREST, the session 0058 / 0060
+// (authenticator + service_role through PostgREST, the session 0059 / 0061
 // admit). It extends the stripe-billing store (the caller lookup, secrets, the
 // shared sync writes and the webhook ledger) with the reads reconciliation
-// needs and the three run functions of 0060. The mirror is written only by
+// needs and the three run functions of 0061. The mirror is written only by
 // billing_sync_apply; run history only by billing_reconcile_*.
 
 import type { LedgerEvent } from "../_shared/stripe/store.ts";

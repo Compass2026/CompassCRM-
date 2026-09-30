@@ -1,4 +1,4 @@
-// Billing read-model helpers (src/lib/billing.ts, 0057): money in integer
+// Billing read-model helpers (src/lib/billing.ts, 0058): money in integer
 // minor units, the agreement and override rules (the same rules as plans' and
 // client_entitlement_overrides' constraints; sandbox: billing_foundation.test.sql),
 // entitlement text and the derived billing states.

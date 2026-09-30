@@ -1,6 +1,6 @@
--- Tests for migration 0059 (billing B3 operations: Checkout records, external
+-- Tests for migration 0060 (billing B3 operations: Checkout records, external
 -- payments with void corrections, the append-only billing audit trail), run by
--- scripts/test-portal-sandbox.sh after the 0058 suite. Own harness schema (bo).
+-- scripts/test-portal-sandbox.sh after the 0059 suite. Own harness schema (bo).
 --
 -- Callers: worker (postgres), service (authenticator + service_role: the
 -- stripe-billing function), person (authenticated + team JWT), portal, anon,
