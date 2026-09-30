@@ -129,3 +129,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/source_asset_hashin
 # saw it, formats, no shared folders between live clients, the read model,
 # nothing else reads them).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folders.test.sql"
+# 0057: overlay roles (phone, website, service segment, template label; claims
+# in previews; up to 12 lines), and the renderer's spec hash equals
+# creative_spec_hash for every Lucas template (the fixture is passed in).
+psql_as postgres -d sandbox -v specs="$(cat "$ROOT/tests/fixtures/creative-lucas-templates.json")" \
+  -f "$ROOT/supabase/tests/sandbox/creative_overlay_roles.test.sql"

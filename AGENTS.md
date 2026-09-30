@@ -25,7 +25,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0056` (Canva folder ids on the client record) was
+  **not yet applied**; `0057` (Creative Engine overlay roles) is written and
+  sandbox-tested but **not applied** (needs Tom's approval); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -1191,6 +1192,58 @@ scheduled or published by any of it.
   lifecycles), and generated creative is never stored in `brand_assets` (a
   future `creative_assets` model; approval will bind copy and the exact
   creative version). Nothing of the Creative Engine is built.
+
+## Creative Engine renderer (Sept 30 2026; 0057 written, not applied; nothing deployed)
+
+This is the deterministic renderer and the Lucas template pilot. Full
+design, rules and runbook: `docs/creative-engine.md`. Production state and
+the readiness matrix: `docs/lucas-creative-readiness.md`.
+
+- **Code:** `supabase/functions/creative-engine/`.
+  - **Pinned stack:** resvg-wasm 2.6.2, hash-checked; opentype.js 1.3.4;
+    Montserrat / Poppins embedded and hash-checked. Text is drawn as glyph
+    paths.
+  - **Determinism:** the same inputs give the same bytes, and Deno is
+    byte-identical to Node (`deno-check.ts`).
+  - **Hashes:** spec hash = `creative_spec_hash`; brief hash; copy hash;
+    re-hashed source bytes; the output hash.
+- **Governance (`govern.ts`):** the request carries references only (a
+  service id, claim ids, a label id, photo ids) and every word is resolved
+  from the record.
+  - **Words:** a claim must be confirmed or sourced-with-source. Compass-wide
+    and client (`kits.ts`) phrase blocks apply. Word limits apply, and copy
+    that does not fit is refused, never shrunk.
+  - **Photos:** approved, own work, unchanged, focal point set, no people
+    tags, showing the service. A hero needs ≥ 1080 px, and nothing is
+    enlarged.
+  - **Nothing falls back.**
+- **Templates:** `registry.ts` holds five cleared families (Service
+  Spotlight, Trust & Know-How authority mode, Seasonal non-offer, Real Work
+  Showcase, Service Light) × Business Profile 1200×900 / Facebook /
+  Instagram 1080×1350, as `lucas-*-{gbp,facebook,instagram}` v1. Review
+  Spotlight, Team & Community and Offer mode stay blocked.
+- **Function (`handler.ts`):**
+  - `version`
+  - `register`: through `creative_register_template`
+  - `plan`: a dry run, no writes
+  - `preview`: `creative_begin_run` → upload at the content address →
+    `creative_write`; proposes, never approves
+  - It is **not deployed**.
+- **0057** adds overlay roles (phone, website, service segment, template
+  label; claims in previews; ≤ 12 lines) so the record matches what is
+  drawn. It is **not applied**.
+- **Previews (read-only):** Brand › Creative use › **Creative previews**
+  (`/clients/[id]/brand/creative-preview`, `src/lib/creative-preview.ts`)
+  renders the Lucas preview set with the teammate's own session. It writes
+  nothing.
+- **Tests:**
+  - `npm test`: `creative-engine`, `creative-engine-handler`
+  - the sandbox's `creative_overlay_roles.test.sql`
+  - `npm run test:creative-preview-ui`
+  - `deno-check.ts`
+- **Runtime:** ≤ ~1.1 s per render and about 190 MB of memory in Deno,
+  against the Edge limits of 2 s CPU and 256 MB; measure the deployed
+  function before relying on it.
 
 ## Canva folder mapping (0056, applied Sept 28 2026 as `20260928212948`)
 
