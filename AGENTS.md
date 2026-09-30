@@ -270,7 +270,17 @@ the portal's own plan, status, services and invoices through
 `portal_billing_summary` / `portal_billing_invoices` /
 `portal_entitlements`, and a Manage billing button that sends no client id.
 **From 0062 on, a client with no recorded agreement gets no weekly blog task
-or website updates** — the cutover runbook's precondition 7. Every Edge Function
+or website updates** — the cutover runbook's precondition 7. **Production readiness** (Sept 30
+2026): `docs/billing-readiness.md` (reconciliation with the Creative
+Engine branch, security-definer hardening in 0062 — every billing function
+pins `search_path = public, pg_temp` —, the tested rollback in
+`supabase/rollback/` (`npm run test:billing-rollback`), the cutover kit in
+`supabase/cutover/`, the test-mode dress rehearsal `npm run
+test:billing-rehearsal`, the deployment order and the go-live checklist);
+`docs/billing-agreement-inventory.md` (no client's terms are recorded
+anywhere yet); `docs/billing-service-role.md` (the Stripe key is in Vault,
+readable by every Edge Function and the worker's SQL: Option A for test
+mode, Option B before live — not yet decided). Every Edge Function
 shares the service-role key, so isolation between functions is code review
 — a production-blocking follow-up in `docs/billing.md`. **Do not add Stripe
 secrets or deploy either function outside the runbook; test mode only.** No

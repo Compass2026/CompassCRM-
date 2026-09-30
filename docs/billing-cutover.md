@@ -1,5 +1,12 @@
 # Billing cutover runbook (B1 – B5, test mode)
 
+> The production-readiness review (Sept 30 2026) turned this runbook into an
+> exact sequence with a tested kit: **`docs/billing-readiness.md` § 17** is
+> the deployment order, `supabase/cutover/` the pause / agreements / test
+> client / validate / resume SQL, `supabase/rollback/` the tested rollback,
+> and `docs/billing-agreement-inventory.md` the client worksheet. Where the
+> two differ, the readiness document wins.
+
 How migrations 0058 / 0059 / 0060 / 0061 / 0062, the app, and the Stripe Edge
 Functions go to production together. Nothing here has been run. Architecture:
 `docs/billing.md`; review: draft PR Compass2026/CompassCRM-#86.
@@ -42,7 +49,7 @@ link from the app, all in Stripe test mode.
    write boundary, and its limit"): accept the shared service-role key for
    test mode, or re-host the sync. This is required before live mode, and
    recommended before test mode too.
-6. A tested rollback script (section 6) is in hand.
+6. The tested rollback (section 6) is in hand: `supabase/rollback/`.
 7. **Agreements before automation (B5).** From 0062 on, the weekly blog
    task and the monthly website updates are planned **only within each
    client's agreement**: a client with no agreement gets none (logged
@@ -208,9 +215,13 @@ link from the app, all in Stripe test mode.
 
 ## 6. Rollback
 
-Write the down script and test it in the sandbox **before** cutover
-(`supabase/tests/sandbox` replay, then down, then the 0056 suites). It must
-restore 0056's state exactly:
+**Written and tested** (production-readiness review, Sept 30 2026):
+`supabase/rollback/billing_0058_0062_backup.sql` (run first; keep the
+output), then `supabase/rollback/billing_0058_0062_down.sql` (one
+transaction). `npm run test:billing-rollback` proves it on the replay: the
+schema dump, cron and billing settings come back identical to the pre-billing
+baseline, main's portal access suite passes, and 0058 – 0062 re-apply
+cleanly. What it restores:
 
 - Restore 0035's `create_weekly_blog_tasks()` and `fire_website_updates()`
   (the planners without the agreement gate), set `billing_livemode()` back
