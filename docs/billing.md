@@ -967,3 +967,5 @@ agreements (effective dates, per-period entitlements) are follow-up work.
 - `npm run test:entitlements-ui`: 6 browser checks (Tasks / Content /
   Social / Reports / Intelligence targets, and no agreement reads "not
   included").
+- Screenshots: `docs/screenshots/billing/portal-billing-*.png`,
+  `docs/screenshots/billing/entitlements-*.png`.
