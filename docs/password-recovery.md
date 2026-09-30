@@ -68,14 +68,18 @@ Supabase dashboard › project `compass-client-platform` › Authentication.
 | --- | --- |
 | **Site URL** | `https://compass-crm-ten.vercel.app` (no trailing slash, no path) |
 | **Redirect URLs** | `https://compass-crm-ten.vercel.app/**` |
-| | `https://compass-crm-*-compassmarketin.vercel.app/**` (every Vercel preview of the `compass-crm` project) |
+| | `https://compass-*-compassmarketin.vercel.app/**` (every Vercel preview of the `compass-crm` project) |
 | | `http://localhost:3000/**` (optional, local `next dev`) |
 
-- The preview pattern covers Vercel's branch and deployment URLs for the
-  project in the `compassmarketin` team, e.g.
-  `https://compass-crm-git-<branch>-compassmarketin.vercel.app`. In Supabase's
-  glob a `*` does not match `.` or `/`, so the pattern cannot match another
-  domain. Add any custom domain the app is later served on.
+- Vercel gives each preview two hostnames in the `compassmarketin` team: the
+  branch URL `compass-crm-git-<branch>-compassmarketin.vercel.app` and the
+  deployment URL `compass-<hash>-compassmarketin.vercel.app` (seen Sept 30
+  2026: `compass-93sl9mu9d-compassmarketin.vercel.app`). The pattern covers
+  both. In Supabase's glob a `*` matches neither `.` nor `/`, so it cannot
+  reach another domain; of the team's projects today only `compass-crm`
+  produces `compass-…` hostnames (`compasswebsite` does not match). Re-check
+  if a team project whose name starts `compass-` is added, and add any custom
+  domain the app is later served on.
 - A deployment missing from the list still works for resets: Supabase falls
   back to the Site URL, the link arrives at production's `/`, and the proxy
   forwards `?token_hash=…&type=recovery` to `/auth/confirm` — the reset
