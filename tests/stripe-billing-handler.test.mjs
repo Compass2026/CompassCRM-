@@ -512,10 +512,10 @@ test("portal: configured conservatively once; sessions for the client's own cust
   assert.equal(mine.status, 200);
   const session = t.s.all("billing_portal.session")[0];
   assert.equal(session.customer, t.store.db.links[0].stripe_customer_id);
-  assert.equal(session.return_url, "https://crm.example.test/portal");
+  assert.equal(session.return_url, "https://crm.example.test/portal/billing");
   const team = await t.call("admin", { action: "create_portal_session", client_id: A });
   assert.equal(team.status, 200);
-  assert.equal(t.s.all("billing_portal.session").find((x) => x.return_url.endsWith("/billing")).return_url, `https://crm.example.test/clients/${A}/billing`);
+  assert.equal(t.s.all("billing_portal.session").find((x) => x.return_url.includes("/clients/")).return_url, `https://crm.example.test/clients/${A}/billing`);
   // B has no customer: nothing to open.
   assert.equal((await t.call("admin", { action: "create_portal_session", client_id: B })).body.error, "no_billing_account");
   // Someone enables cancellation in the dashboard: no more sessions.

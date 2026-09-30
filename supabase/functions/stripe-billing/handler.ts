@@ -666,7 +666,7 @@ export function createStripeBilling(deps: {
     if (problems.length) {
       refuse(409, "portal_config_unsafe", `The Customer Portal configuration was changed in Stripe: ${problems.join("; ")}. An admin must reconfigure it.`);
     }
-    const returnUrl = caller.kind === "portal" ? `${cfg.appUrl}/portal` : `${cfg.appUrl}/clients/${clientId}/billing`;
+    const returnUrl = caller.kind === "portal" ? `${cfg.appUrl}/portal/billing` : `${cfg.appUrl}/clients/${clientId}/billing`;
     const session = await api.post("/v1/billing_portal/sessions", { customer: link!.stripe_customer_id, configuration: confId, return_url: returnUrl });
     await store.audit({ client_id: clientId, action: "portal_session", ...actor(caller), livemode, subject: link!.stripe_customer_id, detail: {} });
     return { url: session.url };

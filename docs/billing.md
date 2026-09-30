@@ -16,6 +16,8 @@ Compass: client → agreement (plans: package, collection) → entitlements
 Stripe webhooks (B2) ─┐
 Reconciliation (B4) ──┴→ _shared sync → Stripe mirror (service role only)
    → client_billing_status (derived) → Dashboard / Plan / Billing / portal (B5)
+Agreement → client_entitlements_for() / client_quota_usage() (B5) → Five Layers
+   (never billing state)
 ```
 
 ## Status
@@ -26,13 +28,13 @@ Reconciliation (B4) ──┴→ _shared sync → Stripe mirror (service role on
 | B2 | Shared Stripe sync layer + corrected webhook | **0058 + `_shared/stripe/` + `stripe-webhook` written and tested, not applied / not deployed** |
 | B3 | Checkout, link existing customer, Customer Portal, billing screens | **0059 + `stripe-billing` + app screens written and tested, not applied / not deployed** |
 | B4 | Reconciliation | **0060 + `stripe-reconcile` + Stripe sync screens written and tested, not applied / not deployed** |
-| B5 | Entitlement interface for the Five Layers + portal billing | not started |
+| B5 | Entitlement interface for the Five Layers + portal billing | **0061 + app + worker skill written and tested, not applied / not deployed** |
 
 Everything stays in Stripe **test mode** until reviewed. **Do not add the
 Stripe secrets to Vault and do not deploy `stripe-billing` or
 `stripe-webhook` outside the cutover in `docs/billing-cutover.md`**: the
 deployed v2 / v1 are the 0008 code, which writes columns 0057 drops (both
-answer 500 without secrets, so today they do nothing). 0057 – 0060 ship
+answer 500 without secrets, so today they do nothing). 0057 – 0061 ship
 together with the app and the three functions. Draft PR:
 Compass2026/CompassCRM-#86.
 
@@ -752,3 +754,216 @@ deleted or rewritten to resolve them.
   global failure, run counts, last reconciled).
 - `npm run test:billing-reconcile-ui`: 4 browser checks; screenshots in
   `docs/screenshots/billing/reconcile-*.png`.
+
+## B5: the entitlement contract and portal billing (migration 0061, the app)
+
+Two paths, kept apart:
+
+```
+Stripe → billing mirror → client_billing_status        (money: B1–B4)
+Agreement (plans.package_id) + package_entitlements + client overrides
+       → client_entitlements_for() → the Five Layers    (scope: B5)
+```
+
+Billing never controls entitlements: a past-due, unpaid or canceled
+subscription, `billing_attention` or a reconciliation run changes nothing
+in what Compass plans. Stripe is never called by, and no billing table is
+read by, Client Intelligence, the Authority Engine, the Drafter, the
+Publisher or the Creative Engine.
+
+### The entitlement interface (0061)
+
+- **`client_entitlements_for(p_client_id uuid default null)`**: invoker
+  rights over `client_entitlements` (0057); one row per client and catalog
+  service. Columns: `client_id`, `service_key`, `service_name`, `kind`
+  (`feature` | `quota`), `enabled`, `quantity`, `unit`, `period`, `source`
+  (`package` | `client_override` | `none`), `package_id`, `sort_order`.
+  No Stripe concept. A quota's `quantity` is its monthly allocation: **0
+  when disabled or not agreed, never NULL, never unlimited**; a feature's
+  is NULL. With no argument it returns every visible client in one call
+  (no N+1). A teammate and the service role see every client; a portal
+  contact, a stranger or anon see nothing (anon cannot execute it).
+- **Service keys.** Features: `seo`, `website`, `hosting`, `gbp`,
+  `social`, `paid_ads`, `crm`, `reporting`, `client_portal`. Quotas:
+  `blog_posts`, `website_pages`, `website_refreshes`, `gbp_posts`,
+  `social_posts`. Typed in `src/lib/entitlements.ts` (`FEATURE_KEYS`,
+  `QUOTA_KEYS`).
+- **Typed helpers** (`src/lib/entitlements.ts`): `getClientEntitlements`,
+  `getClientEntitlement`, `getEntitlementsForClients` (bulk),
+  `getQuotaUsage`, `getClientAgreement` (a screen's fail-safe read),
+  `includes`, `monthlyAllocation`, `remainingAllocation`, `planWork`,
+  `serviceScope`, `targetText`. A read error or no rows throws
+  `EntitlementsUnavailable`: callers that plan stop and say why, and never
+  treat "unreadable" as "nothing included" or "unlimited".
+- **What automation needs for each kind of work** (`WORK_REQUIREMENTS`,
+  mirrored in the SQL planners): Business Profile posts → `gbp` +
+  `gbp_posts`; social posts → `social` + `social_posts`; blog posts →
+  `blog_posts`; new pages → `website` + `website_pages`; refreshes →
+  `website` + `website_refreshes`. A feature that is off means no
+  automatic work of that kind, whatever the quota says.
+
+### Monthly quota accounting (0061)
+
+`client_quota_usage(p_client_id default null, p_month default this month)`
+on the America/Chicago calendar month, for each quota: `allocation` (live
+from the entitlements), `completed`, `planned`, `used` = completed +
+planned, `remaining` = max(0, allocation − used), `over_allocation` =
+max(0, used − allocation). What counts:
+
+| Quota | Completed | Planned |
+| --- | --- | --- |
+| `blog_posts` | Compass `content_posts` published this month | Compass posts not published and due this month; open `blog_post` tasks created this month |
+| `gbp_posts` | `google_business` posts published this month | not rejected, not published, scheduled (or, unscheduled, created) this month |
+| `social_posts` | the same on every other platform | the same |
+| `website_pages` | `change_log` `page_added`, approved, this month | proposed |
+| `website_refreshes` | `change_log` `page_rewrite`, approved | proposed |
+
+A `site_inventory` page (0050) is never Compass's work. A vetoed change or
+a rejected post does not count. A mid-month increase opens room at once; a
+decrease leaves `remaining` at 0 and reports the excess — **nothing is ever
+deleted to fit**. Known limits: a blog task and the post it produced can
+both count for the moments between the worker recording the post and
+closing the task; a failed publish still counts as planned until someone
+rejects or reschedules it.
+
+### Planning within the agreement
+
+- **Weekly blog post** (`create_weekly_blog_tasks`, redefined): a task only
+  while `blog_posts` has room this month.
+- **Monthly website updates** (`fire_website_updates`, redefined): the
+  worker is fired only with the `website` feature and room in
+  `website_pages` or `website_refreshes`. The cycle's `site_updates` task
+  stays open for a person either way.
+- Every decision is a row in **`automation_entitlement_log`** (`created` /
+  `skipped` with `within_allocation`, `not_in_agreement`,
+  `allocation_used` or `entitlements_unavailable`, and the numbers). If the
+  entitlements cannot be read the planner catches the error, logs
+  `entitlements_unavailable` and plans nothing for that client.
+- **The worker skill** reads `client_quota_usage` for website updates (the
+  cap per kind), the weekly blog task, the first month's GBP posts and the
+  report's activity, and stops with the reason if it cannot.
+- **Authority**: the engine's analysis is unchanged (deterministic,
+  fingerprinted, no entitlement input — `authority_input` is deliberately
+  not extended). `src/lib/authority-agreement.ts` marks each opportunity's
+  work on the Authority tab: "Not in agreement", "Allocation used", or
+  unmarked with the room left in its title; "Agreement unknown" when the
+  entitlements cannot be read. Nothing is hidden, and the "Planning within
+  the agreement" card shows the month's GBP / blog / page / refresh
+  targets. The Drafter hand-off stays a teammate's request, so it is not
+  blocked.
+- **People keep operational control.** No database constraint refuses work
+  beyond the allocation: a teammate may add posts, pages or tasks, and they
+  show as over allocation.
+
+### Screens
+
+- Client **Tasks**, **Content**, **Social** and **Authority** show "3 / 4
+  planned" targets from `client_quota_usage` (`MonthlyAllocation`); Social
+  counts Business Profile posts apart from social posts (before B5 the tab
+  counted every platform against `social_posts`).
+- **Reports** keeps actual (published blog / social / Business Profile per
+  cycle) and included (the agreement) apart (`src/lib/reporting-activity.ts`).
+- **Intelligence** shows the service scope (included, every month, not
+  included). `client_intelligence_input` is unchanged, since Authority
+  fingerprints it, and the scope never changes which facts a post may cite.
+
+### Agreement history and versioning
+
+`client_agreement_events` (0061) keeps every change to `plans` and to
+`client_entitlement_overrides`, including a removed override, with before /
+after and the teammate. It is append-only and written only by trigger; no-op
+updates are skipped. The override row itself keeps its reason, `updated_by`
+and `updated_at`. **Agreements are not versioned:** entitlements are
+always read as of now, so a past month's "included" shows today's terms.
+The history makes the terms at a date recoverable by hand; versioned
+agreements (effective dates, per-period entitlements) are follow-up work.
+
+### Portal billing
+
+- **Route** `/portal/billing` and a **Billing** tab in the portal nav, shown
+  once the client has an agreement (`src/app/portal/billing/page.tsx`,
+  `src/components/portal-nav.tsx`). Team members are still sent out of the
+  portal by the portal layout, and portal contacts out of the CRM.
+- **Read models (0061)**, 0037's pattern (owner-run views filtered by
+  `portal_client_id()`; `revoke all`, then `grant select to
+  authenticated`, checked by 0061's verify block and the sandbox's generic
+  portal checks):
+  - `portal_billing_summary`: plan name, collection, status as a
+    client-safe code (`active`, `trial`, `payment_attention` for past due
+    or unpaid, `payment_pending`, `scheduled_to_end`, `ended`, `external`,
+    `awaiting_setup`, `paused`, `not_set_up`), monthly amount / currency /
+    next billing date / end date for Stripe-collected agreements only, and
+    `can_manage_billing`.
+  - `portal_billing_invoices`: number, date, status, amounts, due date,
+    period, and Stripe's `hosted_invoice_url` / `invoice_pdf`. Current
+    billing mode only; never drafts.
+  - `portal_entitlements`: the included services and monthly deliverables,
+    from the same entitlement contract, without `source`, package or
+    override reason.
+- `client_billing_status` and `client_entitlements` are security-invoker
+  views, which Postgres checks with the caller's rights even inside an
+  owner-run view. Two security-definer row functions sit between them and
+  the portal: `portal_billing_summary_row()` and
+  `portal_entitlement_rows()`. Each takes no argument, answers only for
+  `portal_client_id()`, and returns only the client-safe columns.
+  `billing_livemode()` is now security definer, because it read
+  `app_settings` with the caller's rights and would have shown a portal
+  contact test mode in live mode.
+- **Never exposed**:
+  - Stripe ids, package ids
+  - `billing_attention` codes, reconciliation / webhook data, the audit
+    trail
+  - admin notes, override reasons, external-payment notes / methods / references
+- **Status wording** (`src/lib/portal-billing.ts`):
+  - Active; Trial
+  - "Payment needs attention" (with what to do)
+  - "First payment pending"; "Scheduled to end"; "Ended"
+  - "Managed directly with Compass"
+  - "Waiting for your payment details"; "Paused"; "Not set up yet"
+- **Manage billing** (`openPortalBillingAction`) calls B3's
+  `create_portal_session` with the contact's own sign-in and **no client
+  id**. `stripe-billing` derives the client from the sign-in, refuses any
+  other, re-checks Compass's restricted Customer Portal configuration
+  (payment method, invoices, contact details; no cancel, plan or quantity
+  changes), audits it as the portal contact, and returns to
+  `/portal/billing`. On any failure the contact sees one generic message.
+- **External arrangement**: status "Managed directly with Compass", the
+  sentence "Billing is managed directly with Compass.", no amounts, no
+  invoices and no Stripe button.
+
+### Tests (B5)
+
+- `npm test`:
+  - `tests/entitlements.test.mjs` (the typed model, not-included = 0,
+    overrides, fail safe, bulk read, remaining, planned / completed,
+    mid-month changes, excess kept, human extra work, features gate work)
+  - `tests/authority-agreement.test.mjs` (Authority reads the entitlements
+    over the production Lucas run; nothing hidden; unknown when unreadable)
+  - `tests/reporting-activity.test.mjs` (actual vs included; GBP apart from
+    social)
+  - `tests/five-layer-no-billing.test.mjs` (no Stripe or billing table in
+    Five Layer code)
+- `npm run test:sandbox`:
+  - `billing_entitlements_portal.test.sql` (82 checks):
+    - the contract
+    - billing states and reconciliation change nothing
+    - fail safe
+    - quota accounting
+    - the weekly blog and website-update gates
+    - mid-month changes, nothing deleted, human extra work
+    - agreement history
+    - no Five Layer function reads billing
+    - portal isolation, read-only, external, live / test, status codes
+    - team access unchanged
+  - `portal_access.test.sql` now covers eleven portal views.
+- `npm run test:portal-billing-ui`: 6 browser checks with the real
+  `stripe-billing` over the fake Stripe:
+  - the page
+  - Manage billing (no client id, own customer, return URL, audit)
+  - a past-due status
+  - an external client
+  - cross-client refusal
+  - routing
+- `npm run test:entitlements-ui`: 6 browser checks (Tasks / Content /
+  Social / Reports / Intelligence targets, and no agreement reads "not
+  included").

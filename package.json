@@ -30,6 +30,8 @@
     "test:billing-reconcile-ui": "UI_SPEC=tests/billing-reconcile-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:billing-ops-ui": "UI_SPEC=tests/billing-operations-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:billing-ui": "UI_SPEC=tests/billing-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:entitlements-ui": "UI_SPEC=tests/entitlements-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:portal-billing-ui": "UI_SPEC=tests/portal-billing-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:content-origin-ui": "UI_SPEC=tests/content-origin-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"
   },

@@ -26,8 +26,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0057` (billing foundation, B1), `0058` (Stripe sync
-  boundary, B2), `0059` (billing operations, B3) and `0060` (billing
-  reconciliation, B4) are written but **not yet applied** (they take their numbers at merge time; `docs/billing-cutover.md`); `0056` (Canva folder ids on the client record) was
+  boundary, B2), `0059` (billing operations, B3), `0060` (billing
+  reconciliation, B4) and `0061` (entitlement contract + portal billing,
+  B5) are written but **not yet applied** (they take their numbers at merge time; `docs/billing-cutover.md`); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -250,7 +251,26 @@ per-client history (`billing_reconciliation_runs` / `_results`,
 scheduler (`BILLING_RECONCILE_SECRET`; daily schedule enabled only at
 cutover) or an admin (Settings › Run Billing Reconciliation, Billing tab ›
 Reconcile This Client). Stripe wins; nothing is written to Stripe, and
-agreements, entitlements and external payments are never touched. Every Edge Function
+agreements, entitlements and external payments are never touched. **B5 =
+0061 + the app + the worker skill** (written and tested, **not applied / not
+deployed**): `client_entitlements_for()` is the one read of what the
+agreement includes (package + client overrides; a disabled or absent quota
+is 0, never unlimited; never reads billing) and `client_quota_usage()` the
+monthly accounting (America/Chicago month; allocation, completed, planned,
+remaining, over allocation). Typed helpers are in `src/lib/entitlements.ts`.
+The weekly blog task and the monthly website updates are planned only within
+the agreement; every skip is logged in `automation_entitlement_log`, and
+nothing is planned when the entitlements are unreadable. A person may always
+add more. Authority marks work outside the agreement (the engine and
+`authority_input` are unchanged). Tasks / Content / Social / Authority show
+"3 / 4 planned" targets; Reports keeps actual and included apart;
+Intelligence shows the service scope. `client_agreement_events` is the
+agreement history. Agreements are not versioned. `/portal/billing` shows
+the portal's own plan, status, services and invoices through
+`portal_billing_summary` / `portal_billing_invoices` /
+`portal_entitlements`, and a Manage billing button that sends no client id.
+**From 0061 on, a client with no recorded agreement gets no weekly blog task
+or website updates** — the cutover runbook's precondition 7. Every Edge Function
 shares the service-role key, so isolation between functions is code review
 — a production-blocking follow-up in `docs/billing.md`. **Do not add Stripe
 secrets or deploy either function outside the runbook; test mode only.** No
@@ -714,7 +734,8 @@ Function change that:
 ## Website Updates and the weekly blog (Sept 14 2026)
 
 Tom's calls: two new pages and two refreshes per client per month, a blog
-post every week, published on Compass-run sites **without a look** (the
+post every week (since B5 / 0061, the numbers come from each client's
+agreement — `client_quota_usage()`; see "Billing architecture"), published on Compass-run sites **without a look** (the
 Foundation tab's **Put it back** button is the safety net), Google Docs for
 client-run sites. Migration 0035; playbooks in the worker skill; the plan
 and the per-site survey in `docs/website-updates.md`.
