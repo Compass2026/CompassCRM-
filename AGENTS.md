@@ -1241,9 +1241,13 @@ the readiness matrix: `docs/lucas-creative-readiness.md`.
   - the sandbox's `creative_overlay_roles.test.sql`
   - `npm run test:creative-preview-ui`
   - `deno-check.ts`
-- **Runtime:** ≤ ~1.1 s per render and about 190 MB of memory in Deno,
-  against the Edge limits of 2 s CPU and 256 MB; measure the deployed
-  function before relying on it.
+- **Runtime** (`docs/creative-engine-runtime.md`):
+  - Measured in Deno with photo-like JPEGs: 0.53–1.44 s for a cold
+    render, with a process peak of 165–216 MB RSS.
+  - Edge limits: 2 s CPU and 256 MB.
+  - The 1080×1350 formats miss the 1.0 s CPU margin in this container.
+  - Measure the deployed function (a write-free `measure` mode, not built
+    yet) before any production render.
 
 ## Canva folder mapping (0056, applied Sept 28 2026 as `20260928212948`)
 

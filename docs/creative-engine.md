@@ -221,19 +221,23 @@ propose — never approve — a template for the client) is the function's
 
 ## Runtime
 
+Full readiness note: `docs/creative-engine-runtime.md`.
+
 | Where | Render time | Memory |
 |---|---|---|
 | Node (tests) | 15 renders, slowest 986 ms (compose + rasterise); most 300–650 ms | RSS 219 MB for the whole test process |
-| Deno 2.1 | 0.45–1.1 s wall per render | peak RSS 186 MB for the check process (engine start, 15 synthetic source rasterisations, 4 renders) |
+| Deno 2.1, photo-like JPEGs at Lucas's sizes | 0.53–1.44 s for a first render; 0.38–1.17 s warm | peak RSS 165–216 MB per process (the runtime is ~89 MB of that) |
 
 - **Supabase Edge limits:** 256 MB memory and **2 s CPU per request**.
-  Renders fit today, but the heaviest (a 1536×2048 JPEG decoded into a
-  1080-wide slot) uses about half the CPU budget.
-- **Before deploying:** measure the deployed function with `plan`.
-- **If production CPU is tighter than measured here:** move rendering to a
-  Node host with more CPU (the renderer is runtime-neutral and
-  byte-identical) and keep the writes in the Creative Engine's database
-  session.
+- **The 1080×1350 formats are the risk.** Their cold renders take
+  1.15–1.44 s, above the 1.0 s (50%) margin the note sets. Almost all of
+  it is resvg's high-quality resampling of the photos.
+- **Before deploying:** the note's `measure` protocol. `plan` does not
+  rasterise.
+- **If production CPU is tighter than measured here:** use the reductions
+  in the note, or move rendering to a Node host with more CPU (the
+  renderer is runtime-neutral and byte-identical) and keep the writes in
+  the Creative Engine's database session.
 
 ## Tests
 
