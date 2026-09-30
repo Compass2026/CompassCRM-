@@ -7,6 +7,13 @@ export const UPDATE_PASSWORD_PATH = "/update-password";
 
 export const MIN_PASSWORD_LENGTH = 8;
 
+// Set by /auth/confirm when a link it verified was headed for
+// /update-password; required by the page and by the action that saves the
+// password. So only someone who just proved they own the address can set a
+// new password without the current one: a signed-in laptop left open cannot.
+export const RECOVERY_COOKIE = "compass_pw_recovery";
+export const RECOVERY_COOKIE_MAX_AGE = 15 * 60;
+
 // Where /auth/confirm may send a signed-in user after it verifies a link.
 // Only a same-site path: "/x" yes; "//evil.com", "/\\evil.com",
 // "https://evil.com" or anything without a leading slash falls back to "/".

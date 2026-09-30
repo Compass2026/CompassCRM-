@@ -1,7 +1,12 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { UPDATE_PASSWORD_PATH, safeNextPath } from "@/lib/password-recovery";
+import {
+  RECOVERY_COOKIE,
+  RECOVERY_COOKIE_MAX_AGE,
+  UPDATE_PASSWORD_PATH,
+  safeNextPath,
+} from "@/lib/password-recovery";
 
 // Handles both Supabase auth callback styles:
 // - PKCE flow (default email templates): ?code=...
@@ -22,13 +27,27 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(new URL(next, request.url));
+    if (!error) return verified(next, request);
   }
 
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash });
-    if (!error) return NextResponse.redirect(new URL(next, request.url));
+    if (!error) return verified(next, request);
   }
 
   return NextResponse.redirect(new URL("/login?error=invalid_link", request.url));
+}
+
+function verified(next: string, request: NextRequest) {
+  const response = NextResponse.redirect(new URL(next, request.url));
+  if (next === UPDATE_PASSWORD_PATH) {
+    response.cookies.set(RECOVERY_COOKIE, "1", {
+      httpOnly: true,
+      secure: request.nextUrl.protocol === "https:",
+      sameSite: "lax",
+      path: UPDATE_PASSWORD_PATH,
+      maxAge: RECOVERY_COOKIE_MAX_AGE,
+    });
+  }
+  return response;
 }
