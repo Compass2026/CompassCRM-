@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { plannedQuantity } from "@/lib/billing";
+import { getQuotaUsage, targetText, usageByKey, type QuotaUsage } from "@/lib/entitlements";
+import { MonthlyAllocation } from "@/components/entitlements/monthly-allocation";
 import { PostDraftForm } from "@/components/post-forms";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,13 +32,20 @@ export default async function SocialPage({
   const { view = "list", month, review } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: posts }, { data: plan }, { data: services }, { data: offers }, { data: keywords }] = await Promise.all([
+  const now = new Date();
+  const monthStr = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [{ data: posts }, usageQ, { data: services }, { data: offers }, { data: keywords }] = await Promise.all([
     supabase
       .from("social_posts")
       .select("id, platform, post_type, search_intent, copy, review_status, publish_status, scheduled_at, published_at, submitted_at, author_kind, created_at, drafter_run_id")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
-    supabase.from("client_entitlements").select("enabled, quantity").eq("client_id", clientId).eq("service_key", "social_posts").maybeSingle(),
+    // B5: the month's agreed social and Business Profile posts against the
+    // posts planned or published (client_quota_usage; GBP counted apart).
+    getQuotaUsage(supabase, clientId, `${monthStr}-01`).then(
+      (usage) => ({ usage, unavailable: null as string | null }),
+      (e: Error) => ({ usage: [] as QuotaUsage[], unavailable: e.message }),
+    ),
     supabase.from("services").select("id, name").eq("client_id", clientId).eq("status", "approved").order("sort_order"),
     supabase.from("offers").select("id, title, status").eq("client_id", clientId).neq("status", "retired").order("title"),
     supabase.from("keywords").select("id, keyword").eq("client_id", clientId).eq("is_tracked", true).order("keyword"),
@@ -48,12 +56,12 @@ export default async function SocialPage({
   const shown = reviewFilter ? all.filter((p) => p.review_status === reviewFilter) : all;
   const counts = new Map(REVIEW_STATUSES.map((s) => [s, all.filter((p) => p.review_status === s).length]));
 
-  const now = new Date();
-  const monthStr = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [year, mon] = monthStr.split("-").map(Number);
-  const publishedThisMonth = all.filter(
-    (p) => p.publish_status === "published" && (p.published_at ?? "").startsWith(monthStr)
+  // Business Profile posts are their own quota (gbp_posts), not social posts.
+  const publishedIn = (gbp: boolean) => all.filter(
+    (p) => p.publish_status === "published" && (p.platform === "google_business") === gbp && (p.published_at ?? "").startsWith(monthStr)
   ).length;
+  const usage = usageByKey(usageQ.usage);
 
   // Calendar: approved posts by their scheduled (or published) day.
   const firstDay = new Date(Date.UTC(year, mon - 1, 1));
@@ -87,11 +95,18 @@ export default async function SocialPage({
         <Link href={`/clients/${clientId}/social?view=new`} className={chip(view === "new")}>
           New post
         </Link>
-        <span className="ml-auto text-sm text-muted-foreground">
-          Published in {monthStr}: <span className="font-medium text-foreground">{publishedThisMonth}</span>
-          {plannedQuantity(plan) != null && ` / ${plannedQuantity(plan)} planned`}
+        <span className="ml-auto text-sm text-muted-foreground" data-published-month={monthStr}>
+          Published in {monthStr}: <span className="font-medium text-foreground">{publishedIn(false)}</span> social
+          {" · "}<span className="font-medium text-foreground">{publishedIn(true)}</span> Business Profile
+          {usage.social_posts && ` · social ${targetText(usage.social_posts)}`}
         </span>
       </div>
+      <MonthlyAllocation
+        title={`Planned for ${monthStr}`}
+        usage={usageQ.usage}
+        unavailable={usageQ.unavailable}
+        only={["social_posts", "gbp_posts"]}
+      />
 
       {view === "new" ? (
         <Card>

@@ -53,12 +53,13 @@ create function be.today() returns date language sql stable as $$ select (now() 
 grant execute on all functions in schema be to anon, authenticated, service_role, authenticator;
 
 -- ── Fixtures ─────────────────────────────────────────────────────────────────
--- Package "Growth": SEO + GBP on, Social explicitly off, 4 blog posts, 4 GBP
--- posts, 2 new pages, social posts explicitly off, nothing said about
--- refreshes or the other features.
+-- Package "Growth": SEO, Website, GBP on, Social explicitly off, 4 blog
+-- posts, 4 GBP posts, 2 new pages, social posts explicitly off, nothing said
+-- about refreshes or the other features.
 insert into billing_packages (id, key, name, kind) values (be.id('pkg'), 'be_growth', 'Growth', 'standard');
 insert into package_entitlements (package_id, service_key, service_kind, enabled, quantity) values
   (be.id('pkg'), 'seo', 'feature', true, null),
+  (be.id('pkg'), 'website', 'feature', true, null),
   (be.id('pkg'), 'gbp', 'feature', true, null),
   (be.id('pkg'), 'client_portal', 'feature', true, null),
   (be.id('pkg'), 'social', 'feature', false, null),
@@ -358,9 +359,27 @@ begin
     exists (select 1 from automation_entitlement_log where client_id = a and automation = 'website_updates' and reason = 'allocation_used'));
   perform be.ok('W2 B has room (2 pages, none used): fired and logged',
     exists (select 1 from automation_entitlement_log where client_id = b and automation = 'website_updates' and decision = 'created'));
+  perform be.ok('W2b exactly one cycle fired (B''s)', n = 1, n::text);
   perform be.ok('W3 the site_updates tasks stay open for a person either way',
     (select count(*) from tasks t join monthly_cycles mc on mc.id = t.monthly_cycle_id
       where mc.period = p and mc.client_id in (a, b) and t.key = 'site_updates' and t.status = 'open') = 2);
+end $$;
+
+-- Without the Website feature, pages and refreshes are not automated even
+-- with a quantity (a teammate turns the feature off for B).
+set role authenticated;
+select be.as_user('authenticated', :'team');
+insert into client_entitlement_overrides (client_id, service_key, service_kind, enabled, quantity, reason)
+  values (:'cb', 'website', 'feature', false, null, 'Client runs its own site now');
+reset role;
+select set_config('request.jwt.claims', '', false);
+do $$
+declare b uuid := '00000000-0000-4000-b000-00000000000b'; n int;
+begin
+  delete from automation_entitlement_log;
+  n := fire_website_updates(date_trunc('month', be.today())::date);
+  perform be.ok('W4 no Website feature: website updates not fired, logged not_in_agreement',
+    exists (select 1 from automation_entitlement_log where client_id = b and automation = 'website_updates' and reason = 'not_in_agreement'));
 end $$;
 
 -- ── H. Agreement history ─────────────────────────────────────────────────────

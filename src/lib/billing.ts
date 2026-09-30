@@ -216,12 +216,6 @@ export function entitlementText(e: Pick<Entitlement, "service_kind" | "enabled" 
   return `${e.quantity ?? 0} ${e.unit ?? ""} / ${e.period ?? "month"}`.replace(/\s+/g, " ");
 }
 
-// The monthly figure a tracker shows against ("/ 4 planned"): only for an
-// included quota.
-export function plannedQuantity(e: { enabled: boolean | null; quantity: number | null } | null | undefined): number | null {
-  return e?.enabled && e.quantity != null ? e.quantity : null;
-}
-
 export type OverrideInput = { service_kind: string; enabled: boolean; quantity: string | null; reason: string | null };
 
 // The same rules as client_entitlement_overrides' constraints.

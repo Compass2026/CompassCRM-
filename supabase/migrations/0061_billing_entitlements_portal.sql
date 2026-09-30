@@ -257,9 +257,11 @@ end $$;
 revoke execute on function create_weekly_blog_tasks() from public, anon, authenticated;
 
 -- Monthly website updates (0035), within the agreement: the worker is fired
--- for a cycle only while website_pages or website_refreshes has room this
--- month; it reads the exact numbers from client_quota_usage(). The cycle's
--- site_updates task stays open either way, for a person to act on.
+-- for a cycle only when the agreement includes Website Management and
+-- website_pages or website_refreshes has room this month; it reads the exact
+-- numbers from client_quota_usage(). (The same rule as WORK_REQUIREMENTS in
+-- src/lib/entitlements.ts.) The cycle's site_updates task stays open either
+-- way, for a person to act on.
 create or replace function fire_website_updates(p_period date default date_trunc('month', now())::date)
 returns integer
 language plpgsql security definer set search_path = public as $$
@@ -268,6 +270,7 @@ declare
   v_alloc int;
   v_used int;
   v_room int;
+  v_website boolean;
   v_count int := 0;
 begin
   for v_cycle in
@@ -283,6 +286,11 @@ begin
       select sum(u.allocation), sum(u.used), sum(u.remaining) into v_alloc, v_used, v_room
       from client_quota_usage(v_cycle.client_id, p_period) u
       where u.service_key in ('website_pages', 'website_refreshes');
+      select coalesce(bool_or(e.enabled), false) into v_website
+      from client_entitlements_for(v_cycle.client_id) e where e.service_key = 'website';
+      if not v_website then
+        v_alloc := 0;
+      end if;
     exception when others then
       v_alloc := null;
     end;

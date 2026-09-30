@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { plannedQuantity } from "@/lib/billing";
+import { getQuotaUsage, targetText, usageByKey, type QuotaUsage } from "@/lib/entitlements";
 import {
   addContentPostAction,
   deleteContentPostAction,
@@ -42,7 +42,7 @@ export default async function ContentPage({
   const { status: filter } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: posts }, { data: keywords }, { data: plan }, { count: recordedFromSite }] =
+  const [{ data: posts }, { data: keywords }, usageQ, { count: recordedFromSite }] =
     await Promise.all([
       // The tracker is Compass's production: pages recorded from the client's
       // own site (0050, origin site_inventory) are counted below, never listed.
@@ -58,12 +58,12 @@ export default async function ContentPage({
         .eq("client_id", clientId)
         .eq("is_active", true)
         .order("keyword"),
-      supabase
-        .from("client_entitlements")
-        .select("enabled, quantity")
-        .eq("client_id", clientId)
-        .eq("service_key", "blog_posts")
-        .maybeSingle(),
+      // B5: this month's agreed blog posts against the posts planned or
+      // published (client_quota_usage, America/Chicago month).
+      getQuotaUsage(supabase, clientId).then(
+        (usage) => ({ usage, unavailable: null as string | null }),
+        (e: Error) => ({ usage: [] as QuotaUsage[], unavailable: e.message }),
+      ),
       supabase
         .from("content_posts")
         .select("id", { count: "exact", head: true })
@@ -74,10 +74,7 @@ export default async function ContentPage({
   const visible = filter
     ? (posts ?? []).filter((p) => p.status === filter)
     : posts ?? [];
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const publishedThisMonth = (posts ?? []).filter(
-    (p) => p.status === "published" && p.published_at?.startsWith(thisMonth)
-  ).length;
+  const blog = usageByKey(usageQ.usage).blog_posts;
 
   const addPost = addContentPostAction.bind(null, clientId);
 
@@ -99,9 +96,15 @@ export default async function ContentPage({
             {s}
           </Link>
         ))}
-        <span className="ml-auto text-sm text-muted-foreground">
-          Published this month: <span className="font-medium text-foreground">{publishedThisMonth}</span>
-          {plannedQuantity(plan) != null && ` / ${plannedQuantity(plan)} planned`}
+        <span className="ml-auto text-sm text-muted-foreground" data-blog-target>
+          {blog ? (
+            <>
+              Blog posts this month: <span className="font-medium text-foreground">{targetText(blog)}</span>
+              {` (${blog.completed} published)`}
+            </>
+          ) : (
+            <span className="text-amber-900">Entitlements could not be read; automatic blog planning is paused.</span>
+          )}
         </span>
       </div>
 

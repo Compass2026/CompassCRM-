@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   attentionLabel, billingState, billingStateLabels, entitlementText, formatMoney, minorUnits,
-  parseMoneyToCents, plannedQuantity, stripeDashboardUrl, validateAgreement, validateOverride,
+  parseMoneyToCents, stripeDashboardUrl, validateAgreement, validateOverride,
 } from "../src/lib/billing.ts";
 
 const agreement = (o = {}) => ({
@@ -80,13 +80,10 @@ test("an override says why; a quota override has a whole-number quantity", () =>
   assert.match(validateOverride({ service_kind: "quota", enabled: true, quantity: "-1", reason: "x" }).error, /quantity/);
 });
 
-test("entitlement text and planned quantity", () => {
+test("entitlement text", () => {
   assert.equal(entitlementText({ service_kind: "feature", enabled: true, quantity: null, unit: null, period: null }), "Included");
   assert.equal(entitlementText({ service_kind: "quota", enabled: true, quantity: 4, unit: "posts", period: "month" }), "4 posts / month");
   assert.equal(entitlementText({ service_kind: "quota", enabled: false, quantity: null, unit: "posts", period: "month" }), "Not included");
-  assert.equal(plannedQuantity({ enabled: true, quantity: 4 }), 4);
-  assert.equal(plannedQuantity({ enabled: false, quantity: null }), null);
-  assert.equal(plannedQuantity(null), null);
 });
 
 test("billing states and attention reasons have labels; unknown values degrade safely", () => {

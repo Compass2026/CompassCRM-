@@ -6,6 +6,8 @@ import { fetchTaskList, fetchViewCounts } from "@/lib/task-queries";
 import { getCurrentTeamMember, listTeamMembers } from "@/lib/team";
 import { parseTaskView, taskViews, todayIn } from "@/lib/tasks";
 import { chip } from "@/lib/nav-styles";
+import { getQuotaUsage, type QuotaUsage } from "@/lib/entitlements";
+import { MonthlyAllocation } from "@/components/entitlements/monthly-allocation";
 
 // The client's work in one place: pipeline checklists, monthly-cycle tasks
 // and anything the team adds by hand. "By client" makes no sense here.
@@ -26,15 +28,21 @@ export default async function ClientTasksPage({
 
   const [me, members] = await Promise.all([getCurrentTeamMember(supabase), listTeamMembers(supabase)]);
   const meId = me?.id ?? null;
-  const [tasks, counts] = await Promise.all([
+  const [tasks, counts, usageQ] = await Promise.all([
     fetchTaskList(supabase, { view, meId, today, clientId }),
     fetchViewCounts(supabase, { meId, today, clientId }),
+    // B5: this month's agreed deliverables against the work planned or done.
+    getQuotaUsage(supabase, clientId).then(
+      (usage) => ({ usage, unavailable: null as string | null }),
+      (e: Error) => ({ usage: [] as QuotaUsage[], unavailable: e.message }),
+    ),
   ]);
   const badge: Partial<Record<string, number>> = counts;
   const base = `/clients/${clientId}/tasks`;
 
   return (
     <div className="space-y-4">
+      <MonthlyAllocation usage={usageQ.usage} unavailable={usageQ.unavailable} />
       <section className="surface p-4 sm:p-5">
         <h2 className="text-sm font-semibold mb-3">New task</h2>
         <NewTaskForm members={members} meId={meId} clientId={clientId} />

@@ -8,6 +8,7 @@ import { AGENCY_TIME_ZONE } from "./tasks.ts";
 import { historyLine, type EffectiveStatus, type EventRow, type HistoryLine, type StoredStatus, type Workflow } from "./authority-lifecycle.ts";
 import { RECORD_KEY, reconcileAction, recordProgress, type ReconcileAction, type RecordProgress } from "./authority-reconcile.ts";
 import { draftControl, type DraftControl, type DraftInfo } from "./authority-draft.ts";
+import { cardAgreement, type AgreementContext, type CardAgreement } from "./authority-agreement.ts";
 
 export type { Opportunity };
 
@@ -85,6 +86,9 @@ export type ViewInput = {
   // 0053: per opportunity id, the open Draft with AI request and the linked
   // Business Profile posts (the lifecycle asset).
   drafts?: Record<string, DraftInfo>;
+  // B5: the client's agreement and this month's usage, or why it could not be
+  // read. Marks the work automation would not plan; hides nothing.
+  agreement?: AgreementContext | null;
   now?: Date;
 };
 
@@ -191,6 +195,7 @@ export type Card = {
   reconcile: ReconcileAction | null;       // C2: the reconciliation this data fix takes
   progress: RecordProgress;                // C2: record-content while pages remain (overrides the chip)
   draft: DraftControl | null;              // 0053: Draft with AI on a Ready Business Profile post
+  agreement: CardAgreement | null;         // B5: whether the agreement covers the work this creates
   details: {
     objective: string | null;
     reasons: Reason[];
@@ -222,6 +227,7 @@ type CardCtx = {
   pillars: PillarLite[]; stateByKey: Map<string, OpportunityState>; eventsById: Map<string, OpportunityEvent[]>; runsById: Map<string, RunRow>;
   members: ViewInput["members"]; recorded: ViewInput["recorded"];
   drafts: ViewInput["drafts"]; today: string; runId: string;
+  agreement: ViewInput["agreement"];
 };
 
 function workflowOf(st: OpportunityState | null, members: ViewInput["members"], events: OpportunityEvent[]): Workflow | null {
@@ -264,6 +270,7 @@ function toCard(o: Opportunity, ctx: CardCtx): Card {
       ? recordProgress({ candidates: o.candidate_paths, recorded: new Set(ctx.recorded.paths), linked: ctx.recorded.linked })
       : null,
     draft: st ? draftControl(o, st.status ?? null, ctx.drafts?.[st.id], ctx.today, ctx.runId) : null,
+    agreement: cardAgreement(o, ctx.agreement),
     details: {
       objective: o.objective,
       reasons: o.reasons,
@@ -540,7 +547,7 @@ export function buildAuthorityView(input: ViewInput): AuthorityView {
   const runsById = new Map(runs.map((r) => [r.id, r]));
   const ctx = {
     pillars: input.pillars, stateByKey, eventsById, runsById, members: input.members, recorded: input.recorded,
-    drafts: input.drafts, runId: latest.run_id ?? "", today: new Intl.DateTimeFormat("en-CA", { timeZone: AGENCY_TIME_ZONE }).format(input.now ?? new Date()),
+    drafts: input.drafts, agreement: input.agreement, runId: latest.run_id ?? "", today: new Intl.DateTimeFormat("en-CA", { timeZone: AGENCY_TIME_ZONE }).format(input.now ?? new Date()),
   };
   const everything = input.opportunities.map((o) => ({ o, c: toCard(o, ctx) }));
   // A dismissed item (dated or never-recommend) leaves its section for the

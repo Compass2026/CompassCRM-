@@ -283,7 +283,8 @@ Two more task-shaped units (Sept 14 2026, `docs/website-updates.md`), claimed
 with the same conditional update as the report task:
 
 - **Website updates** — the cycle's open `site_updates` task (fired on the
-  2nd; one per active client per month):
+  2nd for an active client whose agreement includes website pages or
+  refreshes with room this month; one per month):
 
 ```sql
 select c.name, c.id as client_id, mc.id as cycle_id, mc.period, t.id as task_id, s.id as site_id, s.content_paths, s.controlled_by_compass, s.repo_url, s.url
@@ -296,7 +297,8 @@ order by mc.period, c.name;
 ```
 
 - **Weekly blog post** — an open `blog_post` task (created and fired on
-  Wednesdays; one per active client per week):
+  Wednesdays; one per active client per week while the agreement's
+  `blog_posts` allocation has room):
 
 ```sql
 select c.name, c.id as client_id, t.id as task_id, t.due_date, s.content_paths, s.controlled_by_compass, s.repo_url, s.url
@@ -1261,9 +1263,13 @@ justify. One call.
 11. **What is wrong today:** each field where the live listing (audit `gbp`
     + the listing search) differs from the spec.
 
-**Posts.** Four posts for the first month, in the brand voice, each ≤ 1,500
-characters with a CTA: a "what we do" post, a service spotlight, a city
-spotlight, an offer or seasonal post. Same doc, last section.
+**Posts.** Up to four posts for the first month — as many as the agreement
+allows: `select allocation from client_quota_usage('<client_id>') where
+service_key = 'gbp_posts'`, and none when `client_entitlements_for` shows
+`gbp` not enabled (write "Not in the agreement" in the section instead). In
+the brand voice, each ≤ 1,500 characters with a CTA: a "what we do" post, a
+service spotlight, a city spotlight, an offer or seasonal post. Same doc,
+last section.
 
 Record the doc as `deliverables (client_id, client_stage_id, label, url,
 type)` = `('GBP Spec', …, 'drive')`. Close `gbp_spec`; close
@@ -1522,10 +1528,13 @@ everything from the CRM first:
   Compass's work), `social_posts`
   with verified publication dates (social `scheduled_at` alone is not proof),
   GBP posts (count the `gbp_posts` task's notes if Tom recorded a verified number,
-  else not measured), against the client's agreement: `client_entitlements`
-  rows `gbp_posts` / `blog_posts` / `social_posts` (`quantity` when
-  `enabled`; a row that is not enabled means none are planned). Billing
-  state never changes what is planned — report the work, not the invoice.
+  else not measured), against the client's agreement:
+  `client_quota_usage('<client_id>', '<period>')` rows `gbp_posts` /
+  `blog_posts` / `social_posts` — `allocation` is what is included (0 = not
+  in the agreement; the agreement as it stands today, since agreements are
+  not versioned). Keep actual and included as separate figures; Business
+  Profile posts are never counted as social. Billing state never changes
+  what is planned — report the work, not the invoice.
 - **Off-page:** `backlinks_timeseries_summary` (bare host, `date_from` = the
   first of the prior period, `group_range = 'month'`): referring domains and
   backlinks, this month vs last. One call.
@@ -1586,8 +1595,10 @@ url, type)` = `('…', '…', 'Monthly Report <yyyy-mm>', '<url>', 'report')`.
 
 **Close.** Tasks on the cycle by key: `monthly_report` and `pulse` (done);
 `rank_snapshot` only if a snapshot landed in the period;
-`content_published` / `social_published` only if the CRM shows the plan's
-count met, else leave them open with a note saying `n of plan`. `gbp_posts`,
+`content_published` / `social_published` only if the CRM shows the
+`allocation` met (`client_quota_usage`), else leave them open with a note
+saying `n of <allocation>`; an allocation of 0 closes them with the note
+"not in the agreement". `gbp_posts`,
 `backlinks_new`, `paid_ads_review`, `report_send` are Tom's; leave them.
 Draft the send: the client's primary contact (`client_contacts` where
 `is_primary`, else any contact with an email) gets a `google-ops`
@@ -1602,8 +1613,9 @@ Gmail" (or "no contact email on file") in the `report_send` task's
 
 ### Website Updates (PB7, monthly — the cycle's `site_updates` task)
 
-Tom's rules (Sept 14 2026): **two new pages and two refreshes per client per
-month, published on Compass-run sites without a look** (the Foundation
+Tom's rules (Sept 14 2026): **the new pages and refreshes the client's
+agreement includes each month (his default was two and two), published on
+Compass-run sites without a look** (the Foundation
 tab's *Put it back* button is the safety net), **Google Docs for
 client-run sites**. Nothing invented: a claim without a source is a
 placeholder line, never copy.
@@ -1636,6 +1648,24 @@ from the tree first (`scripts/build-brief.mjs` with `tree`) and store
 `content_adapter` / `content_paths`; a site whose tree you have not
 inspected is `unsupported` for this month.
 
+**0. The agreement sets the numbers (B5).** Before anything else:
+
+```sql
+select service_key, allocation, used, remaining
+from client_quota_usage('<client_id>', '<cycle period>')
+where service_key in ('website_pages', 'website_refreshes');
+select enabled from client_entitlements_for('<client_id>') where service_key = 'website';
+```
+
+`remaining` is this run's cap for each kind (pages already added or
+proposed this month count). `website` not enabled, or both allocations 0 →
+not in the agreement: change nothing, leave `site_updates` open with the
+note "Not in the agreement (website pages / refreshes); left for Tom", stop.
+Either query errors → stop, block the task with "Entitlements could not be
+read: <error>; nothing planned". Billing state never matters here — never
+read Stripe, invoices or `client_billing_status`. Work already done beyond
+a lowered allocation stays; never revert it to fit.
+
 **1. Map first (every month, cheap).** For every tracked keyword with no
 `target_url`, pick the page: the `page_groups` row whose primary or
 supporting keywords include it (its `target_url`), else the city route for
@@ -1646,7 +1676,7 @@ where the page exists (read the tree: `site-push {read: true}` lists paths;
 page group with no page is a candidate below.
 
 **2. Pick the month's work** from the evidence, in this order, until the
-caps are met (2 new, 2 refresh):
+caps from step 0 are met (`remaining` new pages, `remaining` refreshes):
 
 - *New city page:* a `city` page group (tier 1 first) with no page, or a
   tracked `city` with ≥ 3 keywords and no entry in `locations`.
@@ -1723,18 +1753,24 @@ keyword, commit, pull_request_url}`, `reasoning` (the evidence: rank,
 impressions, missing page), `status = 'approved'` for a published change,
 `'proposed'` for a PR or a Doc. `keywords.target_url` for the keyword the
 page serves. Close `site_updates`: done, `flagged_for_review = true`,
-`recommendation` = "`+2 pages, 2 refreshes on <host>; PR open for <x>`" or
+`recommendation` = "`+<n> pages, <m> refreshes on <host> (of <allocation>); PR open for <x>`" or
 "`Docs filed for <n> pages (site not on the contract)`" — that is what the
 Brief shows Tom.
 
-Caps are caps: two new, two refreshes, then stop, even if the list is
-longer. What is left waits for next month and goes in the notes.
+Caps are caps: the agreement's remaining pages and refreshes, then stop,
+even if the list is longer. What is left waits for next month and goes in
+the notes.
 
 ### Weekly blog post (PB7, weekly — the `blog_post` task)
 
-One post per client per week. **Each post serves one long-tail keyword and
-one service page**, in the brand voice (`get_brand_profile`), sourced facts
-only.
+One post per client per week, within the agreement's `blog_posts`
+allocation: `create_weekly_blog_tasks()` (0061) opens the task only while
+the month has room and logs every skip in `automation_entitlement_log`, so
+the task in hand is either planned within the allocation or added by a
+person — do it; never open another. If `client_quota_usage('<client_id>')`
+errors, block the task with "Entitlements could not be read: <error>" and
+stop. **Each post serves one long-tail keyword and one service page**, in
+the brand voice (`get_brand_profile`), sourced facts only.
 
 1. **Pick the keyword:** a tracked P2 / P3 keyword with `informational` or
    `commercial` intent (`keywords.intent`), no post yet
@@ -1773,7 +1809,9 @@ One post, then stop. The next task arrives next Wednesday.
 
 Only when a person asks for one by name (client, service, intent, keyword,
 button). Never on your own initiative and never as a batch: automatic
-drafting waits on a `plans` row, and no client has one. You are the model
+drafting is not built, and when it is it will follow the agreement (the
+`gbp` feature and room in `gbp_posts`, from `client_entitlements_for` /
+`client_quota_usage`), never billing. You are the model
 adapter; the `post-drafter` Edge Function owns the brief, the linter and the
 write. The CRM is still your only channel, and SQL is never the write path.
 
