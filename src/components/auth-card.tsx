@@ -1,3 +1,5 @@
+import Link from "next/link";
+import type { AuthNotice } from "@/lib/password-recovery";
 import {
   Card,
   CardContent,
@@ -43,6 +45,26 @@ export function AuthCard({
         </CardHeader>
         <CardContent>{children}</CardContent>
       </Card>
+    </div>
+  );
+}
+
+// An error a signed-out page was sent here with, and what to do about it.
+export function AuthNoticeBox({ notice }: { notice: AuthNotice }) {
+  return (
+    <div
+      role="alert"
+      className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+    >
+      <p className="text-destructive">{notice.message}</p>
+      {notice.action && (
+        <Link
+          href={notice.action.href}
+          className="inline-block font-medium text-foreground underline underline-offset-4 hover:no-underline"
+        >
+          {notice.action.label}
+        </Link>
+      )}
     </div>
   );
 }

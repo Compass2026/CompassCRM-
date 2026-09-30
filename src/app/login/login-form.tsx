@@ -4,17 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { AuthCard } from "@/components/auth-card";
+import type { AuthNotice } from "@/lib/password-recovery";
+import { AuthCard, AuthNoticeBox } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginForm({ initialError }: { initialError: string | null }) {
+export function LoginForm({ notice }: { notice: AuthNotice | null }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(initialError);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function signInWithPassword(e: React.FormEvent) {
@@ -64,6 +65,8 @@ export function LoginForm({ initialError }: { initialError: string | null }) {
         </p>
       ) : (
         <form onSubmit={signInWithPassword} className="space-y-4">
+          {/* Why they are here (?error=), until they try again. */}
+          {notice && !error && <AuthNoticeBox notice={notice} />}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input

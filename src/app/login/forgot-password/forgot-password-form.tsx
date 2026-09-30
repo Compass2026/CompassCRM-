@@ -3,16 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { UPDATE_PASSWORD_PATH } from "@/lib/password-recovery";
+import { AUTH_CONFIRM_PATH } from "@/lib/password-recovery";
 import { AuthCard } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function ForgotPasswordForm({ initialEmail }: { initialEmail: string }) {
+export function ForgotPasswordForm({
+  initialEmail,
+  notice,
+}: {
+  initialEmail: string;
+  // Why an earlier reset did not save (?error=), until they send again.
+  notice: string | null;
+}) {
   const [email, setEmail] = useState(initialEmail);
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(notice);
   const [loading, setLoading] = useState(false);
 
   async function sendResetLink(e: React.FormEvent) {
@@ -20,20 +27,22 @@ export function ForgotPasswordForm({ initialEmail }: { initialEmail: string }) {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    // PKCE: the link comes back to /auth/confirm with a code this browser
-    // exchanges for a recovery session, then lands on /update-password.
+    // This deployment's own /auth/confirm (production or a Vercel preview;
+    // both must be on Supabase's Redirect URLs list). The Reset Password
+    // template adds ?token_hash=…&type=recovery, so the link works in any
+    // browser (docs/password-recovery.md).
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(UPDATE_PASSWORD_PATH)}`,
+      redirectTo: `${window.location.origin}${AUTH_CONFIRM_PATH}`,
     });
     setLoading(false);
-    // Only a rate limit is worth showing: any other answer reads the same
-    // whether or not the address has an account, so the page never reveals
-    // who does.
-    if (error && error.status === 429) {
+    // Only a rate limit is worth showing, and it reads the same for every
+    // address. Any other answer (including a failure Supabase Auth reports
+    // only for a real account) shows the same confirmation and is not
+    // logged, so the page never reveals who has an account.
+    if (error?.status === 429) {
       setError("Too many requests. Wait a few minutes and try again.");
       return;
     }
-    if (error) console.error("resetPasswordForEmail", error.message);
     setSent(true);
   }
 
@@ -43,8 +52,8 @@ export function ForgotPasswordForm({ initialEmail }: { initialEmail: string }) {
         <div className="space-y-4 text-sm">
           <p>
             If <span className="font-medium">{email}</span> has an account, a
-            link to set a new password is on its way. Open it in this browser;
-            it expires after an hour.
+            link to set a new password is on its way. It works once, on any
+            device, and expires after an hour.
           </p>
           <Link
             href="/login"
@@ -67,7 +76,11 @@ export function ForgotPasswordForm({ initialEmail }: { initialEmail: string }) {
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Sending…" : "Email me a reset link"}
           </Button>

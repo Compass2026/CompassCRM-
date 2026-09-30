@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updatePasswordAction, type UpdatePasswordState } from "./actions";
 
-export function UpdatePasswordForm({ email }: { email: string }) {
+export function UpdatePasswordForm() {
   const [state, action, pending] = useActionState<UpdatePasswordState, FormData>(
     updatePasswordAction,
     null,
@@ -17,20 +17,10 @@ export function UpdatePasswordForm({ email }: { email: string }) {
   return (
     <AuthCard description="Set a new password">
       <form action={action} className="space-y-4">
-        {email && (
-          <p className="text-sm text-muted-foreground">
-            For <span className="font-medium text-foreground">{email}</span>
-          </p>
-        )}
-        {/* Lets password managers save the new password under the account. */}
-        <input
-          type="email"
-          name="username"
-          autoComplete="username"
-          value={email}
-          readOnly
-          hidden
-        />
+        <p className="text-sm text-muted-foreground">
+          Choose a new password for the account this reset link was sent to.
+          The link works once.
+        </p>
         <div className="space-y-2">
           <Label htmlFor="password">New password</Label>
           <Input
@@ -41,6 +31,9 @@ export function UpdatePasswordForm({ email }: { email: string }) {
             minLength={MIN_PASSWORD_LENGTH}
             autoComplete="new-password"
           />
+          <p className="text-xs text-muted-foreground">
+            At least {MIN_PASSWORD_LENGTH} characters.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirm">Confirm new password</Label>
@@ -53,7 +46,11 @@ export function UpdatePasswordForm({ email }: { email: string }) {
             autoComplete="new-password"
           />
         </div>
-        {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
+        {state?.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {state.error}
+          </p>
+        )}
         <Button type="submit" className="w-full" disabled={pending}>
           {pending ? "Saving…" : "Save new password"}
         </Button>

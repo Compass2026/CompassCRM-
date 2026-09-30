@@ -47,6 +47,14 @@ Reporting cycle. Full build spec: `docs/spec.md`.
 - **Auth:** internal team only. Password sign-in is the primary path with a
   magic-link fallback (`src/app/login/page.tsx`); the built-in Supabase mailer
   rate-limits aggressively, so custom SMTP via Resend is the intended fix.
+  **Password recovery** (`/login/forgot-password` → emailed token-hash link →
+  `/update-password`; `docs/password-recovery.md`): the unspent one-time
+  token, held in an httpOnly cookie until the new password is saved, is the
+  only thing that opens the form — a signed-in session never does. It needs
+  the Reset Password email template and the Redirect URLs in that doc set in
+  the Supabase dashboard; until then reset links are refused
+  (`/login?error=reset_unavailable`). `/auth/confirm` redirects only to
+  `safeNextPath` values, as relative `Location` headers.
   Magic links never create accounts (`shouldCreateUser: false`). RLS is
   enabled everywhere and every team policy reads `is_team()` (migration
   0036) — a sign-in whose `auth.uid()` is not on `team_members` sees
