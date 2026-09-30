@@ -488,7 +488,7 @@ signed off by Tom.
 | --- | --- | --- |
 | Code merged | BLOCKED | PR #86 is a draft awaiting this review |
 | Migrations finalized | PASS | 0058 – 0062 (§ 2); recheck at merge |
-| Migration replay clean | PASS | `npm run test:sandbox`: 23 suites, including the Creative Engine merge trial |
+| Migration replay clean | PASS | `npm run test:sandbox`: 23 suites on the branch; the merge trial with the Creative Engine branch (0057) also passes (§ 1) |
 | Rollback tested | PASS (sandbox) | `npm run test:billing-rollback`: exact schema / cron / settings; main's portal suite 374 pass; re-apply clean |
 | Active client agreements entered | BLOCKED | no terms known (§ 4–5); Tom |
 | Entitlements verified | MANUAL ACTION REQUIRED | `04_validate.sql` on production after the agreements |
