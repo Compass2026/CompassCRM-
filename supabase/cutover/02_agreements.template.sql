@@ -1,0 +1,66 @@
+-- Billing cutover, step 2 — TEMPLATE. Do not run as is.
+--
+-- The package catalog and every active client's agreement, entered only from
+-- terms Tom has confirmed (docs/billing-agreement-inventory.md lists what is
+-- known and what is missing; nothing in the CRM, the repository or Drive states
+-- any client's commercial terms today). The guard below refuses to run until
+-- it is removed from a filled-in copy.
+--
+-- Preferred path: enter the same thing in the app as an admin (Settings ›
+-- Billing catalog for packages and what they include; each client's Plan tab
+-- for the agreement and any overrides). The app records who made each change
+-- in client_agreement_events; this SQL (run as postgres) records no actor.
+
+do $$ begin
+  raise exception 'Template: fill in the confirmed terms, delete this block, then run';
+end $$;
+
+-- ── Packages ─────────────────────────────────────────────────────────────────
+-- One row per package Compass sells. Prices are Stripe's (Settings › Billing
+-- catalog › import the Stripe product, approve its prices); a package with no
+-- Stripe product can still carry agreements collected externally.
+--
+-- insert into billing_packages (id, key, name, kind, description) values
+--   ('<<uuid>>', '<<key, e.g. compass_standard>>', '<<Name>>', 'standard', '<<description>>');
+--
+-- What it includes (features: enabled, quantity null; quotas: enabled with a
+-- monthly quantity, or disabled with null — disabled / absent = 0):
+-- insert into package_entitlements (package_id, service_key, service_kind, enabled, quantity) values
+--   ('<<package uuid>>', 'seo',               'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'website',           'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'hosting',           'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'gbp',               'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'social',            'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'paid_ads',          'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'crm',               'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'reporting',         'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'client_portal',     'feature', <<true|false>>, null),
+--   ('<<package uuid>>', 'blog_posts',        'quota',   <<true|false>>, <<n|null>>),
+--   ('<<package uuid>>', 'social_posts',      'quota',   <<true|false>>, <<n|null>>),
+--   ('<<package uuid>>', 'gbp_posts',         'quota',   <<true|false>>, <<n|null>>),
+--   ('<<package uuid>>', 'website_pages',     'quota',   <<true|false>>, <<n|null>>),
+--   ('<<package uuid>>', 'website_refreshes', 'quota',   <<true|false>>, <<n|null>>);
+
+-- ── Agreements (active clients: all four must be entered or deliberately excluded) ──
+-- collection 'stripe'   = collected by Stripe (Checkout / linked customer, later)
+-- collection 'external' = check / wire / manual ACH / other; then method,
+--                         amount (cents), currency and interval are required.
+--
+-- BHG Safety Partners        3eaa3389-2a33-4004-837c-8aef90404410
+-- Logic Solar                70211d71-d9f4-46ab-abe2-ef39c41591fb
+-- Show Me Design             d94cfde2-0751-4002-a149-c83b4c6c956d
+-- Show Me Electrical         9a8e05f5-3d28-4839-9735-79bcdd0e277d
+--
+-- insert into plans (client_id, package_id, collection, external_method, external_amount_cents, external_currency, external_interval,
+--                    term_months, start_date, notes) values
+--   ('<<client uuid>>', '<<package uuid>>', '<<stripe|external>>', <<null|'check'|'wire'|'ach_manual'|'other'>>, <<null|cents>>,
+--    <<null|'usd'>>, <<null|'month'|'year'>>, <<n|null>>, <<'yyyy-mm-dd'|null>>, '<<source of the terms, e.g. signed agreement dated …>>');
+--
+-- A client whose terms differ from its package (reason required, kept in history):
+-- insert into client_entitlement_overrides (client_id, service_key, service_kind, enabled, quantity, reason) values
+--   ('<<client uuid>>', '<<service_key>>', '<<feature|quota>>', <<true|false>>, <<n|null>>, '<<why>>');
+--
+-- Launching clients (Ginger Huff Interiors, Lucas Construction, Pensacola
+-- Equipment Rentals, Shewmaker Brothers Masonry) are not planned for until they
+-- become active, but enter theirs now if known: the day one converges to
+-- active it is planned for only within its agreement.
