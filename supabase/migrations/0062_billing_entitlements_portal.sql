@@ -84,9 +84,12 @@ comment on function client_entitlements_for(uuid) is
 -- or done is never removed. What counts, per quota:
 --
 --   blog_posts         content_posts origin 'compass': published this month
---                      (completed), or not published and due this month
---                      (planned); plus open weekly blog_post tasks created
---                      this month (planned — the post is not recorded yet)
+--                      (completed), or not published and due — or, with no
+--                      due date, dated — this month (planned: a post filed
+--                      as a Google Doc for a client-run site is a draft
+--                      dated when it was filed); plus open weekly blog_post
+--                      tasks created this month (planned — the post is not
+--                      recorded yet)
 --   gbp_posts          social_posts on google_business, not rejected:
 --                      published this month (completed), else scheduled —
 --                      or, unscheduled, created — this month (planned)
@@ -125,7 +128,8 @@ language sql stable security invoker set search_path = public, pg_temp as $$
     where cp.origin = 'compass'
       and (p_client_id is null or cp.client_id = p_client_id)
       and ((cp.status = 'published' and cp.published_at >= b.m_start and cp.published_at < b.m_end)
-        or (cp.status <> 'published' and cp.due_date >= b.m_start and cp.due_date < b.m_end))
+        or (cp.status <> 'published' and coalesce(cp.due_date, cp.published_at) >= b.m_start
+            and coalesce(cp.due_date, cp.published_at) < b.m_end))
     union all
     select t.client_id, 'blog_posts', false
     from tasks t, b

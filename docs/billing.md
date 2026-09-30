@@ -812,7 +812,7 @@ max(0, used − allocation). What counts:
 
 | Quota | Completed | Planned |
 | --- | --- | --- |
-| `blog_posts` | Compass `content_posts` published this month | Compass posts not published and due this month; open `blog_post` tasks created this month |
+| `blog_posts` | Compass `content_posts` published this month | Compass posts not published and due (or, with no due date, dated) this month — a post filed as a Google Doc for a client-run site counts here; open `blog_post` tasks created this month |
 | `gbp_posts` | `google_business` posts published this month | not rejected, not published, scheduled (or, unscheduled, created) this month |
 | `social_posts` | the same on every other platform | the same |
 | `website_pages` | `change_log` `page_added`, approved, this month | proposed |

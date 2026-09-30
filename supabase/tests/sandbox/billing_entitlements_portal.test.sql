@@ -230,6 +230,13 @@ begin
   perform be.ok('U3 completed work counts; a site_inventory page is not Compass work',
     (u ->> 'completed')::int = 3 and (u ->> 'used')::int = 4 and (u ->> 'remaining')::int = 0, u::text);
 
+  -- A post filed as a Google Doc for a client-run site: a draft dated when
+  -- filed, no due date. It uses the allocation like any planned post.
+  insert into content_posts (client_id, title, status, published_at) values (a, 'Filed as a Doc', 'draft', be.today());
+  u := be.use(a, 'blog_posts');
+  perform be.ok('U3b a Doc-filed draft (dated, no due date) counts as planned', (u ->> 'planned')::int = 2 and (u ->> 'used')::int = 5, u::text);
+  delete from content_posts where client_id = a and title = 'Filed as a Doc';
+
   n := create_weekly_blog_tasks();
   perform be.ok('U4 allocation used: no weekly blog task (no duplicate work)',
     not exists (select 1 from tasks where key = 'blog_post' and client_id = a));
