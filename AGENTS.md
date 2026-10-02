@@ -25,7 +25,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0056` (Canva folder ids on the client record) was
+  **not yet applied**; `0063` (Compass Communications) is written but **not
+  yet applied** (0057–0062 are taken by the unmerged creative-overlay and
+  Billing branches); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -1251,6 +1253,46 @@ Show Me Electrical only because its id sits inside that client's folder).
   as are posts, creative / drafter / publisher / Authority counts and the
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
+
+## Compass Communications (0063 written, not applied; issue #88)
+
+Twilio SMS per client, piloted with BHG Safety Partners. Full design, flows
+and the remaining manual Twilio steps: `docs/communications.md`.
+
+- **Twilio shape:** Compass's parent account (ISV) holds one **subaccount
+  per client**. Vault: the parent's **Main** API key (`TWILIO_ACCOUNT_SID` /
+  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only for `/Accounts` and
+  `/Keys`; per subaccount its own Standard key and its Auth Token
+  (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`), written by
+  the function. Every client operation uses the subaccount's key. No
+  credential is an env var, a column, a response or a log line; no EIN is
+  stored anywhere.
+- **Functions:** `communications` (team JWT; admin modes check
+  `team_members.role = 'admin'`: create / link subaccount, Messaging Service,
+  purchase / link / attach numbers; any teammate: send, search, sync
+  compliance) and `twilio-webhook` (`verify_jwt = false`; official-SDK
+  signature validation with the subaccount's Auth Token;
+  `/messages/inbound`, `/messages/status?m=<id>`). Both are `handler.ts`
+  factories; REST to Twilio is `_shared/communications/twilio.ts` over
+  injected fetch.
+- **Schema rules:** messages, conversations, consents and the Twilio
+  registry are written only by 0063's functions (not by teammates, the
+  service role directly, or the worker's SQL). Consent is separate from a
+  phone number: sending needs `granted` consent under a lock; STOP / 21610
+  opt the recipient out and only their START lifts it. Inbound is idempotent
+  on `MessageSid`; delivery status only moves forward. `contacts` are the
+  client's own customers (not `client_contacts`). Team-only RLS, no portal
+  view.
+- **UI:** client tab **Communications** (Overview, Inbox, Numbers,
+  Compliance, Settings). Per-client switch `client_communication_settings`
+  (no row = off; only a teammate turns sending on).
+- **Tests:** `npm test` (handler, webhook with real SDK signatures,
+  provider, lib), the sandbox's `communications.test.sql`,
+  `npm run test:communications` (real handlers over PostgREST, fake Twilio),
+  `npm run test:communications-ui`.
+- **BHG:** `supabase/seeds/clients/bhg-safety-partners-communications.sql`
+  (data only, sending off). Nothing has been applied, deployed, created in
+  Twilio, purchased or sent.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
