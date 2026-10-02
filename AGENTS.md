@@ -25,9 +25,9 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0063` (Compass Communications) is written but **not
-  yet applied** (0057–0062 are taken by the unmerged creative-overlay and
-  Billing branches); `0056` (Canva folder ids on the client record) was
+  **not yet applied**; `0063` (Compass Communications) was applied Oct 2
+  2026 as `20261002211041` (0057–0062 are taken by the unmerged
+  creative-overlay and Billing branches and are not applied); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -1254,7 +1254,7 @@ Show Me Electrical only because its id sits inside that client's folder).
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
 
-## Compass Communications (0063 written, not applied; issue #88)
+## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 
 Twilio SMS per client, piloted with BHG Safety Partners. Full design, flows
 and the remaining manual Twilio steps: `docs/communications.md`.
@@ -1291,8 +1291,22 @@ and the remaining manual Twilio steps: `docs/communications.md`.
   `npm run test:communications` (real handlers over PostgREST, fake Twilio),
   `npm run test:communications-ui`.
 - **BHG:** `supabase/seeds/clients/bhg-safety-partners-communications.sql`
-  (data only, sending off). Nothing has been applied, deployed, created in
-  Twilio, purchased or sent.
+  (data only, sending off; not run yet).
+- **Production (Oct 2 2026):** 0063 applied as `20261002211041` (recorded
+  SQL identical to the file, md5 `bcb710b3…`; dry run first, rolled back).
+  Verified after applying: 11 tables with RLS and only the `is_team()`
+  policy, grants as designed (anon none; function-only tables select-only),
+  25 functions with their execute grants, guard / history / `updated_at`
+  triggers, no portal view reference, every non-Communications function /
+  column / policy / trigger fingerprint unchanged, and rolled-back probes
+  refused the worker's SQL (with and without the write flag, SET ROLE
+  service_role, SET ROLE authenticated + team JWT), anon and a non-team
+  sign-in. `communications` v1 (`verify_jwt = true`) and `twilio-webhook`
+  v1 (`verify_jwt = false`) deployed through the Supabase MCP from the PR
+  branch (the workflow deploys only `main`); unsigned / forged webhooks
+  answer 403. `database.types.ts` regenerated from production. No Twilio
+  secret is in Vault, no subaccount or number exists, no row is in any
+  Communications table and nothing has been sent.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 

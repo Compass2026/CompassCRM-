@@ -6043,61 +6043,46 @@ export type Database = {
         Returns: Json
       }
       communication_apply_status: {
-        Args: { p_at: string; p_error_code: string; p_error_message: string; p_msg: string; p_status: string }
+        Args: {
+          p_at: string
+          p_error_code: string
+          p_error_message: string
+          p_msg: string
+          p_status: string
+        }
         Returns: string
       }
-      communication_begin_outbound: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      communication_caller: {
-        Args: never
-        Returns: string
-      }
+      communication_begin_outbound: { Args: { p: Json }; Returns: Json }
+      communication_caller: { Args: never; Returns: string }
       communication_ensure_checklist: {
         Args: { p_profile_id: string }
         Returns: number
       }
-      communication_in_write: {
-        Args: never
-        Returns: boolean
-      }
-      communication_mark_sent: {
-        Args: { p: Json }
-        Returns: Json
-      }
+      communication_in_write: { Args: never; Returns: boolean }
+      communication_mark_sent: { Args: { p: Json }; Returns: Json }
       communication_opt_out: {
-        Args: { p_actor: string; p_at: string; p_client: string; p_contact: string; p_evidence: string; p_message: string; p_phone: string; p_source: string }
+        Args: {
+          p_actor: string
+          p_at: string
+          p_client: string
+          p_contact: string
+          p_evidence: string
+          p_message: string
+          p_phone: string
+          p_source: string
+        }
         Returns: undefined
       }
-      communication_record_compliance_sync: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      communication_record_consent: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      communication_record_inbound: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      communication_record_status: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      communication_register_account: {
-        Args: { p: Json }
-        Returns: Json
-      }
+      communication_record_compliance_sync: { Args: { p: Json }; Returns: Json }
+      communication_record_consent: { Args: { p: Json }; Returns: Json }
+      communication_record_inbound: { Args: { p: Json }; Returns: Json }
+      communication_record_status: { Args: { p: Json }; Returns: Json }
+      communication_register_account: { Args: { p: Json }; Returns: Json }
       communication_register_messaging_service: {
         Args: { p: Json }
         Returns: Json
       }
-      communication_register_number: {
-        Args: { p: Json }
-        Returns: Json
-      }
+      communication_register_number: { Args: { p: Json }; Returns: Json }
       communication_set_primary_number: {
         Args: { p_number_id: string }
         Returns: undefined
@@ -6110,14 +6095,8 @@ export type Database = {
           sort_order: number
         }[]
       }
-      communication_status_rank: {
-        Args: { p: string }
-        Returns: number
-      }
-      communication_update_conversation: {
-        Args: { p: Json }
-        Returns: Json
-      }
+      communication_status_rank: { Args: { p: string }; Returns: number }
+      communication_update_conversation: { Args: { p: Json }; Returns: Json }
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined

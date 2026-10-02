@@ -1,8 +1,9 @@
 # Compass Communications (Phase 1: Twilio SMS, BHG Safety pilot)
 
-Issue #88. Migration `0063_communications.sql` (written, **not applied**),
-Edge Functions `communications` and `twilio-webhook` (written, **not
-deployed**), the client **Communications** tab. Phase 2 (CRM Lite:
+Issue #88. Migration `0063_communications.sql` (**applied Oct 2 2026** as
+`20261002211041`), Edge Functions `communications` (v1, JWT verified) and
+`twilio-webhook` (v1, `verify_jwt = false`) (**deployed Oct 2 2026**), the
+client **Communications** tab. No Twilio credential is in Vault yet. Phase 2 (CRM Lite:
 opportunities, pipelines, notes) is not started.
 
 ## Architecture
@@ -203,14 +204,15 @@ No real Twilio traffic anywhere in the suite.
 The two PostgREST suites need `postgrest` on `PATH` and Chromium
 (`CHROME_PATH`, defaults to the Playwright build in `/opt/pw-browsers`).
 
-## Production setup (in order; none done yet)
+## Production setup (in order)
 
-1. Review and merge; **apply 0063** (dry run first; then verify md5 / grants
-   as for earlier migrations) and regenerate `database.types.ts`.
-   Until 0063 is applied the Communications tab errors (its tables do not
-   exist); other tabs are unaffected.
-2. Deploy `communications` and `twilio-webhook` through
-   `deploy-supabase-function.yml` (`twilio-webhook` gets `--no-verify-jwt`).
+1. ~~Apply 0063~~ — **done Oct 2 2026** (`20261002211041`; dry run, md5,
+   grants, RLS and refusal probes verified; `database.types.ts` regenerated
+   from production).
+2. ~~Deploy `communications` and `twilio-webhook`~~ — **done Oct 2 2026**
+   (v1 each, from the PR branch through the Supabase MCP; later deploys go
+   through `deploy-supabase-function.yml` from `main`, which gives
+   `twilio-webhook` `--no-verify-jwt`).
 3. Vault: `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY`, `TWILIO_API_SECRET`
    (a **Main** key). Settings › Check the parent key.
 4. Run the BHG data script (below).
