@@ -24,6 +24,7 @@
     "test:authority-decisions-ui": "UI_SPEC=tests/authority-decisions-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority-reconcile-ui": "UI_SPEC=tests/authority-reconcile-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority-draft-ui": "UI_SPEC=tests/authority-draft-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:auth-ui": "PG_LISTEN=127.0.0.1 UI_SPEC=tests/auth-flows-ui.mjs scripts/test-tasks-ui.sh",
     "test:content-origin-ui": "UI_SPEC=tests/content-origin-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:communications": "UI_SPEC=tests/communications-integration.mjs scripts/test-tasks-ui.sh",
     "test:communications-ui": "UI_SPEC=tests/communications-ui.mjs scripts/test-tasks-ui.sh",
