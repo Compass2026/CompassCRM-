@@ -129,3 +129,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/source_asset_hashin
 # saw it, formats, no shared folders between live clients, the read model,
 # nothing else reads them).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folders.test.sql"
+# 0063: Compass Communications (Twilio SMS): registry, inbound idempotency,
+# consent and opt-out, outbound rules, forward-only delivery status,
+# compliance registrations and checklist, tenancy, the worker kept out.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test.sql"
