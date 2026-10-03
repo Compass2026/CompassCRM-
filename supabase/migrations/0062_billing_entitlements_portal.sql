@@ -386,7 +386,10 @@ alter function billing_livemode() security definer;
 
 -- The client's billing state reduced to client-safe codes (the app words
 -- them). Money only for Stripe-collected agreements; an external arrangement
--- says so and nothing more.
+-- says so and nothing more. The plan's price is the agreement's (what the
+-- client contracted to pay, agreed_*); invoices and payment state are
+-- Stripe's. A Stripe subscription that disagrees with the agreement is
+-- flagged to the team (agreement_price_mismatch), never shown here instead.
 create function portal_billing_summary_row()
 returns table (
   client_id uuid,
@@ -397,7 +400,11 @@ returns table (
   currency text,
   next_billing_at timestamptz,
   ends_at timestamptz,
-  can_manage_billing boolean
+  can_manage_billing boolean,
+  agreed_amount_cents bigint,
+  agreed_currency text,
+  agreed_interval text,
+  agreed_interval_count int
 )
 language sql stable security definer set search_path = public, pg_temp as $$
   select
@@ -423,7 +430,11 @@ language sql stable security definer set search_path = public, pg_temp as $$
     case when pl.collection = 'stripe' then b.next_billing_at end,
     case when pl.collection = 'stripe' and b.billing_state = 'canceling'
          then coalesce(b.cancel_at, b.current_period_end) end,
-    (pl.collection = 'stripe' and b.stripe_customer_id is not null)
+    (pl.collection = 'stripe' and b.stripe_customer_id is not null),
+    case when pl.collection = 'stripe' then pl.agreed_amount_cents end,
+    case when pl.collection = 'stripe' then pl.agreed_currency end,
+    case when pl.collection = 'stripe' then pl.agreed_billing_interval end,
+    case when pl.collection = 'stripe' then pl.agreed_billing_interval_count end
   from client_billing_status b
   join plans pl on pl.client_id = b.client_id
   left join billing_packages pk on pk.id = pl.package_id

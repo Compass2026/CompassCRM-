@@ -137,9 +137,11 @@ sql(`insert into billing_packages (id, key, name, kind) values ('${GROWTH}', 'gr
 assert.equal((await callBilling({ action: "import_product", target: "package", target_id: GROWTH, product_id: "prod_Growth" })).status, 200);
 const pp = sql(`insert into billing_package_prices (package_id, package_kind, stripe_product_id, stripe_price_id, is_default)
   values ('${GROWTH}', 'standard', 'prod_Growth', 'price_GrowthM', true) returning id`).split("\n")[0];
-sql(`insert into plans (client_id, package_id, collection) values ('${A}', '${GROWTH}', 'stripe'), ('${B}', '${GROWTH}', 'stripe')`);
+sql(`insert into plans (client_id, package_id, collection, agreed_amount_cents, agreed_currency, agreed_billing_interval,
+       agreed_billing_interval_count, billing_package_price_id)
+     values ('${A}', '${GROWTH}', 'stripe', 150000, 'usd', 'month', 1, '${pp}'), ('${B}', '${GROWTH}', 'stripe', 150000, 'usd', 'month', 1, '${pp}')`);
 assert.equal((await callBilling({ action: "create_customer", client_id: A, email: "a@example.test" })).status, 200);
-const co = await callBilling({ action: "create_checkout", client_id: A, package_price_id: pp, request_id: "00000000-0000-4000-f000-000000000001" });
+const co = await callBilling({ action: "create_checkout", client_id: A, request_id: "00000000-0000-4000-f000-000000000001" });
 assert.equal(co.status, 200, JSON.stringify(co.body));
 const sub = s.complete(co.body.checkout.session_id).subscription;
 await webhook.handle(await signedRequest(s.event("checkout.session.completed", s.get(co.body.checkout.session_id)), WHSEC));

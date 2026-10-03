@@ -288,7 +288,21 @@ Shewmaker Brothers Masonry at the $500 legacy price, the other six at the
 $650 default; one package and one entitlement definition for both prices;
 seeded at cutover by `supabase/cutover/02_agreements.sql`, not yet in
 production; the live $650 / $500 Stripe Prices do not exist and are created
-only after Option B); `docs/billing-service-role.md` (the Stripe key is in Vault,
+only after Option B). **The agreement binds the exact price** (Oct 3 2026,
+in 0058): `plans.agreed_amount_cents` / `agreed_currency` /
+`agreed_billing_interval` / `agreed_billing_interval_count` are what the
+client contracted to pay (notes are descriptive only), and
+`plans.billing_package_price_id` is the one approved price of the
+agreement's own package Checkout sells (composite FK
+`plans_price_of_package`; `plans_agreement_price_guard` requires it active,
+recurring, fixed, in the current mode and exactly the agreed terms; only an
+admin sets the price or the binding). Checkout takes no price from the
+browser, sells only the bound price and refuses an unbound or mismatched
+agreement (`agreement_price_not_mapped` / `agreement_price_mismatch`);
+`client_agreement_price` reports readiness; the eight stay unbound until
+`07_live_bind_standard_prices.sql` (live, after Option B); the test client
+binds `price_1UMDr54Zq9yMk653B7jdneFm` with `06_bind_test_client_price.sql`;
+`docs/billing-service-role.md` (the Stripe key is in Vault,
 readable by every Edge Function and the worker's SQL). **Decided Sept 30
 2026: Option A for Stripe TEST MODE only; no live Stripe secret may ever go
 into the shared Edge Function / Vault architecture — Option B (dedicated

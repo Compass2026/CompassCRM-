@@ -25,6 +25,9 @@ const upstream = http.createServer(async (req, res) => {
   const reply = (data, status = 200) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(data)); };
   if (url.pathname === "/auth/v1/user") return reply(user);
   if (url.pathname === "/rest/v1/rpc/is_team") return reply(true);
+  // The Reports tab reads what the agreement includes (B5, 0062); this
+  // fictional client has no agreement, so nothing is included.
+  if (url.pathname === "/rest/v1/rpc/client_entitlements_for") return reply([]);
   // The app layout (PR #51) signs out anyone without a team_members row.
   if (url.pathname === "/rest/v1/team_members") return reply([{ id: "00000000-0000-4000-8000-000000000031" }]);
   if (url.pathname === "/rest/v1/clients") {

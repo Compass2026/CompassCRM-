@@ -64,6 +64,8 @@ export const attentionReasonLabels: Record<string, string> = {
   unmapped_price: "The subscription uses a Stripe price no package is mapped to",
   no_agreement_package: "Billing in Stripe, but no package on the agreement",
   package_mismatch: "The Stripe price belongs to a different package than the agreement",
+  agreement_price_unmapped: "Billing is under way, but the agreement has no exact Stripe Price bound",
+  agreement_price_mismatch: "The Stripe Price or subscription differs from the agreed price",
 };
 
 export function attentionLabel(reason: string): string {
@@ -108,6 +110,109 @@ export function parseMoneyToCents(input: string | null | undefined, currency = "
 
 // ── Agreement (plans) ──────────────────────────────────────────────────────
 export type Collection = "stripe" | "external";
+
+// What the client contracted to pay (plans.agreed_*), in words:
+// "$650.00/month", "$1,950.00 every 3 months".
+export function agreedPriceText(p: {
+  amount_cents: number | null | undefined;
+  currency: string | null | undefined;
+  interval: string | null | undefined;
+  interval_count?: number | null;
+}): string {
+  if (p.amount_cents == null || !p.currency || !p.interval) return "—";
+  const money = formatMoney(p.amount_cents, p.currency);
+  const n = p.interval_count ?? 1;
+  return n === 1 ? `${money}/${p.interval}` : `${money} every ${n} ${p.interval}s`;
+}
+
+// client_agreement_price.price_status (0058): is the agreement bound to the
+// exact Stripe Price Checkout will sell?
+export type AgreementPriceStatus =
+  | "not_applicable" | "terms_missing" | "unmapped" | "inactive" | "wrong_mode" | "mismatch" | "ready";
+export const agreementPriceStatusLabels: Record<AgreementPriceStatus, string> = {
+  not_applicable: "Not applicable",
+  terms_missing: "No agreed price",
+  unmapped: "Not mapped",
+  inactive: "Mapped price retired",
+  wrong_mode: "Mapped to the other Stripe mode",
+  mismatch: "Mapped price differs",
+  ready: "Mapped",
+};
+export const agreementPriceStatusHelp: Record<AgreementPriceStatus, string> = {
+  not_applicable: "Only a Stripe-collected agreement with a package is sold through Checkout.",
+  terms_missing: "Record the agreed price first (admin).",
+  unmapped: "No approved Stripe Price is bound to the agreed price yet. Checkout stays closed until an admin binds one.",
+  inactive: "The bound price is retired in the catalog or archived in Stripe. Bind an active price with the same terms.",
+  wrong_mode: "The bound price belongs to the other Stripe mode. Bind a price from the current mode.",
+  mismatch: "The bound Stripe Price no longer says what the agreement says. Bind a matching price or correct the agreement.",
+  ready: "Checkout sells exactly this price.",
+};
+export function agreementPriceStatus(value: string | null | undefined): AgreementPriceStatus {
+  return value && value in agreementPriceStatusLabels ? (value as AgreementPriceStatus) : "not_applicable";
+}
+
+export type AgreedPriceRow = {
+  agreed_amount_cents: number | null;
+  agreed_currency: string | null;
+  agreed_billing_interval: string | null;
+  agreed_billing_interval_count: number | null;
+};
+
+// The agreed recurring price an admin records: an amount, per month or year
+// (every 1 – 12). Empty amount clears it.
+export function validateAgreedPrice(input: {
+  amount: string | null;
+  currency?: string | null;
+  interval: string | null;
+  interval_count: string | null;
+}): { row: AgreedPriceRow } | { error: string } {
+  const currency = (input.currency || "usd").trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(currency)) return { error: "Currency is a three-letter code (usd)." };
+  const cents = parseMoneyToCents(input.amount, currency);
+  if (cents == null) {
+    return { row: { agreed_amount_cents: null, agreed_currency: null, agreed_billing_interval: null, agreed_billing_interval_count: null } };
+  }
+  if (cents === "invalid" || cents <= 0) return { error: "The agreed price is an amount above zero." };
+  const interval = input.interval || "month";
+  if (!(interval in intervalLabels)) return { error: "The agreed price is per month or per year." };
+  const count = input.interval_count?.trim() ? Number(input.interval_count) : 1;
+  if (!Number.isInteger(count) || count < 1 || count > 12) return { error: "Billed every 1 to 12 months or years." };
+  return { row: { agreed_amount_cents: cents, agreed_currency: currency, agreed_billing_interval: interval, agreed_billing_interval_count: count } };
+}
+
+// Which approved package prices an agreement may bind: its own package's,
+// active, in the current mode, reserved for no other client, with exactly the
+// agreed amount, currency and interval (the database's rule, for the list).
+export type BindablePrice = {
+  id: string;
+  package_id: string;
+  client_id: string | null;
+  active: boolean;
+  is_default: boolean;
+  stripe_prices: {
+    active: boolean;
+    livemode: boolean;
+    deleted_at: string | null;
+    unit_amount_cents: number | null;
+    currency: string;
+    recurring_interval: string | null;
+    recurring_interval_count: number | null;
+  } | null;
+};
+export function bindablePrices(
+  prices: BindablePrice[],
+  plan: { client_id: string; package_id: string | null } & AgreedPriceRow,
+  livemode: boolean,
+): BindablePrice[] {
+  if (!plan.package_id || plan.agreed_amount_cents == null) return [];
+  return prices.filter((p) => {
+    const sp = p.stripe_prices;
+    return p.package_id === plan.package_id && p.active && (p.client_id == null || p.client_id === plan.client_id)
+      && !!sp && sp.active && !sp.deleted_at && sp.livemode === livemode
+      && sp.unit_amount_cents === plan.agreed_amount_cents && sp.currency === plan.agreed_currency
+      && sp.recurring_interval === plan.agreed_billing_interval && sp.recurring_interval_count === plan.agreed_billing_interval_count;
+  });
+}
 export const externalMethodLabels: Record<string, string> = {
   check: "Check",
   wire: "Wire",
@@ -142,6 +247,13 @@ export type AgreementRow = {
   renewal_date: string | null;
   managed_ad_budget_cents: number | null;
   notes: string | null;
+  // An external arrangement carries no agreed Stripe price (plans_agreed_terms_stripe_only);
+  // a Stripe agreement's price is set apart, by an admin (setAgreedPriceAction).
+  agreed_amount_cents?: null;
+  agreed_currency?: null;
+  agreed_billing_interval?: null;
+  agreed_billing_interval_count?: null;
+  billing_package_price_id?: null;
 };
 
 // The same rules as plans' constraints, with a reason the teammate can act on.
@@ -186,6 +298,11 @@ export function validateAgreement(input: AgreementInput): { row: AgreementRow } 
       return { error: "An external arrangement is billed per month or per year." };
     }
     Object.assign(row, {
+      agreed_amount_cents: null,
+      agreed_currency: null,
+      agreed_billing_interval: null,
+      agreed_billing_interval_count: null,
+      billing_package_price_id: null,
       external_method: input.external_method,
       external_amount_cents: amount,
       external_currency: currency,

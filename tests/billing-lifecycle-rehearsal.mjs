@@ -137,8 +137,8 @@ try {
        values ('${T}', 'Compass Billing Test Client (TEST)', 'Springfield', 'MO', 'active', 'FICTIONAL billing test client — not a real business')`);
   sqlAdmin(`insert into auth.users (id, email, email_confirmed_at) values ('${PORTAL_T.id}', '${PORTAL_T.email}', now())`);
   sql(`insert into portal_users (client_id, email, is_active) values ('${T}', '${PORTAL_T.email}', true)`);
-  s.put({ id: "prod_TestStd", object: "product", livemode: false, name: "Compass Test Standard (TEST)", active: true, metadata: {}, created: 1 });
-  s.put({ id: "price_TestStdM", object: "price", livemode: false, product: "prod_TestStd", active: true, type: "recurring", currency: "usd",
+  s.put({ id: "prod_VMxmKG052epGVU", object: "product", livemode: false, name: "Compass Test Standard (TEST)", active: true, metadata: {}, created: 1 });
+  s.put({ id: "price_1UMDr54Zq9yMk653B7jdneFm", object: "price", livemode: false, product: "prod_VMxmKG052epGVU", active: true, type: "recurring", currency: "usd",
     unit_amount: 250000, billing_scheme: "per_unit", recurring: { interval: "month", interval_count: 1, usage_type: "licensed" }, metadata: {}, created: 1 });
   {
     const admin = as(ADMIN);
@@ -153,13 +153,15 @@ try {
     const { error: e2 } = await admin.from("package_entitlements").insert(rows);
     assert.equal(e2, null, e2?.message);
   }
-  assert.equal((await callBilling(ADMIN, { action: "import_product", target: "package", target_id: PKG, product_id: "prod_TestStd" })).status, 200);
+  assert.equal((await callBilling(ADMIN, { action: "import_product", target: "package", target_id: PKG, product_id: "prod_VMxmKG052epGVU" })).status, 200);
   const pp = sql(`insert into billing_package_prices (package_id, package_kind, stripe_product_id, stripe_price_id, is_default)
-    values ('${PKG}', 'standard', 'prod_TestStd', 'price_TestStdM', true) returning id`).split("\n")[0];
+    values ('${PKG}', 'standard', 'prod_VMxmKG052epGVU', 'price_1UMDr54Zq9yMk653B7jdneFm', true) returning id`).split("\n")[0];
 
   // ── Phase 10: agreement → entitlements ──
   {
-    const { error } = await as(ADMIN).from("plans").insert({ client_id: T, package_id: PKG, collection: "stripe" });
+    // The test agreement states its contracted price: the TEST price's $2,500.00/month.
+    const { error } = await as(ADMIN).from("plans").insert({ client_id: T, package_id: PKG, collection: "stripe",
+      agreed_amount_cents: 250000, agreed_currency: "usd", agreed_billing_interval: "month", agreed_billing_interval_count: 1 });
     assert.equal(error, null, error?.message);
   }
   const ents = await entitlements();
@@ -175,11 +177,25 @@ try {
   assert.equal(cust.status, 200, JSON.stringify(cust.body));
   const cusId = json(`select row_to_json(x) from stripe_customers x where client_id = '${T}'`).stripe_customer_id;
   assert.equal(s.get(cusId).metadata.compass_client_id, T);
-  const co = await callBilling(ADMIN, { action: "create_checkout", client_id: T, package_price_id: pp, request_id: "00000000-0000-4000-f000-0000000000c1" });
+  // Until the agreement is bound to its exact TEST price, Checkout refuses it.
+  assert.equal((await callBilling(ADMIN, { action: "create_checkout", client_id: T, request_id: "00000000-0000-4000-f000-0000000000c0" })).body.error,
+    "agreement_price_not_mapped");
+  {
+    // 06_bind_test_client_price.sql's step, through the app's path (an admin's update; the database checks it).
+    const { error } = await as(ADMIN).from("plans").update({ billing_package_price_id: pp }).eq("client_id", T);
+    assert.equal(error, null, error?.message);
+    assert.equal(sql(`select price_status || '|' || stripe_price_id from client_agreement_price where client_id = '${T}'`),
+      "ready|price_1UMDr54Zq9yMk653B7jdneFm");
+  }
+  // The browser cannot substitute another price.
+  assert.equal((await callBilling(ADMIN, { action: "create_checkout", client_id: T, package_price_id: "00000000-0000-4000-d000-00000000dead",
+    request_id: "00000000-0000-4000-f000-0000000000c0" })).body.error, "agreement_price_mismatch");
+  const co = await callBilling(ADMIN, { action: "create_checkout", client_id: T, request_id: "00000000-0000-4000-f000-0000000000c1" });
   assert.equal(co.status, 200, JSON.stringify(co.body));
+  assert.equal(s.get(co.body.checkout.session_id).line_items_requested[0].price, "price_1UMDr54Zq9yMk653B7jdneFm");
   assert.match(co.body.checkout.url, /^https:\/\//);
   assert.equal(status(T).billing_state, "checkout_pending");
-  ok("Stripe customer created (linked by metadata); Checkout created from the approved recurring price; the payment link is ready to copy");
+  ok("Stripe customer created (linked by metadata); Checkout refused until the agreement is bound to its exact TEST price ($2,500.00/month, price_1UMDr54Zq9yMk653B7jdneFm), then created at exactly that price (no other price accepted); the payment link is ready to copy");
 
   const done = s.complete(co.body.checkout.session_id);
   const cse = await deliver("checkout.session.completed", s.get(co.body.checkout.session_id));
@@ -205,6 +221,9 @@ try {
     assert.match(pinv[0].invoice_pdf, /^https:\/\/pay\.stripe\.com\//);
     const psum = await portalView(PORTAL_T, "portal_billing_summary");
     assert.deepEqual([psum.length, psum[0].status, psum[0].monthly_amount_cents, psum[0].can_manage_billing], [1, "active", 250000, true]);
+    // The plan price the portal shows is the agreement's.
+    assert.deepEqual([psum[0].agreed_amount_cents, psum[0].agreed_currency, psum[0].agreed_interval, psum[0].agreed_interval_count],
+      [250000, "usd", "month", 1]);
     const pents = await portalView(PORTAL_T, "portal_entitlements");
     // Stripe's own hosted invoice page and PDF are the customer-facing links
     // (required); every other field carries no Stripe id.
@@ -307,11 +326,13 @@ try {
 
   // Expired Checkout repaired by reconciliation (another fictional client; T is subscribed).
   {
-    const { error } = await as(ADMIN).from("plans").insert({ client_id: B, package_id: PKG, collection: "stripe" });
+    const { error } = await as(ADMIN).from("plans").insert({ client_id: B, package_id: PKG, collection: "stripe",
+      agreed_amount_cents: 250000, agreed_currency: "usd", agreed_billing_interval: "month", agreed_billing_interval_count: 1,
+      billing_package_price_id: pp });
     assert.equal(error, null, error?.message);
   }
   assert.equal((await callBilling(ADMIN, { action: "create_customer", client_id: B, email: "b@example.test" })).status, 200);
-  const coB = await callBilling(ADMIN, { action: "create_checkout", client_id: B, package_price_id: pp, request_id: "00000000-0000-4000-f000-0000000000c2" });
+  const coB = await callBilling(ADMIN, { action: "create_checkout", client_id: B, request_id: "00000000-0000-4000-f000-0000000000c2" });
   assert.equal(coB.status, 200, JSON.stringify(coB.body));
   s.patch(coB.body.checkout.session_id, { status: "expired", url: null });   // no webhook delivered
   assert.equal(sql(`select status from checkout_sessions where stripe_checkout_session_id = '${coB.body.checkout.session_id}'`), "open");

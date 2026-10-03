@@ -100,12 +100,12 @@ export async function createCustomPriceAction(clientId: string, packageId: strin
     "Created the client's retainer price in Stripe. It can now be sold with a payment link.");
 }
 
+// The price is never the browser's: stripe-billing sells exactly the price the
+// client's agreement is bound to (plans.billing_package_price_id).
 export async function createCheckoutAction(clientId: string, form: FormData) {
-  const packagePriceId = field(form, "package_price_id");
   const requestId = field(form, "request_id");
-  if (!isUuid(packagePriceId)) back(clientId, "error", "Choose the price to sell.");
   if (!isUuid(requestId)) back(clientId, "error", "The form expired. Reload the page and try again.");
-  await run(clientId, { action: "create_checkout", package_price_id: packagePriceId, request_id: requestId },
+  await run(clientId, { action: "create_checkout", request_id: requestId },
     "Payment link ready. Copy it and send it to the client.");
 }
 

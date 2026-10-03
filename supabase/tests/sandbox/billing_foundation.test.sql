@@ -379,9 +379,14 @@ begin
   perform bl.ok('N5 a quantity is never negative', e like '23514%', e);
 
   -- Agreements.
-  insert into plans (client_id, package_id, term_months, start_date) values
-    (bl.id('c1'), bl.id('pkg_std'), 12, '2026-09-01'),
-    (bl.id('c4'), bl.id('pkg_custom'), 12, '2026-09-01');
+  -- Each agreement states its contracted price and is bound to exactly that
+  -- approved Stripe Price (billing_agreement_price.test.sql has the rules).
+  insert into plans (client_id, package_id, term_months, start_date, agreed_amount_cents, agreed_currency,
+      agreed_billing_interval, agreed_billing_interval_count, billing_package_price_id) values
+    (bl.id('c1'), bl.id('pkg_std'), 12, '2026-09-01', 150000, 'usd', 'month', 1,
+     (select id from billing_package_prices where stripe_price_id = 'price_StdM')),
+    (bl.id('c4'), bl.id('pkg_custom'), 12, '2026-09-01', 99900, 'usd', 'month', 1,
+     (select id from billing_package_prices where stripe_price_id = 'price_CustC1'));
   e := bl.try(format($q$insert into plans (client_id, collection) values (%L, 'external')$q$, bl.id('c3')));
   perform bl.ok('G1 an external arrangement states its method, amount, currency and interval', e like '23514%', e);
   e := bl.try(format($q$insert into plans (client_id, collection, external_method) values (%L, 'stripe', 'check')$q$, bl.id('c3')));
@@ -673,19 +678,21 @@ begin
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname not like 'billing\_%'
        and p.proname not in ('client_entitlements_for', 'client_quota_usage', 'create_weekly_blog_tasks', 'fire_website_updates',
-                             'record_client_agreement_event', 'portal_billing_summary_row', 'portal_entitlement_rows')
+                             'record_client_agreement_event', 'portal_billing_summary_row', 'portal_entitlement_rows',
+                             'plans_agreement_price_guard')
        and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%' or p.prosrc ilike '%billing%'
             or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')),
     (select string_agg(proname, ', ') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname not like 'billing\_%'
        and p.proname not in ('client_entitlements_for', 'client_quota_usage', 'create_weekly_blog_tasks', 'fire_website_updates',
-                             'record_client_agreement_event', 'portal_billing_summary_row', 'portal_entitlement_rows')
+                             'record_client_agreement_event', 'portal_billing_summary_row', 'portal_entitlement_rows',
+                             'plans_agreement_price_guard')
        and (p.prosrc ilike '%stripe%' or p.prosrc ilike '%entitlement%'
        or p.prosrc ilike '%billing%' or p.prosrc ~* '\mplans\M' or p.prosrc ilike '%invoice%')));
   perform bl.ok('I2 only the billing read models (0058, 0061) and the portal billing views (0062) are views over billing tables',
     (select array_agg(viewname::text order by viewname) from pg_views where schemaname = 'public'
        and (definition ilike '%stripe%' or definition ilike '%entitlement%' or definition ~* '\mplans\M'))
-    = array['billing_sync_health', 'client_billing_reconciliation', 'client_billing_status', 'client_entitlements',
+    = array['billing_sync_health', 'client_agreement_price', 'client_billing_reconciliation', 'client_billing_status', 'client_entitlements',
             'portal_billing_invoices', 'portal_entitlements']);
   perform bl.ok('I3 no portal view but 0062''s three billing views reads billing', not exists (select 1 from pg_views where schemaname = 'public'
     and viewname like 'portal\_%' and viewname not in ('portal_billing_summary', 'portal_billing_invoices', 'portal_entitlements') and (definition ilike '%stripe%' or definition ilike '%invoice%' or definition ~* '\mplans\M'

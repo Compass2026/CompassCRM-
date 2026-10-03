@@ -103,13 +103,14 @@ drop table if exists billing_audit_events;
 drop function if exists billing_audit_append_only(), billing_require_service();
 
 -- ── 0058 read models, then 0059's sync functions ────────────────────────────
-drop view if exists client_billing_status, client_entitlements;
+drop view if exists client_billing_status, client_agreement_price, client_entitlements;
 drop function if exists billing_sync_apply(jsonb), billing_link_customer(jsonb), billing_event_begin(jsonb, int),
   billing_event_finish(text, int, text, text), billing_event_fail(text, int, text), billing_owner(text, boolean),
   billing_upsert(text, text[], jsonb), billing_update(text, text, jsonb);
 
 -- ── 0058: the mirror, the catalog, the agreement ────────────────────────────
 drop table plans;   -- references billing_packages; recreated below in its 0001 shape
+drop function if exists plans_agreement_price_guard();
 drop table if exists stripe_refunds, invoice_line_items, payments, invoices, subscription_items, subscriptions,
   checkout_sessions, stripe_customers, stripe_events, client_entitlement_overrides, package_entitlements,
   billing_package_prices, billing_one_time_items, billing_packages, service_catalog, stripe_prices, stripe_products;

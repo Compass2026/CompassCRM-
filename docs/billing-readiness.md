@@ -94,18 +94,37 @@ Tom confirmed the terms for all eight current clients
   at $650. No overrides and no exclusions.
 - **Seed:** `supabase/cutover/02_agreements.sql` (replaces the template):
   one atomic statement, idempotent, refuses rather than overwrite a
-  different package or agreement. The agreed price is in each agreement's
-  notes (plans has no price column; Stripe owns prices).
+  different package or agreement. Each agreement stores its contracted price
+  as structured terms (`agreed_amount_cents` 50000 / 65000, `usd`, every 1
+  `month`); the notes only describe it. No Stripe Price is bound
+  (`billing_package_price_id` null).
 - **Not seeded, and not invented:** the live Stripe Product and the live
   $650 / $500 Prices. They do not exist; they are created only after
   Option B, then mapped to Compass Standard in Settings › Billing catalog
-  ($650 as the default price, $500 as a second approved price). Until then
-  `04_validate.sql` reports Compass Standard as "not ready" for Checkout,
-  which is expected for a test-mode cutover and never raises.
-- **Known limit:** Checkout accepts either approved price of the client's
-  package; it does not check the price named in the agreement's notes. The
-  teammate sends BHG Safety Partners and Shewmaker Brothers Masonry the $500
-  price. A structured agreed-price field is a possible follow-up.
+  ($650 as the default price, $500 as a second approved price), and
+  `07_live_bind_standard_prices.sql` binds each agreement to the one that
+  says exactly its terms. Until then `04_validate.sql` reports the eight as
+  `unmapped` (Checkout refused), which is expected for a test-mode cutover
+  and never raises.
+- **The agreement binds the exact price (fixed Oct 3 2026, before any
+  deployment).** The earlier limit — Checkout accepted either approved price
+  of the client's package — is closed:
+  - `plans` carries the contracted recurring terms and
+    `billing_package_price_id`, the exact approved package price; a
+    composite foreign key keeps it on the agreement's own package, and
+    `plans_agreement_price_guard` requires it to be active, recurring,
+    licensed, fixed-amount, in the current mode and exactly the agreed
+    amount, currency, interval and count. Only an admin sets the price or
+    the binding.
+  - Checkout sells only the bound price (the browser sends no price; a
+    different `package_price_id` is refused, `agreement_price_mismatch`)
+    and refuses an unbound agreement (`agreement_price_not_mapped`) or one
+    whose price no longer matches. BHG Safety Partners and Shewmaker
+    Brothers Masonry cannot be sold the $650 price, nor the six the $500.
+  - `client_agreement_price` reports each agreement's readiness;
+    `agreement_price_unmapped` / `agreement_price_mismatch` flag
+    configuration gaps (never financial state); the portal's plan price is
+    the agreement's.
 - **Automation effect from 0062:** website refreshes drop from Tom's Sept 14
   rule of 2 a month to the agreement's 1, and new pages may rise to 4; the
   weekly blog (≤ 5 a month) stays within 8.
@@ -299,7 +318,11 @@ in chat, git or this document.
 
 **Mapping (§ 17 step 11):** the TEST Standard product and its $2,500 price
 map to the test client's package **"Test Standard (TEST)"**
-(`03_test_client.sql`), never to Compass Standard. Compass Standard stays
+(`03_test_client.sql`), never to Compass Standard. The test client's
+agreement (agreed $2,500.00/month, usd, monthly) is then bound to exactly
+`price_1UMDr54Zq9yMk653B7jdneFm` (`06_bind_test_client_price.sql`, or Plan
+tab › Agreed price › Bind price), so the sandbox Checkout runs the same
+agreement-price enforcement live billing will. Compass Standard stays
 unmapped in test mode; its live $650 default and $500 legacy Prices are
 created and mapped only for live mode, after Option B. The Custom Retainer
 (TEST) product is imported as a `custom` package, used only for the test
@@ -344,7 +367,8 @@ Original setup steps, for reference:
      `price_1UMDr54Zq9yMk653B7jdneFm` as its default;
    - import `prod_VMxtVQBYzS0Qya` as the custom-retainer product;
    - leave **Compass Standard** unmapped (its entitlements are already
-     seeded by `02_agreements.sql`).
+     seeded by `02_agreements.sql`);
+   - bind the test client's agreement: `06_bind_test_client_price.sql`.
 
 **Test payment details:**
 - **Cards:**
@@ -397,7 +421,7 @@ test-mode run.
 | # | Step | Rehearsal | Real test mode |
 | --- | --- | --- | --- |
 | 10.1 | Agreement → entitlements (4 / 8 / 30 / 2 / 2 + 7 services) | PASS | pending |
-| 10.2 | Customer created and linked; Checkout from the approved price; link ready | PASS | pending |
+| 10.2 | Customer created and linked; Checkout refused until the agreement is bound to its exact TEST price, a different price refused, then created at exactly `price_1UMDr54Zq9yMk653B7jdneFm`; link ready | PASS | pending |
 | 10.3 | Payment → webhook → subscription / invoice / payment mirrored; Active; MRR; next billing date; entitlements unchanged | PASS | pending |
 | 10.4 | Invoice internal + portal (hosted page, PDF); no Stripe id / package id / codes | PASS | pending |
 | 10.5 | Customer Portal: own client only; payment methods; no cancel or plan change; widened config refused | PASS | pending |
@@ -417,8 +441,11 @@ test-mode run.
 
 **Real test-mode procedure** (after cutover steps 1–12, with the test client):
 
-1. Plan tab: confirm the agreement. Billing tab: create the customer, then
-   create Checkout from the approved price and copy the link.
+1. Plan tab: confirm the agreement and its **Agreed price** ($2,500.00/month,
+   Stripe Price **Mapped**, test mode). Billing tab: create the customer;
+   before binding, confirm Checkout is refused (no payment link offered);
+   then **Create Payment Link for $2,500.00/month** (no price to choose) and
+   copy the link.
 2. Pay the link with `4242…`, then check the Billing tab: Active, MRR, next
    billing date.
 3. Portal (test inbox): check Billing, the invoice, and Manage billing.
@@ -466,6 +493,10 @@ automation log. On any red: Reconcile This Client, then read the result.
 (§ 4–5); `02_agreements.sql` seeds them and the cutover kit proves the
 validator passes with no exclusions.
 
+**Resolved (Oct 3 2026): the agreement binds its exact recurring price.**
+Checkout can no longer sell a client either of a package's prices; it sells
+only the price the agreement is bound to (§ 4–5).
+
 Remaining, in the order they unblock:
 
 1. **Stripe TEST MODE deployment** (§ 17 steps 1 – 10): migrations, app,
@@ -484,9 +515,10 @@ Remaining, in the order they unblock:
    Function / Vault architecture.
 7. **The live $650 default and $500 legacy Stripe Prices** on a live
    Compass Standard Product: created only after Option B, then mapped to
-   Compass Standard ($650 default, $500 second approved price). No ids
-   exist or are invented; placeholders are in `02_agreements.sql` and
-   `docs/billing-cutover.md`.
+   Compass Standard ($650 default, $500 second approved price), then each
+   agreement bound to its exact price (`07_live_bind_standard_prices.sql`);
+   only then may Checkout run for the eight. No ids exist or are invented;
+   placeholders are in `02_agreements.sql` and `docs/billing-cutover.md`.
 
 Not blockers: the Creative Engine branch's 0057 can merge before or after
 (`npm ci` if it merges first); live mode itself is a separate reviewed change
@@ -517,10 +549,13 @@ do if that step fails.
    against the branch file becomes a follow-up PR.
 6. **Agreements.**
    - Run `02_agreements.sql`: Compass Standard and the eight confirmed
-     agreements. It prints the eight; it refuses, writing nothing, if a
-     client is missing or already has a different agreement.
+     agreements with their structured agreed prices (no Stripe Price
+     bound). It prints the eight; it refuses, writing nothing, if a client
+     is missing or already has a different agreement.
    - Run `03_test_client.sql`.
-   - Run `04_validate.sql`; it must pass.
+   - Run `04_validate.sql`; it must pass (every Stripe agreement has its
+     agreed price; the eight report `unmapped`, Checkout refused — expected
+     in test mode).
    - Check the Tasks / Content / Social targets for each active client.
 7. **Automation.** Run `05_resume_automation.sql` and unpause the Routine.
    - ✓ Watch the next Wednesday's `automation_entitlement_log`.
@@ -536,6 +571,9 @@ do if that step fails.
 11. **Catalog mapping.**
     - Import the TEST products onto the test packages and approve the test
       price (§ 10). Compass Standard stays unmapped in test mode.
+    - Run `06_bind_test_client_price.sql`: the test client's agreement is
+      bound to exactly `price_1UMDr54Zq9yMk653B7jdneFm` and reports
+      `ready`.
     - Configure the Customer Portal.
     - Run the test-client lifecycle (§ 12–15).
 12. **Daily reconciliation.** Only after step 11 passes:
@@ -553,9 +591,12 @@ signed off by Tom.
 | --- | --- | --- |
 | Code merged | BLOCKED | PR #86 is a draft awaiting this review |
 | Migrations finalized | PASS | 0058 – 0062 (§ 2); recheck at merge |
-| Migration replay clean | PASS | `npm run test:sandbox`: 24 suites on the branch, including main's 0063 communications suite after the Oct 3 merge; the merge trial with the Creative Engine branch (0057) also passes (§ 1) |
+| Migration replay clean | PASS | `npm run test:sandbox`: 25 suites on the branch (with `billing_agreement_price`), including main's 0063 communications suite after the Oct 3 merge; the merge trial with the Creative Engine branch (0057) also passes (§ 1) |
 | Rollback tested | PASS (sandbox) | `npm run test:billing-rollback`: exact schema / cron / settings; main's portal suite 374 pass; re-apply clean |
-| Active client agreements confirmed | **RESOLVED** | Tom, Oct 2026 (§ 4–5): eight agreements on Compass Standard, six at $650, two at $500 legacy; seeded by `02_agreements.sql`, proven in the sandbox (cutover kit K3a – K3l, K9a) |
+| Active client agreements confirmed | **RESOLVED** | Tom, Oct 2026 (§ 4–5): eight agreements on Compass Standard, six at $650, two at $500 legacy; seeded with structured agreed prices by `02_agreements.sql`, proven in the sandbox (cutover kit K3a – K3o, K9a) |
+| Agreement bound to its exact price | **RESOLVED** (code) | `plans.agreed_*` + `billing_package_price_id`, composite FK + `plans_agreement_price_guard`, Checkout sells only the bound price; sandbox `billing_agreement_price` (52), cutover kit K11 – K18, handler unit tests, integration, rehearsal, `test:billing-ops-ui` |
+| Test client bound to its TEST price | MANUAL ACTION REQUIRED | § 17 step 11: `06_bind_test_client_price.sql` after the TEST import |
+| Live agreements bound to live prices | BLOCKED | after Option B and the live $650 / $500 Prices: `07_live_bind_standard_prices.sql` (tested in the sandbox with sandbox-only ids) |
 | Agreements entered on production | MANUAL ACTION REQUIRED | § 17 step 6 (`02_agreements.sql`) |
 | Entitlements verified | MANUAL ACTION REQUIRED | `04_validate.sql` on production after the agreements; passes with no exclusions in the sandbox |
 | Security-definer audit passed | PASS | § 7; 18 regression checks; hardening in 0062 |

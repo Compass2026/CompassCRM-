@@ -165,6 +165,11 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_entitlement
 # execution, signed-in users reach only the self-scoping helpers, service-only
 # functions re-check their session, the planners are not API-callable.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_security_definer.test.sql"
+# The agreement binds the client to its exact recurring price: the agreed
+# terms, a binding only to the agreement's own package's matching, active,
+# fixed, current-mode price, admin-only, the readiness read model, the
+# agreement_price_* attention signals and the portal's plan price.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_agreement_price.test.sql"
 # The billing cutover kit (supabase/cutover): pause, the agreements template
 # refuses to run, the fictional test client (paused, no automation), the
 # validation refuses an active client with no agreement, resume.

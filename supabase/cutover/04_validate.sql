@@ -1,7 +1,15 @@
 -- Billing cutover, step 4: prove every active client is represented before
 -- automation resumes. After 02_agreements.sql all eight current clients (four
--- active, four launching) are on Compass Standard, so this passes with no
--- exclusions. Raises (and stops the cutover) if an active client has
+-- active, four launching) are on Compass Standard with structured agreed
+-- terms, so this passes with no exclusions.
+--
+-- Raises (stops the cutover) when an active client has no agreement, or when
+-- any non-offboarded client's Stripe-collected agreement has no structured
+-- agreed price (amount, currency, interval). Checkout readiness (an exact
+-- approved Stripe Price bound to that price) is reported, never raised: in a
+-- TEST MODE cutover Compass Standard stays unmapped and no real client's
+-- Checkout is allowed; the fictional test client is bound afterwards
+-- (06_bind_test_client_price.sql) before its lifecycle runs. Raises (and stops the cutover) if an active client has
 -- no agreement — unless it is deliberately excluded by listing its id in the
 -- session setting first:
 --   set compass.cutover_excluded = '{<uuid>,<uuid>}';
@@ -18,6 +26,15 @@ begin
   if v_missing is not null then
     raise exception 'cutover: active client(s) with no agreement: %', v_missing;
   end if;
+  select string_agg(c.name || ' (' || c.id || ')', ', ' order by c.name) into v_missing
+  from clients c join plans p on p.client_id = c.id
+  where c.status <> 'offboarded' and p.package_id is not null and p.collection = 'stripe'
+    and (p.agreed_amount_cents is null or p.agreed_currency is null or p.agreed_billing_interval is null
+         or p.agreed_billing_interval_count is null)
+    and c.id <> all (v_excluded);
+  if v_missing is not null then
+    raise exception 'cutover: Stripe-collected agreement(s) with no agreed price: %', v_missing;
+  end if;
   if exists (select 1 from client_entitlements_for(null) limit 1) is not true then
     raise exception 'cutover: client_entitlements_for() returned nothing';
   end if;
@@ -30,29 +47,35 @@ from clients c
 where c.status = 'launching' and not exists (select 1 from plans p where p.client_id = c.id and p.package_id is not null)
 order by c.name;
 
--- Compass Standard price readiness (reports, never raises): Checkout needs the
--- $650 default and the $500 legacy Stripe Prices mapped to the package in the
--- billing mode in force. Before the live prices exist this shows
--- "no Stripe product mapped" — expected at a test-mode cutover.
+-- Checkout readiness per Stripe-collected agreement (reports, never raises):
+-- the agreed price, and whether an exact approved Stripe Price of the
+-- agreement's own package, in the current mode, is bound to it. 'unmapped' is
+-- expected for the eight real clients in a TEST MODE cutover (their live
+-- prices do not exist yet); Checkout refuses them until 07 binds them in live
+-- mode.
+select c.name, c.status, bp.name as package,
+       ap.agreed_amount_cents, ap.agreed_currency, ap.agreed_billing_interval, ap.agreed_billing_interval_count,
+       ap.price_status,
+       case when ap.price_status = 'ready' then 'checkout ready'
+            else 'checkout refused (' || ap.price_status || ')' end as checkout
+from client_agreement_price ap
+join clients c on c.id = ap.client_id
+join billing_packages bp on bp.id = ap.package_id
+where ap.collection = 'stripe' and c.status <> 'offboarded'
+order by c.name;
+
+-- Compass Standard: the agreements at each agreed price, and the live prices
+-- mapped for them (none until the live $650 / $500 Prices exist).
 select bp.name as package,
-       count(distinct pl.client_id) filter (where pl.notes like 'Compass Standard at the default price%') as agreements_at_650,
-       count(distinct pl.client_id) filter (where pl.notes like 'Compass Standard at the legacy price%') as agreements_at_500,
+       count(*) filter (where pl.agreed_amount_cents = 65000) as agreements_at_650,
+       count(*) filter (where pl.agreed_amount_cents = 50000) as agreements_at_500,
+       count(*) filter (where pl.billing_package_price_id is not null) as agreements_bound,
        coalesce(bp.stripe_product_id, 'no Stripe product mapped') as stripe_product,
        (select string_agg(sp.stripe_price_id || ' ' || sp.currency || ' ' || (sp.unit_amount_cents / 100.0)::numeric(10,2)
                           || '/' || sp.recurring_interval || case when bpp.is_default then ' (default)' else '' end
                           || case when sp.livemode then ' live' else ' test' end, '; ' order by bpp.is_default desc, sp.unit_amount_cents desc)
           from billing_package_prices bpp join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id
-         where bpp.package_id = bp.id and bpp.active and sp.active) as approved_prices,
-       case
-         when exists (select 1 from billing_package_prices bpp join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id
-                       where bpp.package_id = bp.id and bpp.active and bpp.is_default and sp.active
-                         and sp.livemode = billing_livemode() and sp.unit_amount_cents = 65000 and sp.recurring_interval = 'month')
-          and exists (select 1 from billing_package_prices bpp join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id
-                       where bpp.package_id = bp.id and bpp.active and not bpp.is_default and sp.active
-                         and sp.livemode = billing_livemode() and sp.unit_amount_cents = 50000 and sp.recurring_interval = 'month')
-         then 'ready: $650 default and $500 legacy mapped'
-         else 'not ready: map the $650 default and $500 legacy Stripe Prices (Settings › Billing catalog) before sending Checkout'
-       end as checkout_readiness
+         where bpp.package_id = bp.id and bpp.active and sp.active) as approved_prices
 from billing_packages bp
 left join plans pl on pl.package_id = bp.id
 where bp.key = 'compass_standard'

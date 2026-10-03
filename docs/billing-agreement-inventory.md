@@ -71,26 +71,33 @@ Standard entitlements, no client overrides.
 
 ## How the price is recorded
 
-The CRM does not store prices; Stripe does (`plans` has no price column since
-0058). So:
+The agreement is authoritative for what the client **contracted to pay**;
+Stripe stays authoritative for what was actually billed and paid.
 
-- **In the CRM:** each agreement's `plans.notes` names its agreed price
-  ("Compass Standard at the default price, $650.00/month. …" or "… at the
-  legacy price, $500.00/month (grandfathered; …)"). The notes are team-only;
-  no portal view carries them.
+- **In the CRM (structured):** each agreement stores
+  `plans.agreed_amount_cents` (50000 or 65000), `agreed_currency` (`usd`),
+  `agreed_billing_interval` (`month`) and `agreed_billing_interval_count`
+  (1). Notes still describe the terms but are never read as the price.
+- **The exact Stripe Price:** `plans.billing_package_price_id` names the one
+  approved package price Checkout sells for the agreement. It must be a
+  price of the agreement's own package (composite foreign key), active,
+  recurring, fixed-amount, in the current Stripe mode, and say exactly the
+  agreed amount, currency and interval (`plans_agreement_price_guard`). It
+  is **NULL for all eight today**: the live Prices do not exist.
 - **In Stripe (later, live only):** one Compass Standard Product with two
   monthly Prices, both mapped to the one package in Settings › Billing
-  catalog: $650 as the package's default price, $500 as a second, non-default
-  approved price. **Neither live Price exists yet** and no id is invented
-  here; the placeholders are at the end of `02_agreements.sql` and in
-  `docs/billing-cutover.md`.
-- **At Checkout:** the teammate picks one of the package's approved prices.
-  `stripe-billing` checks the price belongs to the client's package, is
-  active, recurring and in the right mode; it does **not** check which of the
-  two prices the agreement names. BHG Safety Partners and Shewmaker Brothers
-  Masonry must be sent the $500 legacy price; the agreement's notes say so.
-  A structured agreed-price field (so Checkout could refuse the wrong one) is
-  a possible follow-up, not built.
+  catalog ($650 default, $500 second approved price). **Neither live Price
+  exists yet** and no id is invented; the placeholders are at the end of
+  `02_agreements.sql` and in `docs/billing-cutover.md`. Then
+  `07_live_bind_standard_prices.sql` binds BHG Safety Partners and
+  Shewmaker Brothers Masonry to the $500 price and the other six to the $650
+  price, by their agreed terms.
+- **At Checkout:** there is no price to choose. `stripe-billing` sells
+  exactly the bound price and refuses an unbound agreement
+  (`agreement_price_not_mapped`), any other price
+  (`agreement_price_mismatch`), and a bound price that no longer matches
+  the agreement. BHG and Shewmaker cannot be sold $650; the six cannot be
+  sold $500.
 - **ACH:** `collection = 'stripe'` is the agreement; the payment method is
   chosen on Stripe Checkout, which offers ACH debit (`us_bank_account`) and
   card. Nothing in the CRM restricts a Checkout to ACH only.

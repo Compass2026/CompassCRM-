@@ -256,7 +256,9 @@ active-client agreement decisions it needed are answered (Oct 2026,
 **Returned by Tom (Oct 2026), test mode, ids only:**
 - [x] Compass Standard (TEST): `prod_VMxmKG052epGVU`, monthly price
       `price_1UMDr54Zq9yMk653B7jdneFm` ($2,500 — a test fixture, not Compass
-      pricing; mapped to the test client's *Test Standard (TEST)* package)
+      pricing; mapped to the test client's *Test Standard (TEST)* package,
+      whose agreement — agreed $2,500.00/month — is then bound to exactly
+      that price by `supabase/cutover/06_bind_test_client_price.sql`)
 - [x] Compass Custom Retainer (TEST): `prod_VMxtVQBYzS0Qya`
 - [x] Webhook endpoint `we_1UMFdM4Zq9yMk653d9ynrHOP`, 34 events
 - [x] Cards on / ACH Direct Debit on

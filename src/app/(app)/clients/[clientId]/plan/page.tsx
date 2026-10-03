@@ -2,12 +2,19 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { enrollPipelineAction, unenrollPipelineAction } from "@/app/actions";
 import {
+  bindAgreementPriceAction,
   clearEntitlementOverrideAction,
   saveAgreementAction,
+  setAgreedPriceAction,
   setEntitlementOverrideAction,
 } from "@/app/agreement-actions";
+import { getCurrentTeamRole } from "@/lib/team";
+import { AgreedPriceSummary, agreedPriceOf, type AgreementPriceRow } from "@/components/billing/agreed-price";
 import {
+  agreedPriceText,
   attentionLabel,
+  bindablePrices,
+  type BindablePrice,
   billingState,
   billingStateLabels,
   billingStateStyles,
@@ -65,6 +72,8 @@ export default async function PlanPage({
     { data: packages },
     { data: status },
     { data: entitlementRows },
+    { data: agreementPrice },
+    me,
   ] = await Promise.all([
     supabase.from("plans").select("*").eq("client_id", clientId).maybeSingle(),
     supabase
@@ -91,7 +100,22 @@ export default async function PlanPage({
       .select("*")
       .eq("client_id", clientId)
       .order("sort_order"),
+    supabase.from("client_agreement_price").select("*").eq("client_id", clientId).maybeSingle(),
+    getCurrentTeamRole(supabase),
   ]);
+  const isAdmin = me?.role === "admin";
+  // The approved prices of the agreement's package an admin may bind: only
+  // those that say exactly what the agreement says (the database's rule).
+  const { data: packagePrices } = plan?.package_id
+    ? await supabase
+        .from("billing_package_prices")
+        .select("id, package_id, client_id, active, is_default, stripe_prices(active, livemode, deleted_at, unit_amount_cents, currency, recurring_interval, recurring_interval_count)")
+        .eq("package_id", plan.package_id)
+    : { data: [] };
+  const livemode = status?.livemode === true;
+  const bindable = plan
+    ? bindablePrices((packagePrices ?? []) as BindablePrice[], { ...plan, client_id: clientId }, livemode)
+    : [];
 
   const saveAgreement = saveAgreementAction.bind(null, clientId);
   const enrolledByPipeline = new Map(
@@ -101,6 +125,8 @@ export default async function PlanPage({
   const state = billingState(status?.billing_state);
   const reasons = status?.attention_reasons ?? [];
   const choosable = (packages ?? []).filter((p) => p.active || p.id === plan?.package_id);
+  const packageName = (packages ?? []).find((p) => p.id === plan?.package_id)?.name ?? null;
+  const priced = !!plan?.package_id && plan.collection === "stripe";
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -266,6 +292,88 @@ export default async function PlanPage({
                 enrolled
               </Badge>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2" data-card="agreed-price">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Agreed price</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            What the client contracted to pay, and the exact approved Stripe Price that sells it. Checkout sells only
+            this price; a package&apos;s other prices are never offered for this client. Stripe stays authoritative
+            for what is actually billed and paid.
+          </p>
+          {!priced ? (
+            <p className="text-sm text-muted-foreground">
+              {plan?.collection === "external"
+                ? "Paid externally: the amount is in the external terms of the agreement."
+                : "Save a package with Stripe collection first."}
+            </p>
+          ) : (
+            <>
+              <AgreedPriceSummary row={agreementPrice as AgreementPriceRow | null} packageName={packageName} isAdmin={isAdmin} />
+              {isAdmin ? (
+                <div className="grid gap-3 border-t pt-3 md:grid-cols-2">
+                  <form action={setAgreedPriceAction.bind(null, clientId)} className="flex flex-wrap items-end gap-2" data-form="agreed-price">
+                    <input type="hidden" name="agreed_currency" value={plan?.agreed_currency ?? "usd"} />
+                    <div className="space-y-1">
+                      <Label htmlFor="agreed_amount">Agreed price (USD)</Label>
+                      <Input id="agreed_amount" name="agreed_amount" inputMode="decimal" className="w-32"
+                        defaultValue={centsInput(plan?.agreed_amount_cents)} placeholder="650.00" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="agreed_interval">Per</Label>
+                      <select id="agreed_interval" name="agreed_interval" className={selectClass}
+                        defaultValue={plan?.agreed_billing_interval ?? "month"}>
+                        <option value="month">month</option>
+                        <option value="year">year</option>
+                      </select>
+                    </div>
+                    <input type="hidden" name="agreed_interval_count" value={plan?.agreed_billing_interval_count ?? 1} />
+                    <Button type="submit" size="sm" variant="outline">Save agreed price</Button>
+                    <p className="w-full text-xs text-muted-foreground">
+                      Changing it unbinds the Stripe Price, which would no longer say the same thing.
+                    </p>
+                  </form>
+                  {plan?.agreed_amount_cents != null && (
+                    <form action={bindAgreementPriceAction.bind(null, clientId)} className="flex flex-wrap items-end gap-2" data-form="bind-price">
+                      <div className="space-y-1">
+                        <Label htmlFor="billing_package_price_id">Stripe Price for {agreedPriceOf(agreementPrice as AgreementPriceRow | null)}</Label>
+                        <select id="billing_package_price_id" name="billing_package_price_id" className={selectClass}
+                          defaultValue={plan?.billing_package_price_id ?? ""}>
+                          <option value="">Not bound</option>
+                          {bindable.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {agreedPriceText({
+                                amount_cents: p.stripe_prices?.unit_amount_cents,
+                                currency: p.stripe_prices?.currency,
+                                interval: p.stripe_prices?.recurring_interval,
+                                interval_count: p.stripe_prices?.recurring_interval_count,
+                              })}
+                              {p.is_default ? " · package default" : ""}
+                              {p.stripe_prices?.livemode ? " · live" : " · test"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button type="submit" size="sm" variant="outline">Bind price</Button>
+                      {bindable.length === 0 && (
+                        <p className="w-full text-xs text-muted-foreground" data-no-bindable-price>
+                          No approved {livemode ? "live" : "test"}-mode Stripe Price of {packageName} says{" "}
+                          {agreedPriceOf(agreementPrice as AgreementPriceRow | null)}. Import or approve it in Settings › Billing
+                          catalog (or, for a custom retainer, create it on the Billing tab), then bind it here.
+                        </p>
+                      )}
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Only an admin sets the agreed price and binds its Stripe Price.</p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

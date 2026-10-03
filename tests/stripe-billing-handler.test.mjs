@@ -20,11 +20,17 @@ const PKG_CUSTOM = "00000000-0000-4000-c000-000000000002";
 const PP_STD = "00000000-0000-4000-d000-000000000001";
 const PORTAL_A = "00000000-0000-4000-e000-00000000000a";
 const rid = (n) => `00000000-0000-4000-f000-${String(n).padStart(12, "0")}`;
+// An agreement as plans holds it: package, collection, the contracted price
+// and the exact approved package price it binds (null until bound).
+const agreement = (package_id, cents, binding = null, extra = {}) => ({
+  package_id, collection: "stripe", agreed_amount_cents: cents, agreed_currency: "usd",
+  agreed_billing_interval: "month", agreed_billing_interval_count: 1, billing_package_price_id: binding, ...extra,
+});
 
 function memoryStore({ live = false } = {}) {
   const db = {
     clients: new Map([[A, { id: A, name: "Alpha Roofing", status: "active" }], [B, { id: B, name: "Beta Plumbing", status: "active" }]]),
-    plans: new Map([[A, { package_id: PKG_STD, collection: "stripe" }], [B, { package_id: PKG_CUSTOM, collection: "stripe" }]]),
+    plans: new Map([[A, agreement(PKG_STD, 150000, PP_STD)], [B, agreement(PKG_CUSTOM, 275000)]]),
     links: [], // {client_id, stripe_customer_id, livemode, active}
     packages: new Map([
       [PKG_STD, { id: PKG_STD, name: "Growth", kind: "standard", active: true, stripe_product_id: null }],
@@ -213,23 +219,44 @@ test("portal configuration: Compass's is safe; any widening is caught", () => {
   assert.match(checkPortalConfig({ ...asStripe, features: { ...ours.features, payment_method_update: { enabled: false } } }).join(), /payment method/);
 });
 
-test("checkout price rules", () => {
+test("checkout price rules: the agreement's exact price, and nothing else", () => {
   const base = {
-    mapping: { package_id: PKG_STD, client_id: null, active: true, package_active: true, package_kind: "standard" },
-    price: { active: true, type: "recurring", livemode: false, deleted_at: null, unit_amount_cents: 150000, recurring_usage_type: "licensed" },
-    plan: { package_id: PKG_STD, collection: "stripe" }, clientId: A, livemode: false,
+    mapping: { id: PP_STD, package_id: PKG_STD, client_id: null, active: true, package_active: true, package_kind: "standard" },
+    price: { active: true, type: "recurring", livemode: false, deleted_at: null, unit_amount_cents: 150000, currency: "usd",
+      recurring_interval: "month", recurring_interval_count: 1, recurring_usage_type: "licensed", billing_scheme: "per_unit" },
+    plan: agreement(PKG_STD, 150000, PP_STD), clientId: A, livemode: false,
   };
+  const code = (over) => checkCheckoutPrice({ ...base, ...over })?.code ?? null;
   assert.equal(checkCheckoutPrice(base), null);
-  assert.equal(checkCheckoutPrice({ ...base, mapping: null }).code, "price_not_approved");
-  assert.equal(checkCheckoutPrice({ ...base, mapping: { ...base.mapping, client_id: B, package_kind: "custom" } }).code, "price_not_for_client");
-  assert.equal(checkCheckoutPrice({ ...base, mapping: { ...base.mapping, active: false } }).code, "price_inactive");
-  assert.equal(checkCheckoutPrice({ ...base, plan: { package_id: PKG_CUSTOM, collection: "stripe" } }).code, "package_mismatch");
-  assert.equal(checkCheckoutPrice({ ...base, plan: { package_id: PKG_STD, collection: "external" } }).code, "agreement_external");
-  assert.equal(checkCheckoutPrice({ ...base, plan: null }).code, "no_agreement");
-  assert.equal(checkCheckoutPrice({ ...base, price: { ...base.price, livemode: true } }).code, "price_mode_mismatch");
-  assert.equal(checkCheckoutPrice({ ...base, price: { ...base.price, active: false } }).code, "price_inactive");
-  assert.equal(checkCheckoutPrice({ ...base, price: { ...base.price, type: "one_time" } }).code, "price_not_recurring");
-  assert.equal(checkCheckoutPrice({ ...base, price: { ...base.price, recurring_usage_type: "metered" } }).code, "price_not_recurring");
+  assert.equal(code({ requested: PP_STD }), null);
+  // The agreement decides.
+  assert.equal(code({ plan: null }), "no_agreement");
+  assert.equal(code({ plan: { ...base.plan, package_id: null } }), "no_agreement");
+  assert.equal(code({ plan: { ...base.plan, collection: "external" } }), "agreement_external");
+  assert.equal(code({ plan: { ...base.plan, agreed_amount_cents: null } }), "agreement_terms_missing");
+  assert.equal(code({ plan: { ...base.plan, billing_package_price_id: null } }), "agreement_price_not_mapped");
+  assert.equal(code({ requested: rid(99) }), "agreement_price_mismatch");
+  // The bound price must say what the agreement says.
+  assert.equal(code({ price: { ...base.price, unit_amount_cents: 65000 } }), "agreement_price_mismatch");
+  assert.equal(code({ price: { ...base.price, currency: "cad" } }), "agreement_price_mismatch");
+  assert.equal(code({ price: { ...base.price, recurring_interval: "year" } }), "agreement_price_mismatch");
+  assert.equal(code({ price: { ...base.price, recurring_interval_count: 3 } }), "agreement_price_mismatch");
+  assert.match(checkCheckoutPrice({ ...base, price: { ...base.price, unit_amount_cents: 65000 } }).message, /amount.*1500\.00 USD\/month/);
+  // And be a sellable price of this client's package, in this mode.
+  assert.equal(code({ mapping: null }), "price_not_approved");
+  assert.equal(code({ mapping: { ...base.mapping, client_id: B, package_kind: "custom" } }), "price_not_for_client");
+  assert.equal(code({ mapping: { ...base.mapping, active: false } }), "price_inactive");
+  assert.equal(code({ mapping: { ...base.mapping, package_active: false } }), "price_inactive");
+  assert.equal(code({ plan: { ...base.plan, package_id: PKG_CUSTOM } }), "package_mismatch");
+  assert.equal(code({ price: { ...base.price, livemode: true } }), "price_mode_mismatch");
+  assert.equal(code({ livemode: true }), "price_mode_mismatch");
+  assert.equal(code({ price: { ...base.price, active: false } }), "price_inactive");
+  assert.equal(code({ price: { ...base.price, deleted_at: "2026-10-01T00:00:00Z" } }), "price_inactive");
+  assert.equal(code({ price: null }), "price_missing");
+  assert.equal(code({ price: { ...base.price, type: "one_time" } }), "price_not_recurring");
+  assert.equal(code({ price: { ...base.price, recurring_usage_type: "metered" } }), "price_not_recurring");
+  assert.equal(code({ price: { ...base.price, billing_scheme: "tiered" } }), "price_not_fixed");
+  assert.equal(code({ price: { ...base.price, unit_amount_cents: null } }), "price_not_fixed");
 });
 
 // ── Authorization ───────────────────────────────────────────────────────────
@@ -406,7 +433,9 @@ test("Checkout ignores anything the browser sends about price, amount or custome
   assert.notEqual(cs.customer, "cus_Someone");
   // A Stripe price id in place of the approved mapping id is not a mapping.
   assert.equal((await t.call("admin", { action: "create_checkout", client_id: A, package_price_id: "price_Cheap", request_id: rid(4) })).status, 400);
-  assert.equal((await t.call("admin", { action: "create_checkout", client_id: A, package_price_id: rid(99), request_id: rid(4) })).body.error, "price_not_approved");
+  // Any other package price than the agreement's is refused, mapped or not.
+  assert.equal((await t.call("admin", { action: "create_checkout", client_id: A, package_price_id: rid(99), request_id: rid(4) })).body.error, "agreement_price_mismatch");
+  assert.equal(t.s.all("checkout.session").length, 1);
 });
 
 test("Checkout refuses a package other than the agreement, a price archived in Stripe, and no customer", async () => {
@@ -414,9 +443,9 @@ test("Checkout refuses a package other than the agreement, a price archived in S
   await withCatalog(t);
   assert.equal((await t.call("admin", { action: "create_checkout", client_id: A, package_price_id: PP_STD, request_id: rid(5) })).body.error, "no_customer");
   await createCustomer(t);
-  t.store.db.plans.set(A, { package_id: PKG_CUSTOM, collection: "stripe" });
+  t.store.db.plans.set(A, agreement(PKG_CUSTOM, 150000, PP_STD));
   assert.equal((await t.call("admin", { action: "create_checkout", client_id: A, package_price_id: PP_STD, request_id: rid(5) })).body.error, "package_mismatch");
-  t.store.db.plans.set(A, { package_id: PKG_STD, collection: "stripe" });
+  t.store.db.plans.set(A, agreement(PKG_STD, 150000, PP_STD));
   t.s.patch("price_GrowthM", { active: false });
   assert.equal((await t.call("admin", { action: "create_checkout", client_id: A, package_price_id: PP_STD, request_id: rid(5) })).body.error, "price_inactive");
   assert.equal(t.s.all("checkout.session").length, 0);
@@ -486,14 +515,126 @@ test("Custom Retainer: an admin creates the client's price once per request; Che
   assert.deepEqual([mapping.client_id, mapping.package_kind], [B, "custom"]);
 
   await createCustomer(t, B);
-  const sold = await t.call("admin", { action: "create_checkout", client_id: B, package_price_id: r.body.package_price_id, request_id: rid(11) });
+  // Until B's agreement is bound to its price, Checkout has nothing to sell.
+  assert.equal((await t.call("admin", { action: "create_checkout", client_id: B, request_id: rid(11) })).body.error, "agreement_price_not_mapped");
+  t.store.db.plans.get(B).billing_package_price_id = r.body.package_price_id;
+  const sold = await t.call("admin", { action: "create_checkout", client_id: B, request_id: rid(11) });
   assert.equal(sold.status, 200, JSON.stringify(sold.body));
   // Client A cannot be sold B's price.
   await createCustomer(t, A);
-  t.store.db.plans.set(A, { package_id: PKG_CUSTOM, collection: "stripe" });
+  t.store.db.plans.set(A, agreement(PKG_CUSTOM, 275000, r.body.package_price_id));
   const stolen = await t.call("admin", { action: "create_checkout", client_id: A, package_price_id: r.body.package_price_id, request_id: rid(12) });
   assert.equal(stolen.status, 403);
   assert.equal(stolen.body.error, "price_not_for_client");
+});
+
+// ── The agreement decides the price (one package, two prices) ─────────────
+// Compass Standard: one package, a $650 default and a $500 legacy price, the
+// same entitlements. BHG and Shewmaker contracted $500; Logic $650.
+const BHG = "3eaa3389-2a33-4004-837c-8aef90404410";
+const SHEW = "a88f5ce2-30ac-508b-b217-cf22d277b278";
+const LOGIC = "70211d71-d9f4-46ab-abe2-ef39c41591fb";
+const PP650 = "00000000-0000-4000-d000-000000000650";
+const PP500 = "00000000-0000-4000-d000-000000000500";
+async function withStandard(t) {
+  t.s.put({ id: "prod_Standard", object: "product", livemode: false, name: "Compass Standard", active: true, metadata: {}, created: 1 });
+  for (const [id, cents] of [["price_Default650", 65000], ["price_Legacy500", 50000]]) {
+    t.s.put({ id, object: "price", livemode: false, product: "prod_Standard", active: true, type: "recurring", currency: "usd",
+      unit_amount: cents, billing_scheme: "per_unit", recurring: { interval: "month", interval_count: 1, usage_type: "licensed" }, metadata: {}, created: 1 });
+  }
+  assert.equal((await t.call("admin", { action: "import_product", target: "package", target_id: PKG_STD, product_id: "prod_Standard" })).status, 200);
+  t.store.db.packagePrices.set(PP650, { id: PP650, package_id: PKG_STD, package_kind: "standard", stripe_product_id: "prod_Standard",
+    stripe_price_id: "price_Default650", client_id: null, active: true, is_default: true });
+  t.store.db.packagePrices.set(PP500, { id: PP500, package_id: PKG_STD, package_kind: "standard", stripe_product_id: "prod_Standard",
+    stripe_price_id: "price_Legacy500", client_id: null, active: true, is_default: false });
+  for (const [id, name, cents, pp] of [[BHG, "BHG Safety Partners", 50000, PP500], [SHEW, "Shewmaker Brothers Masonry", 50000, PP500],
+    [LOGIC, "Logic Solar", 65000, PP650]]) {
+    t.store.db.clients.set(id, { id, name, status: "active" });
+    t.store.db.plans.set(id, agreement(PKG_STD, cents, pp));
+    assert.equal((await createCustomer(t, id)).status, 200);
+  }
+}
+const soldPrice = (t, sessionId) => t.s.get(sessionId).line_items_requested[0].price;
+
+test("Compass Standard: BHG and Shewmaker cannot be sold the $650 price, Logic cannot be sold the $500 price", async () => {
+  const t = setup();
+  await withStandard(t);
+  for (const [client, wrong] of [[BHG, PP650], [SHEW, PP650], [LOGIC, PP500]]) {
+    const r = await t.call("admin", { action: "create_checkout", client_id: client, package_price_id: wrong, request_id: rid(20) });
+    assert.equal(r.status, 409, client);
+    assert.equal(r.body.error, "agreement_price_mismatch", client);
+  }
+  assert.equal(t.s.all("checkout.session").length, 0);
+});
+
+test("Compass Standard: the legacy $500 and default $650 agreements each sell exactly their own price", async () => {
+  const t = setup();
+  await withStandard(t);
+  const bhg = await t.call("admin", { action: "create_checkout", client_id: BHG, request_id: rid(21) });
+  assert.equal(bhg.status, 200, JSON.stringify(bhg.body));
+  assert.equal(soldPrice(t, bhg.body.checkout.session_id), "price_Legacy500");
+  // Naming the agreement's own price is the same request.
+  const shew = await t.call("admin", { action: "create_checkout", client_id: SHEW, package_price_id: PP500, request_id: rid(22) });
+  assert.equal(shew.status, 200, JSON.stringify(shew.body));
+  assert.equal(soldPrice(t, shew.body.checkout.session_id), "price_Legacy500");
+  const logic = await t.call("admin", { action: "create_checkout", client_id: LOGIC, request_id: rid(23) });
+  assert.equal(logic.status, 200, JSON.stringify(logic.body));
+  assert.equal(soldPrice(t, logic.body.checkout.session_id), "price_Default650");
+  assert.equal(t.s.get(logic.body.checkout.session_id).metadata.compass_agreed_amount_cents, "65000");
+  assert.equal(t.s.get(logic.body.checkout.session_id).metadata.compass_package_price_id, PP650);
+});
+
+test("Compass Standard: no exact price, a price that no longer matches, an archived or wrong-mode price — all refused before Stripe", async () => {
+  const t = setup();
+  await withStandard(t);
+  const co = (client, n) => t.call("admin", { action: "create_checkout", client_id: client, request_id: rid(n) });
+  // Not bound yet (the cutover's state until the live prices exist).
+  t.store.db.plans.get(LOGIC).billing_package_price_id = null;
+  assert.equal((await co(LOGIC, 30)).body.error, "agreement_price_not_mapped");
+  // No agreed price at all.
+  t.store.db.plans.set(LOGIC, { ...agreement(PKG_STD, null), agreed_currency: null, agreed_billing_interval: null, agreed_billing_interval_count: null });
+  assert.equal((await co(LOGIC, 31)).body.error, "agreement_terms_missing");
+  // Bound, but the agreement now says something the price does not.
+  t.store.db.plans.set(LOGIC, agreement(PKG_STD, 70000, PP650));
+  assert.equal((await co(LOGIC, 32)).body.error, "agreement_price_mismatch");
+  t.store.db.plans.set(LOGIC, agreement(PKG_STD, 65000, PP650, { agreed_currency: "cad" }));
+  assert.equal((await co(LOGIC, 33)).body.error, "agreement_price_mismatch");
+  t.store.db.plans.set(LOGIC, agreement(PKG_STD, 65000, PP650, { agreed_billing_interval: "year" }));
+  assert.equal((await co(LOGIC, 34)).body.error, "agreement_price_mismatch");
+  t.store.db.plans.set(LOGIC, agreement(PKG_STD, 65000, PP650));
+  // Retired in the catalog, archived in Stripe, or a price of the other mode.
+  t.store.db.packagePrices.get(PP650).active = false;
+  assert.equal((await co(LOGIC, 35)).body.error, "price_inactive");
+  t.store.db.packagePrices.get(PP650).active = true;
+  t.s.patch("price_Default650", { active: false });
+  assert.equal((await co(LOGIC, 36)).body.error, "price_inactive");
+  t.s.patch("price_Default650", { active: true, livemode: true });
+  assert.equal((await co(LOGIC, 37)).body.error, "price_mode_mismatch");
+  t.s.patch("price_Default650", { livemode: false });
+  // A price of another package can never be the agreement's (here: forced).
+  t.store.db.plans.set(LOGIC, agreement(PKG_CUSTOM, 65000, PP650));
+  assert.equal((await co(LOGIC, 38)).body.error, "package_mismatch");
+  assert.equal(t.s.all("checkout.session").length, 0);
+  t.store.db.plans.set(LOGIC, agreement(PKG_STD, 65000, PP650));
+  assert.equal((await co(LOGIC, 39)).status, 200);
+});
+
+test("the fictional test client's $2,500 TEST agreement sells its exact TEST price", async () => {
+  const t = setup();
+  const TEST_CLIENT = "c0ffee00-0000-4000-b000-00000000b111";
+  const PP_TEST = "00000000-0000-4000-d000-000000002500";
+  t.s.put({ id: "prod_VMxmKG052epGVU", object: "product", livemode: false, name: "Compass Standard (TEST)", active: true, metadata: {}, created: 1 });
+  t.s.put({ id: "price_1UMDr54Zq9yMk653B7jdneFm", object: "price", livemode: false, product: "prod_VMxmKG052epGVU", active: true, type: "recurring",
+    currency: "usd", unit_amount: 250000, billing_scheme: "per_unit", recurring: { interval: "month", interval_count: 1, usage_type: "licensed" }, metadata: {}, created: 1 });
+  assert.equal((await t.call("admin", { action: "import_product", target: "package", target_id: PKG_STD, product_id: "prod_VMxmKG052epGVU" })).status, 200);
+  t.store.db.packagePrices.set(PP_TEST, { id: PP_TEST, package_id: PKG_STD, package_kind: "standard", stripe_product_id: "prod_VMxmKG052epGVU",
+    stripe_price_id: "price_1UMDr54Zq9yMk653B7jdneFm", client_id: null, active: true, is_default: true });
+  t.store.db.clients.set(TEST_CLIENT, { id: TEST_CLIENT, name: "Compass Billing Test Client (TEST)", status: "paused" });
+  t.store.db.plans.set(TEST_CLIENT, agreement(PKG_STD, 250000, PP_TEST));
+  await createCustomer(t, TEST_CLIENT);
+  const r = await t.call("admin", { action: "create_checkout", client_id: TEST_CLIENT, request_id: rid(40) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(soldPrice(t, r.body.checkout.session_id), "price_1UMDr54Zq9yMk653B7jdneFm");
 });
 
 // ── 7. Customer Portal ─────────────────────────────────────────────────────

@@ -50,8 +50,15 @@ insert into package_entitlements (package_id, service_key, service_kind, enabled
   ('c0ffee00-0000-4000-c000-00000000b111', 'website_refreshes', 'quota',   true, 2)
 on conflict (package_id, service_key) do nothing;
 
-insert into plans (client_id, package_id, collection, notes)
-values ('c0ffee00-0000-4000-b000-00000000b111', 'c0ffee00-0000-4000-c000-00000000b111', 'stripe', 'TEST agreement (fixture)')
+-- Its agreed price is the TEST price Tom created in Stripe test mode
+-- (price_1UMDr54Zq9yMk653B7jdneFm, $2,500.00/month — a fixture amount, not
+-- Compass pricing). It is bound by 06_bind_test_client_price.sql once that
+-- price is imported, so the sandbox Checkout runs the same agreement-price
+-- enforcement live billing will.
+insert into plans (client_id, package_id, collection, agreed_amount_cents, agreed_currency, agreed_billing_interval,
+                   agreed_billing_interval_count, notes)
+values ('c0ffee00-0000-4000-b000-00000000b111', 'c0ffee00-0000-4000-c000-00000000b111', 'stripe', 250000, 'usd', 'month', 1,
+        'TEST agreement (fixture): $2,500.00/month, Stripe test mode only.')
 on conflict (client_id) do nothing;
 commit;
 

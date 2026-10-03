@@ -4984,6 +4984,11 @@ export type Database = {
       }
       plans: {
         Row: {
+          agreed_amount_cents: number | null
+          agreed_billing_interval: string | null
+          agreed_billing_interval_count: number | null
+          agreed_currency: string | null
+          billing_package_price_id: string | null
           client_id: string
           collection: string
           external_amount_cents: number | null
@@ -5001,6 +5006,11 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          agreed_amount_cents?: number | null
+          agreed_billing_interval?: string | null
+          agreed_billing_interval_count?: number | null
+          agreed_currency?: string | null
+          billing_package_price_id?: string | null
           client_id: string
           collection?: string
           external_amount_cents?: number | null
@@ -5018,6 +5028,11 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          agreed_amount_cents?: number | null
+          agreed_billing_interval?: string | null
+          agreed_billing_interval_count?: number | null
+          agreed_currency?: string | null
+          billing_package_price_id?: string | null
           client_id?: string
           collection?: string
           external_amount_cents?: number | null
@@ -5035,6 +5050,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "plans_price_of_package"
+            columns: ["billing_package_price_id", "package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_package_prices"
+            referencedColumns: ["id", "package_id"]
+          },
           {
             foreignKeyName: "plans_package_id_fkey"
             columns: ["package_id"]
@@ -7132,6 +7154,26 @@ export type Database = {
         }
         Relationships: []
       }
+      client_agreement_price: {
+        Row: {
+          agreed_amount_cents: number | null
+          agreed_billing_interval: string | null
+          agreed_billing_interval_count: number | null
+          agreed_currency: string | null
+          billing_package_price_id: string | null
+          client_id: string | null
+          collection: string | null
+          package_id: string | null
+          price_amount_cents: number | null
+          price_currency: string | null
+          price_interval: string | null
+          price_interval_count: number | null
+          price_livemode: boolean | null
+          price_status: string | null
+          stripe_price_id: string | null
+        }
+        Relationships: []
+      }
       client_billing_status: {
         Row: {
           agreement_package_id: string | null
@@ -7214,6 +7256,10 @@ export type Database = {
       }
       portal_billing_summary: {
         Row: {
+          agreed_amount_cents: number | null
+          agreed_currency: string | null
+          agreed_interval: string | null
+          agreed_interval_count: number | null
           can_manage_billing: boolean | null
           client_id: string | null
           collection: string | null
@@ -7911,6 +7957,10 @@ export type Database = {
       portal_billing_summary_row: {
         Args: never
         Returns: {
+          agreed_amount_cents: number
+          agreed_currency: string
+          agreed_interval: string
+          agreed_interval_count: number
           can_manage_billing: boolean
           client_id: string
           collection: string

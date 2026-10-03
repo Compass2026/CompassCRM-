@@ -160,6 +160,32 @@ try {
   }
   ok("agreements: a member records each client's package");
 
+  // ── The agreed price and its exact Stripe Price: an admin's.
+  {
+    const terms = (cents) => ({ agreed_amount_cents: cents, agreed_currency: "usd", agreed_billing_interval: "month", agreed_billing_interval_count: 1 });
+    const { error: memberTerms } = await as(MEMBER).from("plans").update(terms(150000)).eq("client_id", A);
+    assert.match(memberTerms?.message ?? "", /Only an admin/);
+    for (const [client, cents] of [[A, 150000], [B, 150000], [C, 225000]]) {
+      const { error } = await as(ADMIN).from("plans").update(terms(cents)).eq("client_id", client);
+      assert.equal(error, null, error?.message);
+    }
+    const { error: memberBind } = await as(MEMBER).from("plans").update({ billing_package_price_id: PP }).eq("client_id", A);
+    assert.match(memberBind?.message ?? "", /Only an admin/);
+    // No Stripe Price is bound yet: Checkout has nothing to sell.
+    assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, request_id: rid(90) })).body.error, "agreement_price_not_mapped");
+    const { error: wrongTerms } = await as(ADMIN).from("plans").update(terms(99900)).eq("client_id", A).select();
+    assert.equal(wrongTerms, null);
+    const { error: mismatch } = await as(ADMIN).from("plans").update({ billing_package_price_id: PP }).eq("client_id", A);
+    assert.match(mismatch?.message ?? "", /differs from the agreement/, "the database refuses a price that is not the agreed one");
+    await as(ADMIN).from("plans").update(terms(150000)).eq("client_id", A);
+    for (const client of [A, B]) {
+      const { error } = await as(ADMIN).from("plans").update({ billing_package_price_id: PP }).eq("client_id", client);
+      assert.equal(error, null, error?.message);
+    }
+    assert.equal(sql(`select string_agg(price_status, ',' order by client_id) from client_agreement_price where client_id in ('${A}', '${B}')`), "ready,ready");
+  }
+  ok("agreed price: only an admin records it and binds the exact approved Stripe Price, which must say the same thing; unbound, Checkout refuses");
+
   // ── 2. Create a customer for A.
   assert.equal((await call(MEMBER, { action: "create_customer", client_id: A, email: "owner@a.example.test" })).status, 403);
   const [c1, c2] = await Promise.all([
@@ -197,15 +223,17 @@ try {
   ok("link existing: search shows the customer; an admin links it with explicit confirmation; its subscription, invoice, payment and both partial refunds are imported by the shared sync; no second client, no second customer");
 
   // ── Duplicate subscription: B already pays.
-  const dup = await call(ADMIN, { action: "create_checkout", client_id: B, package_price_id: PP, request_id: rid(1) });
+  const dup = await call(ADMIN, { action: "create_checkout", client_id: B, request_id: rid(1) });
   assert.equal(dup.status, 409);
   assert.equal(dup.body.error, "subscription_exists");
   assert.equal(s.all("checkout.session").length, 0);
   ok("duplicate subscription: Checkout is refused for a client whose customer already has an active subscription");
 
   // ── 5/6. Checkout for A, standard package.
-  assert.equal((await call(MEMBER, { action: "create_checkout", client_id: A, package_price_id: PP, request_id: rid(2) })).status, 403);
-  const co = await call(ADMIN, { action: "create_checkout", client_id: A, package_price_id: PP, request_id: rid(2),
+  assert.equal((await call(MEMBER, { action: "create_checkout", client_id: A, request_id: rid(2) })).status, 403);
+  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, package_price_id: rid(99), request_id: rid(2) })).body.error,
+    "agreement_price_mismatch", "the browser cannot choose another price");
+  const co = await call(ADMIN, { action: "create_checkout", client_id: A, request_id: rid(2),
     price: "price_GrowthOld", amount_cents: 100, customer: "cus_ExistB" });
   assert.equal(co.status, 200, JSON.stringify(co.body));
   const cs = s.all("checkout.session")[0];
@@ -219,13 +247,13 @@ try {
   assert.equal(co.body.checkout.package_name, "Growth");
   assert.equal(co.body.checkout.price.unit_amount_cents, 150000);
   assert.equal(sql(`select count(*) from billing_audit_events where action = 'create_checkout' and client_id = '${A}' and actor_team_member_id = '${adminId}'`), "1");
-  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, package_price_id: PP, request_id: rid(2) })).body.created, false);
-  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, package_price_id: PP, request_id: rid(3) })).body.error, "checkout_open");
+  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, request_id: rid(2) })).body.created, false);
+  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, request_id: rid(3) })).body.error, "checkout_open");
   assert.equal(s.all("checkout.session").length, 1);
   // A member reads the link (to copy or send it).
   const { data: memberView } = await as(MEMBER).from("checkout_sessions").select("url, status").eq("client_id", A);
   assert.deepEqual(memberView, [{ url: cs.url, status: "open" }]);
-  ok("Checkout: admin creates it from the approved price only (browser price, amount and customer ignored); recorded with its creator and audited; a repeat returns it; a member can read the link");
+  ok("Checkout: admin creates it at the agreement's exact price only (a different package price is refused; browser price, amount and customer ignored); recorded with its creator and audited; a repeat returns it; a member can read the link");
 
   // ── Webhook completes it: Checkout success is not proof; the webhook is.
   assert.equal(status(A).billing_state, "checkout_pending");
@@ -236,7 +264,7 @@ try {
   const stA = status(A);
   assert.equal(stA.billing_state, "active");
   assert.equal(Number(stA.mrr_cents), 150000);
-  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, package_price_id: PP, request_id: rid(4) })).body.error, "subscription_exists");
+  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, request_id: rid(4) })).body.error, "subscription_exists");
   ok("Checkout completed: the webhook marks the session complete and the client active at $1,500 / month; a second sale is refused");
 
   // ── Custom Retainer for C.
@@ -252,13 +280,19 @@ try {
   assert.equal(s.all("price").filter((p) => p.product === "prod_Custom").length, 1);
   assert.equal(sql(`select client_id || '|' || package_kind from billing_package_prices where id = '${cp.body.package_price_id}'`), `${C}|custom`);
   assert.equal(sql(`select unit_amount_cents || '|' || recurring_interval from stripe_prices where stripe_price_id = '${cp.body.price_id}'`), "225000|month");
-  // A cannot be sold C's price (A's agreement is standard anyway; make it custom to prove the reservation holds).
-  await as(MEMBER).from("plans").update({ package_id: CUSTOM }).eq("client_id", A);
-  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, package_price_id: cp.body.package_price_id, request_id: rid(6) })).body.error, "price_not_for_client");
-  await as(MEMBER).from("plans").update({ package_id: PKG }).eq("client_id", A);
-  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: C, package_price_id: cp.body.package_price_id, request_id: rid(7) })).body.error, "no_customer");
+  // A cannot be sold C's price: not through Checkout, not even by binding it.
+  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: A, package_price_id: cp.body.package_price_id, request_id: rid(6) })).body.error, "agreement_price_mismatch");
+  const { error: steal } = await as(ADMIN).from("plans")
+    .update({ package_id: CUSTOM, agreed_amount_cents: 225000, billing_package_price_id: cp.body.package_price_id }).eq("client_id", A);
+  assert.match(steal?.message ?? "", /reserved for another client/);
+  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: C, request_id: rid(7) })).body.error, "agreement_price_not_mapped");
+  {
+    const { error } = await as(ADMIN).from("plans").update({ billing_package_price_id: cp.body.package_price_id }).eq("client_id", C);
+    assert.equal(error, null, error?.message);
+  }
+  assert.equal((await call(ADMIN, { action: "create_checkout", client_id: C, request_id: rid(7) })).body.error, "no_customer");
   await call(ADMIN, { action: "create_customer", client_id: C, email: "owner@c.example.test" });
-  const coC = await call(ADMIN, { action: "create_checkout", client_id: C, package_price_id: cp.body.package_price_id, request_id: rid(7) });
+  const coC = await call(ADMIN, { action: "create_checkout", client_id: C, request_id: rid(7) });
   assert.equal(coC.status, 200, JSON.stringify(coC.body));
   assert.equal(coC.body.checkout.price.unit_amount_cents, 225000);
   ok("Custom Retainer: an admin creates C's $2,250 / month price once (idempotent); only C can be sold it");

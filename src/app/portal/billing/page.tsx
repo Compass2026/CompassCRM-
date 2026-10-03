@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/billing";
+import { agreedPriceText, formatMoney } from "@/lib/billing";
 import { formatDate } from "@/lib/portal";
 import {
   invoiceStatusLabels,
@@ -17,7 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 // The client's billing, in their words (B5). Everything comes from the
 // portal_* views (0062), each filtered to the signed-in contact's own client
 // in the database; nothing here names a client, and no Stripe id, internal
-// code or note is ever selected.
+// code or note is ever selected. The plan price is what the agreement says
+// the client contracted to pay; invoices are Stripe's.
 
 export default async function PortalBillingPage({
   searchParams,
@@ -59,8 +60,17 @@ export default async function PortalBillingPage({
             <dd>{summary?.plan_name ?? "—"}</dd>
             {!external && (
               <>
-                <dt className="text-muted-foreground">Monthly amount</dt>
-                <dd>{summary?.monthly_amount_cents != null ? formatMoney(summary.monthly_amount_cents, summary.currency) : "—"}</dd>
+                <dt className="text-muted-foreground">Plan price</dt>
+                <dd data-plan-price>
+                  {summary?.agreed_amount_cents != null
+                    ? agreedPriceText({
+                        amount_cents: summary.agreed_amount_cents,
+                        currency: summary.agreed_currency,
+                        interval: summary.agreed_interval,
+                        interval_count: summary.agreed_interval_count,
+                      })
+                    : "—"}
+                </dd>
                 <dt className="text-muted-foreground">{status === "scheduled_to_end" ? "Ends" : "Next billing date"}</dt>
                 <dd>{formatDate(status === "scheduled_to_end" ? summary?.ends_at : summary?.next_billing_at)}</dd>
               </>

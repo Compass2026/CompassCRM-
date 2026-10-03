@@ -11,7 +11,7 @@ agreement includes, and how billing state becomes an operational alert.
 Compass mirrors Stripe and never runs a second billing state machine.
 
 ```
-Compass: client → agreement (plans: package, collection) → entitlements
+Compass: client → agreement (plans: package, collection, agreed price → exact Stripe Price) → entitlements
    └─ Checkout link (B3) → Stripe Customer → Subscription → invoices → payments
 Stripe webhooks (B2) ─┐
 Reconciliation (B4) ──┴→ _shared sync → Stripe mirror (service role only)
@@ -69,7 +69,7 @@ Stripe Edge Functions). Every row carries `livemode`. Money is stored as
 | `billing_package_prices` | Which recurring Stripe Prices sell a package. A custom-retainer price names its client; a standard price names none. One default per package |
 | `billing_one_time_items` | Website projects, setup fees, special projects: one-time Stripe Products |
 | `package_entitlements` | What a package includes, per service |
-| `plans` | Kept by name, one row per client: now the **agreement**: `package_id`, `collection` (`stripe` or `external` with method, amount, currency, interval), term, dates, managed ad budget (cents), notes, `updated_by`. The fee and the per-plan quantities are gone: the fee is Stripe's, and quantities are entitlements |
+| `plans` | Kept by name, one row per client: now the **agreement**: `package_id`, `collection` (`stripe` or `external` with method, amount, currency, interval), for a Stripe agreement the **contracted recurring price** (`agreed_amount_cents`, `agreed_currency`, `agreed_billing_interval`, `agreed_billing_interval_count`) and the **exact approved package price** Checkout sells (`billing_package_price_id`, null until bound), term, dates, managed ad budget (cents), notes, `updated_by`. The old fee and per-plan quantities are gone: quantities are entitlements, and what was billed is Stripe's |
 | `client_entitlement_overrides` | What one client receives instead of its package's default, with a required reason and the teammate who set it |
 
 ### Relationships and constraints
@@ -97,6 +97,25 @@ Stripe Edge Functions). Every row carries `livemode`. Money is stored as
   the service kind must match the catalog's (composite FK).
 - **External arrangements.** `plans.collection = 'external'` requires
   method, amount, currency and interval; `stripe` forbids them.
+- **The agreed price and its exact Stripe Price.** One package may carry
+  several approved prices (Compass Standard: $650 default, $500 legacy); the
+  agreement, not the operator, says which one a client pays:
+  - `agreed_*` are all four or none (`plans_agreed_terms`), only on a Stripe
+    agreement (`plans_agreed_terms_stripe_only`); notes are descriptive only.
+  - `billing_package_price_id` needs the agreed terms and a package
+    (`plans_price_needs_terms`) and is a price **of the agreement's own
+    package**, structurally: the composite foreign key
+    `plans_price_of_package (billing_package_price_id, package_id) →
+    billing_package_prices (id, package_id)`; a bound price cannot be
+    deleted and the package cannot change under it.
+  - `plans_agreement_price_guard` (trigger): the bound mapping and package
+    are active, the Stripe Price is active, recurring, licensed,
+    fixed-amount (`per_unit`), in the current mode (`billing_livemode()`),
+    reserved for no other client, and says exactly the agreed amount,
+    currency, interval and interval count. Re-checked whenever the binding,
+    the terms, the package or the collection change.
+  - A signed-in non-admin cannot set or change the agreed price or the
+    binding (42501); members still edit the rest of the agreement.
 - **Payments.** A Stripe payment names its customer and PaymentIntent and
   carries no external fields. An external payment carries no Stripe ids
   and is `succeeded` with a paid date. Refunds never exceed the amount.
@@ -116,6 +135,10 @@ Stripe Edge Functions). Every row carries `livemode`. Money is stored as
   `quantity`, `source` (`package` / `override` / `none`), the package's own
   values for display, and the override reason. Billing state never changes
   it (decision 5).
+- **`client_agreement_price`**: per client, the agreed price, the bound
+  package price and its Stripe Price, and `price_status`: `not_applicable`,
+  `terms_missing`, `unmapped`, `inactive`, `wrong_mode`, `mismatch`, `ready`
+  (the same rules Checkout applies, read from the mirror).
 - **`client_billing_status`**: per client, in the current mode
   (`billing_livemode()`: live only when `app_settings.billing` is exactly
   `{"livemode": true}`). Derived, never stored:
@@ -132,6 +155,13 @@ Stripe Edge Functions). Every row carries `livemode`. Money is stored as
   - `billing_attention` with `attention_reasons`:
     - `subscription_past_due`, `subscription_unpaid`,
       `subscription_incomplete`, `invoice_overdue`: Stripe's own state.
+    - `agreement_price_unmapped` (billing is under way — a live
+      subscription, a linked customer or an open link — but the agreement
+      has no agreed price or no bound Stripe Price) and
+      `agreement_price_mismatch` (the bound price no longer says what the
+      agreement says, or the live subscription sells a different price):
+      configuration signals only; nothing changes the agreement, the
+      subscription or the entitlements.
     - `multiple_live_subscriptions`, `unmapped_price`,
       `no_agreement_package`, `package_mismatch`: catalog and agreement
       mismatches.
@@ -151,8 +181,8 @@ rights) reads it. Production has one admin today.
 
 | Caller | Stripe mirror | Catalog + Stripe mapping (services, packages, package prices, one-time items, package entitlements) | Billing mode (`app_settings` `billing…`) | Agreement (`plans`) + client overrides | Read models |
 | --- | --- | --- | --- | --- | --- |
-| Admin | read | read / write | read / write | read / write | read |
-| Member | read | read | read | read / write | read |
+| Admin | read | read / write | read / write | read / write (incl. the agreed price and its Stripe Price) | read |
+| Member | read | read | read | read / write, except the agreed price and its Stripe Price | read |
 | Stripe sync session (0059) | write, through the sync functions only | — | read | — | read |
 | Worker SQL (`postgres`) | **refused** (0059 guard) | owner | owner | owner | read |
 | Portal contact / stranger | nothing (their own client's billing included) | nothing | nothing | nothing | nothing |
@@ -500,13 +530,22 @@ Stripe; the mirror records the invoice).
 
 ### Checkout and duplicate protection
 
-`create_checkout` takes only `{client_id, package_price_id, request_id}`.
-The function resolves the approved mapping, re-reads the price from Stripe
-(an archive in the dashboard is honoured), and refuses unless: the mapping
-is active and (for a custom package) this client's; the agreement's package
-is that package and is collected through Stripe; the price is active,
-recurring, licensed, fixed-amount and in the current mode; the client has an
-active customer link. It then lists the customer's subscriptions in Stripe
+`create_checkout` takes `{client_id, request_id}`. **The price is the
+agreement's**: the function reads `plans.billing_package_price_id`, re-reads
+that price from Stripe (an archive in the dashboard is honoured) and sells
+exactly it. A `package_price_id` in the request is accepted only when it is
+that same price; any other is refused (`agreement_price_mismatch`). It
+refuses (409, before anything reaches Stripe) when: there is no agreement or
+package (`no_agreement`); the agreement is external (`agreement_external`);
+it has no agreed price (`agreement_terms_missing`); no exact price is bound
+(`agreement_price_not_mapped`); the bound mapping is retired or the Stripe
+Price archived (`price_inactive`); it belongs to another package
+(`package_mismatch`) or another client (`price_not_for_client`); it is not a
+licensed recurring fixed-amount price (`price_not_recurring` /
+`price_not_fixed`); it is in the other mode (`price_mode_mismatch`); or its
+amount, currency, interval or interval count differ from the agreement
+(`agreement_price_mismatch`). The client must also have an active customer
+link. The session's metadata carries the mapping and the agreed amount. It then lists the customer's subscriptions in Stripe
 (`status=all`, synced) and the mirror's for the client: any `active`,
 `trialing`, `past_due`, `unpaid`, `incomplete` or `paused` subscription
 refuses the sale (409 `subscription_exists`, listing them). The mirror can
@@ -525,6 +564,14 @@ reported), success / cancel URLs `<APP_BASE_URL>/checkout/complete` /
 session or data. Reaching them proves nothing; the webhook's
 `checkout.session.completed` (and, for ACH, the later payment events) is
 what the mirror records.
+
+**Billing tab:** the Payment link card shows the package, the agreed price
+and the Stripe Price status (Mapped / Not mapped …) and offers one button,
+**Create Payment Link for $650.00/month** — there is no price to choose.
+Unbound, it says why and offers nothing. **Plan tab › Agreed price**: an
+admin records the agreed price and binds it to one of the approved prices
+that say exactly that (the list holds only those); a member sees it
+read-only.
 
 **Payment Link Ready** (Billing tab): client, package, price and interval,
 expiry, mode, who created it, the URL, **Copy Payment Link** (clipboard),
@@ -892,8 +939,12 @@ agreements (effective dates, per-period entitlements) are follow-up work.
     client-safe code (`active`, `trial`, `payment_attention` for past due
     or unpaid, `payment_pending`, `scheduled_to_end`, `ended`, `external`,
     `awaiting_setup`, `paused`, `not_set_up`), monthly amount / currency /
-    next billing date / end date for Stripe-collected agreements only, and
-    `can_manage_billing`.
+    next billing date / end date for Stripe-collected agreements only,
+    `can_manage_billing`, and the agreed plan price (`agreed_amount_cents`,
+    `agreed_currency`, `agreed_interval`, `agreed_interval_count`, Stripe
+    agreements only) — the portal's "Plan price" is the agreement's; a
+    Stripe subscription that disagrees is flagged to the team
+    (`agreement_price_mismatch`), never shown in its place.
   - `portal_billing_invoices`: number, date, status, amounts, due date,
     period, and Stripe's `hosted_invoice_url` / `invoice_pdf`. Current
     billing mode only; never drafts.

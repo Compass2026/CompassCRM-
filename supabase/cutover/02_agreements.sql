@@ -6,10 +6,14 @@
 -- on Compass Standard, month-to-month from 2026-10-01, collected by Stripe
 -- (ACH debit). Two prices exist commercially for the same package: $650/month
 -- (the default) and $500/month (legacy, grandfathered for BHG Safety Partners
--- and Shewmaker Brothers Masonry). The price is Stripe's, not the CRM's:
--- plans has no price column, so each agreement names its agreed price in
--- notes, and the two Stripe Prices are mapped to this one package later (see
--- "Stripe prices" at the end). Nothing here touches Stripe.
+-- and Shewmaker Brothers Masonry). Each agreement stores what the client
+-- contracted to pay as structured terms (plans.agreed_amount_cents /
+-- agreed_currency / agreed_billing_interval / agreed_billing_interval_count:
+-- 50000 or 65000, usd, month, 1); the notes only describe it. The exact Stripe
+-- Price each agreement is sold at (plans.billing_package_price_id) stays NULL
+-- here: the live $650 and $500 Prices do not exist yet, and until an agreement
+-- is bound Checkout refuses it (agreement_price_not_mapped). Binding them is
+-- 07_live_bind_standard_prices.sql, live mode only. Nothing here touches Stripe.
 --
 -- One statement, so all or nothing. Safe to re-run: every insert is on
 -- conflict do nothing, and the check at the end raises (undoing everything
@@ -23,7 +27,8 @@
 
 do $$
 declare
-  -- The confirmed terms. price = the agreed monthly price in dollars.
+  -- The confirmed terms. price = the agreed monthly price in dollars
+  -- (stored as integer cents: 50000 / 65000, usd, every 1 month).
   v_agreements constant jsonb := '[
     {"client_id": "3eaa3389-2a33-4004-837c-8aef90404410", "name": "BHG Safety Partners",         "price": 500},
     {"client_id": "a88f5ce2-30ac-508b-b217-cf22d277b278", "name": "Shewmaker Brothers Masonry",  "price": 500},
@@ -86,9 +91,11 @@ begin
 
   -- ── The eight agreements ──────────────────────────────────────────────────
   -- term_months null = month-to-month (no fixed term, no renewal date).
-  -- No overrides: every client receives exactly the package.
-  insert into plans (client_id, package_id, collection, term_months, start_date, notes)
-  select a.client_id, v_pkg, 'stripe', null, date '2026-10-01',
+  -- No overrides: every client receives exactly the package. No Stripe Price
+  -- is bound (billing_package_price_id null) until the live prices exist.
+  insert into plans (client_id, package_id, collection, term_months, start_date, agreed_amount_cents, agreed_currency,
+                     agreed_billing_interval, agreed_billing_interval_count, notes)
+  select a.client_id, v_pkg, 'stripe', null, date '2026-10-01', a.price * 100, 'usd', 'month', 1,
          case a.price
            when 650 then 'Compass Standard at the default price, $650.00/month. '
            else 'Compass Standard at the legacy price, $500.00/month (grandfathered; '
@@ -124,9 +131,12 @@ begin
      or pl.term_months is not null
      or pl.renewal_date is not null
      or pl.start_date is distinct from date '2026-10-01'
-     or pl.notes is null
-     or pl.notes not like 'Compass Standard at the '
-          || case a.price when 650 then 'default price, $650.00/month' else 'legacy price, $500.00/month' end || '%'
+     or pl.agreed_amount_cents is distinct from a.price * 100
+     or pl.agreed_currency is distinct from 'usd'
+     or pl.agreed_billing_interval is distinct from 'month'
+     or pl.agreed_billing_interval_count is distinct from 1
+     -- A binding made later (07, live) is kept: the guard already proved it
+     -- says exactly these terms, on this package.
      or exists (select 1 from client_entitlement_overrides o where o.client_id = a.client_id);
   if v_text is not null then
     raise exception 'agreements: existing agreement differs from the confirmed terms (left unchanged; resolve by hand): %', v_text;
@@ -135,8 +145,11 @@ end $$;
 
 -- What was recorded.
 select c.name, c.status, bp.name as package, pl.collection, pl.start_date,
-       coalesce(pl.term_months::text, 'month-to-month') as term, pl.notes
+       coalesce(pl.term_months::text, 'month-to-month') as term,
+       pl.agreed_amount_cents, pl.agreed_currency, pl.agreed_billing_interval, pl.agreed_billing_interval_count,
+       ap.price_status as stripe_price
 from plans pl join clients c on c.id = pl.client_id join billing_packages bp on bp.id = pl.package_id
+join client_agreement_price ap on ap.client_id = pl.client_id
 where bp.key = 'compass_standard'
 order by c.name;
 
@@ -151,8 +164,9 @@ order by c.name;
 --     default price  $650.00 / month  <<LIVE_STANDARD_650_PRICE_ID — not created>>  is_default = true
 --     legacy price   $500.00 / month  <<LIVE_STANDARD_500_PRICE_ID — not created>>  is_default = false
 --
--- Both prices map to this one package, so both give the same entitlements.
--- Checkout lets the teammate choose an approved price of the client's package;
--- BHG Safety Partners and Shewmaker Brothers Masonry must be sent the $500
--- legacy price, everyone else the $650 default (the agreement's notes say
--- which). Do not invent these ids and do not map the TEST product here.
+-- Then 07_live_bind_standard_prices.sql binds each agreement to the one price
+-- that says exactly its agreed terms (BHG Safety Partners and Shewmaker
+-- Brothers Masonry → $500; the other six → $650); no id is typed by hand.
+-- Until then Checkout refuses every one of these clients
+-- (agreement_price_not_mapped). Do not invent these ids and do not map the
+-- TEST product to Compass Standard.

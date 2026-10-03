@@ -34,6 +34,18 @@ export type PackagePrice = {
   client_id: string | null;
   active: boolean;
 };
+// The agreement as Checkout reads it: the package, how it is collected, the
+// contracted recurring price and the exact approved package price it binds.
+export type AgreementPlan = {
+  package_id: string | null;
+  collection: string;
+  agreed_amount_cents: number | null;
+  agreed_currency: string | null;
+  agreed_billing_interval: string | null;
+  agreed_billing_interval_count: number | null;
+  billing_package_price_id: string | null;
+};
+
 export type PriceMirror = {
   active: boolean;
   type: string;
@@ -44,6 +56,7 @@ export type PriceMirror = {
   recurring_interval: string | null;
   recurring_interval_count: number | null;
   recurring_usage_type: string | null;
+  billing_scheme?: string | null;
 };
 export type AuditInput = {
   client_id: string | null;
@@ -68,7 +81,7 @@ export class BillingDbError extends Error {
 export type BillingStore = StripeStore & {
   caller(jwt: string): Promise<"none" | Caller | null>;
   client(id: string): Promise<{ id: string; name: string; status: string } | null>;
-  plan(clientId: string): Promise<{ package_id: string | null; collection: string } | null>;
+  plan(clientId: string): Promise<AgreementPlan | null>;
   activeLink(clientId: string, livemode: boolean): Promise<{ stripe_customer_id: string } | null>;
   linkOf(customerId: string): Promise<{ client_id: string; client_name: string; active: boolean } | null>;
   linksOf(customerIds: string[]): Promise<{ stripe_customer_id: string; client_id: string; client_name: string; active: boolean }[]>;
@@ -130,7 +143,9 @@ export function createBillingStore(supabase: Client): BillingStore {
     },
 
     client: (id) => maybe(supabase.from("clients").select("id, name, status").eq("id", id).maybeSingle()),
-    plan: (clientId) => maybe(supabase.from("plans").select("package_id, collection").eq("client_id", clientId).maybeSingle()),
+    plan: (clientId) => maybe(supabase.from("plans")
+      .select("package_id, collection, agreed_amount_cents, agreed_currency, agreed_billing_interval, agreed_billing_interval_count, billing_package_price_id")
+      .eq("client_id", clientId).maybeSingle()),
 
     activeLink: (clientId, livemode) =>
       maybe(supabase.from("stripe_customers").select("stripe_customer_id").eq("client_id", clientId).eq("livemode", livemode)
@@ -200,7 +215,7 @@ export function createBillingStore(supabase: Client): BillingStore {
     },
 
     priceMirror: (priceId) =>
-      maybe(supabase.from("stripe_prices").select("active, type, livemode, deleted_at, unit_amount_cents, currency, recurring_interval, recurring_interval_count, recurring_usage_type")
+      maybe(supabase.from("stripe_prices").select("active, type, livemode, deleted_at, unit_amount_cents, currency, recurring_interval, recurring_interval_count, recurring_usage_type, billing_scheme")
         .eq("stripe_price_id", priceId).maybeSingle()),
 
     async mapClientPrice(row) {

@@ -60,7 +60,11 @@ link from the app, all in Stripe test mode.
    Safety Partners and Shewmaker Brothers Masonry at the $500 legacy price,
    the other six at the $650 default; one entitlement definition (all nine
    services; 8 blog / 8 GBP / 8 social posts, 4 new pages, 1 refresh a
-   month). They cannot be recorded before 0058 exists, so
+   month), each with its **structured agreed price** (`agreed_amount_cents`
+   50000 / 65000, `usd`, every 1 `month`) and no Stripe Price bound yet:
+   Checkout refuses them (`agreement_price_not_mapped`) until the live
+   prices exist and `07_live_bind_standard_prices.sql` binds them. They
+   cannot be recorded before 0058 exists, so
    `supabase/cutover/02_agreements.sql` seeds them **in the same sitting**,
    right after the migrations and while automation is paused
    (`docs/billing-readiness.md` § 17 step 6); `04_validate.sql` must then
@@ -109,8 +113,14 @@ link from the app, all in Stripe test mode.
 
 1. Merge PR #86; Vercel deploys `main`.
 2. Smoke test as the admin:
-   - The Plan tab shows the Agreement card, the entitlements table (14
-     services, "Not included") and the Billing card "Not set up".
+   - The Plan tab shows the Agreement card, the **Agreed price** card
+     (after `02_agreements.sql`: e.g. "$650.00/month · Stripe Price Not
+     mapped"; the admin sees the agreed-price and Bind price controls, a
+     member does not), the entitlements table (14 services, "Not
+     included") and the Billing card "Not set up".
+   - The Billing tab's Payment link card shows the agreed price and offers
+     no payment link while the Stripe Price is not mapped (no price
+     dropdown anywhere).
    - The Billing tab carries the "Stripe test mode." banner and, for the
      admin, the link / create customer panel.
    - Settings › Billing catalog opens (no packages yet; after
@@ -187,7 +197,10 @@ link from the app, all in Stripe test mode.
    Billing catalog: imports the TEST Standard product onto the test client's
    **Test Standard (TEST)** package and approves its price as the default,
    imports the Custom Retainer (TEST) product, and presses **Configure
-   Customer Portal**. **Compass Standard stays unmapped in test mode**: its
+   Customer Portal**. Then `supabase/cutover/06_bind_test_client_price.sql`
+   binds the test client's agreement ($2,500.00/month) to exactly
+   `price_1UMDr54Zq9yMk653B7jdneFm` (or Plan tab › Agreed price › Bind
+   price). **Compass Standard stays unmapped in test mode**: its
    entitlements and the eight agreements are already seeded, and its real
    prices exist only in live mode (section 7).
 6. **Reconciliation.** An admin presses Run Billing Reconciliation in
@@ -287,10 +300,14 @@ The order depends on how far you got:
    | `<<LIVE_STANDARD_650_PRICE_ID>>` | $650.00 / month | approved price, **default** |
    | `<<LIVE_STANDARD_500_PRICE_ID>>` | $500.00 / month | approved price, not default (legacy) |
 
-   `04_validate.sql` reports "ready: $650 default and $500 legacy mapped"
-   once both are mapped in live mode. Checkout: BHG Safety Partners and
-   Shewmaker Brothers Masonry get the $500 price, the other six the $650
-   default (each agreement's notes say which; Checkout does not check it).
+   Then run `supabase/cutover/07_live_bind_standard_prices.sql` (live mode
+   only): it binds BHG Safety Partners and Shewmaker Brothers Masonry to the
+   $500 legacy price and the other six to the $650 default, by matching each
+   agreement's structured agreed price — no id typed by hand — and refuses
+   on a missing or ambiguous match. `04_validate.sql` then reports all eight
+   `checkout ready`. Checkout sells each client exactly its bound price and
+   refuses any other (`agreement_price_mismatch`); only after this binding
+   may Checkout run for these clients.
 3. Add the live `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. Keep the
    test ones in a note; one mode runs at a time per endpoint.
 4. An admin sets `app_settings.billing = {"livemode": true}`. The read

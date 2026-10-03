@@ -10,6 +10,10 @@
 //   - Billing tab: a member records nothing financial; an admin creates A's
 //     customer and links B's existing one (confirmation required) with its
 //     invoice, payment and each partial refund shown individually.
+//   - Agreed price: only an admin records A's agreed price and binds its exact
+//     Stripe Price on the Plan tab (Mapped / Not mapped); until then the
+//     Billing tab offers no payment link; then one button, "Create Payment
+//     Link for $1,500.00/month", with no price to choose.
 //   - Payment Link Ready: created by the admin, copied, opened; a member can
 //     copy it but not expire it; after the webhook the client is Active and
 //     no second link is offered.
@@ -133,6 +137,7 @@ async function until(page, read, want, what) {
   throw new Error(`${what}: gave up (last ${JSON.stringify(read())}, page errors ${JSON.stringify(banner)})`);
 }
 const text = async (page) => (await page.locator("main").textContent()).replace(/\s+/g, " ");
+const txt = async (locator) => (await locator.textContent()).replace(/\s+/g, " ");
 const shot = async (page, name) => {
   if (!SCREENSHOTS) return;
   mkdirSync(SCREENSHOTS, { recursive: true });
@@ -254,9 +259,45 @@ try {
   await shot(admin, "billing-linked-existing");
   ok("link existing: search, explicit confirmation, then the invoice, the ACH payment and both partial refunds (individually) appear; no payment link is offered over the active subscription");
 
+  // ── The agreed price and its exact Stripe Price (an admin's) ─────────
+  await admin.goto(`${base}/clients/${A}/billing`, { waitUntil: "networkidle" });
+  assert.equal(await admin.getByRole("button", { name: /Create Payment Link/ }).count(), 0);
+  assert.match(await txt(admin.locator("[data-card=payment-link]")), /no agreed price yet/i);
+  await member.goto(`${base}/clients/${A}/plan`, { waitUntil: "networkidle" });
+  const memberPrice = await txt(member.locator("[data-card=agreed-price]"));
+  assert.match(memberPrice, /Only an admin sets the agreed price and binds its Stripe Price\./);
+  assert.equal(await member.locator("[data-form=agreed-price]").count(), 0);
+  assert.equal(await member.locator("[data-form=bind-price]").count(), 0);
+  ok("agreed price: a member sees it and cannot set it or bind a Stripe Price; with no agreed price no payment link is offered");
+
+  await admin.goto(`${base}/clients/${A}/plan`, { waitUntil: "networkidle" });
+  await admin.locator("#agreed_amount").fill("1,500.00");
+  await admin.getByRole("button", { name: "Save agreed price" }).click();
+  await until(admin, () => sql(`select agreed_amount_cents || '|' || agreed_billing_interval from plans where client_id = '${A}'`),
+    (v) => v === "150000|month", "agreed price saved");
+  await admin.goto(`${base}/clients/${A}/plan`, { waitUntil: "networkidle" });
+  let priceCard = await txt(admin.locator("[data-card=agreed-price]"));
+  assert.match(priceCard, /Package\s*Growth\s*Agreed price\s*\$1,500\.00\/month\s*Stripe Price\s*Not mapped/);
+  await admin.goto(`${base}/clients/${A}/billing`, { waitUntil: "networkidle" });
+  assert.equal(await admin.getByRole("button", { name: /Create Payment Link/ }).count(), 0);
+  assert.match(await txt(admin.locator("[data-card=payment-link]")), /No approved Stripe Price is bound to the agreed price \(\$1,500\.00\/month\) yet/);
+  await admin.goto(`${base}/clients/${A}/plan`, { waitUntil: "networkidle" });
+  const options = await admin.locator("#billing_package_price_id option").allTextContents();
+  assert.deepEqual(options.map((o) => o.replace(/\s+/g, " ").trim()), ["Not bound", "$1,500.00/month · package default · test"]);
+  await admin.selectOption("#billing_package_price_id", { index: 1 });
+  await admin.getByRole("button", { name: "Bind price" }).click();
+  await until(admin, () => sql(`select price_status from client_agreement_price where client_id = '${A}'`), (v) => v === "ready", "price bound");
+  await admin.goto(`${base}/clients/${A}/plan`, { waitUntil: "networkidle" });
+  priceCard = await txt(admin.locator("[data-card=agreed-price]"));
+  assert.match(priceCard, /Stripe Price\s*Mapped\s*\$1,500\.00\/month · test mode/);
+  await shot(admin, "agreed-price-mapped");
+  ok("agreed price: the admin records $1,500.00/month and binds the one approved Stripe Price that says exactly that (Not mapped → Mapped)");
+
   // ── Payment link ─────────────────────────────────────────────────────
   await admin.goto(`${base}/clients/${A}/billing`, { waitUntil: "networkidle" });
-  await admin.getByRole("button", { name: "Create payment link" }).click();
+  assert.equal(await admin.locator("#package_price_id").count(), 0, "no price to choose");
+  assert.match(await txt(admin.locator("[data-card=payment-link]")), /Agreed price\s*\$1,500\.00\/month\s*Stripe Price\s*Mapped/);
+  await admin.getByRole("button", { name: "Create Payment Link for $1,500.00/month" }).click();
   await until(admin, () => sql(`select count(*) from checkout_sessions where client_id = '${A}' and status = 'open'`), (v) => v === "1", "checkout created");
   await admin.waitForURL(/notice=/);
   const link = admin.locator("[data-card=payment-link]");
@@ -272,7 +313,7 @@ try {
   const cs = s.all("checkout.session")[0];
   assert.deepEqual(cs.payment_method_types, ["card", "us_bank_account"]);
   await shot(admin, "payment-link-ready");
-  ok("payment link: created from the approved price; Payment Link Ready shows client, package, price, expiry, mode and creator; Copy puts the exact URL on the clipboard");
+  ok("payment link: one button for the agreement's price (no price choice); Payment Link Ready shows client, package, price, expiry, mode and creator; Copy puts the exact URL on the clipboard");
 
   await member.goto(`${base}/clients/${A}/billing`, { waitUntil: "networkidle" });
   assert.equal(await member.getByRole("button", { name: "Copy Payment Link" }).count(), 1);
@@ -287,7 +328,7 @@ try {
   assert.match(aPage, /Active/);
   assert.match(aPage, /\$1,500\.00 \/ month/);
   assert.match(aPage, /already has a subscription in Stripe/);
-  assert.equal(await admin.getByRole("button", { name: "Create payment link" }).count(), 0);
+  assert.equal(await admin.getByRole("button", { name: /Create Payment Link/ }).count(), 0);
   assert.match((await admin.locator("[data-card=entitlements]").textContent()).replace(/\s+/g, " "), /Blog Posts4 posts \/ monthPackage/);
   ok("after Stripe's webhook: Active at $1,500 / month, no second link offered, entitlements from the package");
 

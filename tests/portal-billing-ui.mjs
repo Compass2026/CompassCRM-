@@ -127,7 +127,7 @@ const shot = async (page, name) => {
 const checks = [];
 const ok = (name) => { checks.push(name); console.log(`  ✓ ${name}`); };
 // Nothing internal on a portal page: Stripe ids, internal state codes, notes.
-const INTERNAL = /\b(cus|sub|price|prod|in|pi|py|si|bpc|bps|cs)_[A-Za-z0-9]{2,}|past_due|billing_attention|attention_reasons|unmapped_price|package_mismatch|reconcil|override|webhook/i;
+const INTERNAL = /\b(cus|sub|price|prod|in|pi|py|si|bpc|bps|cs)_[A-Za-z0-9]{2,}|past_due|billing_attention|attention_reasons|unmapped_price|package_mismatch|agreement_price|reconcil|override|webhook/i;
 
 // Setup: Growth (SEO, GBP, 4 blog posts, 4 GBP posts); A on Stripe with an
 // existing customer linked; B an external arrangement on the same package.
@@ -138,7 +138,8 @@ sql(`insert into package_entitlements (package_id, service_key, service_kind, en
   ('${GROWTH}', 'seo', 'feature', true, null), ('${GROWTH}', 'gbp', 'feature', true, null),
   ('${GROWTH}', 'social', 'feature', false, null),
   ('${GROWTH}', 'blog_posts', 'quota', true, 4), ('${GROWTH}', 'gbp_posts', 'quota', true, 4)`);
-sql(`insert into plans (client_id, package_id, collection) values ('${A}', '${GROWTH}', 'stripe')`);
+sql(`insert into plans (client_id, package_id, collection, agreed_amount_cents, agreed_currency, agreed_billing_interval, agreed_billing_interval_count)
+  values ('${A}', '${GROWTH}', 'stripe', 300000, 'usd', 'month', 1)`);
 sql(`insert into plans (client_id, package_id, collection, external_method, external_amount_cents, external_currency, external_interval)
   values ('${B}', '${GROWTH}', 'external', 'check', 150000, 'usd', 'month')`);
 // A's own override (with an internal reason the portal must never show).
@@ -171,7 +172,7 @@ try {
   const overview = await text(pa.locator("[data-card=billing-overview]"));
   assert.match(overview, /Current plan\s*Growth/, overview);
   assert.match(overview, /Active/);
-  assert.match(overview, /Monthly amount\s*\$3,000\.00/, overview);
+  assert.match(overview, /Plan price\s*\$3,000\.00\/month/, overview);
   assert.match(overview, /Next billing date/);
   const plan = await text(pa.locator("[data-card=plan-services]"));
   assert.match(plan, /SEO/);
@@ -221,7 +222,7 @@ try {
   const ob = await text(pb.locator("[data-card=billing-overview]"));
   assert.match(ob, /Managed directly with Compass/);
   assert.match(ob, /Billing is managed directly with Compass\./);
-  assert.doesNotMatch(ob, /Monthly amount|\$1,500/);
+  assert.doesNotMatch(ob, /Plan price|\$1,500/);
   assert.equal(await pb.getByRole("button", { name: "Manage billing" }).count(), 0);
   assert.match(await text(pb.locator("[data-card=invoices]")), /managed directly with Compass/i);
   assert.equal(await pb.getByRole("link", { name: "View invoice" }).count(), 0);

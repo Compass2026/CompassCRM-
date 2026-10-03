@@ -40,9 +40,15 @@
 --      but now says which package the client is on and how it pays (Stripe, or
 --      an external arrangement: check / wire / manually received ACH), with
 --      client_entitlement_overrides for exactly what a custom client receives.
---      The per-plan quantity columns move into entitlements.
---   5. Two read models, both invoker rights (RLS applies):
+--      The per-plan quantity columns move into entitlements. A Stripe-collected
+--      agreement states what the client contracted to pay (agreed amount,
+--      currency, interval) and, once that Stripe Price is approved, the exact
+--      package price it is sold at (billing_package_price_id): the agreement,
+--      not the operator, decides which of a package's prices Checkout sells.
+--   5. Three read models, all invoker rights (RLS applies):
 --        client_entitlements    package ⊕ overrides, per client and service
+--        client_agreement_price the agreed price against its bound Stripe Price
+--                               (ready / unmapped / mismatch …)
 --        client_billing_status  derived from the mirror (never stored):
 --                               billing_state, next billing date, MRR, latest
 --                               invoice, and billing_attention with its reasons
@@ -274,7 +280,8 @@ create table billing_package_prices (
   foreign key (stripe_price_id, stripe_product_id, price_type)
     references stripe_prices (stripe_price_id, stripe_product_id, type),
   check ((package_kind = 'custom') = (client_id is not null)),
-  check (not is_default or client_id is null)
+  check (not is_default or client_id is null),
+  unique (id, package_id)   -- an agreement binds to a price of its own package (plans_price_of_package)
 );
 create unique index billing_package_prices_one_default on billing_package_prices (package_id)
   where is_default and active;
@@ -298,8 +305,17 @@ create table package_entitlements (
 
 -- ── 6. The client agreement ──────────────────────────────────────────────────
 -- plans stays one row per client (the Clients list and tabs read it by that
--- name) and becomes the agreement: package, how it is paid, term. The fee is
--- Stripe's (the price), unless the arrangement is external.
+-- name) and becomes the agreement: package, how it is paid, term, and what the
+-- client contracted to pay. Stripe stays authoritative for what was actually
+-- billed and paid; the agreement is authoritative for the contracted price.
+--   Stripe collection: agreed_amount_cents / agreed_currency /
+--     agreed_billing_interval / agreed_billing_interval_count are the
+--     contracted recurring terms (all four or none), and
+--     billing_package_price_id is the exact approved price of the client's own
+--     package that Checkout sells — null until that Stripe Price is imported
+--     and approved; it must match the agreed terms (plans_agreement_price_guard).
+--   External collection: the external_* terms, as before; no agreed_* and no
+--     Stripe Price.
 alter table plans
   drop column package_name,
   drop column monthly_fee,
@@ -314,6 +330,11 @@ alter table plans
   add column external_currency text check (external_currency ~ '^[a-z]{3}$'),
   add column external_interval text check (external_interval in ('month', 'year')),
   add column managed_ad_budget_cents bigint check (managed_ad_budget_cents >= 0),
+  add column agreed_amount_cents bigint check (agreed_amount_cents > 0),
+  add column agreed_currency text check (agreed_currency ~ '^[a-z]{3}$'),
+  add column agreed_billing_interval text check (agreed_billing_interval in ('month', 'year')),
+  add column agreed_billing_interval_count int check (agreed_billing_interval_count between 1 and 12),
+  add column billing_package_price_id uuid,
   add column updated_at timestamptz not null default now(),
   add column updated_by uuid references team_members on delete set null,
   add constraint plans_external_terms check (
@@ -322,11 +343,99 @@ alter table plans
                        and external_currency is not null and external_interval is not null
       else external_method is null and external_amount_cents is null
        and external_currency is null and external_interval is null
-    end);
+    end),
+  add constraint plans_agreed_terms check (
+    (agreed_amount_cents is null) = (agreed_currency is null)
+    and (agreed_amount_cents is null) = (agreed_billing_interval is null)
+    and (agreed_amount_cents is null) = (agreed_billing_interval_count is null)),
+  add constraint plans_agreed_terms_stripe_only check (
+    collection = 'stripe' or (agreed_amount_cents is null and billing_package_price_id is null)),
+  add constraint plans_price_needs_terms check (
+    billing_package_price_id is null or (agreed_amount_cents is not null and package_id is not null)),
+  -- The bound price is one of the agreement's own package's prices: an
+  -- agreement can never point at another package's price, and the package
+  -- cannot change under a bound price.
+  add constraint plans_price_of_package foreign key (billing_package_price_id, package_id)
+    references billing_package_prices (id, package_id) on update restrict on delete restrict;
+create index on plans (billing_package_price_id) where billing_package_price_id is not null;
 create trigger plans_stamp before insert or update on plans
   for each row execute function billing_stamp_updated();
+
+-- The agreed price and the bound Stripe Price are financial configuration
+-- (like the catalog): a signed-in non-admin cannot set or change them. The
+-- binding must be exactly the agreement's terms, at the moment it is made:
+-- an approved, active price of a live catalog entry, recurring, licensed,
+-- fixed-amount, in the current Stripe mode, reserved for no other client,
+-- with the agreed amount, currency, interval and interval count. Re-checked
+-- whenever the binding, the agreed terms, the package or the collection
+-- change; Checkout re-checks everything again against Stripe's current state.
+-- Sessions with no signed-in user (migrations, the cutover kit, the service
+-- role) are not admin-gated, but the binding rules hold for every caller.
+create function plans_agreement_price_guard() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+declare
+  v_terms_changed boolean;
+  m record;
+begin
+  v_terms_changed := case when tg_op = 'INSERT'
+    then new.agreed_amount_cents is not null or new.billing_package_price_id is not null
+    else new.agreed_amount_cents is distinct from old.agreed_amount_cents
+      or new.agreed_currency is distinct from old.agreed_currency
+      or new.agreed_billing_interval is distinct from old.agreed_billing_interval
+      or new.agreed_billing_interval_count is distinct from old.agreed_billing_interval_count
+      or new.billing_package_price_id is distinct from old.billing_package_price_id end;
+  if v_terms_changed and auth.uid() is not null and not is_team_admin() then
+    raise exception 'Only an admin can set an agreement''s price or its Stripe Price' using errcode = '42501';
+  end if;
+  if new.billing_package_price_id is null then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and not v_terms_changed
+     and new.package_id is not distinct from old.package_id and new.collection = old.collection then
+    return new;
+  end if;
+
+  select bpp.client_id, bpp.active, bp.active as package_active, sp.stripe_price_id, sp.active as price_active,
+         sp.deleted_at, sp.type, sp.livemode, sp.billing_scheme, sp.recurring_usage_type,
+         sp.unit_amount_cents, sp.currency, sp.recurring_interval, sp.recurring_interval_count
+    into m
+  from billing_package_prices bpp
+  join billing_packages bp on bp.id = bpp.package_id
+  left join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id
+  where bpp.id = new.billing_package_price_id;
+  if not found then
+    raise exception 'agreement price: no such approved package price' using errcode = 'foreign_key_violation';
+  end if;
+  if m.client_id is not null and m.client_id <> new.client_id then
+    raise exception 'agreement price: that price is reserved for another client' using errcode = 'check_violation';
+  end if;
+  if not m.active or not m.package_active or m.stripe_price_id is null or not m.price_active or m.deleted_at is not null then
+    raise exception 'agreement price: that price is retired or archived' using errcode = 'check_violation';
+  end if;
+  if m.type <> 'recurring' or m.recurring_usage_type = 'metered'
+     or m.billing_scheme <> 'per_unit' or m.unit_amount_cents is null then
+    raise exception 'agreement price: only a fixed-amount licensed recurring price can be bound' using errcode = 'check_violation';
+  end if;
+  if m.livemode is distinct from billing_livemode() then
+    raise exception 'agreement price: that is a % price; billing is in % mode',
+      case when m.livemode then 'live' else 'test' end, case when billing_livemode() then 'live' else 'test' end
+      using errcode = 'check_violation';
+  end if;
+  if m.unit_amount_cents <> new.agreed_amount_cents or m.currency <> new.agreed_currency
+     or m.recurring_interval <> new.agreed_billing_interval
+     or m.recurring_interval_count <> new.agreed_billing_interval_count then
+    raise exception 'agreement price: the price (% % every % %) differs from the agreement (% % every % %)',
+      m.unit_amount_cents, m.currency, m.recurring_interval_count, m.recurring_interval,
+      new.agreed_amount_cents, new.agreed_currency, new.agreed_billing_interval_count, new.agreed_billing_interval
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end $$;
+revoke all on function plans_agreement_price_guard() from public, anon, authenticated;
+create trigger plans_agreement_price_guard before insert or update on plans
+  for each row execute function plans_agreement_price_guard();
 comment on table plans is
-  'The client''s agreement: package, collection (Stripe or an external arrangement), term. Price and paid state come from Stripe.';
+  'The client''s agreement: package, collection (Stripe or an external arrangement), term, and the contracted recurring price (agreed_*) with the exact approved package price Checkout sells (billing_package_price_id). What was billed and paid comes from Stripe.';
 
 -- What one client receives beyond (or instead of) its package, with the reason.
 create table client_entitlement_overrides (
@@ -773,6 +882,53 @@ left join package_entitlements pe on pe.package_id = p.package_id and pe.service
 left join client_entitlement_overrides o on o.client_id = c.id and o.service_key = s.key
 where s.active;
 
+-- The agreement's price against the Stripe Price it is bound to, per client.
+-- price_status: not_applicable (no Stripe-collected package agreement),
+-- terms_missing (no agreed amount), unmapped (no exact price bound yet),
+-- inactive (the bound mapping, package or Stripe Price is retired / archived),
+-- wrong_mode (bound to a price of the other Stripe mode), mismatch (the price
+-- no longer says what the agreement says, or is not a fixed licensed recurring
+-- price of this client's package), ready (Checkout may sell it). The same
+-- rules Checkout applies (stripe-billing checkCheckoutPrice), read from the
+-- mirror; Checkout re-reads the price from Stripe first.
+create view client_agreement_price with (security_invoker = true) as
+select
+  c.id as client_id,
+  pl.collection,
+  pl.package_id,
+  pl.agreed_amount_cents,
+  pl.agreed_currency,
+  pl.agreed_billing_interval,
+  pl.agreed_billing_interval_count,
+  pl.billing_package_price_id,
+  bpp.stripe_price_id,
+  sp.unit_amount_cents as price_amount_cents,
+  sp.currency as price_currency,
+  sp.recurring_interval as price_interval,
+  sp.recurring_interval_count as price_interval_count,
+  sp.livemode as price_livemode,
+  case
+    when pl.client_id is null or pl.package_id is null or pl.collection <> 'stripe' then 'not_applicable'
+    when pl.agreed_amount_cents is null then 'terms_missing'
+    when pl.billing_package_price_id is null then 'unmapped'
+    when not bpp.active or not bp.active or sp.stripe_price_id is null or not sp.active
+         or sp.deleted_at is not null then 'inactive'
+    when sp.livemode <> billing_livemode() then 'wrong_mode'
+    when bpp.package_id <> pl.package_id
+         or (bpp.client_id is not null and bpp.client_id <> pl.client_id)
+         or sp.type <> 'recurring' or sp.recurring_usage_type = 'metered' or sp.billing_scheme <> 'per_unit'
+         or sp.unit_amount_cents is null
+         or sp.unit_amount_cents <> pl.agreed_amount_cents or sp.currency <> pl.agreed_currency
+         or sp.recurring_interval <> pl.agreed_billing_interval
+         or sp.recurring_interval_count <> pl.agreed_billing_interval_count then 'mismatch'
+    else 'ready'
+  end as price_status
+from clients c
+left join plans pl on pl.client_id = c.id
+left join billing_package_prices bpp on bpp.id = pl.billing_package_price_id
+left join billing_packages bp on bp.id = bpp.package_id
+left join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id;
+
 -- Billing state per client, derived from the Stripe mirror in the current mode.
 -- Nothing here is stored, so nothing here goes stale. billing_attention is an
 -- operational flag Compass derives from Stripe's own state; it never changes
@@ -806,6 +962,7 @@ sub_money as (
                                          pr.recurring_interval, pr.recurring_interval_count)))::bigint as mrr_cents,
          bool_or(pr.unit_amount_cents is null or pr.recurring_usage_type = 'metered') as mrr_incomplete,
          array_agg(distinct bpp.package_id) filter (where bpp.package_id is not null) as package_ids,
+         array_agg(distinct si.stripe_price_id) as price_ids,
          bool_or(bpp.id is null) as has_unmapped_price
   from subscription_items si
   join stripe_prices pr on pr.stripe_price_id = si.stripe_price_id
@@ -868,7 +1025,10 @@ base as (
     sm.mrr_cents,
     sm.mrr_incomplete,
     sm.package_ids as subscription_package_ids,
+    sm.price_ids as subscription_price_ids,
     sm.has_unmapped_price,
+    ap.price_status as agreement_price_status,
+    ap.stripe_price_id as agreement_stripe_price_id,
     coalesce(lc.n, 0) as live_subscription_count,
     coalesce(oi.open_count, 0) as open_invoice_count,
     coalesce(oi.overdue_count, 0) as overdue_invoice_count,
@@ -891,6 +1051,7 @@ base as (
   left join open_invoices oi on oi.client_id = c.id
   left join latest_invoice li on li.client_id = c.id
   left join open_checkout oc on oc.client_id = c.id
+  left join client_agreement_price ap on ap.client_id = c.id
 )
 select
   b.client_id,
@@ -955,15 +1116,26 @@ cross join lateral (
     case when b.is_live and b.has_unmapped_price then 'unmapped_price' end,
     case when b.is_live and b.agreement_package_id is null then 'no_agreement_package' end,
     case when b.is_live and b.agreement_package_id is not null
-              and not (b.agreement_package_id = any (coalesce(b.subscription_package_ids, '{}'))) then 'package_mismatch' end
+              and not (b.agreement_package_id = any (coalesce(b.subscription_package_ids, '{}'))) then 'package_mismatch' end,
+    -- Configuration, not financial state: billing is under way for a client
+    -- (a live subscription, a linked customer or an open link) while its
+    -- agreement has no exact price; or the bound price no longer says what
+    -- the agreement says; or the live subscription sells a different price.
+    case when b.agreement_price_status in ('terms_missing', 'unmapped')
+              and (b.is_live or b.stripe_customer_id is not null or b.checkout_url is not null) then 'agreement_price_unmapped' end,
+    case when b.agreement_price_status = 'mismatch'
+              or (b.is_live and b.agreement_stripe_price_id is not null
+                  and not (b.agreement_stripe_price_id = any (coalesce(b.subscription_price_ids, '{}')))) then 'agreement_price_mismatch' end
   ], null) as reasons
 ) r;
 
-revoke all on client_entitlements, client_billing_status from public, anon, authenticated;
-grant select on client_entitlements, client_billing_status to authenticated, service_role;
+revoke all on client_entitlements, client_agreement_price, client_billing_status from public, anon, authenticated;
+grant select on client_entitlements, client_agreement_price, client_billing_status to authenticated, service_role;
 
 comment on view client_entitlements is
   'Effective service entitlements per client: the agreement''s package with client overrides on top. Billing state never changes them.';
+comment on view client_agreement_price is
+  'Per client: the agreement''s contracted recurring price and the exact approved Stripe Price bound to it, with price_status (ready / unmapped / mismatch …). Configuration only; never financial state.';
 comment on view client_billing_status is
   'Billing state per client derived from the Stripe mirror in the current mode (billing_livemode()). Stripe is authoritative; nothing here is stored.';
 
@@ -994,7 +1166,7 @@ begin
       raise exception '0058: the financial mirror % is writable through the API', t;
     end if;
   end loop;
-  foreach t in array array['client_entitlements', 'client_billing_status'] loop
+  foreach t in array array['client_entitlements', 'client_agreement_price', 'client_billing_status'] loop
     if (select coalesce(reloptions::text, '') not like '%security_invoker=true%' from pg_class
         where oid = ('public.' || t)::regclass) then
       raise exception '0058: view % must run with the caller''s rights', t;

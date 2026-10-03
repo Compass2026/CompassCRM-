@@ -162,10 +162,14 @@ try {
   for (const client of [A, B, C, D]) {
     const { error } = await as(MEMBER).from("plans").upsert({ client_id: client, package_id: GROWTH, collection: "stripe" }, { onConflict: "client_id" });
     assert.equal(error, null, error?.message);
+    // The agreed price and its exact Stripe Price (an admin's).
+    const { error: priced } = await as(ADMIN).from("plans").update({ agreed_amount_cents: 150000, agreed_currency: "usd",
+      agreed_billing_interval: "month", agreed_billing_interval_count: 1, billing_package_price_id: PP }).eq("client_id", client);
+    assert.equal(priced, null, priced?.message);
   }
   // A: created customer, paid through Checkout, every webhook delivered.
   assert.equal((await callBilling(ADMIN, { action: "create_customer", client_id: A, email: "a@example.test" })).status, 200);
-  const coA = await callBilling(ADMIN, { action: "create_checkout", client_id: A, package_price_id: PP, request_id: rid(1) });
+  const coA = await callBilling(ADMIN, { action: "create_checkout", client_id: A, request_id: rid(1) });
   assert.equal(coA.status, 200, JSON.stringify(coA.body));
   const done = s.complete(coA.body.checkout.session_id);
   assert.equal((await deliver("checkout.session.completed", s.get(coA.body.checkout.session_id))).status, 200);
@@ -174,7 +178,7 @@ try {
   assert.equal((await callBilling(ADMIN, { action: "link_customer", client_id: B, customer_id: "cus_ExistB", confirm: true })).status, 200);
   // C: a customer with an open payment link; D: a customer with nothing yet.
   assert.equal((await callBilling(ADMIN, { action: "create_customer", client_id: C, email: "c@example.test" })).status, 200);
-  const coC = await callBilling(ADMIN, { action: "create_checkout", client_id: C, package_price_id: PP, request_id: rid(2) });
+  const coC = await callBilling(ADMIN, { action: "create_checkout", client_id: C, request_id: rid(2) });
   assert.equal(coC.status, 200);
   assert.equal((await callBilling(ADMIN, { action: "create_customer", client_id: D, email: "d@example.test" })).status, 200);
   // C: an external payment (Compass-owned).

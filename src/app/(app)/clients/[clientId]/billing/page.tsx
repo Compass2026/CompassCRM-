@@ -28,6 +28,7 @@ import { reconcileClientAction } from "@/app/billing-reconcile-actions";
 import { CopyLinkButton } from "@/components/billing/copy-link-button";
 import { StripeSyncCard } from "@/components/billing/stripe-sync-card";
 import { CustomerLinkSearch } from "@/components/billing/customer-link-search";
+import { AgreedPriceSummary, agreedPriceOf, type AgreementPriceRow } from "@/components/billing/agreed-price";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,23 +151,18 @@ export default async function BillingPage({
       .limit(20),
     supabase.from("app_settings").select("value").eq("key", "billing_portal").maybeSingle(),
   ]);
-  const [{ data: syncHealth }, { data: reconciled }] = await Promise.all([
+  const [{ data: syncHealth }, { data: reconciled }, { data: agreementPriceRow }] = await Promise.all([
     supabase.from("billing_sync_health").select("*").maybeSingle(),
     supabase.from("client_billing_reconciliation").select("*").eq("client_id", clientId).maybeSingle(),
+    supabase.from("client_agreement_price").select("*").eq("client_id", clientId).maybeSingle(),
   ]);
 
-  // Prices approved for the agreed package: the package's standard prices, or
-  // (custom package) the ones created for this client. Never any other.
+  // Checkout sells exactly the agreement's bound price (client_agreement_price
+  // 'ready'); the teammate never chooses among the package's prices.
   const pkg = plan?.billing_packages ?? null;
-  const { data: approved } = pkg
-    ? await supabase
-        .from("billing_package_prices")
-        .select("id, client_id, is_default, stripe_price_id, stripe_prices(unit_amount_cents, currency, recurring_interval, recurring_interval_count, nickname, active, livemode)")
-        .eq("package_id", pkg.id)
-        .eq("active", true)
-        .or(`client_id.is.null,client_id.eq.${clientId}`)
-    : { data: [] };
-  const sellable = (approved ?? []).filter((p) => p.stripe_prices?.active && p.stripe_prices.livemode === livemode);
+  const agreementPrice = agreementPriceRow as AgreementPriceRow | null;
+  const priceStatus = agreementPrice?.price_status ?? "not_applicable";
+  const agreedLabel = agreedPriceOf(agreementPrice);
   const priceIds = [...new Set((checkouts ?? []).map((c) => (c.line_items as { price?: string }[])?.[0]?.price).filter(Boolean) as string[])];
   const { data: checkoutPrices } = priceIds.length
     ? await supabase.from("stripe_prices").select("stripe_price_id, unit_amount_cents, currency, recurring_interval, recurring_interval_count, nickname, active, livemode").in("stripe_price_id", priceIds)
@@ -190,11 +186,21 @@ export default async function BillingPage({
         ? "Link or create the client's Stripe customer first."
         : subscribed
           ? "The client already has a subscription in Stripe; change it there rather than selling a second one."
-          : sellable.length === 0
-            ? pkg.kind === "custom"
-              ? "Create the client's retainer price below first."
-              : "No approved price for this package yet (Settings › Billing catalog)."
-            : null;
+          : priceStatus === "terms_missing"
+            ? "The agreement has no agreed price yet. An admin records it on the Plan tab."
+            : priceStatus === "unmapped"
+              ? pkg.kind === "custom"
+                ? `No retainer price is bound to the agreed price (${agreedLabel}) yet. Create it below, then bind it on the Plan tab.`
+                : `No approved Stripe Price is bound to the agreed price (${agreedLabel}) yet. An admin binds it on the Plan tab.`
+              : priceStatus === "inactive"
+                ? "The agreement's Stripe Price is retired or archived. An admin binds an active price with the same terms on the Plan tab."
+                : priceStatus === "wrong_mode"
+                  ? `The agreement's Stripe Price belongs to the other Stripe mode; billing is in ${livemode ? "live" : "test"} mode.`
+                  : priceStatus === "mismatch"
+                    ? `The agreement's Stripe Price no longer says ${agreedLabel}. Correct the binding on the Plan tab.`
+                    : priceStatus !== "ready"
+                      ? "This agreement is not sold through Checkout."
+                      : null;
 
   return (
     <div className="space-y-4">
@@ -379,6 +385,11 @@ export default async function BillingPage({
           <CardTitle className="text-base">{open ? "Payment Link Ready" : "Payment link"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          {pkg && plan?.collection === "stripe" && (
+            <div className="rounded-md border bg-muted/30 px-3 py-2">
+              <AgreedPriceSummary row={agreementPrice} packageName={pkg.name} isAdmin={isAdmin} />
+            </div>
+          )}
           {open ? (
             <>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
@@ -417,24 +428,10 @@ export default async function BillingPage({
           ) : isAdmin ? (
             <form action={createCheckoutAction.bind(null, clientId)} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="request_id" value={randomUUID()} />
-              <div className="space-y-1">
-                <Label htmlFor="package_price_id">Price ({pkg?.name})</Label>
-                <select
-                  id="package_price_id"
-                  name="package_price_id"
-                  className="field w-full"
-                  defaultValue={(sellable.find((p) => p.is_default) ?? sellable[0])?.id}
-                >
-                  {sellable.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {priceText(p.stripe_prices as PriceInfo)}{p.stripe_prices?.nickname ? ` — ${p.stripe_prices.nickname}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button type="submit" size="sm">Create payment link</Button>
+              <Button type="submit" size="sm" data-create-payment-link>Create Payment Link for {agreedLabel}</Button>
               <p className="w-full text-xs text-muted-foreground">
-                Stripe Checkout for a subscription at an approved price, card or ACH debit. Nothing is charged until the client pays.
+                Stripe Checkout for a {pkg?.name} subscription at the agreement&apos;s price, card or ACH debit. The price
+                comes from the agreement; nothing is charged until the client pays.
               </p>
             </form>
           ) : (

@@ -32,7 +32,7 @@ import { checkoutSessionRow } from "../_shared/stripe/map.ts";
 import { createStripeSync } from "../_shared/stripe/sync.ts";
 import { BillingDbError, type BillingStore, type Caller } from "./store.ts";
 
-export const STRIPE_BILLING_VERSION = 1;
+export const STRIPE_BILLING_VERSION = 2;
 
 export type BillingConfig = { secretKey: string; appUrl: string };
 
@@ -163,18 +163,57 @@ export function checkPortalConfig(cfg: StripeObject): string[] {
   return problems;
 }
 
-// What may be sold through Checkout for this client: an approved recurring
-// Stripe Price mapped to the client's agreed package (and, for a custom
-// package, reserved for this client), active in Stripe and in this mode.
+// What may be sold through Checkout for this client: exactly the price its
+// agreement binds (plans.billing_package_price_id) — an approved recurring
+// Stripe Price of the client's own package (and, for a custom package,
+// reserved for this client), active in Stripe and in this mode, and saying
+// precisely what the agreement says the client contracted to pay. The caller
+// never chooses among a package's prices: a package_price_id in the request is
+// only accepted when it is that same price, and refused otherwise.
 export type CheckoutPriceCheck = {
-  mapping: { package_id: string; client_id: string | null; active: boolean; package_active: boolean; package_kind: string } | null;
-  price: { active: boolean; type: string; livemode: boolean; deleted_at: string | null; unit_amount_cents: number | null; recurring_usage_type: string | null } | null;
-  plan: { package_id: string | null; collection: string } | null;
+  mapping: { id?: string; package_id: string; client_id: string | null; active: boolean; package_active: boolean; package_kind: string } | null;
+  price: {
+    active: boolean; type: string; livemode: boolean; deleted_at: string | null; unit_amount_cents: number | null;
+    currency?: string | null; recurring_interval?: string | null; recurring_interval_count?: number | null;
+    recurring_usage_type: string | null; billing_scheme?: string | null;
+  } | null;
+  plan: {
+    package_id: string | null; collection: string;
+    agreed_amount_cents?: number | null; agreed_currency?: string | null;
+    agreed_billing_interval?: string | null; agreed_billing_interval_count?: number | null;
+    billing_package_price_id?: string | null;
+  } | null;
   clientId: string;
   livemode: boolean;
+  requested?: string | null;
 };
+
+export function agreedPriceLabel(plan: { agreed_amount_cents?: number | null; agreed_currency?: string | null;
+  agreed_billing_interval?: string | null; agreed_billing_interval_count?: number | null }): string {
+  if (plan.agreed_amount_cents == null || !plan.agreed_currency) return "no agreed price";
+  const amount = `${(plan.agreed_amount_cents / 100).toFixed(2)} ${plan.agreed_currency.toUpperCase()}`;
+  const n = plan.agreed_billing_interval_count ?? 1;
+  return n === 1 ? `${amount}/${plan.agreed_billing_interval}` : `${amount} every ${n} ${plan.agreed_billing_interval}s`;
+}
+
 export function checkCheckoutPrice(c: CheckoutPriceCheck): { status: number; code: string; message: string } | null {
-  if (!c.mapping) return { status: 404, code: "price_not_approved", message: "That price is not an approved package price." };
+  if (!c.plan || !c.plan.package_id) return { status: 409, code: "no_agreement", message: "Record the client's package on the Plan tab first." };
+  if (c.plan.collection !== "stripe") {
+    return { status: 409, code: "agreement_external", message: "The agreement is collected outside Stripe; change it to Stripe first." };
+  }
+  if (c.plan.agreed_amount_cents == null || !c.plan.agreed_currency || !c.plan.agreed_billing_interval
+      || c.plan.agreed_billing_interval_count == null) {
+    return { status: 409, code: "agreement_terms_missing", message: "The agreement has no agreed price; an admin records it on the Plan tab first." };
+  }
+  if (!c.plan.billing_package_price_id) {
+    return { status: 409, code: "agreement_price_not_mapped",
+      message: `The agreed price (${agreedPriceLabel(c.plan)}) has no approved Stripe Price bound yet; an admin binds it on the Plan tab.` };
+  }
+  if (c.requested && c.requested !== c.plan.billing_package_price_id) {
+    return { status: 409, code: "agreement_price_mismatch",
+      message: `Checkout sells only the agreement's price (${agreedPriceLabel(c.plan)}); a different price was requested.` };
+  }
+  if (!c.mapping) return { status: 404, code: "price_not_approved", message: "The agreement's price is not an approved package price." };
   if (c.mapping.client_id && c.mapping.client_id !== c.clientId) {
     return { status: 403, code: "price_not_for_client", message: "That custom price belongs to another client." };
   }
@@ -182,14 +221,10 @@ export function checkCheckoutPrice(c: CheckoutPriceCheck): { status: number; cod
     return { status: 409, code: "price_not_for_client", message: "A custom package price must be reserved for the client." };
   }
   if (!c.mapping.active || !c.mapping.package_active) {
-    return { status: 409, code: "price_inactive", message: "That package price is retired in the Compass catalog." };
-  }
-  if (!c.plan || !c.plan.package_id) return { status: 409, code: "no_agreement", message: "Record the client's package on the Plan tab first." };
-  if (c.plan.collection !== "stripe") {
-    return { status: 409, code: "agreement_external", message: "The agreement is collected outside Stripe; change it to Stripe first." };
+    return { status: 409, code: "price_inactive", message: "The agreement's package price is retired in the Compass catalog." };
   }
   if (c.plan.package_id !== c.mapping.package_id) {
-    return { status: 409, code: "package_mismatch", message: "That price sells a different package from the client's agreement." };
+    return { status: 409, code: "package_mismatch", message: "The bound price sells a different package from the client's agreement." };
   }
   if (!c.price) return { status: 409, code: "price_missing", message: "The Stripe price is not in the mirror; import the product again." };
   if (c.price.deleted_at || !c.price.active) return { status: 409, code: "price_inactive", message: "The Stripe price is archived in Stripe." };
@@ -199,7 +234,18 @@ export function checkCheckoutPrice(c: CheckoutPriceCheck): { status: number; cod
   if (c.price.livemode !== c.livemode) {
     return { status: 409, code: "price_mode_mismatch", message: `That price is a ${c.price.livemode ? "live" : "test"} price; billing is in ${c.livemode ? "live" : "test"} mode.` };
   }
-  if (!c.price.unit_amount_cents) return { status: 409, code: "price_not_fixed", message: "Checkout sells a fixed-amount price only." };
+  if (!c.price.unit_amount_cents || (c.price.billing_scheme != null && c.price.billing_scheme !== "per_unit")) {
+    return { status: 409, code: "price_not_fixed", message: "Checkout sells a fixed-amount price only." };
+  }
+  const differs: string[] = [];
+  if (c.price.unit_amount_cents !== c.plan.agreed_amount_cents) differs.push("amount");
+  if ((c.price.currency ?? null) !== c.plan.agreed_currency) differs.push("currency");
+  if ((c.price.recurring_interval ?? null) !== c.plan.agreed_billing_interval) differs.push("interval");
+  if ((c.price.recurring_interval_count ?? null) !== c.plan.agreed_billing_interval_count) differs.push("interval count");
+  if (differs.length > 0) {
+    return { status: 409, code: "agreement_price_mismatch",
+      message: `The bound Stripe Price differs from the agreement (${differs.join(", ")}): the agreement says ${agreedPriceLabel(c.plan)}.` };
+  }
   return null;
 }
 
@@ -519,17 +565,20 @@ export function createStripeBilling(deps: {
   // ── 5. Checkout ─────────────────────────────────────────────────────────
   async function createCheckout({ api, livemode, caller, cfg, sync }: Ctx, body: Record<string, unknown>) {
     const clientId = uuidOf(body, "client_id");
-    const packagePriceId = uuidOf(body, "package_price_id");
+    // The price is the agreement's, never the caller's. A package_price_id in
+    // the request (an older form) is accepted only when it names that price.
+    const requested = body.package_price_id == null ? null : uuidOf(body, "package_price_id");
     const requestId = uuidOf(body, "request_id");
     // Nothing else from the body reaches Stripe: no price id, amount or customer.
     const client = await liveClient(clientId);
 
-    const mapping = await store.packagePrice(packagePriceId);
+    const plan = await store.plan(clientId);
+    const bound = plan?.collection === "stripe" ? plan.billing_package_price_id : null;
+    const mapping = bound ? await store.packagePrice(bound) : null;
     // Read the price from Stripe now: an archive in the dashboard is honoured.
     if (mapping) await sync.syncPrice(mapping.stripe_price_id);
     const price = mapping ? await store.priceMirror(mapping.stripe_price_id) : null;
-    const plan = await store.plan(clientId);
-    const bad = checkCheckoutPrice({ mapping, price, plan, clientId, livemode });
+    const bad = checkCheckoutPrice({ mapping, price, plan, clientId, livemode, requested });
     if (bad) refuse(bad.status, bad.code, bad.message);
 
     const link = await store.activeLink(clientId, livemode);
@@ -568,6 +617,7 @@ export function createStripeBilling(deps: {
       compass_client_id: clientId,
       compass_package_id: mapping!.package_id,
       compass_package_price_id: mapping!.id,
+      compass_agreed_amount_cents: String(plan!.agreed_amount_cents),
       compass_request_id: requestId,
     };
     const params = (methods: string[]) => ({

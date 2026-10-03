@@ -5,8 +5,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  attentionLabel, billingState, billingStateLabels, entitlementText, formatMoney, minorUnits,
-  parseMoneyToCents, stripeDashboardUrl, validateAgreement, validateOverride,
+  agreedPriceText, agreementPriceStatus, agreementPriceStatusLabels, attentionLabel, billingState, billingStateLabels,
+  bindablePrices, entitlementText, formatMoney, minorUnits, parseMoneyToCents, stripeDashboardUrl, validateAgreedPrice,
+  validateAgreement, validateOverride,
 } from "../src/lib/billing.ts";
 
 const agreement = (o = {}) => ({
@@ -101,4 +102,58 @@ test("billing states and attention reasons have labels; unknown values degrade s
 test("Stripe dashboard links follow the object's mode", () => {
   assert.equal(stripeDashboardUrl("customers", "cus_1", false), "https://dashboard.stripe.com/test/customers/cus_1");
   assert.equal(stripeDashboardUrl("invoices", "in_1", true), "https://dashboard.stripe.com/invoices/in_1");
+});
+
+// ── The agreed price (plans.agreed_* + billing_package_price_id) ──────────
+test("the agreed price reads as the contract: $650.00/month, $500.00/month", () => {
+  assert.equal(agreedPriceText({ amount_cents: 65000, currency: "usd", interval: "month", interval_count: 1 }), "$650.00/month");
+  assert.equal(agreedPriceText({ amount_cents: 50000, currency: "usd", interval: "month" }), "$500.00/month");
+  assert.equal(agreedPriceText({ amount_cents: 195000, currency: "usd", interval: "month", interval_count: 3 }), "$1,950.00 every 3 months");
+  assert.equal(agreedPriceText({ amount_cents: null, currency: null, interval: null }), "—");
+});
+
+test("an admin's agreed price: positive, per month or year, every 1 – 12; empty clears it", () => {
+  assert.deepEqual(validateAgreedPrice({ amount: "650", interval: "month", interval_count: "1" }).row,
+    { agreed_amount_cents: 65000, agreed_currency: "usd", agreed_billing_interval: "month", agreed_billing_interval_count: 1 });
+  assert.deepEqual(validateAgreedPrice({ amount: "$500.00", interval: null, interval_count: null }).row.agreed_amount_cents, 50000);
+  assert.deepEqual(validateAgreedPrice({ amount: "", interval: "month", interval_count: "1" }).row,
+    { agreed_amount_cents: null, agreed_currency: null, agreed_billing_interval: null, agreed_billing_interval_count: null });
+  assert.match(validateAgreedPrice({ amount: "0", interval: "month", interval_count: "1" }).error, /above zero/);
+  assert.match(validateAgreedPrice({ amount: "abc", interval: "month", interval_count: "1" }).error, /above zero/);
+  assert.match(validateAgreedPrice({ amount: "650", interval: "week", interval_count: "1" }).error, /per month or per year/);
+  assert.match(validateAgreedPrice({ amount: "650", interval: "month", interval_count: "13" }).error, /1 to 12/);
+});
+
+test("an external arrangement clears any agreed Stripe price and its binding", () => {
+  const r = validateAgreement(agreement({ collection: "external", external_method: "check", external_amount: "650", external_interval: "month" }));
+  assert.deepEqual([r.row.agreed_amount_cents, r.row.billing_package_price_id], [null, null]);
+  const s = validateAgreement(agreement({ collection: "stripe" }));
+  assert.equal("agreed_amount_cents" in s.row, false, "a Stripe agreement's save leaves the admin's price alone");
+});
+
+test("only the package's prices that say exactly the agreed price can be bound", () => {
+  const P = "pkg-standard", OTHER = "pkg-other", C = "client-1";
+  const price = (id, cents, o = {}, sp = {}) => ({ id, package_id: P, client_id: null, active: true, is_default: false, ...o,
+    stripe_prices: { active: true, livemode: false, deleted_at: null, unit_amount_cents: cents, currency: "usd",
+      recurring_interval: "month", recurring_interval_count: 1, ...sp } });
+  const prices = [
+    price("pp650", 65000, { is_default: true }), price("pp500", 50000), price("ppYear", 65000, {}, { recurring_interval: "year" }),
+    price("ppOther", 65000, { package_id: OTHER }), price("ppLive", 65000, {}, { livemode: true }),
+    price("ppArchived", 65000, {}, { active: false }), price("ppRetired", 65000, { active: false }),
+    price("ppReserved", 65000, { client_id: "client-2" }),
+  ];
+  const plan = (cents) => ({ client_id: C, package_id: P, agreed_amount_cents: cents, agreed_currency: "usd",
+    agreed_billing_interval: "month", agreed_billing_interval_count: 1 });
+  assert.deepEqual(bindablePrices(prices, plan(65000), false).map((p) => p.id), ["pp650"]);
+  assert.deepEqual(bindablePrices(prices, plan(50000), false).map((p) => p.id), ["pp500"]);
+  assert.deepEqual(bindablePrices(prices, plan(65000), true).map((p) => p.id), ["ppLive"]);
+  assert.deepEqual(bindablePrices(prices, { ...plan(null), agreed_currency: null }, false), []);
+});
+
+test("the agreement price status reads as Mapped / Not mapped", () => {
+  assert.equal(agreementPriceStatusLabels[agreementPriceStatus("ready")], "Mapped");
+  assert.equal(agreementPriceStatusLabels[agreementPriceStatus("unmapped")], "Not mapped");
+  assert.equal(agreementPriceStatus("nonsense"), "not_applicable");
+  assert.match(attentionLabel("agreement_price_unmapped"), /no exact Stripe Price/);
+  assert.match(attentionLabel("agreement_price_mismatch"), /differs from the agreed price/);
 });
