@@ -1,148 +1,111 @@
-# Active client agreement inventory (billing cutover worksheet)
+# Client agreement inventory (billing cutover record)
 
-Compiled Sept 30 2026 for the B5 cutover gate. **No business terms are
-guessed here.** Two sources were checked:
+**Status: RESOLVED (October 2026).** Tom confirmed the commercial terms for
+all eight current clients. Every one is on **Compass Standard**,
+month-to-month from **October 1, 2026**, collected by **Stripe (ACH)**: six
+at the $650/month default price, two at the $500/month legacy price. Nothing
+is entered in production yet: the terms are seeded at cutover by
+`supabase/cutover/02_agreements.sql` (tested in the sandbox by
+`billing_cutover_kit.test.sql`), after migrations 0058 – 0062 are applied.
 
-- **Production (read-only SQL).** There are no `plans` rows, no Stripe
-  customers and no subscriptions.
-- **The repository, and a read-only search of the Compass Google Drive.** No
-  client's proposal, agreement, SOW, invoice or price sheet exists. Every
-  client's `01 Onboarding` folder is empty. The only commercial documents are
-  blank templates:
-  - `Compass_Marketing_Service_Agreement`: month-to-month or annual; setup
-    fee and monthly payment left blank; ACH authorization.
-  - `Compass_Client_Onboarding_Checklist`: Package / Monthly Retainer /
-    Setup Fee left blank.
-  - `Compass_Client_Roadmap_with_Monthly_Deliverables`: Package left blank.
+Machine-readable copy: `docs/billing-agreement-inventory.csv`.
+The Sept 30 2026 worksheet that preceded this (no terms recorded anywhere;
+the operational evidence per client) is in this file's git history.
 
-Drive to-do lists refer to contracts and payments handled in GoHighLevel,
-Stripe and email ("Send Brad a contract through GHL and Stripe", "Setup ACH
-Payments", "Collect Shane's payment"). The terms most likely live there, or
-with Tom.
+## Compass Standard (the one standard package)
 
-Fill-in copy: `docs/billing-agreement-inventory.csv` (one row per client,
-one column per required field). The confirmed values become
-`supabase/cutover/02_agreements.template.sql`, or are entered in the app.
+| | |
+| --- | --- |
+| Package | **Compass Standard** (`billing_packages.key = compass_standard`, kind `standard`) |
+| Default price | **$650.00 / month** |
+| Legacy price | **$500.00 / month** (grandfathered) |
+| Term | Month-to-month (`plans.term_months` null, no renewal date) |
+| Start | October 1, 2026 |
+| Collection | Stripe (`plans.collection = 'stripe'`), ACH debit |
 
-## Why this blocks 0062
+Both prices belong to the **same package with the same entitlements**. There
+is no separate "legacy" package: the price a client pays never changes what
+it receives.
 
-From 0062 on, automation plans only within the agreement:
+**Included** (features — on, no quantity):
 
-- A client with no agreement gets **no weekly blog task and no website
-  updates**.
-- An agreement that includes 0 of something gets none of it.
+| Service | `service_key` |
+| --- | --- |
+| Website Management | `website` |
+| Website Hosting | `hosting` |
+| SEO | `seo` |
+| Google Business Profile | `gbp` |
+| Social Media | `social` |
+| Paid Ads | `paid_ads` |
+| CRM | `crm` |
+| Reporting | `reporting` |
+| Client Portal | `client_portal` |
 
-The four active clients receive a weekly blog task today, from
-`create_weekly_blog_tasks()`: two each so far, on Sept 16 and 23.
-Applying 0062 without their agreements would stop that silently. The
-validation step refuses to continue in that case: `supabase/cutover/04_validate.sql`.
+**Monthly quantities** (quotas; America/Chicago month):
 
-## Active clients (the cutover gate)
+| Quota | `service_key` | Per month |
+| --- | --- | --- |
+| Blog posts | `blog_posts` | 8 |
+| GBP posts | `gbp_posts` | 8 |
+| Social posts | `social_posts` | 8 |
+| New website pages | `website_pages` | 4 |
+| Website refreshes | `website_refreshes` | 1 |
 
-For all four active clients, **nothing is recorded or known**:
+## The eight agreements
 
-- agreement
-- package
-- monthly amount / term / start date
-- collection method (Stripe or external)
-- every quota: blog, social, GBP, new pages, refreshes
+All: Compass Standard, month-to-month, start 2026-10-01, Stripe ACH, the full
+Standard entitlements, no client overrides.
 
-What the CRM shows for each:
+| Client | Client id | Status today | Price |
+| --- | --- | --- | --- |
+| BHG Safety Partners | `3eaa3389-2a33-4004-837c-8aef90404410` | active | **$500 legacy** |
+| Shewmaker Brothers Masonry | `a88f5ce2-30ac-508b-b217-cf22d277b278` | launching | **$500 legacy** |
+| Logic Solar | `70211d71-d9f4-46ab-abe2-ef39c41591fb` | active | $650 default |
+| Show Me Design | `d94cfde2-0751-4002-a149-c83b4c6c956d` | active | $650 default |
+| Show Me Electrical | `9a8e05f5-3d28-4839-9735-79bcdd0e277d` | active | $650 default |
+| Lucas Construction | `102d3b20-2795-44ae-bd64-d1e43916291c` | launching | $650 default |
+| Ginger Huff Interiors | `db9009c2-a04b-4e93-843f-e20c49263b5b` | launching | $650 default |
+| Pensacola Equipment Rentals | `1e12fc47-731a-4d84-a4f1-4aed777db451` | launching | $650 default |
 
-**BHG Safety Partners** (`3eaa3389-2a33-4004-837c-8aef90404410`)
-- **Operational evidence:**
-  - Pipelines: Foundation ✓, SEO ✓, Reporting active.
-  - Compass-run Next.js site (`upgrade_existing`, `markdown_blog`).
-  - Weekly blog running: 2 posts, 1 published.
-  - No social accounts; no GBP location linked.
-- **Drive:** a to-do says "Send Brad a contract through GHL and Stripe … Setup ACH Payments / Send Brad proposal". No terms.
+*Compass Activation Test (fictional)* is offboarded and has no agreement.
 
-**Logic Solar** (`70211d71-d9f4-46ab-abe2-ef39c41591fb`)
-- **Operational evidence:**
-  - Pipelines: Foundation ✓, SEO ✓, Reporting active.
-  - Client-run site (`client_retains`): blog posts are filed as Google Docs (2 drafts).
-  - No social accounts; no GBP location.
-- **Drive:** "Sign Logic up for Compass", "Logic- Website and Invoice", "Collect Shane's payment". No amounts.
+## How the price is recorded
 
-**Show Me Design** (`d94cfde2-0751-4002-a149-c83b4c6c956d`)
-- **Operational evidence:**
-  - Pipelines: Foundation ✓, SEO ✓, Reporting active.
-  - Client-run site; blog posts filed as Docs (2 drafts).
-  - No social accounts; no GBP location.
-- **Drive:** to-dos only.
+The CRM does not store prices; Stripe does (`plans` has no price column since
+0058). So:
 
-**Show Me Electrical** (`9a8e05f5-3d28-4839-9735-79bcdd0e277d`)
-- **Operational evidence:**
-  - Pipelines: Foundation ✓, SEO ✓, Reporting active.
-  - Client-run site; blog posts filed as Docs (2 drafts).
-  - No social accounts; no GBP location.
-- **Drive:**
-  - to-dos only;
-  - the Compass OS scoping doc lists "Show Me Electric" as a Compass OS CRM tenant, with no price.
+- **In the CRM:** each agreement's `plans.notes` names its agreed price
+  ("Compass Standard at the default price, $650.00/month. …" or "… at the
+  legacy price, $500.00/month (grandfathered; …)"). The notes are team-only;
+  no portal view carries them.
+- **In Stripe (later, live only):** one Compass Standard Product with two
+  monthly Prices, both mapped to the one package in Settings › Billing
+  catalog: $650 as the package's default price, $500 as a second, non-default
+  approved price. **Neither live Price exists yet** and no id is invented
+  here; the placeholders are at the end of `02_agreements.sql` and in
+  `docs/billing-cutover.md`.
+- **At Checkout:** the teammate picks one of the package's approved prices.
+  `stripe-billing` checks the price belongs to the client's package, is
+  active, recurring and in the right mode; it does **not** check which of the
+  two prices the agreement names. BHG Safety Partners and Shewmaker Brothers
+  Masonry must be sent the $500 legacy price; the agreement's notes say so.
+  A structured agreed-price field (so Checkout could refuse the wrong one) is
+  a possible follow-up, not built.
+- **ACH:** `collection = 'stripe'` is the agreement; the payment method is
+  chosen on Stripe Checkout, which offers ACH debit (`us_bank_account`) and
+  card. Nothing in the CRM restricts a Checkout to ACH only.
 
-Services are listed per client in the CSV. Operational evidence is only a
-hint: "SEO pipeline complete" shows work was done, not that SEO is part of a
-paid agreement.
+## What changes in automation when the agreements apply (0062)
 
-## Launching clients (not planned for until active)
-
-For all four, **nothing is recorded or known** about the agreement or its
-terms.
-
-**Ginger Huff Interiors** (`db9009c2-a04b-4e93-843f-e20c49263b5b`)
-- **Operational evidence:** Foundation ✓, SEO ✓, Website active; Compass-run Next.js site.
-- **Drive:** to-do "Update Blogs, Add Location pages, Update GBP".
-
-**Lucas Construction** (`102d3b20-2795-44ae-bd64-d1e43916291c`)
-- **Operational evidence:**
-  - Foundation ✓, SEO ✓, Website active.
-  - Compass-run site (`upgrade_existing`, `lucas_json`).
-  - A Sept cycle whose website updates are done: 2 pages proposed, 2 refreshes published.
-  - 4 GBP post drafts (2 approved).
-- **Drive:** the September monthly report states: "There is no service plan on file for Lucas Construction".
-
-**Pensacola Equipment Rentals** (`1e12fc47-731a-4d84-a4f1-4aed777db451`)
-- **Operational evidence:** Foundation ✓, SEO ✓, Website active; Compass-run Next.js site.
-- **Drive:** to-dos ("build AI Website", "Post FB").
-
-**Shewmaker Brothers Masonry** (`a88f5ce2-30ac-508b-b217-cf22d277b278`)
-- **Operational evidence:** Foundation ✓, Website active; the blueprint record.
-- **Drive:** nothing.
-
-*Compass Activation Test (fictional)* is offboarded and excluded.
-
-## Missing business decisions (Tom)
-
-1. **Terms per active client:**
-   - package or custom retainer
-   - monthly amount, term and start date
-   - collection: Stripe (card / ACH debit) or external (check / wire / manual ACH, with the amount)
-2. **The package catalog:** which packages Compass sells, and what each
-   includes: the 9 services and 5 monthly quantities.
-3. **The default cadence.** Two sources disagree:
-   - Compass Marketing OS — Product & Delivery Standard (Drive, Sept 28 2026):
-     "Default monthly planning target: 8 Social Media posts • 8 Google
-     Business Profile posts • 8 Blog posts • 4 new Website pages". It calls
-     this a planning target, not a contract term.
-   - The CRM today: one blog post a week (about 4–5 a month) and up to 2 new
-     pages plus 2 refreshes a month.
-
-   Which one, if either, is the contract default?
-4. **Website Management for client-run sites** (Logic Solar, Show Me Design,
-   Show Me Electrical). Does the agreement include `website` (Docs proposed to
-   the client) or not? From 0062, website updates run only when `website` is
-   included.
-5. **Hosting:** which sites Compass hosts and bills for.
-6. **Social, GBP, Paid Ads, CRM (Compass OS), Reporting, Client Portal:**
-   included per client? No active client has a social account or a GBP
-   location linked in the CRM today.
-7. **If the terms cannot be confirmed before cutover,** choose per client:
-   - **(a) Exclude.** Record the client's id in the validation's exclusion
-     list; automation stops for them (the weekly blog stops) until the
-     agreement is entered.
-   - **(b) An explicitly interim agreement** that reproduces today's
-     automation for that client, for example "Interim — current service",
-     with the numbers Tom states. It must be labelled interim in its notes,
-     and replaced when terms are confirmed.
-
-   Neither may be chosen without Tom.
+- **Active clients** (BHG Safety Partners, Logic Solar, Show Me Design, Show
+  Me Electrical) keep the weekly blog task (within 8 a month; one a week
+  never exceeds it) and get the monthly website updates within 4 new pages
+  and **1 refresh** a month (Tom's Sept 14 rule was 2 pages + 2 refreshes;
+  the agreement now governs, so refreshes drop to 1 and pages may rise to 4).
+  Website Management is included for the three client-run sites too, so
+  their updates continue as proposed Google Docs.
+- **Launching clients** (Ginger Huff, Lucas, Pensacola, Shewmaker) are not
+  planned for until they converge to `active`; from then on they are planned
+  for within the same Standard entitlements.
+- `managed_ad_budget_cents` (Paid Ads budget under management) was not part
+  of the confirmed terms and stays empty. It plans nothing.

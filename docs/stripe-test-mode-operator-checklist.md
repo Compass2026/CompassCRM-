@@ -249,6 +249,15 @@ Stop here. Do not paste any secret anywhere. Bring back, as plain text:
 - [ ] The three secrets are stored in your password manager, **not** added
       anywhere else
 
-Deployment then follows `docs/billing-readiness.md` § 17. It needs the
-active-client agreement decisions first
-(`docs/active-client-agreement-questions.md`).
+Deployment then follows `docs/billing-readiness.md` § 17. The
+active-client agreement decisions it needed are answered (Oct 2026,
+`docs/billing-agreement-inventory.md`).
+
+**Returned by Tom (Oct 2026), test mode, ids only:**
+- [x] Compass Standard (TEST): `prod_VMxmKG052epGVU`, monthly price
+      `price_1UMDr54Zq9yMk653B7jdneFm` ($2,500 — a test fixture, not Compass
+      pricing; mapped to the test client's *Test Standard (TEST)* package)
+- [x] Compass Custom Retainer (TEST): `prod_VMxtVQBYzS0Qya`
+- [x] Webhook endpoint `we_1UMFdM4Zq9yMk653d9ynrHOP`, 34 events
+- [x] Cards on / ACH Direct Debit on
+- [x] The three secrets stored privately by Tom (not in Vault, chat or git)

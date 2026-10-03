@@ -1,176 +1,69 @@
-# ACTIVE CLIENT AGREEMENT QUESTIONS FOR TOM
+# Client agreement questions for Tom — ANSWERED (October 2026)
 
-Please answer each blank from the client's actual agreement. Nothing is
-prefilled: no commercial term is recorded in the CRM, the repository or the
-Compass Drive (checked Sept 30 2026).
+**Status: RESOLVED.** Tom answered these in October 2026. The answers are
+recorded in `docs/billing-agreement-inventory.md` (and `.csv`) and seeded at
+cutover by `supabase/cutover/02_agreements.sql`. The Sept 30 2026 blank
+questionnaire and its operational-evidence notes are in this file's git
+history.
 
-How to fill it in:
+## The answers
 
-- **Package / Custom Retainer:** a package name, or "Custom Retainer".
-- **Collection method:** Stripe (card / ACH debit) or external (check /
-  wire / manual ACH / other).
-- **Services:** "Included" or "Not included".
-- **Monthly quantities:** a number. 0 means none; it never means
-  "unlimited".
+**Package.** One standard package, **Compass Standard**. Every current
+client is on it. There is no separate package for the legacy price.
 
-The entitlement migration (0062) will not be applied until every client
-below either has confirmed terms or is deliberately excluded.
-
----
-
-## BHG Safety Partners
-
-| Field | Answer |
+| Field | Answer (all eight clients) |
 | --- | --- |
-| Package / Custom Retainer | |
-| Monthly amount | |
-| Term | |
-| Start date | |
-| Collection method | |
-| Website Management | |
-| Website Hosting | |
-| SEO | |
-| GBP | |
-| Social Media | |
-| Paid Ads | |
-| CRM | |
-| Reporting | |
-| Client Portal | |
-| Blog Posts / month | |
-| GBP Posts / month | |
-| Social Posts / month | |
-| New Website Pages / month | |
-| Website Refreshes / month | |
+| Package / Custom Retainer | Compass Standard |
+| Monthly amount | $650 default; **$500 legacy** for BHG Safety Partners and Shewmaker Brothers Masonry |
+| Term | Month-to-month |
+| Start date | 2026-10-01 |
+| Collection method | Stripe (ACH) |
+| Website Management | Included |
+| Website Hosting | Included |
+| SEO | Included |
+| GBP | Included |
+| Social Media | Included |
+| Paid Ads | Included |
+| CRM | Included |
+| Reporting | Included |
+| Client Portal | Included |
+| Blog Posts / month | 8 |
+| GBP Posts / month | 8 |
+| Social Posts / month | 8 |
+| New Website Pages / month | 4 |
+| Website Refreshes / month | 1 |
 
-## Logic Solar
-
-| Field | Answer |
+| Client | Price |
 | --- | --- |
-| Package / Custom Retainer | |
-| Monthly amount | |
-| Term | |
-| Start date | |
-| Collection method | |
-| Website Management | |
-| Website Hosting | |
-| SEO | |
-| GBP | |
-| Social Media | |
-| Paid Ads | |
-| CRM | |
-| Reporting | |
-| Client Portal | |
-| Blog Posts / month | |
-| GBP Posts / month | |
-| Social Posts / month | |
-| New Website Pages / month | |
-| Website Refreshes / month | |
+| BHG Safety Partners | $500 legacy |
+| Shewmaker Brothers Masonry | $500 legacy |
+| Logic Solar | $650 default |
+| Show Me Design | $650 default |
+| Show Me Electrical | $650 default |
+| Lucas Construction | $650 default |
+| Ginger Huff Interiors | $650 default |
+| Pensacola Equipment Rentals | $650 default |
 
-## Show Me Design
+## What the answers settled
 
-| Field | Answer |
-| --- | --- |
-| Package / Custom Retainer | |
-| Monthly amount | |
-| Term | |
-| Start date | |
-| Collection method | |
-| Website Management | |
-| Website Hosting | |
-| SEO | |
-| GBP | |
-| Social Media | |
-| Paid Ads | |
-| CRM | |
-| Reporting | |
-| Client Portal | |
-| Blog Posts / month | |
-| GBP Posts / month | |
-| Social Posts / month | |
-| New Website Pages / month | |
-| Website Refreshes / month | |
+1. **Terms per client:** as above; no client is excluded and none needs an
+   interim agreement.
+2. **The package catalog:** Compass Standard, one entitlement definition
+   shared by both prices.
+3. **The default cadence:** the confirmed quotas are 8 social / 8 GBP / 8
+   blog / 4 new pages / 1 refresh a month (the first four match the Sept 28
+   Product & Delivery Standard's planning target). Once 0062 applies the
+   agreement replaces the CRM's old fixed rule of 2 pages + 2 refreshes.
+4. **Website Management for client-run sites** (Logic Solar, Show Me Design,
+   Show Me Electrical): included, so their monthly website updates continue
+   as proposed Google Docs.
+5. **Hosting, Social, GBP, Paid Ads, CRM, Reporting, Client Portal:**
+   included for every client.
 
-## Show Me Electrical
+## Still open (not agreement questions)
 
-| Field | Answer |
-| --- | --- |
-| Package / Custom Retainer | |
-| Monthly amount | |
-| Term | |
-| Start date | |
-| Collection method | |
-| Website Management | |
-| Website Hosting | |
-| SEO | |
-| GBP | |
-| Social Media | |
-| Paid Ads | |
-| CRM | |
-| Reporting | |
-| Client Portal | |
-| Blog Posts / month | |
-| GBP Posts / month | |
-| Social Posts / month | |
-| New Website Pages / month | |
-| Website Refreshes / month | |
-
----
-
-## Context only: operational evidence (not commercial terms)
-
-This is what Compass's systems currently *do* for each client, from
-production data on Sept 30 2026. It shows work performed, not what was
-sold. Do not copy it into the answers above.
-
-### BHG Safety Partners
-
-- **Pipelines:** Foundation complete, SEO complete, Reporting active.
-- **Site:** Compass-run (Next.js, `upgrade_existing`).
-- **Current automation:** weekly blog task, 2 so far: Sept 16, Sept 23.
-- **Social / GBP linked in the CRM:** none.
-- **Drive notes (to-dos, no terms):** "Send Brad a contract through GHL and
-  Stripe"; "Setup ACH Payments"; "Send Brad proposal".
-
-### Logic Solar
-
-- **Pipelines:** Foundation complete, SEO complete, Reporting active.
-- **Site:** client-run (`client_retains`).
-- **Current automation:** weekly blog task, 2 so far, filed as Google Docs.
-- **Social / GBP linked in the CRM:** none.
-- **Drive notes (to-dos, no terms):** "Sign Logic up for Compass"; "Logic-
-  Website and Invoice"; "Collect Shane's payment".
-
-### Show Me Design
-
-- **Pipelines:** Foundation complete, SEO complete, Reporting active.
-- **Site:** client-run (`client_retains`).
-- **Current automation:** weekly blog task, 2 so far, filed as Google Docs.
-- **Social / GBP linked in the CRM:** none.
-- **Drive notes:** to-dos only.
-
-### Show Me Electrical
-
-- **Pipelines:** Foundation complete, SEO complete, Reporting active.
-- **Site:** client-run (`client_retains`).
-- **Current automation:** weekly blog task, 2 so far, filed as Google Docs.
-- **Social / GBP linked in the CRM:** none.
-- **Drive notes:** to-dos only; listed as a Compass OS tenant in the scoping
-  doc, with no price.
-
-### Related decisions (all four)
-
-**1. The default cadence.** The Sept 28 Product & Delivery Standard gives a
-default *planning target* of 8 social, 8 GBP, 8 blog and 4 new pages a
-month. The CRM today runs one blog post a week plus up to 2 new pages and
-2 refreshes a month. Which, if either, is a contract default?
-
-**2. Website Management for the three client-run sites.** Does it include
-proposing pages / updates as Docs? From 0062, website updates run only when
-Website Management is included.
-
-**3. A client whose terms cannot be confirmed before cutover.** Choose one
-per client:
-
-- **(a) Exclude.** Its weekly blog task stops until an agreement is entered.
-- **(b) An explicit interim agreement.** Labelled interim, with numbers you
-  state.
+- The live Stripe Product and its $650 default / $500 legacy Prices do not
+  exist yet; they are created only after Option B and then mapped to
+  Compass Standard (`docs/billing-cutover.md` section 7).
+- The Paid Ads budget under management (`plans.managed_ad_budget_cents`) was
+  not part of the answers and stays empty; it plans nothing.

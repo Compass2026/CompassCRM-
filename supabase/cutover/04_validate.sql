@@ -1,5 +1,7 @@
 -- Billing cutover, step 4: prove every active client is represented before
--- automation resumes. Raises (and stops the cutover) if an active client has
+-- automation resumes. After 02_agreements.sql all eight current clients (four
+-- active, four launching) are on Compass Standard, so this passes with no
+-- exclusions. Raises (and stops the cutover) if an active client has
 -- no agreement — unless it is deliberately excluded by listing its id in the
 -- session setting first:
 --   set compass.cutover_excluded = '{<uuid>,<uuid>}';
@@ -27,6 +29,34 @@ select c.name as launching_without_agreement
 from clients c
 where c.status = 'launching' and not exists (select 1 from plans p where p.client_id = c.id and p.package_id is not null)
 order by c.name;
+
+-- Compass Standard price readiness (reports, never raises): Checkout needs the
+-- $650 default and the $500 legacy Stripe Prices mapped to the package in the
+-- billing mode in force. Before the live prices exist this shows
+-- "no Stripe product mapped" — expected at a test-mode cutover.
+select bp.name as package,
+       count(distinct pl.client_id) filter (where pl.notes like 'Compass Standard at the default price%') as agreements_at_650,
+       count(distinct pl.client_id) filter (where pl.notes like 'Compass Standard at the legacy price%') as agreements_at_500,
+       coalesce(bp.stripe_product_id, 'no Stripe product mapped') as stripe_product,
+       (select string_agg(sp.stripe_price_id || ' ' || sp.currency || ' ' || (sp.unit_amount_cents / 100.0)::numeric(10,2)
+                          || '/' || sp.recurring_interval || case when bpp.is_default then ' (default)' else '' end
+                          || case when sp.livemode then ' live' else ' test' end, '; ' order by bpp.is_default desc, sp.unit_amount_cents desc)
+          from billing_package_prices bpp join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id
+         where bpp.package_id = bp.id and bpp.active and sp.active) as approved_prices,
+       case
+         when exists (select 1 from billing_package_prices bpp join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id
+                       where bpp.package_id = bp.id and bpp.active and bpp.is_default and sp.active
+                         and sp.livemode = billing_livemode() and sp.unit_amount_cents = 65000 and sp.recurring_interval = 'month')
+          and exists (select 1 from billing_package_prices bpp join stripe_prices sp on sp.stripe_price_id = bpp.stripe_price_id
+                       where bpp.package_id = bp.id and bpp.active and not bpp.is_default and sp.active
+                         and sp.livemode = billing_livemode() and sp.unit_amount_cents = 50000 and sp.recurring_interval = 'month')
+         then 'ready: $650 default and $500 legacy mapped'
+         else 'not ready: map the $650 default and $500 legacy Stripe Prices (Settings › Billing catalog) before sending Checkout'
+       end as checkout_readiness
+from billing_packages bp
+left join plans pl on pl.package_id = bp.id
+where bp.key = 'compass_standard'
+group by bp.id, bp.name, bp.stripe_product_id;
 
 -- Every non-offboarded client: what is included.
 select c.name, c.status, e.service_key, e.kind, e.enabled, e.quantity, e.source

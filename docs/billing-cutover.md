@@ -4,7 +4,8 @@
 > exact sequence with a tested kit: **`docs/billing-readiness.md` § 17** is
 > the deployment order, `supabase/cutover/` the pause / agreements / test
 > client / validate / resume SQL, `supabase/rollback/` the tested rollback,
-> and `docs/billing-agreement-inventory.md` the client worksheet. Where the
+> and `docs/billing-agreement-inventory.md` the confirmed client agreements
+> (Oct 2026: Compass Standard for all eight clients). Where the
 > two differ, the readiness document wins.
 
 How migrations 0058 / 0059 / 0060 / 0061 / 0062, the app, and the Stripe Edge
@@ -50,19 +51,22 @@ link from the app, all in Stripe test mode.
    test mode, or re-host the sync. This is required before live mode, and
    recommended before test mode too.
 6. The tested rollback (section 6) is in hand: `supabase/rollback/`.
-7. **Agreements before automation (B5).** From 0062 on, the weekly blog
-   task and the monthly website updates are planned **only within each
-   client's agreement**: a client with no agreement gets none (logged
-   `not_in_agreement` in `automation_entitlement_log`). No client has an
-   agreement today, and 0058 cannot hold one before it is applied, so
-   decide one of:
-   - apply 0058 – 0062 and, in the same sitting, record each active
-     client's package (Plan tab) with its blog posts, pages and refreshes
-     before the next Wednesday 09:00 UTC / 2nd-of-month 09:00 UTC run; or
-   - accept that weekly blog tasks and website updates pause until each
-     client's agreement is recorded.
+7. **Agreements before automation (B5) — terms RESOLVED Oct 2026.** From
+   0062 on, the weekly blog task and the monthly website updates are planned
+   **only within each client's agreement**: a client with no agreement gets
+   none (logged `not_in_agreement` in `automation_entitlement_log`). Tom has
+   confirmed all eight agreements (`docs/billing-agreement-inventory.md`):
+   **Compass Standard**, month-to-month from 2026-10-01, Stripe ACH; BHG
+   Safety Partners and Shewmaker Brothers Masonry at the $500 legacy price,
+   the other six at the $650 default; one entitlement definition (all nine
+   services; 8 blog / 8 GBP / 8 social posts, 4 new pages, 1 refresh a
+   month). They cannot be recorded before 0058 exists, so
+   `supabase/cutover/02_agreements.sql` seeds them **in the same sitting**,
+   right after the migrations and while automation is paused
+   (`docs/billing-readiness.md` § 17 step 6); `04_validate.sql` must then
+   pass with no exclusions.
 
-   Which clients are affected:
+   Before the seed, the affected clients are:
    `select c.name from clients c where c.status = 'active' and not exists (select 1 from plans p where p.client_id = c.id and p.package_id is not null);`
    After recording them, `select * from client_quota_usage()` shows each
    client's allocations; nothing else changes.
@@ -109,9 +113,12 @@ link from the app, all in Stripe test mode.
      services, "Not included") and the Billing card "Not set up".
    - The Billing tab carries the "Stripe test mode." banner and, for the
      admin, the link / create customer panel.
-   - Settings › Billing catalog opens (no packages yet).
+   - Settings › Billing catalog opens (no packages yet; after
+     `02_agreements.sql`, Compass Standard with its 14 entitlements and no
+     Stripe product).
    - The Dashboard has no billing card.
-   - The Clients list shows "—" for the package.
+   - The Clients list shows "—" for the package (Compass Standard after
+     `02_agreements.sql`).
    - The client Tasks tab shows "This month's plan" with every quota "not
      included" until an agreement is recorded; the Intelligence tab shows
      "Service scope".
@@ -173,12 +180,16 @@ link from the app, all in Stripe test mode.
 4. In the Stripe dashboard (test mode) enable **ACH Direct Debit**
    (`us_bank_account`) under payment methods. Without it Checkout falls back
    to card only and says so.
-5. Create the test catalog in Stripe: standard package products and prices,
-   a "Compass Custom Retainer" product (no prices; they are created per
-   client from the app), and one-time products. Then an admin, in Settings ›
-   Billing catalog: adds the packages, imports each product, approves the
-   standard prices (one default), sets what each package includes, adds the
-   one-time items, and presses **Configure Customer Portal**.
+5. The test catalog exists in Stripe (Tom, Oct 2026; ids in
+   `docs/billing-readiness.md` § 10): "Compass Standard (TEST)" with one
+   $2,500 monthly test price (a fixture amount, not Compass pricing) and
+   "Compass Custom Retainer (TEST)" with no prices. An admin, in Settings ›
+   Billing catalog: imports the TEST Standard product onto the test client's
+   **Test Standard (TEST)** package and approves its price as the default,
+   imports the Custom Retainer (TEST) product, and presses **Configure
+   Customer Portal**. **Compass Standard stays unmapped in test mode**: its
+   entitlements and the eight agreements are already seeded, and its real
+   prices exist only in live mode (section 7).
 6. **Reconciliation.** An admin presses Run Billing Reconciliation in
    Settings › Billing; the run should complete with no failures. Then
    schedule it daily (reconciliation is the safety net; do not make it more
@@ -263,7 +274,23 @@ The order depends on how far you got:
 ## 7. Later: live mode (a separate, reviewed change)
 
 1. Resolve the write-boundary follow-up.
-2. Create the live catalog and the live webhook endpoint (same event list).
+2. **Option B first** (`docs/billing-service-role.md`): no live Stripe
+   secret goes into the shared Edge Function / Vault architecture. Then
+   create the live catalog and the live webhook endpoint (same event list).
+   The live catalog is one **Compass Standard** Product with two monthly
+   Prices, both mapped in Settings › Billing catalog to the one Compass
+   Standard package already seeded:
+
+   | Placeholder (does not exist yet) | Amount | Mapping |
+   | --- | --- | --- |
+   | `<<LIVE_STANDARD_PRODUCT_ID>>` | — | `billing_packages.stripe_product_id` of `compass_standard` |
+   | `<<LIVE_STANDARD_650_PRICE_ID>>` | $650.00 / month | approved price, **default** |
+   | `<<LIVE_STANDARD_500_PRICE_ID>>` | $500.00 / month | approved price, not default (legacy) |
+
+   `04_validate.sql` reports "ready: $650 default and $500 legacy mapped"
+   once both are mapped in live mode. Checkout: BHG Safety Partners and
+   Shewmaker Brothers Masonry get the $500 price, the other six the $650
+   default (each agreement's notes say which; Checkout does not check it).
 3. Add the live `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. Keep the
    test ones in a note; one mode runs at a time per endpoint.
 4. An admin sets `app_settings.billing = {"livemode": true}`. The read

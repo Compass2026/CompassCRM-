@@ -1,8 +1,9 @@
 # Billing production readiness and Stripe TEST MODE cutover
 
-Status as of Sept 30 2026 (branch `claude/amazing-gates-eak3wb`, draft PR
+Status as of Oct 3 2026 (branch `claude/amazing-gates-eak3wb`, draft PR
 Compass2026/CompassCRM-#86). **Nothing has been merged, deployed, applied or
-configured.**
+configured.** The client agreements are **confirmed** (Oct 2026: § 4–5) and
+seeded by the cutover kit, not yet in production.
 - no Stripe credential has been added
 - no live Stripe object exists
 - the daily reconciliation schedule is not enabled
@@ -11,7 +12,7 @@ Companion documents:
 - `docs/billing.md`: architecture
 - `docs/billing-cutover.md`: the runbook this document feeds
 - `docs/billing-service-role.md`: the credential decision
-- `docs/billing-agreement-inventory.md` (+ `.csv`): the client worksheet
+- `docs/billing-agreement-inventory.md` (+ `.csv`): the confirmed agreements
 
 ## 1. Branch reconciliation
 
@@ -19,9 +20,9 @@ What was inspected, all read-only:
 
 | Area | State |
 | --- | --- |
-| `main` | `023143a` (PR #85, Sept 28). PR #86's base is the same commit; `main` has not moved, so no rebase or merge was needed. |
-| Production app | Vercel `compass-crm` serves `main` at `023143a`. |
-| Production database | Last recorded migration: `0056_client_canva_folders` (`20260928212948`). `0042` is still written but unapplied. |
+| `main` | `897b1c0` (PR #89, Compass Communications, Oct 2 2026), merged into PR #86's branch on Oct 3. The only conflicts were text (`AGENTS.md`, the sandbox script, the portal suite's security-definer allowlist, `database.types.ts`); both sides kept. |
+| Production app | Vercel `compass-crm` serves `main`. |
+| Production database | Last recorded migration: `0063_compass_communications` (`20261002211041`, applied Oct 2 2026). `0042` is still written but unapplied. Billing (0058 – 0062) therefore applies **after** 0063; the two touch no common object (0063 has no billing reference, and 0062's security-definer check covers only billing / portal-billing functions and the two planners), and the replay passes in file order. |
 | Deployed Edge Functions | 15. `stripe-billing` is v2 and `stripe-webhook` v1 (the 0008 code, inert without secrets). `stripe-reconcile` is not deployed. |
 | Five Layer / Authority | 0047 – 0056 are all merged and applied. Nothing from B5 depends on unmerged Five Layer code. |
 | Other branches | `claude/dreamy-cerf-pzlgff` (Creative Engine step 2) has one unmerged commit from Sept 30 with its own `0057_creative_overlay_roles.sql` (not applied, no PR). **This is the only collision.** |
@@ -75,18 +76,39 @@ Creative code passes it.
   - A Customer Portal session now returns the portal contact to
     `/portal/billing`.
 
-## 4–5. Active-client agreement inventory and missing decisions
+## 4–5. Client agreements — RESOLVED (Oct 2026)
 
-See `docs/billing-agreement-inventory.md`. In short:
-- **Clients:** 4 active and 4 launching.
-- **Terms:** **none** of the 8 has any recorded or documented commercial
-  terms, not in the CRM, the repository or Drive.
-- **Default cadence:** the Sept 28 "Product & Delivery Standard" sets a
-  default planning cadence of 8 social / 8 GBP / 8 blog / 4 pages a month.
-  The CRM today runs one blog post a week and 2 new pages + 2 refreshes a
-  month.
-- **Tom decides:** the terms, the catalog, and per client whether to
-  exclude it or give it an explicit interim agreement.
+Tom confirmed the terms for all eight current clients
+(`docs/billing-agreement-inventory.md`, `.csv`):
+
+- **One package, Compass Standard** (`compass_standard`): Website
+  Management, Website Hosting, SEO, GBP, Social Media, Paid Ads, CRM,
+  Reporting and Client Portal included; 8 blog posts, 8 GBP posts, 8 social
+  posts, 4 new website pages and 1 website refresh a month.
+- **Two prices for the same package and the same entitlements:** $650/month
+  (default) and $500/month (legacy, grandfathered). No second package.
+- **Eight agreements**, all Compass Standard, month-to-month from
+  2026-10-01, collected by Stripe (ACH): BHG Safety Partners and Shewmaker
+  Brothers Masonry at $500; Logic Solar, Show Me Design, Show Me Electrical,
+  Lucas Construction, Ginger Huff Interiors and Pensacola Equipment Rentals
+  at $650. No overrides and no exclusions.
+- **Seed:** `supabase/cutover/02_agreements.sql` (replaces the template):
+  one atomic statement, idempotent, refuses rather than overwrite a
+  different package or agreement. The agreed price is in each agreement's
+  notes (plans has no price column; Stripe owns prices).
+- **Not seeded, and not invented:** the live Stripe Product and the live
+  $650 / $500 Prices. They do not exist; they are created only after
+  Option B, then mapped to Compass Standard in Settings › Billing catalog
+  ($650 as the default price, $500 as a second approved price). Until then
+  `04_validate.sql` reports Compass Standard as "not ready" for Checkout,
+  which is expected for a test-mode cutover and never raises.
+- **Known limit:** Checkout accepts either approved price of the client's
+  package; it does not check the price named in the agreement's notes. The
+  teammate sends BHG Safety Partners and Shewmaker Brothers Masonry the $500
+  price. A structured agreed-price field is a possible follow-up.
+- **Automation effect from 0062:** website refreshes drop from Tom's Sept 14
+  rule of 2 a month to the agreement's 1, and new pages may rise to 4; the
+  weekly blog (≤ 5 a month) stays within 8.
 
 ## 6. Automation cutover plan
 
@@ -114,15 +136,18 @@ been run in the sandbox by `billing_cutover_kit.test.sql`.
    three jobs. It prints what it paused.
 3. Apply 0058 → 0062 (`apply_migration`, one at a time).
 4. Merge PR #86 → Vercel deploys the app. Regenerate the database types.
-5. Seed the catalog and agreements: `02_agreements.template.sql`, filled in
-   from Tom's confirmed terms, or through the app (Settings › Billing
-   catalog; each Plan tab).
+5. Seed Compass Standard and the eight confirmed agreements:
+   `02_agreements.sql` (prints what it recorded; refuses, writing nothing,
+   if any of the eight clients is missing or already has a different
+   agreement).
 6. `03_test_client.sql`: the fictional test client, paused, with its test
    agreement.
 7. `04_validate.sql`: **raises** unless every active client has an agreement
-   or is excluded by id (`set compass.cutover_excluded = '{…}'`). It then
-   prints each client's entitlements, allocations, and what each planner will
-   do next.
+   or is excluded by id (`set compass.cutover_excluded = '{…}'`; after 02
+   nothing needs excluding). It then prints whether Compass Standard's $650 /
+   $500 Stripe Prices are mapped ("not ready" until the live prices exist),
+   each client's entitlements, allocations, and what each planner will do
+   next.
 8. Test the entitlement reads in the app: Tasks / Content / Social /
    Intelligence per client.
 9. `05_resume_automation.sql`, then unpause the Routine.
@@ -259,12 +284,31 @@ Restricted-key permissions (test):
 - **Read:** Products, Prices, Customers (including search), Subscriptions,
   Invoices, PaymentIntents, Charges, Refunds, Checkout Sessions, Events.
 
-**Objects to create (test mode):**
+**Created by Tom in Stripe TEST MODE (Oct 2026).** Ids below are test-mode
+object ids, not secrets. The three secret values are held privately by Tom
+and are **not** in Vault yet (they go in at § 17 step 9); they never appear
+in chat, git or this document.
 
-1. **Product** "Compass Standard (TEST)", or the real package names once
-   decided, with a monthly recurring **Price**.
-2. **Product** "Compass Custom Retainer (TEST)" with **no prices**. The app
-   creates a test retainer Price per client (Billing tab › Custom Retainer).
+| Object | Test-mode id | Use |
+| --- | --- | --- |
+| Product "Compass Standard (TEST)" | `prod_VMxmKG052epGVU` | the test lifecycle |
+| its monthly Price, $2,500.00 | `price_1UMDr54Zq9yMk653B7jdneFm` | test fixture amount, **not** Compass pricing |
+| Product "Compass Custom Retainer (TEST)" | `prod_VMxtVQBYzS0Qya` | no prices; the app creates a test retainer Price per client (Billing tab › Custom Retainer) |
+| Webhook endpoint | `we_1UMFdM4Zq9yMk653d9ynrHOP` | the 34 events below |
+| Payment methods | cards + ACH Direct Debit (`us_bank_account`) | enabled |
+
+**Mapping (§ 17 step 11):** the TEST Standard product and its $2,500 price
+map to the test client's package **"Test Standard (TEST)"**
+(`03_test_client.sql`), never to Compass Standard. Compass Standard stays
+unmapped in test mode; its live $650 default and $500 legacy Prices are
+created and mapped only for live mode, after Option B. The Custom Retainer
+(TEST) product is imported as a `custom` package, used only for the test
+client's retainer path.
+
+Original setup steps, for reference:
+
+1. **Product** "Compass Standard (TEST)" with a monthly recurring **Price**.
+2. **Product** "Compass Custom Retainer (TEST)" with **no prices**.
 3. **Optional:** a one-time Product/Price "Website Build (TEST)".
 4. **Settings › Payment methods:** enable **ACH Direct Debit
    (`us_bank_account`)** and cards.
@@ -296,10 +340,11 @@ Restricted-key permissions (test):
    only; no cancellation, no plan or quantity changes. Every session
    re-checks that configuration and refuses one widened in the dashboard.
 7. **In the app** (admin), Settings › Billing catalog:
-   - add the package(s);
-   - import each Stripe product;
-   - approve the recurring price (one default);
-   - set what the package includes.
+   - import `prod_VMxmKG052epGVU` onto **Test Standard (TEST)** and approve
+     `price_1UMDr54Zq9yMk653B7jdneFm` as its default;
+   - import `prod_VMxtVQBYzS0Qya` as the custom-retainer product;
+   - leave **Compass Standard** unmapped (its entitlements are already
+     seeded by `02_agreements.sql`).
 
 **Test payment details:**
 - **Cards:**
@@ -417,23 +462,36 @@ automation log. On any red: Reconcile This Client, then read the result.
 
 ## 16. Remaining blockers
 
-1. **Agreements.** No client's terms are known (§ 4–5). Hard gate for 0062;
-   the questions are in `docs/active-client-agreement-questions.md`. No
-   production agreement is created until Tom provides the terms.
-2. **The service-role decision** (§ 8). Decided Sept 30 2026: Option A is
-   approved for test mode only. **Option B remains a hard go-live blocker**:
-   no live Stripe secret may go into the shared Supabase architecture.
-3. **Stripe test credentials, the webhook endpoint and ACH** (§ 10). Tom,
-   following `docs/stripe-test-mode-operator-checklist.md`.
-4. **`BILLING_RECONCILE_SECRET`** in Vault. Tom generates it.
-5. **Production type regeneration** after the migrations. The branch types
-   were matched by hand against the replay.
-6. **Daily reconciliation** stays disabled until the cutover's last step.
-7. **Real test-mode lifecycle** (§ 12–15): pending the above.
-8. **Merge order with the Creative Engine branch** (0057): either order
-   works; `npm ci` is needed if it merges first.
-9. **Live mode:** a separate reviewed change. It needs Option B, the live
-   catalog, live keys, a live endpoint and a real low-value charge + refund.
+**Resolved (Oct 2026): the client agreements.** Tom confirmed all eight
+(§ 4–5); `02_agreements.sql` seeds them and the cutover kit proves the
+validator passes with no exclusions.
+
+Remaining, in the order they unblock:
+
+1. **Stripe TEST MODE deployment** (§ 17 steps 1 – 10): migrations, app,
+   functions, Tom's test secrets into Vault, the existing test webhook
+   endpoint pointed at the deployed function. Option A, test mode only.
+2. **Real Stripe test lifecycle** (§ 12–15, § 17 step 11) with the test
+   client.
+3. **Production cutover**: the agreements seeded and `04_validate.sql`
+   passing on production (§ 17 step 6), automation resumed.
+4. **Production database type regeneration** after the migrations (§ 17
+   step 5). The branch types were matched by hand against the replay.
+5. **Daily reconciliation activation**, only after the test lifecycle passes
+   (§ 17 step 12).
+6. **Option B, the dedicated live billing runtime** (§ 8): a hard go-live
+   blocker. No live Stripe secret may go into the shared Supabase Edge
+   Function / Vault architecture.
+7. **The live $650 default and $500 legacy Stripe Prices** on a live
+   Compass Standard Product: created only after Option B, then mapped to
+   Compass Standard ($650 default, $500 second approved price). No ids
+   exist or are invented; placeholders are in `02_agreements.sql` and
+   `docs/billing-cutover.md`.
+
+Not blockers: the Creative Engine branch's 0057 can merge before or after
+(`npm ci` if it merges first); live mode itself is a separate reviewed change
+(Option B, the live prices, live keys, a live endpoint and a real low-value
+charge + refund).
 
 ## 17. Production deployment order (test mode)
 
@@ -458,7 +516,9 @@ do if that step fails.
 5. **Types.** Regenerate `database.types.ts` from production. Any diff
    against the branch file becomes a follow-up PR.
 6. **Agreements.**
-   - Enter the catalog and agreements: `02` filled in, or the app.
+   - Run `02_agreements.sql`: Compass Standard and the eight confirmed
+     agreements. It prints the eight; it refuses, writing nothing, if a
+     client is missing or already has a different agreement.
    - Run `03_test_client.sql`.
    - Run `04_validate.sql`; it must pass.
    - Check the Tasks / Content / Social targets for each active client.
@@ -474,7 +534,8 @@ do if that step fails.
 10. **Webhook endpoint.** Create it with the 34 events. Send a test event;
     it must read `ignored` in `stripe_events`.
 11. **Catalog mapping.**
-    - Import the products and approve the prices.
+    - Import the TEST products onto the test packages and approve the test
+      price (§ 10). Compass Standard stays unmapped in test mode.
     - Configure the Customer Portal.
     - Run the test-client lifecycle (§ 12–15).
 12. **Daily reconciliation.** Only after step 11 passes:
@@ -492,21 +553,22 @@ signed off by Tom.
 | --- | --- | --- |
 | Code merged | BLOCKED | PR #86 is a draft awaiting this review |
 | Migrations finalized | PASS | 0058 – 0062 (§ 2); recheck at merge |
-| Migration replay clean | PASS | `npm run test:sandbox`: 23 suites on the branch; the merge trial with the Creative Engine branch (0057) also passes (§ 1) |
+| Migration replay clean | PASS | `npm run test:sandbox`: 24 suites on the branch, including main's 0063 communications suite after the Oct 3 merge; the merge trial with the Creative Engine branch (0057) also passes (§ 1) |
 | Rollback tested | PASS (sandbox) | `npm run test:billing-rollback`: exact schema / cron / settings; main's portal suite 374 pass; re-apply clean |
-| Active client agreements entered | BLOCKED | no terms known (§ 4–5); Tom |
-| Entitlements verified | MANUAL ACTION REQUIRED | `04_validate.sql` on production after the agreements |
+| Active client agreements confirmed | **RESOLVED** | Tom, Oct 2026 (§ 4–5): eight agreements on Compass Standard, six at $650, two at $500 legacy; seeded by `02_agreements.sql`, proven in the sandbox (cutover kit K3a – K3l, K9a) |
+| Agreements entered on production | MANUAL ACTION REQUIRED | § 17 step 6 (`02_agreements.sql`) |
+| Entitlements verified | MANUAL ACTION REQUIRED | `04_validate.sql` on production after the agreements; passes with no exclusions in the sandbox |
 | Security-definer audit passed | PASS | § 7; 18 regression checks; hardening in 0062 |
 | Service-role isolation decision made | PASS (test mode) / BLOCKED (live) | Approved Sept 30 2026: Option A for Stripe TEST MODE only. Hard rule: no live Stripe secret in the shared Edge Function / Vault architecture. Option B (dedicated billing runtime, billing-only Stripe credentials, least-privilege database role) must be built and reviewed before any real billing. |
 | Stripe test lifecycle passed | BLOCKED | rehearsal PASS (17); the real test-mode run waits on deployment and keys |
 | Failure-path tests passed | BLOCKED | rehearsal PASS; real test mode pending |
 | Portal tests passed | BLOCKED | browser + sandbox PASS; real test mode pending |
-| Webhook endpoint tested | MANUAL ACTION REQUIRED | Tom creates it (§ 10); test event → `ignored` |
-| ACH tested | MANUAL ACTION REQUIRED | enable ACH; one test ACH payment |
+| Webhook endpoint tested | MANUAL ACTION REQUIRED | created in test mode (`we_1UMFdM4Zq9yMk653d9ynrHOP`, 34 events); test event → `ignored` after deployment |
+| ACH tested | MANUAL ACTION REQUIRED | ACH enabled in test mode; one test ACH payment after deployment |
 | Reconciliation tested | BLOCKED | rehearsal and integration PASS; production run pending |
 | Production DB types regenerated | MANUAL ACTION REQUIRED | after step 3 |
-| Production secrets ready | MANUAL ACTION REQUIRED | test keys + `BILLING_RECONCILE_SECRET` (Tom) |
-| Live Stripe catalog ready | BLOCKED | not before live approval; do not create |
+| Production secrets ready | MANUAL ACTION REQUIRED | Tom holds the test restricted key, the test signing secret and `BILLING_RECONCILE_SECRET` privately; added to Vault at § 17 step 9 |
+| Live Stripe catalog ready | BLOCKED | needs Option B first; then the live Compass Standard Product with a $650 default and a $500 legacy monthly Price, mapped to the one package. Not created; do not create |
 | Daily reconciliation ready but disabled | PASS | `billing_fire_reconciliation()` exists; never scheduled by a migration (checked by the sandbox) |
 | Backup captured | MANUAL ACTION REQUIRED | step 2 of § 17 |
 | Deployment order ready | PASS | § 17 |

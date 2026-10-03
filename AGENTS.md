@@ -280,15 +280,22 @@ pins `search_path = public, pg_temp` —, the tested rollback in
 `supabase/rollback/` (`npm run test:billing-rollback`), the cutover kit in
 `supabase/cutover/`, the test-mode dress rehearsal `npm run
 test:billing-rehearsal`, the deployment order and the go-live checklist);
-`docs/billing-agreement-inventory.md` (no client's terms are recorded
-anywhere yet); `docs/billing-service-role.md` (the Stripe key is in Vault,
+`docs/billing-agreement-inventory.md` (**agreements confirmed Oct 2026**:
+one package, **Compass Standard** — all nine services, 8 blog / 8 GBP / 8
+social posts, 4 new pages, 1 refresh a month — for all eight clients,
+month-to-month from 2026-10-01, Stripe ACH; BHG Safety Partners and
+Shewmaker Brothers Masonry at the $500 legacy price, the other six at the
+$650 default; one package and one entitlement definition for both prices;
+seeded at cutover by `supabase/cutover/02_agreements.sql`, not yet in
+production; the live $650 / $500 Stripe Prices do not exist and are created
+only after Option B); `docs/billing-service-role.md` (the Stripe key is in Vault,
 readable by every Edge Function and the worker's SQL). **Decided Sept 30
 2026: Option A for Stripe TEST MODE only; no live Stripe secret may ever go
 into the shared Edge Function / Vault architecture — Option B (dedicated
 billing runtime, billing-only Stripe credentials, least-privilege database
 role) is a hard go-live blocker, not yet built.** Operator steps:
-`docs/stripe-test-mode-operator-checklist.md`; open questions:
-`docs/active-client-agreement-questions.md`. Every Edge Function
+`docs/stripe-test-mode-operator-checklist.md`; the agreement questions
+(`docs/active-client-agreement-questions.md`) are answered. Every Edge Function
 shares the service-role key, so isolation between functions is code review
 — a production-blocking follow-up in `docs/billing.md`. **Do not add Stripe
 secrets or deploy either function outside the runbook; test mode only.** No
