@@ -1644,6 +1644,61 @@ export type Database = {
           },
         ]
       }
+      client_communication_settings: {
+        Row: {
+          client_id: string
+          created_at: string
+          display_name: string | null
+          enabled: boolean
+          notes: string | null
+          outbound_enabled: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          display_name?: string | null
+          enabled?: boolean
+          notes?: string | null
+          outbound_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          display_name?: string | null
+          enabled?: boolean
+          notes?: string | null
+          outbound_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contacts: {
         Row: {
           client_id: string
@@ -2134,6 +2189,893 @@ export type Database = {
           zip?: string | null
         }
         Relationships: []
+      }
+      communication_accounts: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          friendly_name: string | null
+          id: string
+          provider: string
+          provider_account_sid: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          friendly_name?: string | null
+          id?: string
+          provider?: string
+          provider_account_sid: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          friendly_name?: string | null
+          id?: string
+          provider?: string
+          provider_account_sid?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_accounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_compliance_items: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          client_id: string
+          created_at: string
+          evidence: string | null
+          id: string
+          item_key: string
+          label: string
+          profile_id: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          client_id: string
+          created_at?: string
+          evidence?: string | null
+          id?: string
+          item_key: string
+          label: string
+          profile_id: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          client_id?: string
+          created_at?: string
+          evidence?: string | null
+          id?: string
+          item_key?: string
+          label?: string
+          profile_id?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_compliance_items_checked_by_fkey"
+            columns: ["checked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_profile_id_client_id_fkey"
+            columns: ["profile_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_compliance_profiles"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      communication_compliance_profiles: {
+        Row: {
+          address_city: string | null
+          address_country: string | null
+          address_postal_code: string | null
+          address_region: string | null
+          address_street: string | null
+          approved_at: string | null
+          business_contact_email: string | null
+          business_contact_name: string | null
+          business_contact_phone: string | null
+          client_id: string
+          communication_account_id: string | null
+          communication_number_id: string | null
+          created_at: string
+          created_by: string | null
+          doing_business_as: string | null
+          edit_allowed: boolean | null
+          id: string
+          last_synced_at: string | null
+          legal_business_name: string | null
+          message_volume: string | null
+          notification_email: string | null
+          opt_in_image_urls: string[]
+          opt_in_type: string | null
+          opt_in_url: string | null
+          privacy_url: string | null
+          profile_type: string
+          provider: string
+          provider_profile_sid: string | null
+          provider_status: string | null
+          rejected_at: string | null
+          rejection_code: string | null
+          rejection_reason: string | null
+          restricted_at: string | null
+          restricted_by: string | null
+          restriction: string | null
+          restriction_reason: string | null
+          sample_messages: string[]
+          status: string
+          submitted_at: string | null
+          terms_url: string | null
+          updated_at: string
+          use_case_categories: string[]
+          use_case_summary: string | null
+          website_url: string | null
+        }
+        Insert: {
+          address_city?: string | null
+          address_country?: string | null
+          address_postal_code?: string | null
+          address_region?: string | null
+          address_street?: string | null
+          approved_at?: string | null
+          business_contact_email?: string | null
+          business_contact_name?: string | null
+          business_contact_phone?: string | null
+          client_id: string
+          communication_account_id?: string | null
+          communication_number_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          doing_business_as?: string | null
+          edit_allowed?: boolean | null
+          id?: string
+          last_synced_at?: string | null
+          legal_business_name?: string | null
+          message_volume?: string | null
+          notification_email?: string | null
+          opt_in_image_urls?: string[]
+          opt_in_type?: string | null
+          opt_in_url?: string | null
+          privacy_url?: string | null
+          profile_type: string
+          provider?: string
+          provider_profile_sid?: string | null
+          provider_status?: string | null
+          rejected_at?: string | null
+          rejection_code?: string | null
+          rejection_reason?: string | null
+          restricted_at?: string | null
+          restricted_by?: string | null
+          restriction?: string | null
+          restriction_reason?: string | null
+          sample_messages?: string[]
+          status?: string
+          submitted_at?: string | null
+          terms_url?: string | null
+          updated_at?: string
+          use_case_categories?: string[]
+          use_case_summary?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          address_city?: string | null
+          address_country?: string | null
+          address_postal_code?: string | null
+          address_region?: string | null
+          address_street?: string | null
+          approved_at?: string | null
+          business_contact_email?: string | null
+          business_contact_name?: string | null
+          business_contact_phone?: string | null
+          client_id?: string
+          communication_account_id?: string | null
+          communication_number_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          doing_business_as?: string | null
+          edit_allowed?: boolean | null
+          id?: string
+          last_synced_at?: string | null
+          legal_business_name?: string | null
+          message_volume?: string | null
+          notification_email?: string | null
+          opt_in_image_urls?: string[]
+          opt_in_type?: string | null
+          opt_in_url?: string | null
+          privacy_url?: string | null
+          profile_type?: string
+          provider?: string
+          provider_profile_sid?: string | null
+          provider_status?: string | null
+          rejected_at?: string | null
+          rejection_code?: string | null
+          rejection_reason?: string | null
+          restricted_at?: string | null
+          restricted_by?: string | null
+          restriction?: string | null
+          restriction_reason?: string | null
+          sample_messages?: string[]
+          status?: string
+          submitted_at?: string | null
+          terms_url?: string | null
+          updated_at?: string
+          use_case_categories?: string[]
+          use_case_summary?: string | null
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_compliance_prof_communication_account_id_cli_fkey"
+            columns: ["communication_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_prof_communication_number_id_clie_fkey"
+            columns: ["communication_number_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_numbers"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_restricted_by_fkey"
+            columns: ["restricted_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_consent_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          consent_id: string
+          consent_type: string
+          created_at: string
+          disclosure_version: string | null
+          evidence: string | null
+          from_status: string | null
+          id: string
+          message_id: string | null
+          phone_e164: string
+          source: string
+          source_url: string | null
+          to_status: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          consent_id: string
+          consent_type: string
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          from_status?: string | null
+          id?: string
+          message_id?: string | null
+          phone_e164: string
+          source: string
+          source_url?: string | null
+          to_status: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          consent_id?: string
+          consent_type?: string
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          from_status?: string | null
+          id?: string
+          message_id?: string | null
+          phone_e164?: string
+          source?: string
+          source_url?: string | null
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_consent_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_consent_id_client_id_fkey"
+            columns: ["consent_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_consents"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      communication_consents: {
+        Row: {
+          client_id: string
+          consent_type: string
+          consented_at: string | null
+          contact_id: string | null
+          created_at: string
+          disclosure_version: string | null
+          evidence: string | null
+          id: string
+          phone_e164: string
+          recorded_by: string | null
+          revoked_at: string | null
+          source: string
+          source_url: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          consent_type?: string
+          consented_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          id?: string
+          phone_e164: string
+          recorded_by?: string | null
+          revoked_at?: string | null
+          source: string
+          source_url?: string | null
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          consent_type?: string
+          consented_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          id?: string
+          phone_e164?: string
+          recorded_by?: string | null
+          revoked_at?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_consents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consents_contact_id_client_id_fkey"
+            columns: ["contact_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_consents_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_conversations: {
+        Row: {
+          assigned_user_id: string | null
+          channel: string
+          client_id: string
+          communication_number_id: string
+          contact_id: string
+          created_at: string
+          id: string
+          last_direction: string | null
+          last_message_at: string | null
+          last_message_preview: string | null
+          status: string
+          unread_count: number
+          updated_at: string
+        }
+        Insert: {
+          assigned_user_id?: string | null
+          channel?: string
+          client_id: string
+          communication_number_id: string
+          contact_id: string
+          created_at?: string
+          id?: string
+          last_direction?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          status?: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Update: {
+          assigned_user_id?: string | null
+          channel?: string
+          client_id?: string
+          communication_number_id?: string
+          contact_id?: string
+          created_at?: string
+          id?: string
+          last_direction?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          status?: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_conversations_assigned_user_id_fkey"
+            columns: ["assigned_user_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_communication_number_id_client_fkey"
+            columns: ["communication_number_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_numbers"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_contact_id_client_id_fkey"
+            columns: ["contact_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      communication_messages: {
+        Row: {
+          body: string
+          client_id: string
+          conversation_id: string
+          created_at: string
+          delivered_at: string | null
+          direction: string
+          error_code: string | null
+          error_message: string | null
+          from_e164: string
+          id: string
+          num_media: number
+          opt_out_type: string | null
+          provider: string
+          provider_message_sid: string | null
+          provider_status: string
+          request_id: string | null
+          sent_at: string | null
+          sent_by: string | null
+          status_updated_at: string | null
+          to_e164: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string
+          client_id: string
+          conversation_id: string
+          created_at?: string
+          delivered_at?: string | null
+          direction: string
+          error_code?: string | null
+          error_message?: string | null
+          from_e164: string
+          id?: string
+          num_media?: number
+          opt_out_type?: string | null
+          provider?: string
+          provider_message_sid?: string | null
+          provider_status: string
+          request_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status_updated_at?: string | null
+          to_e164: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          client_id?: string
+          conversation_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          direction?: string
+          error_code?: string | null
+          error_message?: string | null
+          from_e164?: string
+          id?: string
+          num_media?: number
+          opt_out_type?: string | null
+          provider?: string
+          provider_message_sid?: string | null
+          provider_status?: string
+          request_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status_updated_at?: string | null
+          to_e164?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_conversation_id_client_id_fkey"
+            columns: ["conversation_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_conversations"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_messages_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_messaging_services: {
+        Row: {
+          client_id: string
+          communication_account_id: string
+          created_at: string
+          friendly_name: string
+          id: string
+          opt_out_mode: string
+          provider: string
+          provider_service_sid: string
+          status: string
+          updated_at: string
+          use_case: string
+        }
+        Insert: {
+          client_id: string
+          communication_account_id: string
+          created_at?: string
+          friendly_name: string
+          id?: string
+          opt_out_mode?: string
+          provider?: string
+          provider_service_sid: string
+          status?: string
+          updated_at?: string
+          use_case?: string
+        }
+        Update: {
+          client_id?: string
+          communication_account_id?: string
+          created_at?: string
+          friendly_name?: string
+          id?: string
+          opt_out_mode?: string
+          provider?: string
+          provider_service_sid?: string
+          status?: string
+          updated_at?: string
+          use_case?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_messaging_servi_communication_account_id_cli_fkey"
+            columns: ["communication_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_messaging_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messaging_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_numbers: {
+        Row: {
+          client_id: string
+          communication_account_id: string
+          created_at: string
+          friendly_name: string | null
+          id: string
+          is_primary: boolean
+          messaging_service_id: string | null
+          mms_enabled: boolean
+          number_type: string
+          phone_number_e164: string
+          provider: string
+          provider_phone_number_sid: string
+          purchased_at: string | null
+          sms_enabled: boolean
+          status: string
+          updated_at: string
+          voice_enabled: boolean
+        }
+        Insert: {
+          client_id: string
+          communication_account_id: string
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          is_primary?: boolean
+          messaging_service_id?: string | null
+          mms_enabled?: boolean
+          number_type?: string
+          phone_number_e164: string
+          provider?: string
+          provider_phone_number_sid: string
+          purchased_at?: string | null
+          sms_enabled?: boolean
+          status?: string
+          updated_at?: string
+          voice_enabled?: boolean
+        }
+        Update: {
+          client_id?: string
+          communication_account_id?: string
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          is_primary?: boolean
+          messaging_service_id?: string | null
+          mms_enabled?: boolean
+          number_type?: string
+          phone_number_e164?: string
+          provider?: string
+          provider_phone_number_sid?: string
+          purchased_at?: string | null
+          sms_enabled?: boolean
+          status?: string
+          updated_at?: string
+          voice_enabled?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_numbers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_communication_account_id_client_id_fkey"
+            columns: ["communication_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_messaging_service_id_client_id_fkey"
+            columns: ["messaging_service_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_messaging_services"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          client_id: string
+          company: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          notes: string | null
+          phone_e164: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notes?: string | null
+          phone_e164?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notes?: string | null
+          phone_e164?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       content_posts: {
         Row: {
@@ -6848,6 +7790,61 @@ export type Database = {
           used: number
         }[]
       }
+      communication_apply_status: {
+        Args: {
+          p_at: string
+          p_error_code: string
+          p_error_message: string
+          p_msg: string
+          p_status: string
+        }
+        Returns: string
+      }
+      communication_begin_outbound: { Args: { p: Json }; Returns: Json }
+      communication_caller: { Args: never; Returns: string }
+      communication_ensure_checklist: {
+        Args: { p_profile_id: string }
+        Returns: number
+      }
+      communication_in_write: { Args: never; Returns: boolean }
+      communication_mark_sent: { Args: { p: Json }; Returns: Json }
+      communication_opt_out: {
+        Args: {
+          p_actor: string
+          p_at: string
+          p_client: string
+          p_contact: string
+          p_evidence: string
+          p_message: string
+          p_phone: string
+          p_source: string
+        }
+        Returns: undefined
+      }
+      communication_record_compliance_sync: { Args: { p: Json }; Returns: Json }
+      communication_record_consent: { Args: { p: Json }; Returns: Json }
+      communication_record_inbound: { Args: { p: Json }; Returns: Json }
+      communication_record_status: { Args: { p: Json }; Returns: Json }
+      communication_register_account: { Args: { p: Json }; Returns: Json }
+      communication_register_messaging_service: {
+        Args: { p: Json }
+        Returns: Json
+      }
+      communication_register_number: { Args: { p: Json }; Returns: Json }
+      communication_set_primary_number: {
+        Args: { p_number_id: string }
+        Returns: undefined
+      }
+      communication_standard_checklist: {
+        Args: never
+        Returns: {
+          item_key: string
+          label: string
+          sort_order: number
+        }[]
+      }
+      communication_status_rank: { Args: { p: string }; Returns: number }
+      communication_update_conversation: { Args: { p: Json }; Returns: Json }
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined

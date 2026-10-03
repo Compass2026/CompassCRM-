@@ -128,11 +128,14 @@ begin
   -- the billing mode boolean, so the portal's billing views follow it;
   -- portal_billing_summary_row / portal_entitlement_rows (0062) answer only
   -- for portal_client_id(), with the client-safe columns (billing suite P*).
-  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, secret_present, social_post_readiness among security-definer functions',
+  -- communication_record_consent,
+  -- communication_set_primary_number and communication_update_conversation
+  -- (0063) refuse anyone but a signed-in teammate: D11f here, communications.test.sql.
+  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, communication_record_consent, communication_set_primary_number, communication_update_conversation, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, secret_present, social_post_readiness among security-definer functions',
     (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
      where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
        and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_post_readiness']);
+    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_post_readiness']);
 
   -- portal_client and portal_site are simple views, so Postgres would let a
   -- write through them (as the owner, bypassing RLS) if a grant allowed it.
@@ -274,7 +277,7 @@ begin
   perform t.ok('D11 portal user cannot call any other security-definer function',
     not exists (select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
       where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
-        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_post_readiness')
+        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_post_readiness')
         and has_function_privilege(p.oid, 'execute')));
   perform t.ok('D11b social_post_readiness refuses a portal user',
     t.try('select social_post_readiness(gen_random_uuid())') = '42501');
@@ -285,6 +288,10 @@ begin
     and t.try('select authority_apply(gen_random_uuid(), ''create_task'', ''{}'', ''{}'')') = '42501');
   perform t.ok('D11e authority_draft_start (0053) refuses a portal user',
     t.try('select authority_draft_start(gen_random_uuid())') = '42501');
+  perform t.ok('D11f the communications teammate functions (0063) refuse a portal user',
+    t.try('select communication_record_consent(''{"client_id": "00000000-0000-4000-b000-00000000000a", "phone_e164": "+15735550100", "status": "granted", "source": "verbal", "evidence": "x"}'')') = '42501'
+    and t.try('select communication_update_conversation(''{"conversation_id": "00000000-0000-4000-b000-00000000000a", "mark_read": true}'')') = '42501'
+    and t.try('select communication_set_primary_number(gen_random_uuid())') = '42501');
   perform t.ok('D12 secret_present() answers false for a portal user', not secret_present('SANDBOX_SECRET'));
   perform t.ok('D13 get_brand_profile() (security invoker) reveals nothing to a portal user',
     coalesce(get_brand_profile(cb)::text, '') not like '%Sandbox Client B%'

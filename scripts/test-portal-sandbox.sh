@@ -169,3 +169,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_security_de
 # refuses to run, the fictional test client (paused, no automation), the
 # validation refuses an active client with no agreement, resume.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_cutover_kit.test.sql"
+# 0063: Compass Communications (Twilio SMS): registry, inbound idempotency,
+# consent and opt-out, outbound rules, forward-only delivery status,
+# compliance registrations and checklist, tenancy, the worker kept out.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test.sql"
