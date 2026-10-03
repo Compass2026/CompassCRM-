@@ -18,6 +18,8 @@ import { AuthoritySections } from "@/components/authority/authority-sections";
 import { AuthorityRunHistory } from "@/components/authority/authority-run-history";
 import { AuthorityRunControls } from "@/components/authority/authority-run-controls";
 import { AuthorityRunProvider } from "@/components/authority/authority-run-context";
+import { getClientAgreement, usageByKey } from "@/lib/entitlements";
+import { MonthlyAllocation } from "@/components/entitlements/monthly-allocation";
 
 // The Authority Engine's recorded runs (0048). Every read is the signed-in
 // teammate's own (RLS: is_team()). The controls start a full analysis or a
@@ -28,7 +30,7 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientQ, latestQ, runsQ, statesQ, eventsQ, members] = await Promise.all([
+  const [clientQ, latestQ, runsQ, statesQ, eventsQ, members, agreement] = await Promise.all([
     supabase.from("clients").select("status").eq("id", clientId).maybeSingle(),
     supabase.from("authority_latest").select("*").eq("client_id", clientId).maybeSingle(),
     supabase
@@ -48,6 +50,9 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
       .order("created_at", { ascending: true })
       .limit(2000),
     listTeamMembers(supabase),
+    // B5: what the agreement includes and this month's usage — the planning
+    // constraint applied to the analysis (the engine itself never reads it).
+    getClientAgreement(supabase, clientId),
   ]);
 
   const failure = clientQ.error ?? latestQ.error ?? runsQ.error ?? statesQ.error ?? eventsQ.error;
@@ -124,6 +129,9 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
     members,
     recorded,
     drafts,
+    agreement: agreement.unavailable
+      ? { unavailable: agreement.unavailable }
+      : agreement.set ? { set: agreement.set, usage: usageByKey(agreement.usage) } : null,
   });
   const controlState = controlsState({
     clientStatus: clientQ.data?.status ?? null,
@@ -141,6 +149,14 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
         <AuthorityHeader header={view.header} controls={controls} />
         <AuthorityBanners banners={view.banners} />
         {!view.empty && <AuthoritySummary summary={view.summary} />}
+        {!view.empty && (
+          <MonthlyAllocation
+            title="Planning within the agreement"
+            usage={agreement.usage}
+            unavailable={agreement.unavailable}
+            only={["gbp_posts", "blog_posts", "website_pages", "website_refreshes"]}
+          />
+        )}
         {!view.empty && (
           <AuthoritySections
             sections={view.sections}

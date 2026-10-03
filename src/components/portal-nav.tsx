@@ -12,12 +12,14 @@ const tabs = [
   { label: "Reports", segment: "reports" },
 ];
 
-export function PortalNav() {
+// Billing shows once the client has an agreement with Compass (B5).
+export function PortalNav({ showBilling = false }: { showBilling?: boolean }) {
   const pathname = usePathname();
+  const visible = showBilling ? [...tabs, { label: "Billing", segment: "billing" }] : tabs;
 
   return (
     <nav className="flex gap-1 overflow-x-auto">
-      {tabs.map((tab) => {
+      {visible.map((tab) => {
         const href = tab.segment ? `/portal/${tab.segment}` : "/portal";
         const active = tab.segment
           ? pathname.startsWith(href)

@@ -80,7 +80,11 @@ for f in "${MIGRATIONS[@]}" ${LATE[@]+"${LATE[@]}"}; do
 done
 
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /dev/null
+# Billing rows for the portal clients while the generic portal checks run
+# (0062's views are portal views too), removed straight after.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_access.test.sql"
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_teardown.sql" -o /dev/null
 # 0043: task assignment, history, comments (same replay, own harness schema).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/task_assignment.test.sql"
 # 0041: scorecard ledger (same replay, own harness schema).
@@ -129,6 +133,47 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/source_asset_hashin
 # saw it, formats, no shared folders between live clients, the read model,
 # nothing else reads them).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folders.test.sql"
+# 0058: billing foundation (Stripe mirror is team read-only and service-role
+# written, client / customer / subscription / invoice belong together, the
+# catalog's package ↔ price rules, entitlements and overrides, the derived
+# billing status in test and live mode, portal / stranger / anon see nothing).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_foundation.test.sql"
+# 0059: the Stripe sync write boundary (only the sync functions, called by an
+# authenticator + service_role session, write the mirror; the worker's SQL,
+# teammates, portal contacts and anon cannot), the sync ops (ownership from
+# the customer link, stale reads, item / line replacement, refunds, test/live)
+# and the webhook ledger (claim, lease, fail, retry, finish).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_sync.test.sql"
+# 0060: billing operations (Checkout records, admin-only external payments with
+# idempotency and void corrections, the append-only billing audit trail; only
+# the stripe-billing function's session can call them).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_operations.test.sql"
+# 0061: billing reconciliation (run history and per-client results written
+# only by the stripe-reconcile function's session, one running run per mode,
+# abandoned runs closed, fingerprints that ignore bookkeeping, the health and
+# last-reconciled read models, the unscheduled fire function).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_reconciliation.test.sql"
+# 0062: the entitlement contract (package + overrides, disabled / missing = 0,
+# billing state never changes it), monthly quota accounting and planning
+# within the agreement (fail safe, mid-month changes, nothing deleted, people
+# may exceed it), agreement history, no Five Layer function reads billing,
+# and billing in the client portal (own client only, client-safe fields,
+# read-only, external arrangements, live / test mode).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_entitlements_portal.test.sql"
+# Security-definer hardening (production-readiness review): pinned
+# search_path with pg_temp last (temp tables cannot shadow), no PUBLIC / anon
+# execution, signed-in users reach only the self-scoping helpers, service-only
+# functions re-check their session, the planners are not API-callable.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_security_definer.test.sql"
+# The agreement binds the client to its exact recurring price: the agreed
+# terms, a binding only to the agreement's own package's matching, active,
+# fixed, current-mode price, admin-only, the readiness read model, the
+# agreement_price_* attention signals and the portal's plan price.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_agreement_price.test.sql"
+# The billing cutover kit (supabase/cutover): pause, the agreements template
+# refuses to run, the fictional test client (paused, no automation), the
+# validation refuses an active client with no agreement, resume.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_cutover_kit.test.sql"
 # 0063: Compass Communications (Twilio SMS): registry, inbound idempotency,
 # consent and opt-out, outbound rules, forward-only delivery status,
 # compliance registrations and checklist, tenancy, the worker kept out.

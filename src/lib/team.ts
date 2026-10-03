@@ -33,3 +33,20 @@ export async function listTeamMembers(supabase: Supabase): Promise<TeamMember[]>
   const { data } = await supabase.from("team_members").select("id, name, email").order("name");
   return data ?? [];
 }
+
+// The signed-in teammate with their role, for screens that show admin-only
+// controls (financial configuration, 0058's is_team_admin()). The database
+// and the billing function enforce the role themselves; this only decides
+// what to show.
+export async function getCurrentTeamRole(supabase: Supabase): Promise<(TeamMember & { role: "admin" | "member" }) | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("team_members")
+    .select("id, name, email, role")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  return data ? { id: data.id, name: data.name, email: data.email, role: data.role === "admin" ? "admin" : "member" } : null;
+}

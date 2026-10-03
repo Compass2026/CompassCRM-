@@ -43,7 +43,17 @@ until then use sourced manual entries or explicit unavailable states.
    run at the home city: set their Keyword Research stages to *Not started*
    so the worker city-tags the lists (and tops Show Me Electrical up to 50).
 3. **Stripe secrets** (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — billing
-   is built and inert.
+   is being rebuilt (`docs/billing.md`); add **test-mode** keys only during
+   the cutover in `docs/billing-cutover.md`, never before. Billing work
+   left after B5: record every active client's agreement at cutover (from
+   0062 the weekly blog and website updates follow it); versioned
+   agreements (effective dates; today a past month shows today's terms);
+   the Authority Engine could take the allocation as a planning input once
+   agreements are versioned (today the Authority tab marks work outside the
+   agreement instead); Send Payment Link from Compass;
+   selling one-time items through Checkout; unlinking / relinking a
+   customer; the write-boundary decision (shared service-role key); the
+   daily reconciliation schedule (enabled at cutover).
 4. **Pensacola**: blend the `compass-astro` branch into `main` (Launch is
    blocked on it) and create the Search Console property.
 5. **Delete `Compass2026/zz-sitepush-smoke`, `Compass2026/lucasconstruction`

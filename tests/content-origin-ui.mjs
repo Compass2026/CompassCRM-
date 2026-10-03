@@ -124,9 +124,10 @@ try {
 
   // Reports tab: the September cycle counts Compass's posts only.
   await team.goto(`${base}/clients/${CLIENT}/reports`, { waitUntil: "networkidle" });
-  const counts = await team.locator("span", { hasText: "social published" }).allTextContents();
-  assert.ok(counts.some((t) => t.replace(/\s+/g, " ").includes(`· ${compassSept} blog ·`)), `a cycle reads ${compassSept} blog: ${JSON.stringify(counts)}`);
-  assert.ok(!counts.some((t) => t.replace(/\s+/g, " ").includes(`· ${allSept} blog ·`)), `no cycle counts the recorded page (${allSept}): ${JSON.stringify(counts)}`);
+  // B5: each cycle's delivered work (blog · social · Business Profile).
+  const counts = await team.locator("[data-actual]").allTextContents();
+  assert.ok(counts.some((t) => t.replace(/\s+/g, " ").startsWith(`${compassSept} blog ·`)), `a cycle reads ${compassSept} blog: ${JSON.stringify(counts)}`);
+  assert.ok(!counts.some((t) => t.replace(/\s+/g, " ").startsWith(`${allSept} blog ·`)), `no cycle counts the recorded page (${allSept}): ${JSON.stringify(counts)}`);
   ok(`Reports: the September cycle reads ${compassSept} blog, not ${allSept}`);
 
   // Content tab: Compass's production only, with the recorded pages counted.

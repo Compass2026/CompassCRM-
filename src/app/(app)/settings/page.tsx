@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -83,6 +84,19 @@ export default async function SettingsPage({
         spec). Template editing lands with the Trackers phase — changes for now
         go through Claude Code.
       </p>
+
+      <Card id="billing">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Billing catalog</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Packages, what each includes, one-time items, their Stripe Products and
+            Prices, and the Stripe Customer Portal. Admins change them.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Link href="/settings/billing" className="text-sm underline">Open the billing catalog</Link>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">
