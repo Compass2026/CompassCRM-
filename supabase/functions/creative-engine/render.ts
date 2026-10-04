@@ -257,9 +257,14 @@ export type Rendered = {
   ms: { plan: number; compose: number; rasterize: number };
 };
 
+// The post a render is for (purpose 'post'): copy_hash is drafter_copy_hash
+// of the post's copy, which creative_begin_run / creative_write check.
+export type PostBinding = { id: string; copy_hash: string; creative_version: number };
+
 // Plan, verify the source bytes, compose, rasterise, check, hash.
 export async function render(engine: Engine, t: RegisteredTemplate, facts: Facts, req: RenderRequest,
-  read: (asset: { id: string; storage_path: string; content_hash: string }) => Promise<Uint8Array>): Promise<Rendered> {
+  read: (asset: { id: string; storage_path: string; content_hash: string }) => Promise<Uint8Array>,
+  opts: { post?: PostBinding } = {}): Promise<Rendered> {
   const t0 = performance.now();
   const hash = await specHash(t.spec);
   if (req.template.key !== t.key || req.template.version !== t.version) {
@@ -305,6 +310,9 @@ export async function render(engine: Engine, t: RegisteredTemplate, facts: Facts
     photos: photosBrief,
     logo: { brand_asset_id: p.logo.id, content_hash: p.logo.content_hash },
     copy_hash: p.copy_hash,
+    // A post's render also binds the post: its copy (the creative is made for
+    // that copy) and the creative version it replaces. Previews carry no key.
+    ...(opts.post ? { post: opts.post } : {}),
   };
   const headline = p.lines.find((l) => l.slot === "headline")?.text ?? facts.client.name;
   const first = p.photos[0]?.asset;

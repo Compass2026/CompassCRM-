@@ -4,6 +4,8 @@
 // governed functions (creative_register_template, creative_begin_run,
 // creative_write, creative_fail_run) or an upload to the private
 // creative-assets bucket at a content address (objects there are immutable).
+// It reads posts and template approvals; it never changes them except
+// through those functions.
 // It reads brand-asset bytes; it never writes, moves or deletes them.
 import type { Facts } from "./govern.ts";
 import type { Store } from "./handler.ts";
@@ -71,6 +73,25 @@ export function createStore(supabase: Client): Store {
         .eq("key", key).eq("version", version).maybeSingle();
       if (error) throw new Error(error.message);
       return data ?? null;
+    },
+
+    async post(postId) {
+      const { data, error } = await supabase.from("social_posts")
+        .select("id, client_id, platform, service_id, copy, review_status, creative_policy, creative_version, scheduled_at")
+        .eq("id", postId).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      const links = await supabase.from("post_claims").select("claim_id, created_at").eq("post_id", postId)
+        .order("created_at").order("claim_id");
+      if (links.error) throw new Error(links.error.message);
+      return { ...data, platform: String(data.platform), claim_ids: (links.data ?? []).map((l: { claim_id: string }) => l.claim_id) };
+    },
+
+    async clientTemplateStatus(clientId, templateId) {
+      const { data, error } = await supabase.from("client_creative_templates").select("status")
+        .eq("client_id", clientId).eq("template_id", templateId).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data?.status ?? null;
     },
 
     registerTemplate: (p) => rpc(supabase, "creative_register_template", p),

@@ -8,8 +8,9 @@ source governance.
 
 **Status:**
 
-- **Built and tested:** the renderer, the specs, the Edge Function code and
-  a read-only preview page.
+- **Built and tested:** the renderer, the specs, the Edge Function code
+  (including graphics for posts, Oct 3 2026), the preview page with template
+  approval, and the post page's Graphic section.
 - **Not done:**
   - Migration 0057 is written and sandbox-tested, but **not applied**.
   - The Edge Function is **not deployed**.
@@ -43,7 +44,8 @@ request (references only) ──► govern.ts ──► render.ts ──► PNG 
 | `crop.ts` | Focal-point cover crop that never enlarges a photo. |
 | `text.ts` | Glyph-level measuring and wrapping from the pinned fonts. Copy that does not fit is refused, never shrunk. Text is emitted as SVG paths. |
 | `render.ts` | Composes the SVG, rasterises it with resvg, checks the PNG, and hashes it. Holds the pinned versions. |
-| `handler.ts` / `store.ts` / `index.ts` | The Edge Function: modes `version`, `register`, `plan`, `preview`. |
+| `handler.ts` / `store.ts` / `index.ts` | The Edge Function: modes `version`, `register`, `plan`, `preview`, `post`. |
+| `post-bindings.ts` | A post's creative: which governed references fill a template's slots (the post's service and linked claims) and which approved photos fill its photo slots. |
 | `previews.ts` | The Lucas preview set (references only). |
 | `fonts.generated.ts` | Embedded, hash-pinned font files (from `scripts/creative-fonts.mjs`). |
 | `deno-check.ts` | Cross-runtime check against the Node goldens. |
@@ -202,7 +204,7 @@ No table, grant, policy or write boundary changes. Its tests are
 the renderer's spec hash equals Postgres's for all 15 Lucas specs.
 **Apply only on approval.**
 
-## Previews (read-only)
+## Previews and template approval
 
 **Brand › Creative use › Creative previews**
 (`/clients/<id>/brand/creative-preview`) renders the Lucas preview set on
@@ -211,13 +213,76 @@ request with the signed-in teammate's own session. The image route is
 
 - **Same renderer:** the output is byte-identical to the renderer tests
   (checked by the browser test).
-- **Nothing is written:** no run, asset, template, client template, post,
-  event or policy.
+- **Viewing writes nothing:** no run, asset, template, client template,
+  post, event or policy.
 - **Refusals show on the page,** with no fallback image.
 
-Recording previews in production (`template_preview` runs and assets, which
-propose — never approve — a template for the client) is the function's
-`preview` mode. It needs 0057 applied and the templates registered.
+Under each preview, per channel (the 4:5 layout once for Facebook and once
+for Instagram, since 0054 keys a template to one channel):
+
+- **Record preview for approval** calls the function's `preview` mode with
+  the teammate's JWT: a `template_preview` run and asset, and a `proposed`
+  `client_creative_templates` row. Shown once the version is registered and
+  its registered spec equals this code's.
+- **Recorded preview** opens the stored bytes (`/clients/<id>/creative/<asset
+  id>`, re-hashed on the way out).
+- **Approve for this client** / **Revoke** update the row as the teammate,
+  conditional on the status they saw; 0054's guard requires a current
+  preview and stamps `approved_by`.
+
+**Graphic policy for new posts** sets `client_creative_settings` per channel
+(none / optional / required). Existing posts keep their own policy.
+
+## Graphics for posts (`post` mode, Oct 3 2026)
+
+A teammate turns a draft post into one with a rendered graphic from the post
+page (**Social › post › Graphic**):
+
+1. **Policy:** on a draft, *No graphic* / *Graphic optional* / *Graphic
+   required* (`social_posts.creative_policy`; a teammate's change, drafts
+   only). *Required* blocks approval until a graphic is linked.
+2. **Generate graphic:** pick a template approved for the client on the
+   post's channel. The CRM calls the function with the teammate's JWT:
+   `{mode: "post", post_id, template: {key, version, spec_hash}}`. The
+   request carries no words, claims or photos.
+3. **What the function decides** (`post-bindings.ts`):
+   - **Service:** the post's service is the topic. Service-led families
+     refuse a post without one (`post_service_missing`).
+   - **Claims:** only claims linked to the post, in link order, confirmed
+     or sourced-with-source, and free of blocked language. A claim the copy
+     may cite but no creative may carry (the warranty, review counts) is
+     left off. Trust & Know-How needs a headline claim plus two points:
+     three usable linked claims, else `not_enough_claims`.
+   - **Other lines:** the eyebrow is the service segment (else the
+     business name). The subline is the tagline or a linked claim. Seasonal
+     takes the season of the post's Central date (never "storm season").
+     Real Work uses the "Our work" label.
+   - **Photos:** for each slot in order, the largest approved own-work photo
+     of the service that fills it without enlarging (hero ≥ 1080 px), no
+     people, no repeats. No photo means `no_eligible_photo`, never a
+     stand-in.
+4. **Writes, all through 0054's functions:**
+   - `creative_begin_run` with `purpose: post`. The `copy_hash` is
+     `drafter_copy_hash(copy)`, and the brief carries
+     `post: {id, copy_hash, creative_version}`, so a new copy or a new
+     version is a new run and a repeat is the same run.
+   - The upload at the content address.
+   - `creative_write`, which checks the overlay against the post's own
+     service and linked claims (0057), links the image (`post_assets`,
+     role `primary`), sets `creative_status = ready` and bumps
+     `creative_version`.
+   - The post stays a draft until a teammate submits it.
+5. **Review:** the reviewer sees the image. **Approve** binds its content
+   hash in `approved_snapshot.creative`. **Reject** asks whether the copy,
+   the graphic or both are rejected (`rejection_category`, required by
+   0054 when a graphic is linked).
+6. **Request new graphic** (in review, approved, or rejected for the
+   graphic) calls `request_new_creative`: it keeps the copy, unlinks the
+   graphic and returns the post to draft.
+7. **Delivery without the publisher:**
+   - **Download PNG** serves the exact recorded bytes, re-hashed, named
+     `<client>-<template>-<hash12>.png`.
+   - An approved post also has **Copy text**.
 
 ## Runtime
 
@@ -243,9 +308,10 @@ Full readiness note: `docs/creative-engine-runtime.md`.
 
 | Command | What it covers |
 |---|---|
-| `npm test` | Includes `tests/creative-engine.test.mjs` (21) and `tests/creative-engine-handler.test.mjs` (12): specs and lint, jsonb hash, crop, text, governance refusals, determinism, goldens, pixel checks (focal point and footer), handler auth, dry run, refusals before writes, write path, idempotency, retry after failure. |
+| `npm test` | Includes `tests/creative-engine.test.mjs` (21), `tests/creative-engine-handler.test.mjs` (16) and `tests/creative-engine-post.test.mjs` (6): specs and lint, jsonb hash, crop, text, governance refusals, determinism, goldens, pixel checks (focal point and footer), handler auth, dry run, refusals before writes, write path, idempotency, retry after failure; post mode's refusals, run binding and every Lucas template on a roofing post; the post picker's claims, photos and seasons. |
 | `npm run test:sandbox` | Includes `creative_overlay_roles.test.sql` (21). |
 | `npm run test:creative-preview-ui` | The page and route in a real app session over the sandbox (7 checks). |
+| `npm run test:creative-post-ui` | End to end over the sandbox with the real handler and store: register, record a preview, approve it, set the channel policy, render a post's graphic, download the exact bytes, submit and approve (snapshot binds the hash), request a new graphic, reject the graphic alone, portal / anonymous refused, phone width (9 checks). |
 | `deno run --allow-net --allow-read --allow-env supabase/functions/creative-engine/deno-check.ts` | Cross-runtime check. |
 
 **Regenerate** (only with a new renderer or template version):
@@ -258,11 +324,17 @@ Full readiness note: `docs/creative-engine-runtime.md`.
 
 1. Apply 0057; verify it with the recorded SQL md5 and the probes.
 2. Deploy `creative-engine` through `deploy-supabase-function.yml` (it is
-   on the function list); check it with `{"mode": "version"}` and `plan`.
-3. `register` the approved template versions.
-4. Run `preview` for Lucas. This proposes each template for Lucas with its
-   preview asset.
-5. A teammate approves each template version for Lucas on its preview.
-6. Separately, choose Lucas's creative policy per channel.
+   on the function list); check it with `{"mode": "version"}` and a `plan`
+   of each 1080×1350 template (its `ms` shows the render time against the
+   2 s CPU limit).
+3. `register` the approved template versions (`{"mode": "register"}` with
+   a teammate's JWT or the cron secret).
+4. On **Creative previews**, **Record preview for approval** for each
+   template and channel Lucas will use.
+5. A teammate opens each recorded preview and **Approves** it for Lucas.
+6. Set Lucas's **Graphic policy for new posts** per channel on the same
+   page.
+
+From then on a teammate renders graphics on draft posts (above).
 
 Publishing stays with the existing publisher and its switch.

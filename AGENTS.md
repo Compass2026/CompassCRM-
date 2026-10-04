@@ -1196,7 +1196,7 @@ scheduled or published by any of it.
   future `creative_assets` model; approval will bind copy and the exact
   creative version). Nothing of the Creative Engine is built.
 
-## Creative Engine renderer (Sept 30 2026; 0057 written, not applied; nothing deployed)
+## Creative Engine renderer (Sept 30 2026; post graphics Oct 3; 0057 written, not applied; nothing deployed)
 
 This is the deterministic renderer and the Lucas template pilot. Full
 design, rules and runbook: `docs/creative-engine.md`. Production state and
@@ -1231,18 +1231,38 @@ the readiness matrix: `docs/lucas-creative-readiness.md`.
   - `plan`: a dry run, no writes
   - `preview`: `creative_begin_run` → upload at the content address →
     `creative_write`; proposes, never approves
+  - `post` (Oct 3 2026): the graphic for a draft post from a template
+    approved for the client. `post-bindings.ts` takes the post's service
+    and only its linked claims, and picks approved own-work photos of that
+    service. The run is bound to the post's copy hash and creative version.
+    `creative_write` links the image for review.
   - It is **not deployed**.
 - **0057** adds overlay roles (phone, website, service segment, template
   label; claims in previews; ≤ 12 lines) so the record matches what is
   drawn. It is **not applied**.
-- **Previews (read-only):** Brand › Creative use › **Creative previews**
+- **Previews and approval:** Brand › Creative use › **Creative previews**
   (`/clients/[id]/brand/creative-preview`, `src/lib/creative-preview.ts`)
-  renders the Lucas preview set with the teammate's own session. It writes
-  nothing.
+  renders the Lucas preview set with the teammate's own session (viewing
+  writes nothing).
+  - Per template and channel: **Record preview for approval** (the
+    function's `preview` mode) and **Approve** / **Revoke**
+    (`client_creative_templates`).
+  - Per channel: the **graphic policy for new posts**
+    (`client_creative_settings`).
+- **Post graphics:** the post page's **Graphic** section (policy, Generate
+  graphic, Download PNG, Request new graphic), with
+  `src/app/creative-actions.ts` calling the function with the teammate's
+  JWT.
+  - `/clients/[id]/creative/[assetId]` serves recorded bytes, re-hashed.
+  - Reject asks copy / graphic / both.
+  - Approved posts get **Copy text**.
 - **Tests:**
-  - `npm test`: `creative-engine`, `creative-engine-handler`
+  - `npm test`: `creative-engine`, `creative-engine-handler`,
+    `creative-engine-post`
   - the sandbox's `creative_overlay_roles.test.sql`
-  - `npm run test:creative-preview-ui`
+  - `npm run test:creative-preview-ui`, `npm run test:creative-post-ui`
+    (end to end: register → preview → approve → render → download →
+    approve post → request new → reject graphic)
   - `deno-check.ts`
 - **Runtime** (`docs/creative-engine-runtime.md`):
   - Measured in Deno with photo-like JPEGs: 0.53–1.44 s for a cold

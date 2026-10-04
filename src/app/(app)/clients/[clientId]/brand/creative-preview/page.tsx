@@ -9,17 +9,36 @@ import { KITS } from "../../../../../../../supabase/functions/creative-engine/ki
 import { specHash } from "../../../../../../../supabase/functions/creative-engine/spec.ts";
 import { CopyRefusal } from "../../../../../../../supabase/functions/creative-engine/text.ts";
 import { RENDERER_ID } from "../../../../../../../supabase/functions/creative-engine/render.ts";
+import { Badge } from "@/components/ui/badge";
+import { ChannelPolicyForm, RecordPreviewButton, TemplateDecisionButtons } from "@/components/creative/template-approval-forms";
+import { isCreativePolicy } from "@/lib/creative-post";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-// Creative previews (read-only): the cleared template families rendered from
-// this client's governed record — approved own-work photos, the approved
-// wordmark, governed words only. Nothing is stored, approved or published.
+// Creative previews: the cleared template families rendered from this
+// client's governed record — approved own-work photos, the approved wordmark,
+// governed words only. Rendering here stores nothing. Below each preview, a
+// registered template version can be recorded for this client (the
+// creative-engine function's preview mode, which proposes it) and then
+// approved or revoked by a teammate; only approved versions render posts.
+// Nothing here publishes.
 const CHANNEL_LABEL: Record<string, string> = {
   google_business: "Business Profile · 1200×900",
   facebook: "Facebook / Instagram · 1080×1350",
   instagram: "Instagram · 1080×1350",
 };
+const STATUS_STYLE: Record<string, string> = {
+  proposed: "border-amber-200 bg-amber-100 text-amber-900",
+  approved: "border-green-200 bg-green-100 text-green-800",
+  revoked: "border-red-200 bg-red-100 text-red-800",
+};
+const POLICY_CHANNELS = [
+  ["google_business", "Business Profile"],
+  ["facebook", "Facebook"],
+  ["instagram", "Instagram"],
+] as const;
+
 const BLOCKED = [
   ["Review Spotlight", "Needs a governed review record (exact text, reviewer, platform, date, permission). None exists."],
   ["Team & Community", "Needs a governed consent / usage record for the people in a photo. None exists; team photos stay out."],
@@ -52,6 +71,21 @@ export default async function CreativePreviewPage({ params }: { params: Promise<
     }
   }
 
+  // Registered versions and this client's approvals. The 4:5 social layout is
+  // registered for Facebook and Instagram separately, so each needs its own.
+  const keys = rows.flatMap((r) => (r.key.endsWith("-facebook") ? [r.key, r.key.replace(/-facebook$/, "-instagram")] : [r.key]));
+  const [{ data: registered }, { data: approvals }, { data: settings }] = kit
+    ? await Promise.all([
+        supabase.from("creative_templates").select("id, key, version, spec_hash, status").in("key", keys).eq("version", 1),
+        supabase.from("client_creative_templates").select("id, template_id, status, preview_asset_id, approved_at").eq("client_id", clientId),
+        supabase.from("client_creative_settings").select("channel, creative_policy").eq("client_id", clientId),
+      ])
+    : [{ data: null }, { data: null }, { data: null }];
+  const approvalFor = (key: string) => {
+    const t = (registered ?? []).find((x) => x.key === key);
+    return { t, a: t ? (approvals ?? []).find((x) => x.template_id === t.id) ?? null : null };
+  };
+
   return (
     <div className="space-y-6">
       <div className="surface space-y-2 p-4">
@@ -60,12 +94,14 @@ export default async function CreativePreviewPage({ params }: { params: Promise<
           <Link href={`/clients/${clientId}/brand/creative-use`} className="ml-auto text-xs underline underline-offset-2">Creative use</Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          Preview only: {client.name}&apos;s cleared template families rendered from the governed record — approved own-work
-          photos cropped at their reviewed focal points, the approved wordmark, and words taken from the record (services,
-          sourced or confirmed claims, the standing CTA, phone and website). Nothing here is stored, approved, scheduled or
-          published, and no post is created.
+          {client.name}&apos;s cleared template families rendered from the governed record — approved own-work photos
+          cropped at their reviewed focal points, the approved wordmark, and words taken from the record (services, sourced
+          or confirmed claims, the standing CTA, phone and website). Viewing this page stores nothing. To use a template on
+          posts, record its preview for this client, look at it, and approve it. Nothing here publishes.
         </p>
-        <p className="text-xs text-muted-foreground" data-renderer>{RENDERER_ID} · template versions v1 (not registered)</p>
+        <p className="text-xs text-muted-foreground" data-renderer>
+          {RENDERER_ID} · template versions v1 ({(registered ?? []).length > 0 ? `${(registered ?? []).length} registered` : "not registered"})
+        </p>
       </div>
 
       {!kit && <p className="surface p-4 text-sm">No creative templates exist for this client yet.</p>}
@@ -103,9 +139,55 @@ export default async function CreativePreviewPage({ params }: { params: Promise<
               </ul>
             </div>
             <p className="break-all text-muted-foreground">{r.key} v1 · spec {r.spec.slice(0, 19)}…{r.plan ? ` · copy ${r.plan.copy_hash.slice(0, 12)}…` : ""}</p>
+            <div className="space-y-3 border-t pt-3" data-approvals={r.key}>
+              <p className="font-medium">For {client.name}&apos;s posts</p>
+              {(r.key.endsWith("-facebook") ? [r.key, r.key.replace(/-facebook$/, "-instagram")] : [r.key]).map((key) => {
+                const { t, a } = approvalFor(key);
+                const channel = key.endsWith("-gbp") ? "Business Profile" : key.endsWith("-facebook") ? "Facebook" : "Instagram";
+                return (
+                  <div key={key} className="space-y-1.5" data-approval={key}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{channel}</span>
+                      {a && <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLE[a.status])}>{a.status}</Badge>}
+                    </div>
+                    {!t ? (
+                      <p className="text-muted-foreground">Not registered yet.</p>
+                    ) : t.spec_hash !== r.spec ? (
+                      <p className="text-amber-900">The registered version differs from this code&apos;s; it cannot be recorded here.</p>
+                    ) : (
+                      <>
+                        {a?.preview_asset_id && (
+                          <a href={`/clients/${clientId}/creative/${a.preview_asset_id}`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                            Recorded preview
+                          </a>
+                        )}
+                        {a?.status !== "approved" && !r.refusal && <RecordPreviewButton clientId={clientId} templateKey={key} again={!!a} />}
+                        {a && a.preview_asset_id && <TemplateDecisionButtons clientId={clientId} rowId={a.id} status={a.status} />}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
       ))}
+
+      {kit && (
+        <section className="surface space-y-3 p-4" data-channel-policies>
+          <h2 className="text-sm font-semibold">Graphic policy for new posts</h2>
+          <p className="text-xs text-muted-foreground">
+            The starting policy for each new post on a channel. A teammate can change it on any draft. “Required” means a post
+            cannot be approved without a rendered graphic.
+          </p>
+          <div className="flex flex-wrap gap-6">
+            {POLICY_CHANNELS.map(([ch, label]) => {
+              const v = (settings ?? []).find((x) => x.channel === ch)?.creative_policy;
+              return <ChannelPolicyForm key={ch} clientId={clientId} channel={ch} label={label} policy={isCreativePolicy(v) ? v : "none"} />;
+            })}
+          </div>
+        </section>
+      )}
 
       {kit && (
         <section className="surface space-y-2 p-4" data-blocked>

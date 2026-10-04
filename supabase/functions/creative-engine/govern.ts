@@ -107,13 +107,20 @@ function refuse(code: string, message: string, slot?: string): never {
   throw new CopyRefusal(code, message, slot);
 }
 
-function checkPhrases(text: string, spec: TemplateSpec, slot: string) {
+// Why a governed line may not appear on a creative, or null.
+export function blockedPhrase(text: string, spec: TemplateSpec): string | null {
   for (const b of GLOBAL_BLOCKED) {
-    if (b.re.test(text)) refuse("unavailable_claim", `"${text}" uses ${b.id} language, which is not available for creative`, slot);
+    if (b.re.test(text)) return `"${text}" uses ${b.id} language, which is not available for creative`;
   }
   for (const src of spec.blocked_phrases) {
-    if (new RegExp(src, "i").test(text)) refuse("unavailable_claim", `"${text}" matches the client's unavailable phrase /${src}/`, slot);
+    if (new RegExp(src, "i").test(text)) return `"${text}" matches the client's unavailable phrase /${src}/`;
   }
+  return null;
+}
+
+function checkPhrases(text: string, spec: TemplateSpec, slot: string) {
+  const why = blockedPhrase(text, spec);
+  if (why) refuse("unavailable_claim", why, slot);
 }
 
 export async function copyHash(lines: Line[], lists: Record<string, Line[]>): Promise<string> {

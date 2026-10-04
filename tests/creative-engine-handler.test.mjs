@@ -12,7 +12,7 @@ import { lucasTemplates, findTemplate } from "../supabase/functions/creative-eng
 import { specHash, jsonbText, sha256Hex } from "../supabase/functions/creative-engine/spec.ts";
 import { FACTS, P, RR, C, clone, syntheticSources, requestFor } from "./helpers/creative-fixtures.mjs";
 
-function fakeStore({ facts, bytes, registered = true, beginReuse = null, uploadFails = false } = {}) {
+function fakeStore({ facts, bytes, registered = true, beginReuse = null, uploadFails = false, posts = [], approved = "approved" } = {}) {
   const calls = [];
   const runs = [];
   const tpl = new Map();
@@ -32,6 +32,8 @@ function fakeStore({ facts, bytes, registered = true, beginReuse = null, uploadF
       const t = findTemplate(key, version);
       return t ? { id: `tpl-${key}`, spec_hash: typeof registered === "string" ? registered : await specHash(t.spec), status: "published" } : null;
     },
+    async post(id) { calls.push(["post", id]); return posts.find((x) => x.id === id) ?? null; },
+    async clientTemplateStatus(clientId, templateId) { calls.push(["clientTemplateStatus", clientId, templateId]); return approved; },
     async registerTemplate(p) {
       calls.push(["registerTemplate", p.key]);
       const hash = await specHash(p.spec);
@@ -41,10 +43,10 @@ function fakeStore({ facts, bytes, registered = true, beginReuse = null, uploadF
     },
     async beginRun(p) {
       calls.push(["beginRun", p]);
-      const same = runs.find((r) => r.brief_hash === p.brief_hash && r.status !== "failed");
+      const same = runs.find((r) => r.brief_hash === p.brief_hash && r.post_id === (p.post_id ?? null) && r.status !== "failed");
       if (beginReuse) return beginReuse;
       if (same) return { run_id: same.id, status: same.status, reused: true, creative_asset_id: same.asset };
-      const run = { id: `run-${runs.length + 1}`, brief_hash: p.brief_hash, status: "rendering", asset: null };
+      const run = { id: `run-${runs.length + 1}`, brief_hash: p.brief_hash, post_id: p.post_id ?? null, status: "rendering", asset: null };
       runs.push(run);
       return { run_id: run.id, status: "rendering", reused: false };
     },
@@ -57,7 +59,8 @@ function fakeStore({ facts, bytes, registered = true, beginReuse = null, uploadF
       const run = runs.find((r) => r.id === p.run_id);
       run.status = "succeeded";
       run.asset = `asset-${p.asset.content_hash.slice(0, 8)}`;
-      return { creative_asset_id: run.asset, storage_path: `${facts.client.id}/${p.asset.content_hash}.png`, new: true, preview: true };
+      const out = { creative_asset_id: run.asset, storage_path: `${facts.client.id}/${p.asset.content_hash}.png`, new: true };
+      return run.post_id ? { ...out, post_id: run.post_id, creative_version: p.expected_creative_version + 1 } : { ...out, preview: true };
     },
     async failRun(p) {
       calls.push(["failRun", p]);
@@ -224,5 +227,87 @@ test("every template's pilot request renders through the handler (dry run)", asy
   for (const t of lucasTemplates()) {
     const res = await post(fn, { ...(await body(t.key)), mode: "plan" });
     assert.equal(res.status, 200, t.key);
+  }
+});
+
+// ── post: the creative for a draft post ─────────────────────────────────────
+const POST_ID = "5e0e7a0c-0000-4000-8000-000000000001";
+const COPY = "New Owens Corning Duration shingles on a Wentzville home. Request a quote.";
+const gbpPost = (over = {}) => ({
+  id: POST_ID, client_id: FACTS.client.id, platform: "google_business", service_id: RR, copy: COPY,
+  review_status: "draft", creative_policy: "optional", creative_version: 0, scheduled_at: null,
+  claim_ids: [C.oc, C.dur], ...over,
+});
+const postBody = async (key, over = {}) => ({
+  mode: "post", post_id: POST_ID, template: { key, version: 1, spec_hash: await specHash(T(key).spec) }, ...over,
+});
+
+test("post: refusals before any write — not a draft, policy none, other channel, not approved for the client, unknown fields", async () => {
+  const cases = [
+    [{ posts: [gbpPost({ review_status: "in_review" })] }, "lucas-service-spotlight-gbp", "post_not_draft"],
+    [{ posts: [gbpPost({ creative_policy: "none" })] }, "lucas-service-spotlight-gbp", "creative_policy_none"],
+    [{ posts: [gbpPost()] }, "lucas-service-spotlight-facebook", "channel_mismatch"],
+    [{ posts: [gbpPost()], approved: "proposed" }, "lucas-service-spotlight-gbp", "template_not_approved"],
+    [{ posts: [gbpPost()], registered: false }, "lucas-service-spotlight-gbp", "template_not_registered"],
+    [{ posts: [gbpPost({ service_id: null })] }, "lucas-service-spotlight-gbp", "post_service_missing"],
+    [{ posts: [gbpPost()] }, "lucas-trust-know-how-gbp", "not_enough_claims"],
+  ];
+  for (const [opts, key, code] of cases) {
+    const s = await setup(opts);
+    const res = await post(s.fn, await postBody(key), { authorization: "Bearer team-jwt" });
+    const j = await res.json();
+    assert.deepEqual([res.status, j.code], [409, code], `${key}: ${JSON.stringify(j)}`);
+    assert.deepEqual(writes(s.store), [], code);
+  }
+  const s = await setup({ posts: [gbpPost()] });
+  const res = await post(s.fn, await postBody("lucas-service-spotlight-gbp", { bindings: { headline: { role: "claim", source_id: C.oc } } }));
+  assert.equal(res.status, 400);
+  assert.deepEqual(writes(s.store), []);
+  assert.equal((await post(s.fn, await postBody("lucas-service-spotlight-gbp", { post_id: "nope" }))).status, 400);
+});
+
+test("post: renders from the post's service and linked claims, begins a post run bound to its copy, links the image", async () => {
+  const { fn, store } = await setup({ posts: [gbpPost()] });
+  const res = await post(fn, await postBody("lucas-service-spotlight-gbp"), { authorization: "Bearer team-jwt" });
+  const r = await res.json();
+  assert.equal(res.status, 200, JSON.stringify(r));
+  const [[, begin]] = store.calls.filter(([k]) => k === "beginRun");
+  assert.deepEqual([begin.purpose, begin.post_id, begin.reason, begin.requested_via, begin.requested_by],
+    ["post", POST_ID, "initial", "team", "m-1"]);
+  assert.equal(begin.copy_hash, await sha256Hex(COPY), "copy_hash is drafter_copy_hash(copy)");
+  assert.deepEqual(begin.brief.post, { id: POST_ID, copy_hash: begin.copy_hash, creative_version: 0 });
+  assert.equal(begin.brief_hash, "sha256:" + await sha256Hex(jsonbText(begin.brief)));
+  const [[, w]] = store.calls.filter(([k]) => k === "write");
+  assert.equal(w.expected_creative_version, 0);
+  assert.equal(w.submit, false);
+  const claims = w.asset.overlay.filter((o) => o.role === "claim").map((o) => o.source_id);
+  assert.ok(claims.length > 0 && claims.every((id) => [C.oc, C.dur].includes(id)), "only the post's linked claims");
+  assert.equal(w.asset.overlay[0].text, "Roof Replacement");
+  assert.ok(w.asset.alt_text.length > 0, "a post creative carries alt text");
+  assert.equal(r.post_id, POST_ID);
+  assert.equal(r.creative_version, 1);
+});
+
+test("post: the same request is the same run; a new creative version is a new run", async () => {
+  const p0 = gbpPost();
+  const { fn, store } = await setup({ posts: [p0] });
+  const b = await postBody("lucas-real-work-gbp");
+  const first = await (await post(fn, b)).json();
+  const again = await (await post(fn, b)).json();
+  assert.equal(again.reused, true);
+  assert.equal(again.creative_asset_id, first.creative_asset_id);
+  p0.creative_version = 1; // linked, then "Request new creative" unlinked it
+  const third = await (await post(fn, b)).json();
+  assert.equal(third.reused, false);
+  assert.equal(third.content_hash, first.content_hash, "same pixels");
+  assert.notEqual(store.calls.filter(([k]) => k === "beginRun")[2][1].brief_hash, store.calls.filter(([k]) => k === "beginRun")[0][1].brief_hash);
+});
+
+test("post: every approved Lucas family renders for a roofing post with three linked claims", async () => {
+  for (const t of lucasTemplates()) {
+    const platform = t.channel;
+    const { fn } = await setup({ posts: [gbpPost({ platform, claim_ids: [C.oc, C.dur, C.bbb] })] });
+    const res = await post(fn, await postBody(t.key));
+    assert.equal(res.status, 200, `${t.key}: ${JSON.stringify(await res.clone().json())}`);
   }
 });
