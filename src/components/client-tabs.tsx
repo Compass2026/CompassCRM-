@@ -17,6 +17,7 @@ const tabs = [
   { label: "Authority", segment: "authority" },
   { label: "Services", segment: "services" },
   { label: "Keywords", segment: "keywords" },
+  { label: "Planner", segment: "planner" },
   { label: "Content", segment: "content" },
   { label: "Social", segment: "social" },
   { label: "Communications", segment: "communications" },
