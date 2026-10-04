@@ -8,8 +8,14 @@ Production-readiness review, Sept 30 2026.
 > Vault architecture. Before any real client billing (a recurring charge,
 > a card payment or an ACH debit), Option B must be implemented and
 > reviewed: a dedicated billing runtime, billing-only Stripe credentials
-> and a dedicated least-privilege database role. Option B is not
-> implemented yet and stays a production go-live blocker.
+> and a dedicated least-privilege database role.
+>
+> **STATUS (Oct 4 2026): Option B is built** — `billing/` (the
+> `compass-billing` Vercel project), migration `0064_billing_runtime.sql`
+> (the `billing_sync` login and the boundary switch) and the CRM's
+> `BILLING_API_URL` switch. It stays a go-live blocker until it is deployed
+> and verified per `docs/billing-runtime.md`, which also records where the
+> build differs from the shape below.
 
 ## The problem, exactly
 
@@ -155,7 +161,7 @@ whose secrets no other Compass code has.
 About two to three days:
 
 - the Node entry points and a `pg` store for the three handlers
-- migration `0063`: the `billing_sync` role and the boundary switch
+- migration `0064` (0063 is Communications): the `billing_sync` role and the boundary switch
 - the Vercel project, env and cron
 - moving the three secrets from Vault to Vercel
 - re-running the whole suite plus a test-mode lifecycle on the new
@@ -183,5 +189,12 @@ About two to three days:
    before live billing even with Option B, because other live credentials
    are in Vault.
 
-Nothing in this document has been built. It waits for Tom's and ChatGPT's
-review.
+Option B was approved and is built (Oct 4 2026): `docs/billing-runtime.md`.
+Differences from the shape above: the switch keeps the Edge Function path
+open until the owner closes it (so the TEST setup works until the
+replacement is verified); the Vercel Cron bearer (`CRON_SECRET`) replaces
+`BILLING_RECONCILE_SECRET`; `billing_sync` also has the few direct writes the
+handlers already made after their admin check (a catalog entry's Stripe
+Product, a client-bound custom price, the `billing_portal` setting) and
+column-limited reads of `clients`, `plans`, `team_members` and
+`portal_users`.

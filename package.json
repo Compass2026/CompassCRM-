@@ -33,6 +33,7 @@
     "test:billing-ui": "UI_SPEC=tests/billing-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:entitlements-ui": "UI_SPEC=tests/entitlements-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:billing-rehearsal": "UI_SPEC=tests/billing-lifecycle-rehearsal.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:billing-runtime": "BILLING_STORE=pg UI_SPEC=tests/billing-lifecycle-rehearsal.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:portal-billing-ui": "UI_SPEC=tests/portal-billing-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:content-origin-ui": "UI_SPEC=tests/content-origin-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:communications": "UI_SPEC=tests/communications-integration.mjs scripts/test-tasks-ui.sh",

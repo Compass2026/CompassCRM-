@@ -8,6 +8,10 @@
 // (docs/billing-readiness.md § 10).
 //
 //   npm run test:billing-rehearsal   (scripts/test-tasks-ui.sh with UI_SPEC set)
+//   npm run test:billing-runtime     the same lifecycle on the Option B runtime:
+//                                    billing/src/store.ts over Postgres as the
+//                                    billing_sync login (0064), with the Edge
+//                                    Function (service_role) path closed
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createHmac } from "node:crypto";
@@ -21,6 +25,8 @@ import { createStripeReconcile } from "../supabase/functions/stripe-reconcile/ha
 import { createReconcileStore } from "../supabase/functions/stripe-reconcile/store.ts";
 import { checkPortalConfig } from "../supabase/functions/stripe-billing/handler.ts";
 import { fakeStripe, signedRequest } from "./fixtures/stripe-fake.mjs";
+import { createRequire } from "node:module";
+import { createPgStore, supabaseAuthUser } from "../billing/src/store.ts";
 
 const { PGRST_URL, JWT_SECRET, PSQL, PSQL_ADMIN } = process.env;
 assert.ok(PGRST_URL && JWT_SECRET && PSQL && PSQL_ADMIN, "run through npm run test:billing-rehearsal");
@@ -84,13 +90,35 @@ const service = createClient(gatewayUrl, serviceKey, opts);
 const as = (u) => createClient(gatewayUrl, anonKey, { ...opts, global: { headers: { Authorization: `Bearer ${tokenFor(u)}` } } });
 
 const s = fakeStripe();
-const billing = createStripeBilling({ config: async () => ({ secretKey: "sk_test_rehearsal", appUrl: "https://crm.example.test" }), store: createBillingStore(service), makeApi: () => s.api });
-const webhook = createStripeWebhook({ config: async () => ({ secretKey: "sk_test_rehearsal", webhookSecret: WHSEC }), store: createStripeStore(service), makeApi: () => s.api });
-const reconcileStore = createReconcileStore(service);
+// The stores: the Edge Functions' (supabase-js + service role through
+// PostgREST), or with BILLING_STORE=pg the billing runtime's (a direct
+// Postgres connection as billing_sync, the caller verified by Supabase Auth).
+const RUNTIME = process.env.BILLING_STORE === "pg";
+let pool = null;
+let billingStore, webhookStore, reconcileStore;
+if (RUNTIME) {
+  const pg = createRequire(import.meta.url)("../billing/node_modules/pg");
+  const [, host, port] = PSQL.match(/-h (\S+) -p (\d+)/);
+  pool = new pg.Pool({ host, port: Number(port), user: "billing_sync", database: "sandbox", max: 3 });
+  const runtimeStore = createPgStore(pool, {
+    authUser: supabaseAuthUser({ url: gatewayUrl, anonKey }),
+    reconcileSecret: RSECRET,
+  });
+  billingStore = webhookStore = reconcileStore = runtimeStore;
+  // Prove the run needs nothing from the Edge Function path: close it.
+  sql("update billing_runtime set edge_functions = false");
+} else {
+  billingStore = createBillingStore(service);
+  webhookStore = createStripeStore(service);
+  const edge = createReconcileStore(service);
+  reconcileStore = { ...edge, secret: async (n) => n === "BILLING_RECONCILE_SECRET" ? RSECRET : edge.secret(n) };
+}
+const billing = createStripeBilling({ config: async () => ({ secretKey: "sk_test_rehearsal", appUrl: "https://crm.example.test" }), store: billingStore, makeApi: () => s.api });
+const webhook = createStripeWebhook({ config: async () => ({ secretKey: "sk_test_rehearsal", webhookSecret: WHSEC }), store: webhookStore, makeApi: () => s.api });
 const jobs = [];
 const reconcile = createStripeReconcile({
   config: async () => ({ secretKey: "sk_test_rehearsal" }),
-  store: { ...reconcileStore, secret: async (n) => n === "BILLING_RECONCILE_SECRET" ? RSECRET : reconcileStore.secret(n) },
+  store: reconcileStore,
   makeApi: () => s.api, waitUntil: (p) => jobs.push(p),
 });
 const post = async (h, headers, body = {}) => {
@@ -414,8 +442,17 @@ try {
   }
   ok("portal: its own summary and client-safe entitlements only; no billing table, audit, reconciliation or history readable; another client's contact cannot reach it");
 
-  console.log(`Billing test-mode rehearsal passed (${checks.length}).`);
+  if (RUNTIME) {
+    // The Edge Function path stayed closed throughout, and the runtime wrote everything.
+    assert.equal(sql("select edge_functions from billing_runtime"), "f");
+    const e = await createBillingStore(service).audit({ client_id: T, action: "resync_customer", actor_kind: "team", detail: {} }).then(() => null, (x) => x);
+    assert.ok(e && e.code === "42501", `the service-role path is refused once closed (${e?.message})`);
+    ok("runtime: the whole lifecycle ran as billing_sync; the service-role (Edge Function) path is refused");
+  }
+
+  console.log(`Billing test-mode rehearsal passed (${checks.length})${RUNTIME ? " on the billing runtime store" : ""}.`);
 } finally {
+  await pool?.end();
   gateway.closeAllConnections();
   await new Promise((r) => gateway.close(r));
 }

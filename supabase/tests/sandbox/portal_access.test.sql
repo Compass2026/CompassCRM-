@@ -107,8 +107,15 @@ begin
   end loop;
 
   select count(*) into n from pg_policies
-  where schemaname in ('public', 'storage') and (qual = 'true' or with_check = 'true');
+  where schemaname in ('public', 'storage') and (qual = 'true' or with_check = 'true')
+    and roles && array['public', 'anon', 'authenticated']::name[];
   perform t.ok('A4 no policy is open to every signed-in user', n = 0, n || ' open');
+  -- The billing runtime's own login (0064) reads its tables through policies
+  -- scoped to it alone; nothing else may hold an open policy.
+  select count(*) into n from pg_policies
+  where schemaname in ('public', 'storage') and (qual = 'true' or with_check = 'true')
+    and roles <> array['billing_sync']::name[];
+  perform t.ok('A4b open policies belong to the billing runtime login only', n = 0, n || ' other');
 
   select count(*) into n from pg_class c join pg_namespace ns on ns.oid = c.relnamespace
   where ns.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity;
