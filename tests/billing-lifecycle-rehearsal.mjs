@@ -137,8 +137,8 @@ try {
        values ('${T}', 'Compass Billing Test Client (TEST)', 'Springfield', 'MO', 'active', 'FICTIONAL billing test client — not a real business')`);
   sqlAdmin(`insert into auth.users (id, email, email_confirmed_at) values ('${PORTAL_T.id}', '${PORTAL_T.email}', now())`);
   sql(`insert into portal_users (client_id, email, is_active) values ('${T}', '${PORTAL_T.email}', true)`);
-  s.put({ id: "prod_VMxmKG052epGVU", object: "product", livemode: false, name: "Compass Test Standard (TEST)", active: true, metadata: {}, created: 1 });
-  s.put({ id: "price_1UMDr54Zq9yMk653B7jdneFm", object: "price", livemode: false, product: "prod_VMxmKG052epGVU", active: true, type: "recurring", currency: "usd",
+  s.put({ id: "prod_VMxmkG052epGVU", object: "product", livemode: false, name: "Compass Test Standard (TEST)", active: true, metadata: {}, created: 1 });
+  s.put({ id: "price_1UMDr54Zq9yMk653B7jdneFm", object: "price", livemode: false, product: "prod_VMxmkG052epGVU", active: true, type: "recurring", currency: "usd",
     unit_amount: 250000, billing_scheme: "per_unit", recurring: { interval: "month", interval_count: 1, usage_type: "licensed" }, metadata: {}, created: 1 });
   {
     const admin = as(ADMIN);
@@ -153,9 +153,9 @@ try {
     const { error: e2 } = await admin.from("package_entitlements").insert(rows);
     assert.equal(e2, null, e2?.message);
   }
-  assert.equal((await callBilling(ADMIN, { action: "import_product", target: "package", target_id: PKG, product_id: "prod_VMxmKG052epGVU" })).status, 200);
+  assert.equal((await callBilling(ADMIN, { action: "import_product", target: "package", target_id: PKG, product_id: "prod_VMxmkG052epGVU" })).status, 200);
   const pp = sql(`insert into billing_package_prices (package_id, package_kind, stripe_product_id, stripe_price_id, is_default)
-    values ('${PKG}', 'standard', 'prod_VMxmKG052epGVU', 'price_1UMDr54Zq9yMk653B7jdneFm', true) returning id`).split("\n")[0];
+    values ('${PKG}', 'standard', 'prod_VMxmkG052epGVU', 'price_1UMDr54Zq9yMk653B7jdneFm', true) returning id`).split("\n")[0];
 
   // ── Phase 10: agreement → entitlements ──
   {

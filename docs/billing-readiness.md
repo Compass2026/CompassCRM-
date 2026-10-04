@@ -310,7 +310,7 @@ in chat, git or this document.
 
 | Object | Test-mode id | Use |
 | --- | --- | --- |
-| Product "Compass Standard (TEST)" | `prod_VMxmKG052epGVU` | the test lifecycle |
+| Product "Compass Standard (TEST)" | `prod_VMxmkG052epGVU` | the test lifecycle |
 | its monthly Price, $2,500.00 | `price_1UMDr54Zq9yMk653B7jdneFm` | test fixture amount, **not** Compass pricing |
 | Product "Compass Custom Retainer (TEST)" | `prod_VMxtVQBYzS0Qya` | no prices; the app creates a test retainer Price per client (Billing tab › Custom Retainer) |
 | Webhook endpoint | `we_1UMFdM4Zq9yMk653d9ynrHOP` | the 34 events below |
@@ -363,7 +363,7 @@ Original setup steps, for reference:
    only; no cancellation, no plan or quantity changes. Every session
    re-checks that configuration and refuses one widened in the dashboard.
 7. **In the app** (admin), Settings › Billing catalog:
-   - import `prod_VMxmKG052epGVU` onto **Test Standard (TEST)** and approve
+   - import `prod_VMxmkG052epGVU` onto **Test Standard (TEST)** and approve
      `price_1UMDr54Zq9yMk653B7jdneFm` as its default;
    - import `prod_VMxtVQBYzS0Qya` as the custom-retainer product;
    - leave **Compass Standard** unmapped (its entitlements are already

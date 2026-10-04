@@ -205,15 +205,15 @@ select ck.ok('K11 the test-client binding refuses until the TEST price is import
 -- The import, as the app's sync and catalog actions would leave it.
 \c - supabase_admin
 insert into stripe_products (stripe_product_id, livemode, name, active, stripe_synced_at)
-values ('prod_VMxmKG052epGVU', false, 'Compass Standard (TEST)', true, now());
+values ('prod_VMxmkG052epGVU', false, 'Compass Standard (TEST)', true, now());
 insert into stripe_prices (stripe_price_id, stripe_product_id, livemode, active, type, currency, unit_amount_cents,
     billing_scheme, recurring_interval, recurring_interval_count, recurring_usage_type, stripe_synced_at)
-values ('price_1UMDr54Zq9yMk653B7jdneFm', 'prod_VMxmKG052epGVU', false, true, 'recurring', 'usd', 250000,
+values ('price_1UMDr54Zq9yMk653B7jdneFm', 'prod_VMxmkG052epGVU', false, true, 'recurring', 'usd', 250000,
         'per_unit', 'month', 1, 'licensed', now());
 \c - postgres
-update billing_packages set stripe_product_id = 'prod_VMxmKG052epGVU' where id = 'c0ffee00-0000-4000-c000-00000000b111';
+update billing_packages set stripe_product_id = 'prod_VMxmkG052epGVU' where id = 'c0ffee00-0000-4000-c000-00000000b111';
 insert into billing_package_prices (package_id, package_kind, stripe_product_id, stripe_price_id, is_default)
-values ('c0ffee00-0000-4000-c000-00000000b111', 'standard', 'prod_VMxmKG052epGVU', 'price_1UMDr54Zq9yMk653B7jdneFm', true);
+values ('c0ffee00-0000-4000-c000-00000000b111', 'standard', 'prod_VMxmkG052epGVU', 'price_1UMDr54Zq9yMk653B7jdneFm', true);
 \set LAST_ERROR_MESSAGE ''
 \ir ../../cutover/06_bind_test_client_price.sql
 \ir ../../cutover/06_bind_test_client_price.sql
