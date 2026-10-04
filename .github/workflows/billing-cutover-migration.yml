@@ -1,0 +1,184 @@
+name: Billing cutover migration (production, temporary)
+
+# One purpose: apply ONE of the four Stage A billing migrations (0058, 0059,
+# 0060, 0061) to the production Compass Supabase project, in order, through
+# the Supabase Management API's migrations endpoint, which records the
+# migration in supabase_migrations.schema_migrations exactly as the Supabase
+# MCP connector's apply_migration does (and rolls it back if it fails). It
+# exists only because the connector holds any statement containing DROP for
+# a confirmation the cloud session cannot show (Stage A, PR #86).
+#
+# - manual only (workflow_dispatch), from main only, one migration per run;
+# - the SQL is the migration file at the reviewed PR #86 commit, refused
+#   unless its md5 matches the pinned value; no other file or SQL can run;
+# - refuses unless the latest recorded migration is the expected predecessor
+#   and the selected one is not yet recorded;
+# - 0062 and the cutover scripts are never applied here; no rollback here.
+#
+# Delete this file once 0061 is applied.
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: "Billing migration to apply (one per run, in order: 0058 → 0059 → 0060 → 0061)"
+        required: true
+        type: choice
+        options:
+          - "0058"
+          - "0059"
+          - "0060"
+          - "0061"
+      confirm:
+        description: "Type APPLY_BILLING_PRODUCTION to apply it to production"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: billing-cutover-migration
+  cancel-in-progress: false
+
+env:
+  # Hard-bound: the production Compass project and the reviewed commit.
+  PROJECT_REF: iokcopiyzajigvhwexhe
+  SOURCE_SHA: 0558fc97dd19070af8f2d6c7526d55e17ef22485
+  API: https://api.supabase.com/v1/projects/iokcopiyzajigvhwexhe/database
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check request
+        env:
+          MIGRATION: ${{ inputs.migration }}
+          CONFIRM: ${{ inputs.confirm }}
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run this workflow from main only (got $GITHUB_REF)."; exit 1
+          fi
+          if [ "$CONFIRM" != "APPLY_BILLING_PRODUCTION" ]; then
+            echo "::error::Confirmation must be exactly APPLY_BILLING_PRODUCTION. Nothing was applied."; exit 1
+          fi
+          # name | expected md5 of the file | migration that must be the latest recorded
+          case "$MIGRATION" in
+            0058) set -- 0058_billing_foundation     719d41805e6518309fea6ea1a6f22531 0063_communications ;;
+            0059) set -- 0059_billing_sync           b42871227038d122fa62e737fee51976 0058_billing_foundation ;;
+            0060) set -- 0060_billing_operations     7dd19f55d687c5dfee30bfc3e05686c5 0059_billing_sync ;;
+            0061) set -- 0061_billing_reconciliation 9b80e61c345856130d63d5a5cf1109d7 0060_billing_operations ;;
+            *) echo "::error::Unknown migration '$MIGRATION'. Only 0058, 0059, 0060 or 0061."; exit 1 ;;
+          esac
+          {
+            echo "MIGRATION_NAME=$1"
+            echo "MIGRATION_FILE=supabase/migrations/$1.sql"
+            echo "EXPECTED_MD5=$2"
+            echo "EXPECTED_PREVIOUS=$3"
+          } >> "$GITHUB_ENV"
+          echo "Selected $1 (expects $3 to be the latest recorded migration)."
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify the migration file
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA" || { echo "::error::Checked out the wrong commit."; exit 1; }
+          ACTUAL_MD5="$(md5sum "$MIGRATION_FILE" | cut -d' ' -f1)"
+          if [ "$ACTUAL_MD5" != "$EXPECTED_MD5" ]; then
+            echo "::error::$MIGRATION_FILE md5 is $ACTUAL_MD5, expected $EXPECTED_MD5. Nothing was applied."; exit 1
+          fi
+          echo "$MIGRATION_FILE at $SOURCE_SHA: md5 $ACTUAL_MD5 ($(wc -c < "$MIGRATION_FILE") bytes)."
+
+      - name: Check migration history before applying
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "::error::SUPABASE_ACCESS_TOKEN repository secret is not configured."; exit 1; }
+          printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_ACCESS_TOKEN" > "$RUNNER_TEMP/auth.curl"
+          chmod 600 "$RUNNER_TEMP/auth.curl"
+          curl -sS --fail-with-body --max-time 60 -K "$RUNNER_TEMP/auth.curl" "$API/migrations" -o "$RUNNER_TEMP/before.json" \
+            || { echo "::error::Could not read migration history. Nothing was applied."; exit 1; }
+          LATEST="$(jq -r 'sort_by(.version | tonumber) | last | "\(.version) \(.name)"' "$RUNNER_TEMP/before.json")"
+          echo "Latest recorded migration: $LATEST"
+          if jq -e --arg n "$MIGRATION_NAME" 'any(.[]; .name == $n)' "$RUNNER_TEMP/before.json" > /dev/null; then
+            echo "::error::$MIGRATION_NAME is already recorded. Nothing was applied."; exit 1
+          fi
+          if [ "${LATEST#* }" != "$EXPECTED_PREVIOUS" ]; then
+            echo "::error::Latest recorded migration is '${LATEST#* }', expected '$EXPECTED_PREVIOUS'. Nothing was applied."; exit 1
+          fi
+          echo "PREVIOUS_LATEST=$LATEST" >> "$GITHUB_ENV"
+
+      - name: Apply the migration
+        id: apply
+        shell: bash
+        run: |
+          jq -n --rawfile q "$MIGRATION_FILE" --arg n "$MIGRATION_NAME" '{query: $q, name: $n}' > "$RUNNER_TEMP/body.json"
+          set +e
+          STATUS="$(curl -sS --max-time 900 -X POST -K "$RUNNER_TEMP/auth.curl" \
+            -H "Content-Type: application/json" \
+            -H "Idempotency-Key: $MIGRATION_NAME-$GITHUB_RUN_ID" \
+            --data-binary @"$RUNNER_TEMP/body.json" \
+            -o "$RUNNER_TEMP/apply.json" -w '%{http_code}' "$API/migrations")"
+          CURL_EXIT=$?
+          set -e
+          echo "HTTP_STATUS=$STATUS" >> "$GITHUB_ENV"
+          echo "CURL_EXIT=$CURL_EXIT" >> "$GITHUB_ENV"
+          echo "Apply request: HTTP $STATUS (curl exit $CURL_EXIT)."
+          if [ "$CURL_EXIT" != 0 ] || [ "${STATUS:0:1}" != 2 ]; then
+            echo "Response:"; head -c 4000 "$RUNNER_TEMP/apply.json" 2>/dev/null; echo
+            exit 1
+          fi
+
+      # Runs even when the request failed or timed out, so the summary says what
+      # production actually holds rather than what the request reported.
+      - name: Verify migration history after applying
+        if: ${{ always() && steps.apply.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          RESULT=failure
+          DETAIL=""
+          if curl -sS --fail-with-body --max-time 60 -K "$RUNNER_TEMP/auth.curl" "$API/migrations" -o "$RUNNER_TEMP/after.json"; then
+            RECORDED="$(jq -r --arg n "$MIGRATION_NAME" '[.[] | select(.name == $n)] | if length == 1 then .[0].version else "" end' "$RUNNER_TEMP/after.json")"
+            LATEST="$(jq -r 'sort_by(.version | tonumber) | last | "\(.version) \(.name)"' "$RUNNER_TEMP/after.json")"
+            if [[ "$RECORDED" =~ ^[0-9]{14}$ ]] && [ "$LATEST" = "$RECORDED $MIGRATION_NAME" ]; then
+              # Read-only check that the recorded statement is the pinned file.
+              jq -n --arg q "select md5(statements[1]) as md5, array_length(statements, 1) as n from supabase_migrations.schema_migrations where version = '$RECORDED'" \
+                '{query: $q}' > "$RUNNER_TEMP/check.json"
+              if curl -sS --fail-with-body --max-time 60 -X POST -K "$RUNNER_TEMP/auth.curl" -H "Content-Type: application/json" \
+                   --data-binary @"$RUNNER_TEMP/check.json" "$API/query/read-only" -o "$RUNNER_TEMP/md5.json"; then
+                RECORDED_MD5="$(jq -r '.[0].md5 // empty' "$RUNNER_TEMP/md5.json")"
+                RECORDED_N="$(jq -r '.[0].n // empty' "$RUNNER_TEMP/md5.json")"
+                if [ "$RECORDED_MD5" = "$EXPECTED_MD5" ] && [ "$RECORDED_N" = 1 ]; then
+                  RESULT=success; DETAIL="recorded as $RECORDED, statement md5 $RECORDED_MD5 matches the file"
+                else
+                  DETAIL="recorded as $RECORDED but the recorded statement md5 is '$RECORDED_MD5' ($RECORDED_N statement(s)), expected $EXPECTED_MD5 — inspect before continuing"
+                fi
+              else
+                RESULT=unverified; DETAIL="recorded as $RECORDED; the read-only md5 check could not run — verify md5(statements[1]) = $EXPECTED_MD5 before continuing"
+              fi
+            elif [ -z "$RECORDED" ]; then
+              DETAIL="NOT recorded — nothing was applied (latest is still $LATEST)"
+            else
+              DETAIL="history is unexpected (recorded '$RECORDED', latest '$LATEST') — inspect before continuing"
+            fi
+          else
+            DETAIL="could not read migration history after the request — check production before doing anything else"
+          fi
+          rm -f "$RUNNER_TEMP/auth.curl"
+          SUMMARY="Billing cutover $MIGRATION_NAME: $RESULT — $DETAIL. Before: $PREVIOUS_LATEST. Apply request: HTTP $HTTP_STATUS (curl exit $CURL_EXIT). Source $SOURCE_SHA, project $PROJECT_REF."
+          echo "$SUMMARY"
+          echo "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          [ "$RESULT" = success ]
+
+      - name: Remove the credential file
+        if: ${{ always() }}
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/auth.curl"

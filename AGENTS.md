@@ -26,7 +26,10 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
   **not yet applied**; `0057` (Creative Engine overlay roles) is written and
-  sandbox-tested but **not applied** (needs Tom's approval); `0056` (Canva folder ids on the client record) was
+  sandbox-tested but **not applied** (needs Tom's approval); `0063` (Compass
+  Communications) was applied Oct 2 2026 as `20261002211041`; `0058`–`0062`
+  (Billing) were applied to production on Oct 3 2026 (Central) from the
+  Billing branch, whose files are not on `main` until that PR merges; `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -1308,6 +1311,60 @@ Show Me Electrical only because its id sits inside that client's folder).
   as are posts, creative / drafter / publisher / Authority counts and the
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
+
+## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
+
+Twilio SMS per client, piloted with BHG Safety Partners. Full design, flows
+and the remaining manual Twilio steps: `docs/communications.md`.
+
+- **Twilio shape:** Compass's parent account (ISV) holds one **subaccount
+  per client**. Vault: the parent's **Main** API key (`TWILIO_ACCOUNT_SID` /
+  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only for `/Accounts` and
+  `/Keys`; per subaccount its own Standard key and its Auth Token
+  (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`), written by
+  the function. Every client operation uses the subaccount's key. No
+  credential is an env var, a column, a response or a log line; no EIN is
+  stored anywhere.
+- **Functions:** `communications` (team JWT; admin modes check
+  `team_members.role = 'admin'`: create / link subaccount, Messaging Service,
+  purchase / link / attach numbers; any teammate: send, search, sync
+  compliance) and `twilio-webhook` (`verify_jwt = false`; official-SDK
+  signature validation with the subaccount's Auth Token;
+  `/messages/inbound`, `/messages/status?m=<id>`). Both are `handler.ts`
+  factories; REST to Twilio is `_shared/communications/twilio.ts` over
+  injected fetch.
+- **Schema rules:** messages, conversations, consents and the Twilio
+  registry are written only by 0063's functions (not by teammates, the
+  service role directly, or the worker's SQL). Consent is separate from a
+  phone number: sending needs `granted` consent under a lock; STOP / 21610
+  opt the recipient out and only their START lifts it. Inbound is idempotent
+  on `MessageSid`; delivery status only moves forward. `contacts` are the
+  client's own customers (not `client_contacts`). Team-only RLS, no portal
+  view.
+- **UI:** client tab **Communications** (Overview, Inbox, Numbers,
+  Compliance, Settings). Per-client switch `client_communication_settings`
+  (no row = off; only a teammate turns sending on).
+- **Tests:** `npm test` (handler, webhook with real SDK signatures,
+  provider, lib), the sandbox's `communications.test.sql`,
+  `npm run test:communications` (real handlers over PostgREST, fake Twilio),
+  `npm run test:communications-ui`.
+- **BHG:** `supabase/seeds/clients/bhg-safety-partners-communications.sql`
+  (data only, sending off; not run yet).
+- **Production (Oct 2 2026):** 0063 applied as `20261002211041` (recorded
+  SQL identical to the file, md5 `bcb710b3…`; dry run first, rolled back).
+  Verified after applying: 11 tables with RLS and only the `is_team()`
+  policy, grants as designed (anon none; function-only tables select-only),
+  25 functions with their execute grants, guard / history / `updated_at`
+  triggers, no portal view reference, every non-Communications function /
+  column / policy / trigger fingerprint unchanged, and rolled-back probes
+  refused the worker's SQL (with and without the write flag, SET ROLE
+  service_role, SET ROLE authenticated + team JWT), anon and a non-team
+  sign-in. `communications` v1 (`verify_jwt = true`) and `twilio-webhook`
+  v1 (`verify_jwt = false`) deployed through the Supabase MCP from the PR
+  branch (the workflow deploys only `main`); unsigned / forged webhooks
+  answer 403. `database.types.ts` regenerated from production. No Twilio
+  secret is in Vault, no subaccount or number exists, no row is in any
+  Communications table and nothing has been sent.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 

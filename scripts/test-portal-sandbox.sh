@@ -134,3 +134,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folder
 # creative_spec_hash for every Lucas template (the fixture is passed in).
 psql_as postgres -d sandbox -v specs="$(cat "$ROOT/tests/fixtures/creative-lucas-templates.json")" \
   -f "$ROOT/supabase/tests/sandbox/creative_overlay_roles.test.sql"
+# 0063: Compass Communications (Twilio SMS): registry, inbound idempotency,
+# consent and opt-out, outbound rules, forward-only delivery status,
+# compliance registrations and checklist, tenancy, the worker kept out.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test.sql"
