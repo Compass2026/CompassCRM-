@@ -254,7 +254,7 @@ active-client agreement decisions it needed are answered (Oct 2026,
 `docs/billing-agreement-inventory.md`).
 
 **Returned by Tom (Oct 2026), test mode, ids only:**
-- [x] Compass Standard (TEST): `prod_VMxmKG052epGVU`, monthly price
+- [x] Compass Standard (TEST): `prod_VMxmkG052epGVU`, monthly price
       `price_1UMDr54Zq9yMk653B7jdneFm` ($2,500 — a test fixture, not Compass
       pricing; mapped to the test client's *Test Standard (TEST)* package,
       whose agreement — agreed $2,500.00/month — is then bound to exactly
