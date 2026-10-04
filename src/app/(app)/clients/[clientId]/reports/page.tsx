@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 import { ClientScorecard } from "@/components/client-scorecard";
 import { loadReportMeasurements } from "@/lib/reporting-data";
 import { reportingMonths, validDate } from "@/lib/reporting";
+import { getClientEntitlements } from "@/lib/entitlements";
+import { actualInMonth, actualText, includedPerMonth, includedText } from "@/lib/reporting-activity";
 
 export default async function ReportsPage({
   params,
@@ -28,7 +30,7 @@ export default async function ReportsPage({
   const query = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cycles }, { data: client }, { data: contentPosts }, { data: socialPosts }, measurements] =
+  const [{ data: cycles }, { data: client }, { data: contentPosts }, { data: socialPosts }, measurements, entitlements] =
     await Promise.all([
       supabase
         .from("monthly_cycles")
@@ -46,11 +48,15 @@ export default async function ReportsPage({
       // 0045: published is a publishing state, dated by when it went out.
       supabase
         .from("social_posts")
-        .select("published_at")
+        .select("published_at, platform")
         .eq("client_id", clientId)
         .eq("publish_status", "published"),
       loadReportMeasurements(supabase, clientId),
+      // B5: what the agreement includes, shown beside (never merged into) what
+      // was delivered.
+      getClientEntitlements(supabase, clientId).catch(() => null),
     ]);
+  const included = includedPerMonth(entitlements);
 
   // Monthly cycles are created on UTC months (startCycleAction, pg_cron), so
   // the cycle list keeps that month. The scorecard's default data month uses
@@ -66,10 +72,6 @@ export default async function ReportsPage({
   const hasCurrentCycle = (cycles ?? []).some((c) => c.period === thisMonthFirst);
   const startCycle = startCycleAction.bind(null, clientId);
 
-  function countInMonth(dates: (string | null)[], period: string) {
-    const prefix = period.slice(0, 7);
-    return dates.filter((d) => d?.startsWith(prefix)).length;
-  }
 
   return (
     <div className="space-y-4">
@@ -88,6 +90,9 @@ export default async function ReportsPage({
           month and open automatically on the 1st at 06:00 UTC (1 am Central in
           summer, midnight in winter) for active clients; each cycle reports the
           previous month&apos;s data. The button covers mid-month starts.
+          <span className="mt-1 block" data-included>
+            {includedText(included)} (the agreement as it stands today; each cycle below shows what was delivered).
+          </span>
         </p>
         {!hasCurrentCycle && (
           <form action={startCycle}>
@@ -152,10 +157,7 @@ export default async function ReportsPage({
                 </Badge>
                 <span className="text-xs text-muted-foreground ml-auto">
                   {doneTasks}/{cycle.tasks.length} tasks ·{" "}
-                  {countInMonth(contentPosts?.map((p) => p.published_at) ?? [], cycle.period)}{" "}
-                  blog ·{" "}
-                  {countInMonth(socialPosts?.map((p) => p.published_at) ?? [], cycle.period)}{" "}
-                  social published
+                  <span data-actual>{actualText(actualInMonth(cycle.period, contentPosts ?? [], socialPosts ?? []))}</span>
                 </span>
               </div>
             </CardHeader>

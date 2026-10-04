@@ -146,7 +146,8 @@ create table cron.job (
   jobid bigserial primary key,
   jobname text unique,
   schedule text,
-  command text
+  command text,
+  active boolean not null default true
 );
 create function cron.schedule(job_name text, schedule text, command text)
 returns bigint language sql as $$
@@ -156,6 +157,13 @@ returns bigint language sql as $$
 $$;
 create function cron.unschedule(job_name text) returns boolean language sql as $$
   with d as (delete from cron.job where jobname = job_name returning 1) select exists (select 1 from d)
+$$;
+-- pg_cron 1.5+: alter_job(job_id, schedule, command, database, username, active).
+create function cron.alter_job(job_id bigint, schedule text default null, command text default null,
+  database text default null, username text default null, active boolean default null)
+returns void language sql as $$
+  update cron.job set schedule = coalesce(alter_job.schedule, job.schedule), command = coalesce(alter_job.command, job.command),
+    active = coalesce(alter_job.active, job.active) where jobid = job_id
 $$;
 grant usage on schema cron to postgres;
 grant all on all tables in schema cron to postgres;

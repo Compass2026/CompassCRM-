@@ -13,6 +13,7 @@ import {
   type IntelligenceInput,
 } from "@/lib/client-intelligence";
 import { cn } from "@/lib/utils";
+import { getClientEntitlements, serviceScope } from "@/lib/entitlements";
 
 const statusStyles: Record<AreaStatus, string> = {
   ready: "bg-green-100 text-green-800 border-green-200",
@@ -50,7 +51,13 @@ export default async function IntelligencePage({
   // The one read of Client Intelligence (migration 0047): the same function
   // the post-drafter Edge Function and the dry run call, so what this tab
   // reports is exactly what a draft may stand on.
-  const { data, error } = await supabase.rpc("client_intelligence_input", { p_client_id: clientId });
+  // B5: the agreement's service scope is read separately (the entitlement
+  // contract), not added to client_intelligence_input: Authority fingerprints
+  // that document, and what a post may cite does not depend on the agreement.
+  const [{ data, error }, scope] = await Promise.all([
+    supabase.rpc("client_intelligence_input", { p_client_id: clientId }),
+    getClientEntitlements(supabase, clientId).then(serviceScope, (e: Error) => e.message),
+  ]);
   const input = data as unknown as IntelligenceInput | null;
   if (error || !input?.client) {
     return (
@@ -86,6 +93,28 @@ export default async function IntelligencePage({
           before anything is published. Posts support visibility and engagement; they are not a
           guarantee of Google rankings or topical authority.
         </p>
+      </section>
+
+      <section aria-label="Service scope" className="surface p-4 sm:p-5" data-card="service-scope">
+        <h3 className="text-sm font-semibold text-navy-900">Service scope</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          What the client&apos;s agreement includes. Automatic planning and drafting stay inside it; a teammate may still
+          do more by hand. It never changes which facts a post may cite.
+        </p>
+        {typeof scope === "string" ? (
+          <p role="alert" className="mt-2 text-sm text-amber-900" data-entitlements-unavailable>
+            The agreement could not be read, so automatic planning is paused for this client. {scope}
+          </p>
+        ) : (
+          <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+            <dt className="text-muted-foreground">Included</dt>
+            <dd data-scope="included">{scope.included.length ? scope.included.join(", ") : "Nothing yet — no agreement recorded"}</dd>
+            <dt className="text-muted-foreground">Every month</dt>
+            <dd data-scope="monthly">{scope.monthly.length ? scope.monthly.join(" · ") : "—"}</dd>
+            <dt className="text-muted-foreground">Not included</dt>
+            <dd data-scope="not-included" className="text-muted-foreground">{scope.notIncluded.join(", ") || "—"}</dd>
+          </dl>
+        )}
       </section>
 
       <section aria-label="Readiness by area" className="grid gap-4 md:grid-cols-2">

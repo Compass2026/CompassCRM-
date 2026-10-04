@@ -148,6 +148,16 @@ export function OpportunityCard({ card, compact = false, clientId = null }: { ca
             {chip.label}
           </Badge>
         )}
+        {card.agreement?.label && (
+          <Badge
+            variant="outline"
+            className={cn("h-5 px-1.5 text-[11px]", card.agreement.status === "allocation_used" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-300 bg-slate-50 text-slate-700")}
+            title={card.agreement.title}
+            data-agreement={card.agreement.status}
+          >
+            {card.agreement.label}
+          </Badge>
+        )}
       </div>
       <p className="mt-1 text-sm text-foreground/90">{card.reason}</p>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">

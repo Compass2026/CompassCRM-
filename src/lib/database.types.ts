@@ -531,6 +531,442 @@ export type Database = {
           },
         ]
       }
+      automation_entitlement_log: {
+        Row: {
+          allocation: number | null
+          automation: string
+          client_id: string
+          created_at: string
+          decision: string
+          id: string
+          reason: string
+          service_key: string
+          used: number | null
+        }
+        Insert: {
+          allocation?: number | null
+          automation: string
+          client_id: string
+          created_at?: string
+          decision: string
+          id?: string
+          reason: string
+          service_key: string
+          used?: number | null
+        }
+        Update: {
+          allocation?: number | null
+          automation?: string
+          client_id?: string
+          created_at?: string
+          decision?: string
+          id?: string
+          reason?: string
+          service_key?: string
+          used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_entitlement_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_entitlement_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_audit_events: {
+        Row: {
+          action: string
+          actor_kind: string
+          actor_portal_user_id: string | null
+          actor_team_member_id: string | null
+          client_id: string | null
+          created_at: string
+          detail: Json
+          id: string
+          livemode: boolean | null
+          subject: string | null
+        }
+        Insert: {
+          action: string
+          actor_kind: string
+          actor_portal_user_id?: string | null
+          actor_team_member_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          livemode?: boolean | null
+          subject?: string | null
+        }
+        Update: {
+          action?: string
+          actor_kind?: string
+          actor_portal_user_id?: string | null
+          actor_team_member_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          livemode?: boolean | null
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_actor_portal_user_id_fkey"
+            columns: ["actor_portal_user_id"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_actor_team_member_id_fkey"
+            columns: ["actor_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_one_time_items: {
+        Row: {
+          active: boolean
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          name: string
+          sort_order: number
+          stripe_product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          name: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          name?: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_one_time_items_stripe_product_id_fkey"
+            columns: ["stripe_product_id"]
+            isOneToOne: true
+            referencedRelation: "stripe_products"
+            referencedColumns: ["stripe_product_id"]
+          },
+        ]
+      }
+      billing_package_prices: {
+        Row: {
+          active: boolean
+          client_id: string | null
+          created_at: string
+          id: string
+          is_default: boolean
+          notes: string | null
+          package_id: string
+          package_kind: string
+          price_type: string
+          stripe_price_id: string
+          stripe_product_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          notes?: string | null
+          package_id: string
+          package_kind: string
+          price_type?: string
+          stripe_price_id: string
+          stripe_product_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          notes?: string | null
+          package_id?: string
+          package_kind?: string
+          price_type?: string
+          stripe_price_id?: string
+          stripe_product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_package_prices_package_id_stripe_product_id_packag_fkey"
+            columns: ["package_id", "stripe_product_id", "package_kind"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id", "stripe_product_id", "kind"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_stripe_price_id_stripe_product_id_p_fkey"
+            columns: ["stripe_price_id", "stripe_product_id", "price_type"]
+            isOneToOne: false
+            referencedRelation: "stripe_prices"
+            referencedColumns: ["stripe_price_id", "stripe_product_id", "type"]
+          },
+        ]
+      }
+      billing_packages: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          kind: string
+          name: string
+          sort_order: number
+          stripe_product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          kind: string
+          name: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          kind?: string
+          name?: string
+          sort_order?: number
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_packages_stripe_product_id_fkey"
+            columns: ["stripe_product_id"]
+            isOneToOne: true
+            referencedRelation: "stripe_products"
+            referencedColumns: ["stripe_product_id"]
+          },
+        ]
+      }
+      billing_reconciliation_results: {
+        Row: {
+          attention_reasons: string[]
+          changes: Json
+          checked_at: string
+          client_id: string
+          error: string | null
+          livemode: boolean
+          objects_examined: number
+          records_changed: number
+          run_id: string
+          status: string
+          stripe_customer_id: string
+          warnings: string[]
+        }
+        Insert: {
+          attention_reasons?: string[]
+          changes?: Json
+          checked_at?: string
+          client_id: string
+          error?: string | null
+          livemode: boolean
+          objects_examined?: number
+          records_changed?: number
+          run_id: string
+          status: string
+          stripe_customer_id: string
+          warnings?: string[]
+        }
+        Update: {
+          attention_reasons?: string[]
+          changes?: Json
+          checked_at?: string
+          client_id?: string
+          error?: string | null
+          livemode?: boolean
+          objects_examined?: number
+          records_changed?: number
+          run_id?: string
+          status?: string
+          stripe_customer_id?: string
+          warnings?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_reconciliation_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "billing_reconciliation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_reconciliation_runs: {
+        Row: {
+          completed_at: string | null
+          customers_examined: number
+          customers_repaired: number
+          error: string | null
+          events_recovered: number
+          failures: number
+          id: string
+          livemode: boolean
+          objects_examined: number
+          records_changed: number
+          requested_by: string | null
+          scope_client_id: string | null
+          started_at: string
+          status: string
+          summary: Json
+          trigger: string
+          warnings: number
+        }
+        Insert: {
+          completed_at?: string | null
+          customers_examined?: number
+          customers_repaired?: number
+          error?: string | null
+          events_recovered?: number
+          failures?: number
+          id?: string
+          livemode: boolean
+          objects_examined?: number
+          records_changed?: number
+          requested_by?: string | null
+          scope_client_id?: string | null
+          started_at?: string
+          status?: string
+          summary?: Json
+          trigger: string
+          warnings?: number
+        }
+        Update: {
+          completed_at?: string | null
+          customers_examined?: number
+          customers_repaired?: number
+          error?: string | null
+          events_recovered?: number
+          failures?: number
+          id?: string
+          livemode?: boolean
+          objects_examined?: number
+          records_changed?: number
+          requested_by?: string | null
+          scope_client_id?: string | null
+          started_at?: string
+          status?: string
+          summary?: Json
+          trigger?: string
+          warnings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
+            columns: ["scope_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
+            columns: ["scope_client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_runs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_assets: {
         Row: {
           client_id: string
@@ -877,6 +1313,114 @@ export type Database = {
           },
         ]
       }
+      checkout_sessions: {
+        Row: {
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          line_items: Json
+          livemode: boolean
+          mode: string
+          package_id: string | null
+          payment_status: string | null
+          status: string
+          stripe_checkout_session_id: string
+          stripe_created_at: string | null
+          stripe_customer_id: string
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_subscription_id: string | null
+          stripe_synced_at: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          line_items?: Json
+          livemode: boolean
+          mode: string
+          package_id?: string | null
+          payment_status?: string | null
+          status: string
+          stripe_checkout_session_id: string
+          stripe_created_at?: string | null
+          stripe_customer_id: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_synced_at: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          line_items?: Json
+          livemode?: boolean
+          mode?: string
+          package_id?: string | null
+          payment_status?: string | null
+          status?: string
+          stripe_checkout_session_id?: string
+          stripe_created_at?: string | null
+          stripe_customer_id?: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_synced_at?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkout_sessions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claims: {
         Row: {
           claim: string
@@ -967,6 +1511,64 @@ export type Database = {
           },
         ]
       }
+      client_agreement_events: {
+        Row: {
+          action: string
+          actor_team_member_id: string | null
+          after: Json | null
+          before: Json | null
+          client_id: string
+          created_at: string
+          id: string
+          service_key: string | null
+          subject: string
+        }
+        Insert: {
+          action: string
+          actor_team_member_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_id: string
+          created_at?: string
+          id?: string
+          service_key?: string | null
+          subject: string
+        }
+        Update: {
+          action?: string
+          actor_team_member_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          service_key?: string | null
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_agreement_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agreement_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agreement_events_actor_team_member_id_fkey"
+            columns: ["actor_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_brands: {
         Row: {
           ai_guidance: string | null
@@ -1038,6 +1640,61 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: true
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_communication_settings: {
+        Row: {
+          client_id: string
+          created_at: string
+          display_name: string | null
+          enabled: boolean
+          notes: string | null
+          outbound_enabled: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          display_name?: string | null
+          enabled?: boolean
+          notes?: string | null
+          outbound_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          display_name?: string | null
+          enabled?: boolean
+          notes?: string | null
+          outbound_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -1217,6 +1874,68 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "creative_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_entitlement_overrides: {
+        Row: {
+          client_id: string
+          enabled: boolean
+          quantity: number | null
+          reason: string
+          service_key: string
+          service_kind: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          enabled: boolean
+          quantity?: number | null
+          reason: string
+          service_key: string
+          service_kind: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          enabled?: boolean
+          quantity?: number | null
+          reason?: string
+          service_key?: string
+          service_kind?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_entitlement_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_service_key_service_kind_fkey"
+            columns: ["service_key", "service_kind"]
+            isOneToOne: false
+            referencedRelation: "service_catalog"
+            referencedColumns: ["key", "kind"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -1470,6 +2189,893 @@ export type Database = {
           zip?: string | null
         }
         Relationships: []
+      }
+      communication_accounts: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          friendly_name: string | null
+          id: string
+          provider: string
+          provider_account_sid: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          friendly_name?: string | null
+          id?: string
+          provider?: string
+          provider_account_sid: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          friendly_name?: string | null
+          id?: string
+          provider?: string
+          provider_account_sid?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_accounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_compliance_items: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          client_id: string
+          created_at: string
+          evidence: string | null
+          id: string
+          item_key: string
+          label: string
+          profile_id: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          client_id: string
+          created_at?: string
+          evidence?: string | null
+          id?: string
+          item_key: string
+          label: string
+          profile_id: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          client_id?: string
+          created_at?: string
+          evidence?: string | null
+          id?: string
+          item_key?: string
+          label?: string
+          profile_id?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_compliance_items_checked_by_fkey"
+            columns: ["checked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_profile_id_client_id_fkey"
+            columns: ["profile_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_compliance_profiles"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      communication_compliance_profiles: {
+        Row: {
+          address_city: string | null
+          address_country: string | null
+          address_postal_code: string | null
+          address_region: string | null
+          address_street: string | null
+          approved_at: string | null
+          business_contact_email: string | null
+          business_contact_name: string | null
+          business_contact_phone: string | null
+          client_id: string
+          communication_account_id: string | null
+          communication_number_id: string | null
+          created_at: string
+          created_by: string | null
+          doing_business_as: string | null
+          edit_allowed: boolean | null
+          id: string
+          last_synced_at: string | null
+          legal_business_name: string | null
+          message_volume: string | null
+          notification_email: string | null
+          opt_in_image_urls: string[]
+          opt_in_type: string | null
+          opt_in_url: string | null
+          privacy_url: string | null
+          profile_type: string
+          provider: string
+          provider_profile_sid: string | null
+          provider_status: string | null
+          rejected_at: string | null
+          rejection_code: string | null
+          rejection_reason: string | null
+          restricted_at: string | null
+          restricted_by: string | null
+          restriction: string | null
+          restriction_reason: string | null
+          sample_messages: string[]
+          status: string
+          submitted_at: string | null
+          terms_url: string | null
+          updated_at: string
+          use_case_categories: string[]
+          use_case_summary: string | null
+          website_url: string | null
+        }
+        Insert: {
+          address_city?: string | null
+          address_country?: string | null
+          address_postal_code?: string | null
+          address_region?: string | null
+          address_street?: string | null
+          approved_at?: string | null
+          business_contact_email?: string | null
+          business_contact_name?: string | null
+          business_contact_phone?: string | null
+          client_id: string
+          communication_account_id?: string | null
+          communication_number_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          doing_business_as?: string | null
+          edit_allowed?: boolean | null
+          id?: string
+          last_synced_at?: string | null
+          legal_business_name?: string | null
+          message_volume?: string | null
+          notification_email?: string | null
+          opt_in_image_urls?: string[]
+          opt_in_type?: string | null
+          opt_in_url?: string | null
+          privacy_url?: string | null
+          profile_type: string
+          provider?: string
+          provider_profile_sid?: string | null
+          provider_status?: string | null
+          rejected_at?: string | null
+          rejection_code?: string | null
+          rejection_reason?: string | null
+          restricted_at?: string | null
+          restricted_by?: string | null
+          restriction?: string | null
+          restriction_reason?: string | null
+          sample_messages?: string[]
+          status?: string
+          submitted_at?: string | null
+          terms_url?: string | null
+          updated_at?: string
+          use_case_categories?: string[]
+          use_case_summary?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          address_city?: string | null
+          address_country?: string | null
+          address_postal_code?: string | null
+          address_region?: string | null
+          address_street?: string | null
+          approved_at?: string | null
+          business_contact_email?: string | null
+          business_contact_name?: string | null
+          business_contact_phone?: string | null
+          client_id?: string
+          communication_account_id?: string | null
+          communication_number_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          doing_business_as?: string | null
+          edit_allowed?: boolean | null
+          id?: string
+          last_synced_at?: string | null
+          legal_business_name?: string | null
+          message_volume?: string | null
+          notification_email?: string | null
+          opt_in_image_urls?: string[]
+          opt_in_type?: string | null
+          opt_in_url?: string | null
+          privacy_url?: string | null
+          profile_type?: string
+          provider?: string
+          provider_profile_sid?: string | null
+          provider_status?: string | null
+          rejected_at?: string | null
+          rejection_code?: string | null
+          rejection_reason?: string | null
+          restricted_at?: string | null
+          restricted_by?: string | null
+          restriction?: string | null
+          restriction_reason?: string | null
+          sample_messages?: string[]
+          status?: string
+          submitted_at?: string | null
+          terms_url?: string | null
+          updated_at?: string
+          use_case_categories?: string[]
+          use_case_summary?: string | null
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_compliance_prof_communication_account_id_cli_fkey"
+            columns: ["communication_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_prof_communication_number_id_clie_fkey"
+            columns: ["communication_number_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_numbers"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_restricted_by_fkey"
+            columns: ["restricted_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_consent_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          consent_id: string
+          consent_type: string
+          created_at: string
+          disclosure_version: string | null
+          evidence: string | null
+          from_status: string | null
+          id: string
+          message_id: string | null
+          phone_e164: string
+          source: string
+          source_url: string | null
+          to_status: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          consent_id: string
+          consent_type: string
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          from_status?: string | null
+          id?: string
+          message_id?: string | null
+          phone_e164: string
+          source: string
+          source_url?: string | null
+          to_status: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          consent_id?: string
+          consent_type?: string
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          from_status?: string | null
+          id?: string
+          message_id?: string | null
+          phone_e164?: string
+          source?: string
+          source_url?: string | null
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_consent_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_consent_id_client_id_fkey"
+            columns: ["consent_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_consents"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      communication_consents: {
+        Row: {
+          client_id: string
+          consent_type: string
+          consented_at: string | null
+          contact_id: string | null
+          created_at: string
+          disclosure_version: string | null
+          evidence: string | null
+          id: string
+          phone_e164: string
+          recorded_by: string | null
+          revoked_at: string | null
+          source: string
+          source_url: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          consent_type?: string
+          consented_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          id?: string
+          phone_e164: string
+          recorded_by?: string | null
+          revoked_at?: string | null
+          source: string
+          source_url?: string | null
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          consent_type?: string
+          consented_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          disclosure_version?: string | null
+          evidence?: string | null
+          id?: string
+          phone_e164?: string
+          recorded_by?: string | null
+          revoked_at?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_consents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_consents_contact_id_client_id_fkey"
+            columns: ["contact_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_consents_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_conversations: {
+        Row: {
+          assigned_user_id: string | null
+          channel: string
+          client_id: string
+          communication_number_id: string
+          contact_id: string
+          created_at: string
+          id: string
+          last_direction: string | null
+          last_message_at: string | null
+          last_message_preview: string | null
+          status: string
+          unread_count: number
+          updated_at: string
+        }
+        Insert: {
+          assigned_user_id?: string | null
+          channel?: string
+          client_id: string
+          communication_number_id: string
+          contact_id: string
+          created_at?: string
+          id?: string
+          last_direction?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          status?: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Update: {
+          assigned_user_id?: string | null
+          channel?: string
+          client_id?: string
+          communication_number_id?: string
+          contact_id?: string
+          created_at?: string
+          id?: string
+          last_direction?: string | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          status?: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_conversations_assigned_user_id_fkey"
+            columns: ["assigned_user_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_communication_number_id_client_fkey"
+            columns: ["communication_number_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_numbers"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_contact_id_client_id_fkey"
+            columns: ["contact_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      communication_messages: {
+        Row: {
+          body: string
+          client_id: string
+          conversation_id: string
+          created_at: string
+          delivered_at: string | null
+          direction: string
+          error_code: string | null
+          error_message: string | null
+          from_e164: string
+          id: string
+          num_media: number
+          opt_out_type: string | null
+          provider: string
+          provider_message_sid: string | null
+          provider_status: string
+          request_id: string | null
+          sent_at: string | null
+          sent_by: string | null
+          status_updated_at: string | null
+          to_e164: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string
+          client_id: string
+          conversation_id: string
+          created_at?: string
+          delivered_at?: string | null
+          direction: string
+          error_code?: string | null
+          error_message?: string | null
+          from_e164: string
+          id?: string
+          num_media?: number
+          opt_out_type?: string | null
+          provider?: string
+          provider_message_sid?: string | null
+          provider_status: string
+          request_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status_updated_at?: string | null
+          to_e164: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          client_id?: string
+          conversation_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          direction?: string
+          error_code?: string | null
+          error_message?: string | null
+          from_e164?: string
+          id?: string
+          num_media?: number
+          opt_out_type?: string | null
+          provider?: string
+          provider_message_sid?: string | null
+          provider_status?: string
+          request_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status_updated_at?: string | null
+          to_e164?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_conversation_id_client_id_fkey"
+            columns: ["conversation_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_conversations"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_messages_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_messaging_services: {
+        Row: {
+          client_id: string
+          communication_account_id: string
+          created_at: string
+          friendly_name: string
+          id: string
+          opt_out_mode: string
+          provider: string
+          provider_service_sid: string
+          status: string
+          updated_at: string
+          use_case: string
+        }
+        Insert: {
+          client_id: string
+          communication_account_id: string
+          created_at?: string
+          friendly_name: string
+          id?: string
+          opt_out_mode?: string
+          provider?: string
+          provider_service_sid: string
+          status?: string
+          updated_at?: string
+          use_case?: string
+        }
+        Update: {
+          client_id?: string
+          communication_account_id?: string
+          created_at?: string
+          friendly_name?: string
+          id?: string
+          opt_out_mode?: string
+          provider?: string
+          provider_service_sid?: string
+          status?: string
+          updated_at?: string
+          use_case?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_messaging_servi_communication_account_id_cli_fkey"
+            columns: ["communication_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_messaging_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messaging_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_numbers: {
+        Row: {
+          client_id: string
+          communication_account_id: string
+          created_at: string
+          friendly_name: string | null
+          id: string
+          is_primary: boolean
+          messaging_service_id: string | null
+          mms_enabled: boolean
+          number_type: string
+          phone_number_e164: string
+          provider: string
+          provider_phone_number_sid: string
+          purchased_at: string | null
+          sms_enabled: boolean
+          status: string
+          updated_at: string
+          voice_enabled: boolean
+        }
+        Insert: {
+          client_id: string
+          communication_account_id: string
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          is_primary?: boolean
+          messaging_service_id?: string | null
+          mms_enabled?: boolean
+          number_type?: string
+          phone_number_e164: string
+          provider?: string
+          provider_phone_number_sid: string
+          purchased_at?: string | null
+          sms_enabled?: boolean
+          status?: string
+          updated_at?: string
+          voice_enabled?: boolean
+        }
+        Update: {
+          client_id?: string
+          communication_account_id?: string
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          is_primary?: boolean
+          messaging_service_id?: string | null
+          mms_enabled?: boolean
+          number_type?: string
+          phone_number_e164?: string
+          provider?: string
+          provider_phone_number_sid?: string
+          purchased_at?: string | null
+          sms_enabled?: boolean
+          status?: string
+          updated_at?: string
+          voice_enabled?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_numbers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_communication_account_id_client_id_fkey"
+            columns: ["communication_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_messaging_service_id_client_id_fkey"
+            columns: ["messaging_service_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "communication_messaging_services"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          client_id: string
+          company: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          notes: string | null
+          phone_e164: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notes?: string | null
+          phone_e164?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notes?: string | null
+          phone_e164?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       content_posts: {
         Row: {
@@ -2473,6 +4079,211 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_line_items: {
+        Row: {
+          amount_cents: number
+          client_id: string
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          invoice_id: string
+          period_end: string | null
+          period_start: string | null
+          proration: boolean
+          quantity: number | null
+          stripe_line_item_id: string
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          stripe_subscription_item_id: string | null
+          stripe_synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          client_id: string
+          created_at?: string
+          currency: string
+          description?: string | null
+          id?: string
+          invoice_id: string
+          period_end?: string | null
+          period_start?: string | null
+          proration?: boolean
+          quantity?: number | null
+          stripe_line_item_id: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_subscription_item_id?: string | null
+          stripe_synced_at: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          client_id?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          invoice_id?: string
+          period_end?: string | null
+          period_start?: string | null
+          proration?: boolean
+          quantity?: number | null
+          stripe_line_item_id?: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_subscription_item_id?: string | null
+          stripe_synced_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_line_items_invoice_id_client_id_fkey"
+            columns: ["invoice_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount_due_cents: number
+          amount_paid_cents: number
+          amount_remaining_cents: number
+          attempt_count: number
+          attempted: boolean
+          billing_reason: string | null
+          client_id: string
+          collection_method: string
+          created_at: string
+          currency: string
+          due_date: string | null
+          finalized_at: string | null
+          hosted_invoice_url: string | null
+          id: string
+          invoice_pdf: string | null
+          livemode: boolean
+          marked_uncollectible_at: string | null
+          next_payment_attempt: string | null
+          number: string | null
+          paid_at: string | null
+          paid_out_of_band: boolean
+          period_end: string | null
+          period_start: string | null
+          status: string
+          stripe_created_at: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_subscription_id: string | null
+          stripe_synced_at: string
+          subtotal_cents: number
+          total_cents: number
+          updated_at: string
+          voided_at: string | null
+        }
+        Insert: {
+          amount_due_cents: number
+          amount_paid_cents: number
+          amount_remaining_cents: number
+          attempt_count?: number
+          attempted?: boolean
+          billing_reason?: string | null
+          client_id: string
+          collection_method: string
+          created_at?: string
+          currency: string
+          due_date?: string | null
+          finalized_at?: string | null
+          hosted_invoice_url?: string | null
+          id?: string
+          invoice_pdf?: string | null
+          livemode: boolean
+          marked_uncollectible_at?: string | null
+          next_payment_attempt?: string | null
+          number?: string | null
+          paid_at?: string | null
+          paid_out_of_band?: boolean
+          period_end?: string | null
+          period_start?: string | null
+          status: string
+          stripe_created_at: string
+          stripe_customer_id: string
+          stripe_invoice_id: string
+          stripe_subscription_id?: string | null
+          stripe_synced_at: string
+          subtotal_cents: number
+          total_cents: number
+          updated_at?: string
+          voided_at?: string | null
+        }
+        Update: {
+          amount_due_cents?: number
+          amount_paid_cents?: number
+          amount_remaining_cents?: number
+          attempt_count?: number
+          attempted?: boolean
+          billing_reason?: string | null
+          client_id?: string
+          collection_method?: string
+          created_at?: string
+          currency?: string
+          due_date?: string | null
+          finalized_at?: string | null
+          hosted_invoice_url?: string | null
+          id?: string
+          invoice_pdf?: string | null
+          livemode?: boolean
+          marked_uncollectible_at?: string | null
+          next_payment_attempt?: string | null
+          number?: string | null
+          paid_at?: string | null
+          paid_out_of_band?: boolean
+          period_end?: string | null
+          period_start?: string | null
+          status?: string
+          stripe_created_at?: string
+          stripe_customer_id?: string
+          stripe_invoice_id?: string
+          stripe_subscription_id?: string | null
+          stripe_synced_at?: string
+          subtotal_cents?: number
+          total_cents?: number
+          updated_at?: string
+          voided_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
+          },
+          {
+            foreignKeyName: "invoices_stripe_subscription_id_client_id_fkey"
+            columns: ["stripe_subscription_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["stripe_subscription_id", "client_id"]
+          },
+        ]
+      }
       keywords: {
         Row: {
           city: string | null
@@ -2841,6 +4652,51 @@ export type Database = {
           },
         ]
       }
+      package_entitlements: {
+        Row: {
+          enabled: boolean
+          notes: string | null
+          package_id: string
+          quantity: number | null
+          service_key: string
+          service_kind: string
+          updated_at: string
+        }
+        Insert: {
+          enabled: boolean
+          notes?: string | null
+          package_id: string
+          quantity?: number | null
+          service_key: string
+          service_kind: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          notes?: string | null
+          package_id?: string
+          quantity?: number | null
+          service_key?: string
+          service_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_entitlements_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_entitlements_service_key_service_kind_fkey"
+            columns: ["service_key", "service_kind"]
+            isOneToOne: false
+            referencedRelation: "service_catalog"
+            referencedColumns: ["key", "kind"]
+          },
+        ]
+      }
       page_groups: {
         Row: {
           city_tier: Database["public"]["Enums"]["city_tier"] | null
@@ -2907,52 +4763,94 @@ export type Database = {
       }
       payments: {
         Row: {
-          amount: number
+          amount_cents: number
+          amount_refunded_cents: number
           client_id: string
+          client_request_id: string | null
+          created_at: string
+          currency: string
+          external_method: string | null
+          failure_code: string | null
+          failure_message: string | null
           id: string
-          method: Database["public"]["Enums"]["payment_method"] | null
+          livemode: boolean | null
           notes: string | null
           paid_at: string | null
-          period_end: string | null
-          period_start: string | null
+          payment_method_type: string | null
           recorded_by: string | null
           reference: string | null
-          source: Database["public"]["Enums"]["payment_source"]
+          source: string
+          status: string
+          stripe_charge_id: string | null
+          stripe_created_at: string | null
+          stripe_customer_id: string | null
           stripe_invoice_id: string | null
           stripe_payment_intent_id: string | null
-          subscription_id: string | null
+          stripe_synced_at: string | null
+          updated_at: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
-          amount: number
+          amount_cents: number
+          amount_refunded_cents?: number
           client_id: string
+          client_request_id?: string | null
+          created_at?: string
+          currency: string
+          external_method?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
           id?: string
-          method?: Database["public"]["Enums"]["payment_method"] | null
+          livemode?: boolean | null
           notes?: string | null
           paid_at?: string | null
-          period_end?: string | null
-          period_start?: string | null
+          payment_method_type?: string | null
           recorded_by?: string | null
           reference?: string | null
-          source?: Database["public"]["Enums"]["payment_source"]
+          source: string
+          status: string
+          stripe_charge_id?: string | null
+          stripe_created_at?: string | null
+          stripe_customer_id?: string | null
           stripe_invoice_id?: string | null
           stripe_payment_intent_id?: string | null
-          subscription_id?: string | null
+          stripe_synced_at?: string | null
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
-          amount?: number
+          amount_cents?: number
+          amount_refunded_cents?: number
           client_id?: string
+          client_request_id?: string | null
+          created_at?: string
+          currency?: string
+          external_method?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
           id?: string
-          method?: Database["public"]["Enums"]["payment_method"] | null
+          livemode?: boolean | null
           notes?: string | null
           paid_at?: string | null
-          period_end?: string | null
-          period_start?: string | null
+          payment_method_type?: string | null
           recorded_by?: string | null
           reference?: string | null
-          source?: Database["public"]["Enums"]["payment_source"]
+          source?: string
+          status?: string
+          stripe_charge_id?: string | null
+          stripe_created_at?: string | null
+          stripe_customer_id?: string | null
           stripe_invoice_id?: string | null
           stripe_payment_intent_id?: string | null
-          subscription_id?: string | null
+          stripe_synced_at?: string | null
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -2970,10 +4868,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "payments_subscription_id_fkey"
-            columns: ["subscription_id"]
+            foreignKeyName: "payments_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
             isOneToOne: false
-            referencedRelation: "subscriptions"
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
+          },
+          {
+            foreignKeyName: "payments_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_voided_by_fkey"
+            columns: ["voided_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -3072,48 +4984,86 @@ export type Database = {
       }
       plans: {
         Row: {
-          ad_budget_managed: number | null
-          blog_posts_per_month: number | null
+          agreed_amount_cents: number | null
+          agreed_billing_interval: string | null
+          agreed_billing_interval_count: number | null
+          agreed_currency: string | null
+          billing_package_price_id: string | null
           client_id: string
-          gbp_posts_per_month: number | null
+          collection: string
+          external_amount_cents: number | null
+          external_currency: string | null
+          external_interval: string | null
+          external_method: string | null
           id: string
-          monthly_fee: number | null
+          managed_ad_budget_cents: number | null
           notes: string | null
-          package_name: string | null
+          package_id: string | null
           renewal_date: string | null
-          social_posts_per_month: number | null
           start_date: string | null
           term_months: number | null
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
-          ad_budget_managed?: number | null
-          blog_posts_per_month?: number | null
+          agreed_amount_cents?: number | null
+          agreed_billing_interval?: string | null
+          agreed_billing_interval_count?: number | null
+          agreed_currency?: string | null
+          billing_package_price_id?: string | null
           client_id: string
-          gbp_posts_per_month?: number | null
+          collection?: string
+          external_amount_cents?: number | null
+          external_currency?: string | null
+          external_interval?: string | null
+          external_method?: string | null
           id?: string
-          monthly_fee?: number | null
+          managed_ad_budget_cents?: number | null
           notes?: string | null
-          package_name?: string | null
+          package_id?: string | null
           renewal_date?: string | null
-          social_posts_per_month?: number | null
           start_date?: string | null
           term_months?: number | null
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
-          ad_budget_managed?: number | null
-          blog_posts_per_month?: number | null
+          agreed_amount_cents?: number | null
+          agreed_billing_interval?: string | null
+          agreed_billing_interval_count?: number | null
+          agreed_currency?: string | null
+          billing_package_price_id?: string | null
           client_id?: string
-          gbp_posts_per_month?: number | null
+          collection?: string
+          external_amount_cents?: number | null
+          external_currency?: string | null
+          external_interval?: string | null
+          external_method?: string | null
           id?: string
-          monthly_fee?: number | null
+          managed_ad_budget_cents?: number | null
           notes?: string | null
-          package_name?: string | null
+          package_id?: string | null
           renewal_date?: string | null
-          social_posts_per_month?: number | null
           start_date?: string | null
           term_months?: number | null
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "plans_price_of_package"
+            columns: ["billing_package_price_id", "package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_package_prices"
+            referencedColumns: ["id", "package_id"]
+          },
+          {
+            foreignKeyName: "plans_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "plans_client_id_fkey"
             columns: ["client_id"]
@@ -3126,6 +5076,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: true
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -3575,6 +5532,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      service_catalog: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          key: string
+          kind: string
+          name: string
+          period: string | null
+          pipeline_key: Database["public"]["Enums"]["pipeline_key"] | null
+          sort_order: number
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          key: string
+          kind: string
+          name: string
+          period?: string | null
+          pipeline_key?: Database["public"]["Enums"]["pipeline_key"] | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          key?: string
+          kind?: string
+          name?: string
+          period?: string | null
+          pipeline_key?: Database["public"]["Enums"]["pipeline_key"] | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       services: {
         Row: {
@@ -4067,113 +6066,514 @@ export type Database = {
         Row: {
           client_id: string
           created_at: string
+          currency: string | null
+          default_payment_method_brand: string | null
+          default_payment_method_last4: string | null
+          default_payment_method_type: string | null
+          deleted_at: string | null
+          email: string | null
           id: string
-          last4: string | null
-          payment_method_type:
-            | Database["public"]["Enums"]["payment_method_type"]
-            | null
+          link_source: string
+          linked_at: string
+          linked_by: string | null
+          livemode: boolean
+          metadata: Json
+          name: string | null
+          stripe_created_at: string | null
           stripe_customer_id: string
+          stripe_synced_at: string
+          unlink_reason: string | null
+          unlinked_at: string | null
+          unlinked_by: string | null
+          updated_at: string
         }
         Insert: {
           client_id: string
           created_at?: string
+          currency?: string | null
+          default_payment_method_brand?: string | null
+          default_payment_method_last4?: string | null
+          default_payment_method_type?: string | null
+          deleted_at?: string | null
+          email?: string | null
           id?: string
-          last4?: string | null
-          payment_method_type?:
-            | Database["public"]["Enums"]["payment_method_type"]
-            | null
+          link_source: string
+          linked_at?: string
+          linked_by?: string | null
+          livemode: boolean
+          metadata?: Json
+          name?: string | null
+          stripe_created_at?: string | null
           stripe_customer_id: string
+          stripe_synced_at: string
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+          updated_at?: string
         }
         Update: {
           client_id?: string
           created_at?: string
+          currency?: string | null
+          default_payment_method_brand?: string | null
+          default_payment_method_last4?: string | null
+          default_payment_method_type?: string | null
+          deleted_at?: string | null
+          email?: string | null
           id?: string
-          last4?: string | null
-          payment_method_type?:
-            | Database["public"]["Enums"]["payment_method_type"]
-            | null
+          link_source?: string
+          linked_at?: string
+          linked_by?: string | null
+          livemode?: boolean
+          metadata?: Json
+          name?: string | null
+          stripe_created_at?: string | null
           stripe_customer_id?: string
+          stripe_synced_at?: string
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "stripe_customers_client_id_fkey"
             columns: ["client_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "stripe_customers_client_id_fkey"
             columns: ["client_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_customers_linked_by_fkey"
+            columns: ["linked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_customers_unlinked_by_fkey"
+            columns: ["unlinked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
       }
       stripe_events: {
         Row: {
+          api_version: string | null
+          attempts: number
+          event_created_at: string
           id: string
+          ignored_reason: string | null
+          last_attempt_at: string | null
+          last_error: string | null
+          lease_expires_at: string | null
+          livemode: boolean
+          object_id: string | null
+          object_type: string | null
+          processed_at: string | null
           received_at: string
+          status: string
           type: string
         }
         Insert: {
+          api_version?: string | null
+          attempts?: number
+          event_created_at: string
           id: string
+          ignored_reason?: string | null
+          last_attempt_at?: string | null
+          last_error?: string | null
+          lease_expires_at?: string | null
+          livemode: boolean
+          object_id?: string | null
+          object_type?: string | null
+          processed_at?: string | null
           received_at?: string
+          status?: string
           type: string
         }
         Update: {
+          api_version?: string | null
+          attempts?: number
+          event_created_at?: string
           id?: string
+          ignored_reason?: string | null
+          last_attempt_at?: string | null
+          last_error?: string | null
+          lease_expires_at?: string | null
+          livemode?: boolean
+          object_id?: string | null
+          object_type?: string | null
+          processed_at?: string | null
           received_at?: string
+          status?: string
           type?: string
         }
         Relationships: []
       }
-      subscriptions: {
+      stripe_prices: {
         Row: {
-          amount: number | null
-          cancel_at: string | null
-          client_id: string
+          active: boolean
+          billing_scheme: string
           created_at: string
-          current_period_end: string | null
-          current_period_start: string | null
-          id: string
-          interval: string
-          latest_invoice_url: string | null
-          paid_status: Database["public"]["Enums"]["paid_status_type"]
-          status: string | null
-          stripe_price_id: string | null
-          stripe_subscription_id: string | null
+          currency: string
+          deleted_at: string | null
+          livemode: boolean
+          lookup_key: string | null
+          metadata: Json
+          nickname: string | null
+          recurring_interval: string | null
+          recurring_interval_count: number | null
+          recurring_usage_type: string | null
+          stripe_created_at: string | null
+          stripe_price_id: string
+          stripe_product_id: string
+          stripe_synced_at: string
+          tax_behavior: string | null
+          type: string
+          unit_amount_cents: number | null
+          updated_at: string
         }
         Insert: {
-          amount?: number | null
-          cancel_at?: string | null
-          client_id: string
+          active: boolean
+          billing_scheme?: string
           created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          id?: string
-          interval?: string
-          latest_invoice_url?: string | null
-          paid_status?: Database["public"]["Enums"]["paid_status_type"]
-          status?: string | null
-          stripe_price_id?: string | null
-          stripe_subscription_id?: string | null
+          currency: string
+          deleted_at?: string | null
+          livemode: boolean
+          lookup_key?: string | null
+          metadata?: Json
+          nickname?: string | null
+          recurring_interval?: string | null
+          recurring_interval_count?: number | null
+          recurring_usage_type?: string | null
+          stripe_created_at?: string | null
+          stripe_price_id: string
+          stripe_product_id: string
+          stripe_synced_at: string
+          tax_behavior?: string | null
+          type: string
+          unit_amount_cents?: number | null
+          updated_at?: string
         }
         Update: {
-          amount?: number | null
-          cancel_at?: string | null
+          active?: boolean
+          billing_scheme?: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          livemode?: boolean
+          lookup_key?: string | null
+          metadata?: Json
+          nickname?: string | null
+          recurring_interval?: string | null
+          recurring_interval_count?: number | null
+          recurring_usage_type?: string | null
+          stripe_created_at?: string | null
+          stripe_price_id?: string
+          stripe_product_id?: string
+          stripe_synced_at?: string
+          tax_behavior?: string | null
+          type?: string
+          unit_amount_cents?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stripe_prices_stripe_product_id_fkey"
+            columns: ["stripe_product_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_products"
+            referencedColumns: ["stripe_product_id"]
+          },
+        ]
+      }
+      stripe_products: {
+        Row: {
+          active: boolean
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          livemode: boolean
+          metadata: Json
+          name: string
+          stripe_created_at: string | null
+          stripe_product_id: string
+          stripe_synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          active: boolean
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          livemode: boolean
+          metadata?: Json
+          name: string
+          stripe_created_at?: string | null
+          stripe_product_id: string
+          stripe_synced_at: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          livemode?: boolean
+          metadata?: Json
+          name?: string
+          stripe_created_at?: string | null
+          stripe_product_id?: string
+          stripe_synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      stripe_refunds: {
+        Row: {
+          amount_cents: number
+          client_id: string
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          id: string
+          livemode: boolean
+          payment_id: string
+          payment_source: string
+          reason: string | null
+          status: string
+          stripe_charge_id: string | null
+          stripe_created_at: string
+          stripe_payment_intent_id: string | null
+          stripe_refund_id: string
+          stripe_synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          client_id: string
+          created_at?: string
+          currency: string
+          failure_reason?: string | null
+          id?: string
+          livemode: boolean
+          payment_id: string
+          payment_source?: string
+          reason?: string | null
+          status: string
+          stripe_charge_id?: string | null
+          stripe_created_at: string
+          stripe_payment_intent_id?: string | null
+          stripe_refund_id: string
+          stripe_synced_at: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
           client_id?: string
           created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          livemode?: boolean
+          payment_id?: string
+          payment_source?: string
+          reason?: string | null
+          status?: string
+          stripe_charge_id?: string | null
+          stripe_created_at?: string
+          stripe_payment_intent_id?: string | null
+          stripe_refund_id?: string
+          stripe_synced_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stripe_refunds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_payment_id_client_id_payment_source_fkey"
+            columns: ["payment_id", "client_id", "payment_source"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id", "client_id", "source"]
+          },
+        ]
+      }
+      subscription_items: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          quantity: number | null
+          stripe_created_at: string | null
+          stripe_price_id: string
+          stripe_subscription_item_id: string
+          stripe_synced_at: string
+          subscription_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          quantity?: number | null
+          stripe_created_at?: string | null
+          stripe_price_id: string
+          stripe_subscription_item_id: string
+          stripe_synced_at: string
+          subscription_id: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          quantity?: number | null
+          stripe_created_at?: string | null
+          stripe_price_id?: string
+          stripe_subscription_item_id?: string
+          stripe_synced_at?: string
+          subscription_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_items_stripe_price_id_fkey"
+            columns: ["stripe_price_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_prices"
+            referencedColumns: ["stripe_price_id"]
+          },
+          {
+            foreignKeyName: "subscription_items_subscription_id_client_id_fkey"
+            columns: ["subscription_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          billing_cycle_anchor: string | null
+          cancel_at: string | null
+          cancel_at_period_end: boolean
+          canceled_at: string | null
+          cancellation_comment: string | null
+          cancellation_feedback: string | null
+          cancellation_reason: string | null
+          client_id: string
+          collection_method: string
+          created_at: string
+          currency: string
+          current_period_end: string | null
+          current_period_start: string | null
+          days_until_due: number | null
+          default_payment_method_type: string | null
+          ended_at: string | null
+          id: string
+          latest_stripe_invoice_id: string | null
+          livemode: boolean
+          metadata: Json
+          pause_collection_behavior: string | null
+          pause_collection_resumes_at: string | null
+          start_date: string | null
+          status: string
+          stripe_created_at: string | null
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          stripe_synced_at: string
+          trial_end: string | null
+          trial_start: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_cycle_anchor?: string | null
+          cancel_at?: string | null
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          cancellation_comment?: string | null
+          cancellation_feedback?: string | null
+          cancellation_reason?: string | null
+          client_id: string
+          collection_method: string
+          created_at?: string
+          currency: string
           current_period_end?: string | null
           current_period_start?: string | null
+          days_until_due?: number | null
+          default_payment_method_type?: string | null
+          ended_at?: string | null
           id?: string
-          interval?: string
-          latest_invoice_url?: string | null
-          paid_status?: Database["public"]["Enums"]["paid_status_type"]
-          status?: string | null
-          stripe_price_id?: string | null
-          stripe_subscription_id?: string | null
+          latest_stripe_invoice_id?: string | null
+          livemode: boolean
+          metadata?: Json
+          pause_collection_behavior?: string | null
+          pause_collection_resumes_at?: string | null
+          start_date?: string | null
+          status: string
+          stripe_created_at?: string | null
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          stripe_synced_at: string
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_cycle_anchor?: string | null
+          cancel_at?: string | null
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          cancellation_comment?: string | null
+          cancellation_feedback?: string | null
+          cancellation_reason?: string | null
+          client_id?: string
+          collection_method?: string
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          days_until_due?: number | null
+          default_payment_method_type?: string | null
+          ended_at?: string | null
+          id?: string
+          latest_stripe_invoice_id?: string | null
+          livemode?: boolean
+          metadata?: Json
+          pause_collection_behavior?: string | null
+          pause_collection_resumes_at?: string | null
+          start_date?: string | null
+          status?: string
+          stripe_created_at?: string | null
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          stripe_synced_at?: string
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -4189,6 +6589,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_client"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
           },
         ]
       }
@@ -4712,6 +7119,159 @@ export type Database = {
           },
         ]
       }
+      billing_sync_health: {
+        Row: {
+          failed_events: number | null
+          last_event_at: string | null
+          last_run_completed_at: string | null
+          last_run_customers: number | null
+          last_run_failures: number | null
+          last_run_id: string | null
+          last_run_records_changed: number | null
+          last_run_started_at: string | null
+          last_run_status: string | null
+          last_run_trigger: string | null
+          last_run_warnings: number | null
+          livemode: boolean | null
+          stuck_events: number | null
+        }
+        Relationships: []
+      }
+      client_billing_reconciliation: {
+        Row: {
+          attention_reasons: string[] | null
+          changes: Json | null
+          checked_at: string | null
+          client_id: string | null
+          error: string | null
+          livemode: boolean | null
+          records_changed: number | null
+          run_id: string | null
+          status: string | null
+          stripe_customer_id: string | null
+          trigger: string | null
+          warnings: string[] | null
+        }
+        Relationships: []
+      }
+      client_agreement_price: {
+        Row: {
+          agreed_amount_cents: number | null
+          agreed_billing_interval: string | null
+          agreed_billing_interval_count: number | null
+          agreed_currency: string | null
+          billing_package_price_id: string | null
+          client_id: string | null
+          collection: string | null
+          package_id: string | null
+          price_amount_cents: number | null
+          price_currency: string | null
+          price_interval: string | null
+          price_interval_count: number | null
+          price_livemode: boolean | null
+          price_status: string | null
+          stripe_price_id: string | null
+        }
+        Relationships: []
+      }
+      client_billing_status: {
+        Row: {
+          agreement_package_id: string | null
+          attention_reasons: string[] | null
+          billing_attention: boolean | null
+          billing_state: string | null
+          cancel_at: string | null
+          cancel_at_period_end: boolean | null
+          canceled_at: string | null
+          checkout_expires_at: string | null
+          checkout_url: string | null
+          client_id: string | null
+          collection: string | null
+          currency: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          default_payment_method_brand: string | null
+          default_payment_method_last4: string | null
+          default_payment_method_type: string | null
+          latest_invoice_currency: string | null
+          latest_invoice_due_date: string | null
+          latest_invoice_id: string | null
+          latest_invoice_remaining_cents: number | null
+          latest_invoice_status: string | null
+          latest_invoice_total_cents: number | null
+          latest_invoice_url: string | null
+          live_subscription_count: number | null
+          livemode: boolean | null
+          mrr_cents: number | null
+          mrr_incomplete: boolean | null
+          next_billing_at: string | null
+          open_invoice_count: number | null
+          outstanding_cents_by_currency: Json | null
+          overdue_invoice_count: number | null
+          pause_collection_behavior: string | null
+          settling_invoice_count: number | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_package_ids: string[] | null
+          subscription_status: string | null
+        }
+        Relationships: []
+      }
+      client_entitlements: {
+        Row: {
+          client_id: string | null
+          enabled: boolean | null
+          override_reason: string | null
+          package_enabled: boolean | null
+          package_id: string | null
+          package_quantity: number | null
+          period: string | null
+          quantity: number | null
+          service_key: string | null
+          service_kind: string | null
+          service_name: string | null
+          sort_order: number | null
+          source: string | null
+          unit: string | null
+        }
+        Relationships: []
+      }
+      portal_billing_invoices: {
+        Row: {
+          amount_paid_cents: number | null
+          amount_remaining_cents: number | null
+          client_id: string | null
+          currency: string | null
+          due_date: string | null
+          hosted_invoice_url: string | null
+          invoice_date: string | null
+          invoice_pdf: string | null
+          number: string | null
+          period_end: string | null
+          period_start: string | null
+          status: string | null
+          total_cents: number | null
+        }
+        Relationships: []
+      }
+      portal_billing_summary: {
+        Row: {
+          agreed_amount_cents: number | null
+          agreed_currency: string | null
+          agreed_interval: string | null
+          agreed_interval_count: number | null
+          can_manage_billing: boolean | null
+          client_id: string | null
+          collection: string | null
+          currency: string | null
+          ends_at: string | null
+          monthly_amount_cents: number | null
+          next_billing_at: string | null
+          plan_name: string | null
+          status: string | null
+        }
+        Relationships: []
+      }
       portal_client: {
         Row: {
           city: string | null
@@ -4739,6 +7299,19 @@ export type Database = {
           state?: string | null
           status?: never
           website_url?: string | null
+        }
+        Relationships: []
+      }
+      portal_entitlements: {
+        Row: {
+          client_id: string | null
+          kind: string | null
+          period: string | null
+          quantity: number | null
+          service_key: string | null
+          service_name: string | null
+          sort_order: number | null
+          unit: string | null
         }
         Relationships: []
       }
@@ -5084,6 +7657,138 @@ export type Database = {
       }
       authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
+      billing_audit: {
+        Args: {
+          p: Json
+        }
+        Returns: string
+      }
+      billing_caller_is_service: { Args: never; Returns: boolean }
+      billing_caller_is_superuser: { Args: never; Returns: boolean }
+      billing_catalog_fingerprint: {
+        Args: {
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      billing_event_begin: {
+        Args: {
+          p: Json
+          p_lease_seconds?: number
+        }
+        Returns: Json
+      }
+      billing_event_fail: {
+        Args: {
+          p_attempt: number
+          p_error: string
+          p_id: string
+        }
+        Returns: Json
+      }
+      billing_event_finish: {
+        Args: {
+          p_attempt: number
+          p_id: string
+          p_reason?: string
+          p_status: string
+        }
+        Returns: Json
+      }
+      billing_fire_reconciliation: { Args: never; Returns: number }
+      billing_link_customer: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_livemode: { Args: never; Returns: boolean }
+      billing_mirror_fingerprint: {
+        Args: {
+          p_client: string
+          p_livemode: boolean
+        }
+        Returns: Json
+      }
+      billing_monthly_cents: {
+        Args: {
+          p_amount: number
+          p_interval: string
+          p_interval_count: number
+          p_quantity: number
+        }
+        Returns: number
+      }
+      billing_owner: {
+        Args: { p_customer: string; p_livemode: boolean }
+        Returns: Record<string, unknown>
+      }
+      billing_reconcile_begin: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_reconcile_client: {
+        Args: {
+          p: Json
+        }
+        Returns: undefined
+      }
+      billing_reconcile_finish: {
+        Args: {
+          p: Json
+        }
+        Returns: undefined
+      }
+      billing_record_checkout: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_record_external_payment: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_require_service: { Args: never; Returns: undefined }
+      billing_row_digest: {
+        Args: {
+          r: Json
+        }
+        Returns: string
+      }
+      billing_sync_active: { Args: never; Returns: boolean }
+      billing_sync_apply: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
+      billing_update: {
+        Args: {
+          p_key: string
+          p_row: Json
+          p_table: string
+        }
+        Returns: string
+      }
+      billing_upsert: {
+        Args: {
+          p_keys: string[]
+          p_row: Json
+          p_table: string
+        }
+        Returns: Json
+      }
+      billing_void_external_payment: {
+        Args: {
+          p: Json
+        }
+        Returns: Json
+      }
       brand_asset_record_hash: { Args: { p: Json }; Returns: Json }
       client_canva_folders: {
         Args: { p_client_id?: string }
@@ -5096,10 +7801,96 @@ export type Database = {
           client_status: string
         }[]
       }
+      client_entitlements_for: {
+        Args: { p_client_id?: string }
+        Returns: {
+          client_id: string
+          enabled: boolean
+          kind: string
+          package_id: string
+          period: string
+          quantity: number
+          service_key: string
+          service_name: string
+          sort_order: number
+          source: string
+          unit: string
+        }[]
+      }
       client_intelligence_input: {
         Args: { p_client_id: string }
         Returns: Json
       }
+      client_quota_usage: {
+        Args: { p_client_id?: string; p_month?: string }
+        Returns: {
+          allocation: number
+          client_id: string
+          completed: number
+          month: string
+          over_allocation: number
+          planned: number
+          remaining: number
+          service_key: string
+          service_name: string
+          used: number
+        }[]
+      }
+      communication_apply_status: {
+        Args: {
+          p_at: string
+          p_error_code: string
+          p_error_message: string
+          p_msg: string
+          p_status: string
+        }
+        Returns: string
+      }
+      communication_begin_outbound: { Args: { p: Json }; Returns: Json }
+      communication_caller: { Args: never; Returns: string }
+      communication_ensure_checklist: {
+        Args: { p_profile_id: string }
+        Returns: number
+      }
+      communication_in_write: { Args: never; Returns: boolean }
+      communication_mark_sent: { Args: { p: Json }; Returns: Json }
+      communication_opt_out: {
+        Args: {
+          p_actor: string
+          p_at: string
+          p_client: string
+          p_contact: string
+          p_evidence: string
+          p_message: string
+          p_phone: string
+          p_source: string
+        }
+        Returns: undefined
+      }
+      communication_record_compliance_sync: { Args: { p: Json }; Returns: Json }
+      communication_record_consent: { Args: { p: Json }; Returns: Json }
+      communication_record_inbound: { Args: { p: Json }; Returns: Json }
+      communication_record_status: { Args: { p: Json }; Returns: Json }
+      communication_register_account: { Args: { p: Json }; Returns: Json }
+      communication_register_messaging_service: {
+        Args: { p: Json }
+        Returns: Json
+      }
+      communication_register_number: { Args: { p: Json }; Returns: Json }
+      communication_set_primary_number: {
+        Args: { p_number_id: string }
+        Returns: undefined
+      }
+      communication_standard_checklist: {
+        Args: never
+        Returns: {
+          item_key: string
+          label: string
+          sort_order: number
+        }[]
+      }
+      communication_status_rank: { Args: { p: string }; Returns: number }
+      communication_update_conversation: { Args: { p: Json }; Returns: Json }
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined
@@ -5158,12 +7949,43 @@ export type Database = {
       get_brand_profile: { Args: { p_client_id: string }; Returns: Json }
       get_secret: { Args: { secret_name: string }; Returns: string }
       is_team: { Args: never; Returns: boolean }
-      mark_past_due_subscriptions: { Args: never; Returns: undefined }
+      is_team_admin: { Args: never; Returns: boolean }
       normalize_tracked_keywords: {
         Args: { p_client_id: string; p_target?: number }
         Returns: number
       }
+      portal_billing_summary_row: {
+        Args: never
+        Returns: {
+          agreed_amount_cents: number
+          agreed_currency: string
+          agreed_interval: string
+          agreed_interval_count: number
+          can_manage_billing: boolean
+          client_id: string
+          collection: string
+          currency: string
+          ends_at: string
+          monthly_amount_cents: number
+          next_billing_at: string
+          plan_name: string
+          status: string
+        }[]
+      }
       portal_client_id: { Args: never; Returns: string }
+      portal_entitlement_rows: {
+        Args: never
+        Returns: {
+          client_id: string
+          kind: string
+          period: string
+          quantity: number
+          service_key: string
+          service_name: string
+          sort_order: number
+          unit: string
+        }[]
+      }
       portal_seen: { Args: never; Returns: undefined }
       post_caller_is_human: { Args: never; Returns: boolean }
       post_caller_kind: { Args: never; Returns: string }
@@ -5279,10 +8101,6 @@ export type Database = {
       keyword_priority: "p1" | "p2" | "p3"
       owner_type: "TOM" | "CLAUDE" | "CLAUDE_APPROVAL" | "DELEGATED" | "WAITING"
       page_group_type: "home" | "service" | "city" | "hub" | "other"
-      paid_status_type: "paid" | "processing" | "open" | "past_due"
-      payment_method: "card" | "stripe_ach" | "external_ach" | "check"
-      payment_method_type: "card" | "us_bank_account" | "external_ach"
-      payment_source: "stripe" | "manual"
       pipeline_key:
         | "foundation"
         | "seo"
@@ -5514,10 +8332,6 @@ export const Constants = {
       keyword_priority: ["p1", "p2", "p3"],
       owner_type: ["TOM", "CLAUDE", "CLAUDE_APPROVAL", "DELEGATED", "WAITING"],
       page_group_type: ["home", "service", "city", "hub", "other"],
-      paid_status_type: ["paid", "processing", "open", "past_due"],
-      payment_method: ["card", "stripe_ach", "external_ach", "check"],
-      payment_method_type: ["card", "us_bank_account", "external_ach"],
-      payment_source: ["stripe", "manual"],
       pipeline_key: [
         "foundation",
         "seo",

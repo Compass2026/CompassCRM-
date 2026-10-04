@@ -11,6 +11,7 @@
     "test:reporting-ui": "node tests/reporting-ui.mjs",
     "build-brief": "node --no-warnings scripts/build-brief.mjs",
     "test:sandbox": "scripts/test-portal-sandbox.sh",
+    "test:billing-rollback": "scripts/test-billing-rollback.sh",
     "test:tasks-ui": "scripts/test-tasks-ui.sh",
     "test:posts-ui": "UI_SPEC=tests/posts-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-use-ui": "UI_SPEC=tests/creative-use-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
@@ -25,7 +26,18 @@
     "test:authority-reconcile-ui": "UI_SPEC=tests/authority-reconcile-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:authority-draft-ui": "UI_SPEC=tests/authority-draft-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:auth-ui": "PG_LISTEN=127.0.0.1 UI_SPEC=tests/auth-flows-ui.mjs scripts/test-tasks-ui.sh",
+    "test:stripe-webhook": "UI_SPEC=tests/stripe-webhook-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:stripe-billing": "UI_SPEC=tests/stripe-billing-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:stripe-reconcile": "UI_SPEC=tests/stripe-reconcile-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:billing-reconcile-ui": "UI_SPEC=tests/billing-reconcile-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:billing-ops-ui": "UI_SPEC=tests/billing-operations-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:billing-ui": "UI_SPEC=tests/billing-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:entitlements-ui": "UI_SPEC=tests/entitlements-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:billing-rehearsal": "UI_SPEC=tests/billing-lifecycle-rehearsal.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:portal-billing-ui": "UI_SPEC=tests/portal-billing-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:content-origin-ui": "UI_SPEC=tests/content-origin-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:communications": "UI_SPEC=tests/communications-integration.mjs scripts/test-tasks-ui.sh",
+    "test:communications-ui": "UI_SPEC=tests/communications-ui.mjs scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"
   },
   "dependencies": {
@@ -53,6 +65,7 @@
     "eslint-config-next": "16.3.3",
     "playwright-core": "^1.62.1",
     "tailwindcss": "^4",
+    "twilio": "^5.13.1",
     "typescript": "^5"
   }
 }
