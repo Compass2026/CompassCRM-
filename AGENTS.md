@@ -25,9 +25,13 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   timestamp version; `docs/portal-reconciliation.md` maps every file to its
   recorded version (`0007a_gsc_snapshots_plain_key.sql` is the recorded
   migration that was missing a file — never apply it; `0042` is written but
-  **not yet applied**; `0063` (Compass Communications) was applied Oct 2
+  **not yet applied**; `0058` (billing foundation, B1), `0059` (Stripe sync
+  boundary, B2), `0060` (billing operations, B3), `0061` (billing
+  reconciliation, B4) and `0062` (entitlement contract + portal billing,
+  B5) are written but **not yet applied** (final numbers set Sept 30 2026; `0057` belongs to the Creative Engine overlay-roles migration on its own branch; `docs/billing-cutover.md`); `0063` (Compass Communications) was applied Oct 2
   2026 as `20261002211041` (0057–0062 are taken by the unmerged
-  creative-overlay and Billing branches and are not applied); `0056` (Canva folder ids on the client record) was
+  creative-overlay and Billing branches and are not applied, so in production
+  they apply after 0063; the two sets touch no common object); `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -203,6 +207,113 @@ subscriptions still `open` 3+ days past `current_period_end` to `past_due`;
 the Dashboard surfaces those under "Payments past due". UI: Billing tab
 (subscription card, payment history, lifetime paid, pause/resume, open in
 Stripe) plus a setup card on the Plan tab.
+
+**Billing & Financial Operations rework** (audit Sept 28 2026,
+`docs/billing-audit.md`; architecture and status `docs/billing.md`; cutover
+`docs/billing-cutover.md`; draft PR Compass2026/CompassCRM-#86 — do not
+merge or deploy without the runbook). Decisions: standard packages + custom
+retainers + one-time work; link existing Stripe customers, never duplicate;
+card + ACH debit, external arrangements admin-recorded; Stripe owns dunning
+(Compass derives `billing_attention` only); entitlements now, never switched
+off by billing; Checkout link copied by a teammate. **B1 = 0058** (written,
+sandbox-tested, **not applied**): the Stripe mirror (team read-only, money
+in minor units, `livemode` on every row, `stripe_refunds` one row per
+refund), the package / price / one-time catalog, the 14-service
+`service_catalog`, `package_entitlements`, `client_entitlement_overrides`,
+`plans` as the agreement, the `client_entitlements` /
+`client_billing_status` read models; the 3-day sweep and `paid_status`
+retired. **Financial configuration is admin-only** (`team_members.role` via
+`is_team_admin()`): the catalog and its Stripe mapping, the billing mode
+(`app_settings` `billing…`), and team roles (members cannot mint or take
+over an admin). **B2 = 0059 + `supabase/functions/_shared/stripe/` +
+`stripe-webhook`** (written and tested, **not applied / not deployed**): one
+shared sync layer (fetch-on-event, pinned API version, newest read wins)
+behind the webhook, B3 and future reconciliation; a claim / lease / fail
+ledger; the mirror writable only inside the sync functions by an
+authenticator + service_role session (the worker's SQL is refused). **B3 =
+0060 + `stripe-billing` + the app** (written and tested, **not applied /
+not deployed**): explicit admin actions (search / link an existing customer
+with confirmation, create a customer, import a Stripe product, a client's
+Custom Retainer price, Checkout from an approved price only with
+duplicate-subscription protection, expire a link, configure and open the
+Customer Portal, record / void external payments), every Stripe create
+idempotent and followed by the shared sync; `billing_audit_events`
+append-only; Billing tab (Payment Link Ready, customer, entitlements with
+source, invoices, payments with individual refunds, history), Settings ›
+Billing catalog, public `/checkout/complete` and `/checkout/canceled`.
+Members read everything and edit agreements / overrides; portal contacts
+can only open their own client's Customer Portal. **B4 = 0061 +
+`stripe-reconcile`** (written and tested, **not applied / not deployed**):
+the safety net behind the webhook, reusing the shared sync (never a second
+one) — mapped catalog products and prices, every linked customer
+(`resyncCustomer`, invoices Stripe no longer lists, non-final Checkout
+Sessions), then failed / stale webhook events re-synced from Stripe's
+current state; repairs measured by mirror fingerprints; per-run and
+per-client history (`billing_reconciliation_runs` / `_results`,
+`client_billing_reconciliation`, `billing_sync_health`); callers are the
+scheduler (`BILLING_RECONCILE_SECRET`; daily schedule enabled only at
+cutover) or an admin (Settings › Run Billing Reconciliation, Billing tab ›
+Reconcile This Client). Stripe wins; nothing is written to Stripe, and
+agreements, entitlements and external payments are never touched. **B5 =
+0062 + the app + the worker skill** (written and tested, **not applied / not
+deployed**): `client_entitlements_for()` is the one read of what the
+agreement includes (package + client overrides; a disabled or absent quota
+is 0, never unlimited; never reads billing) and `client_quota_usage()` the
+monthly accounting (America/Chicago month; allocation, completed, planned,
+remaining, over allocation). Typed helpers are in `src/lib/entitlements.ts`.
+The weekly blog task and the monthly website updates are planned only within
+the agreement; every skip is logged in `automation_entitlement_log`, and
+nothing is planned when the entitlements are unreadable. A person may always
+add more. Authority marks work outside the agreement (the engine and
+`authority_input` are unchanged). Tasks / Content / Social / Authority show
+"3 / 4 planned" targets; Reports keeps actual and included apart;
+Intelligence shows the service scope. `client_agreement_events` is the
+agreement history. Agreements are not versioned. `/portal/billing` shows
+the portal's own plan, status, services and invoices through
+`portal_billing_summary` / `portal_billing_invoices` /
+`portal_entitlements`, and a Manage billing button that sends no client id.
+**From 0062 on, a client with no recorded agreement gets no weekly blog task
+or website updates** — the cutover runbook's precondition 7. **Production readiness** (Sept 30
+2026): `docs/billing-readiness.md` (reconciliation with the Creative
+Engine branch, security-definer hardening in 0062 — every billing function
+pins `search_path = public, pg_temp` —, the tested rollback in
+`supabase/rollback/` (`npm run test:billing-rollback`), the cutover kit in
+`supabase/cutover/`, the test-mode dress rehearsal `npm run
+test:billing-rehearsal`, the deployment order and the go-live checklist);
+`docs/billing-agreement-inventory.md` (**agreements confirmed Oct 2026**:
+one package, **Compass Standard** — all nine services, 8 blog / 8 GBP / 8
+social posts, 4 new pages, 1 refresh a month — for all eight clients,
+month-to-month from 2026-10-01, Stripe ACH; BHG Safety Partners and
+Shewmaker Brothers Masonry at the $500 legacy price, the other six at the
+$650 default; one package and one entitlement definition for both prices;
+seeded at cutover by `supabase/cutover/02_agreements.sql`, not yet in
+production; the live $650 / $500 Stripe Prices do not exist and are created
+only after Option B). **The agreement binds the exact price** (Oct 3 2026,
+in 0058): `plans.agreed_amount_cents` / `agreed_currency` /
+`agreed_billing_interval` / `agreed_billing_interval_count` are what the
+client contracted to pay (notes are descriptive only), and
+`plans.billing_package_price_id` is the one approved price of the
+agreement's own package Checkout sells (composite FK
+`plans_price_of_package`; `plans_agreement_price_guard` requires it active,
+recurring, fixed, in the current mode and exactly the agreed terms; only an
+admin sets the price or the binding). Checkout takes no price from the
+browser, sells only the bound price and refuses an unbound or mismatched
+agreement (`agreement_price_not_mapped` / `agreement_price_mismatch`);
+`client_agreement_price` reports readiness; the eight stay unbound until
+`07_live_bind_standard_prices.sql` (live, after Option B); the test client
+binds `price_1UMDr54Zq9yMk653B7jdneFm` with `06_bind_test_client_price.sql`;
+`docs/billing-service-role.md` (the Stripe key is in Vault,
+readable by every Edge Function and the worker's SQL). **Decided Sept 30
+2026: Option A for Stripe TEST MODE only; no live Stripe secret may ever go
+into the shared Edge Function / Vault architecture — Option B (dedicated
+billing runtime, billing-only Stripe credentials, least-privilege database
+role) is a hard go-live blocker, not yet built.** Operator steps:
+`docs/stripe-test-mode-operator-checklist.md`; the agreement questions
+(`docs/active-client-agreement-questions.md`) are answered. Every Edge Function
+shares the service-role key, so isolation between functions is code review
+— a production-blocking follow-up in `docs/billing.md`. **Do not add Stripe
+secrets or deploy either function outside the runbook; test mode only.** No
+tenant model yet (debt, `docs/billing.md`).
 
 ## Brand board (spec §6.2b)
 
@@ -662,7 +773,8 @@ Function change that:
 ## Website Updates and the weekly blog (Sept 14 2026)
 
 Tom's calls: two new pages and two refreshes per client per month, a blog
-post every week, published on Compass-run sites **without a look** (the
+post every week (since B5 / 0062, the numbers come from each client's
+agreement — `client_quota_usage()`; see "Billing architecture"), published on Compass-run sites **without a look** (the
 Foundation tab's **Put it back** button is the safety net), Google Docs for
 client-run sites. Migration 0035; playbooks in the worker skill; the plan
 and the per-site survey in `docs/website-updates.md`.

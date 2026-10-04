@@ -27,7 +27,7 @@ export default async function ClientsPage() {
   const { data: clients } = await supabase
     .from("clients")
     .select(
-      "id, name, status, website_url, service_area, plans(package_name, monthly_fee), client_pipelines(status, pipelines(name, is_recurring))"
+      "id, name, status, website_url, service_area, plans(billing_packages(name)), client_pipelines(status, pipelines(name, is_recurring))"
     )
     .order("name");
 
@@ -186,7 +186,7 @@ export default async function ClientsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {client.plans?.package_name ?? "—"}
+                    {client.plans?.billing_packages?.name ?? "—"}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {launch.length
