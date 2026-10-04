@@ -21,6 +21,7 @@ on:
           - portal-invite
           - stripe-billing
           - source-assets
+          - creative-engine
           - communications
           - twilio-webhook
       expected_sha:

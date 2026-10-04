@@ -257,9 +257,8 @@ Full readiness note: `docs/creative-engine-runtime.md`.
 ## To go live (each step on Tom's approval)
 
 1. Apply 0057; verify it with the recorded SQL md5 and the probes.
-2. Add `creative-engine` to the function list in
-   `deploy-supabase-function.yml` and deploy it through that workflow; check
-   it with `{"mode": "version"}` and `plan`.
+2. Deploy `creative-engine` through `deploy-supabase-function.yml` (it is
+   on the function list); check it with `{"mode": "version"}` and `plan`.
 3. `register` the approved template versions.
 4. Run `preview` for Lucas. This proposes each template for Lucas with its
    preview asset.
