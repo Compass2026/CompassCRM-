@@ -28,10 +28,14 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   **not yet applied**; `0058` (billing foundation, B1), `0059` (Stripe sync
   boundary, B2), `0060` (billing operations, B3), `0061` (billing
   reconciliation, B4) and `0062` (entitlement contract + portal billing,
-  B5) are written but **not yet applied** (final numbers set Sept 30 2026; `0057` belongs to the Creative Engine overlay-roles migration on its own branch; `docs/billing-cutover.md`); `0063` (Compass Communications) was applied Oct 2
-  2026 as `20261002211041` (0057–0062 are taken by the unmerged
-  creative-overlay and Billing branches and are not applied, so in production
-  they apply after 0063; the two sets touch no common object); `0056` (Canva folder ids on the client record) was
+  B5) were applied Oct 4 2026 as `20261004023512`, `20261004031812`,
+  `20261004032556`, `20261004032929` and `20261004033843` — after 0063,
+  which they share no object with (`0057` belongs to the Creative Engine
+  overlay-roles migration on its own branch, not applied;
+  `docs/billing-cutover.md`); `0064` (the dedicated billing runtime login,
+  Option B; `docs/billing-runtime.md`) is written but **not yet applied**;
+  `0063` (Compass Communications) was applied Oct 2 2026 as
+  `20261002211041`; `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -216,7 +220,7 @@ retainers + one-time work; link existing Stripe customers, never duplicate;
 card + ACH debit, external arrangements admin-recorded; Stripe owns dunning
 (Compass derives `billing_attention` only); entitlements now, never switched
 off by billing; Checkout link copied by a teammate. **B1 = 0058** (written,
-sandbox-tested, **not applied**): the Stripe mirror (team read-only, money
+sandbox-tested, applied Oct 4 2026): the Stripe mirror (team read-only, money
 in minor units, `livemode` on every row, `stripe_refunds` one row per
 refund), the package / price / one-time catalog, the 14-service
 `service_catalog`, `package_entitlements`, `client_entitlement_overrides`,
@@ -226,13 +230,12 @@ retired. **Financial configuration is admin-only** (`team_members.role` via
 `is_team_admin()`): the catalog and its Stripe mapping, the billing mode
 (`app_settings` `billing…`), and team roles (members cannot mint or take
 over an admin). **B2 = 0059 + `supabase/functions/_shared/stripe/` +
-`stripe-webhook`** (written and tested, **not applied / not deployed**): one
+`stripe-webhook`** (applied and deployed Oct 4 2026): one
 shared sync layer (fetch-on-event, pinned API version, newest read wins)
 behind the webhook, B3 and future reconciliation; a claim / lease / fail
 ledger; the mirror writable only inside the sync functions by an
 authenticator + service_role session (the worker's SQL is refused). **B3 =
-0060 + `stripe-billing` + the app** (written and tested, **not applied /
-not deployed**): explicit admin actions (search / link an existing customer
+0060 + `stripe-billing` + the app** (applied and deployed Oct 4 2026): explicit admin actions (search / link an existing customer
 with confirmation, create a customer, import a Stripe product, a client's
 Custom Retainer price, Checkout from an approved price only with
 duplicate-subscription protection, expire a link, configure and open the
@@ -243,7 +246,7 @@ source, invoices, payments with individual refunds, history), Settings ›
 Billing catalog, public `/checkout/complete` and `/checkout/canceled`.
 Members read everything and edit agreements / overrides; portal contacts
 can only open their own client's Customer Portal. **B4 = 0061 +
-`stripe-reconcile`** (written and tested, **not applied / not deployed**):
+`stripe-reconcile`** (applied and deployed Oct 4 2026):
 the safety net behind the webhook, reusing the shared sync (never a second
 one) — mapped catalog products and prices, every linked customer
 (`resyncCustomer`, invoices Stripe no longer lists, non-final Checkout
@@ -255,8 +258,7 @@ scheduler (`BILLING_RECONCILE_SECRET`; daily schedule enabled only at
 cutover) or an admin (Settings › Run Billing Reconciliation, Billing tab ›
 Reconcile This Client). Stripe wins; nothing is written to Stripe, and
 agreements, entitlements and external payments are never touched. **B5 =
-0062 + the app + the worker skill** (written and tested, **not applied / not
-deployed**): `client_entitlements_for()` is the one read of what the
+0062 + the app + the worker skill** (applied and deployed Oct 4 2026): `client_entitlements_for()` is the one read of what the
 agreement includes (package + client overrides; a disabled or absent quota
 is 0, never unlimited; never reads billing) and `client_quota_usage()` the
 monthly accounting (America/Chicago month; allocation, completed, planned,
@@ -307,7 +309,16 @@ readable by every Edge Function and the worker's SQL). **Decided Sept 30
 2026: Option A for Stripe TEST MODE only; no live Stripe secret may ever go
 into the shared Edge Function / Vault architecture — Option B (dedicated
 billing runtime, billing-only Stripe credentials, least-privilege database
-role) is a hard go-live blocker, not yet built.** Operator steps:
+role) is a hard go-live blocker.** The Stripe TEST lifecycle passed on
+production on Oct 4 2026 (subscription active, invoice paid $2,500, payment
+succeeded, all `livemode = false`) through the Edge Functions. **Option B is
+built (Oct 4 2026, not yet deployed): `billing/` is the `compass-billing`
+Vercel project (the same three handlers as Node functions, a `pg` store as
+the `billing_sync` login from 0064, daily reconciliation by Vercel Cron), and
+the CRM calls it with the signed-in user's JWT once `BILLING_API_URL` is set
+on `compass-crm`. `billing_runtime.edge_functions` keeps the Edge Function
+path open until the owner closes it; ordered deployment, verification and
+rollback in `docs/billing-runtime.md`.** Operator steps:
 `docs/stripe-test-mode-operator-checklist.md`; the agreement questions
 (`docs/active-client-agreement-questions.md`) are answered. Every Edge Function
 shares the service-role key, so isolation between functions is code review

@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     // The Astro starter is a separate project with its own toolchain.
     "templates/**",
     "supabase/functions/**",
+    // The billing runtime (Vercel project compass-billing) has its own
+    // package, typecheck and build (billing/package.json).
+    "billing/**",
   ]),
 ]);
 
