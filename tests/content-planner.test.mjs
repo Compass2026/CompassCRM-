@@ -33,7 +33,7 @@ test("the roll-up: approved + delivered against the target, the rest by status, 
   assert.deepEqual([s.web_page.done, s.web_page.planned, s.web_page.unplanned], [0, 0, 1]);
 });
 
-test("Authority content types map to slots exactly as 0064's guard does", () => {
+test("Authority content types map to slots exactly as 0065's guard does", () => {
   assert.deepEqual(OPPORTUNITY_DELIVERABLE, {
     gbp_post: "gbp", blog_post: "blog", blog_refresh: "blog", service_page: "web_page", location_page: "web_page", page_improvement: "web_page",
   });

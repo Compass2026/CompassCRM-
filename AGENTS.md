@@ -1685,7 +1685,7 @@ stands. No billing, no approvals, no uploads yet.
   an hour, so **custom SMTP (Resend, `send.compassmarketing.ai` is verified)
   must be set in Auth → Emails before inviting real clients.**
 
-## Content Planner (0064 written, not applied; Oct 4 2026)
+## Content Planner (0065 written, not applied; Oct 4 2026)
 
 The weekly production view of the Production MVP sprint: per managed
 client, **Social X/2 | GBP X/2 | Blogs X/2 | Web Pages X/1**, where X is
@@ -1693,7 +1693,7 @@ approved or delivered pieces. The targets (`WEEKLY_TARGETS` in
 `src/lib/content-planner.ts`) are a cadence, not a quota. Full model,
 statuses, the scoped next slices and go-live: `docs/content-planner.md`.
 
-- **0064:** `content_plan_items` holds one planned piece per client and week
+- **0065:** `content_plan_items` holds one planned piece per client and week
   (Monday).
   - Fields: deliverable, channel, purpose (the seven), topic, intent,
     keyword, service, Authority opportunity (exactly when the purpose is
@@ -1706,7 +1706,7 @@ statuses, the scoped next slices and go-live: `docs/content-planner.md`.
   - Team only. It touches no Billing object; Billing's quota counts the
     posts and blogs themselves.
   - **Not applied.** The planner types in `database.types.ts` are
-    hand-written until 0064 is applied and the types are regenerated.
+    hand-written until 0065 is applied and the types are regenerated.
 - **Pages:** **Production** (main nav, `/production`) for all clients'
   week, and the client **Planner** tab (`/clients/[id]/planner`).
   - Plan items per slot; **From Authority** plans a ready opportunity with

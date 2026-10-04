@@ -1,4 +1,4 @@
-// Content Planner (0064): the weekly production targets, labels and the
+// Content Planner (0065): the weekly production targets, labels and the
 // arithmetic the planner pages share. The database derives each item's
 // status (content_plan_board); this only rolls it up.
 // Relative imports (not "@/"), so the unit tests load this file in Node.
@@ -52,7 +52,7 @@ export const isPlanStatus = (v: unknown): v is PlanStatus => PLAN_STATUSES.inclu
 // Clients the planner covers: managed now or launching (not paused or offboarded).
 export const PLANNER_CLIENT_STATUSES = ["active", "launching"] as const;
 
-// Which Authority content types can fill which slot (mirrors 0064's guard).
+// Which Authority content types can fill which slot (mirrors 0065's guard).
 export const OPPORTUNITY_DELIVERABLE: Record<string, Deliverable> = {
   gbp_post: "gbp",
   blog_post: "blog",

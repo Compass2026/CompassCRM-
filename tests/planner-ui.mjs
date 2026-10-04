@@ -1,4 +1,4 @@
-// Browser acceptance check for the Content Planner (0064): the Production
+// Browser acceptance check for the Content Planner (0065): the Production
 // page across clients and a client's Planner tab — plan items, plan from
 // Authority, link a draft and follow it through review, block, deliver.
 // Run by `npm run test:planner-ui` (scripts/test-tasks-ui.sh with UI_SPEC

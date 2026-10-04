@@ -10,10 +10,10 @@ X counts the pieces that are **approved or delivered**. The targets are a
 cadence, not a quota: Authority and quality stay the gate, so a slot may
 stay empty rather than be filled with weak work.
 
-**Status:** migration 0064 is written and sandbox-tested, but **not
+**Status:** migration 0065 is written and sandbox-tested, but **not
 applied**. The pages are built and tested against the sandbox.
 
-## Model (0064)
+## Model (0065)
 
 `content_plan_items` holds one row per planned piece, for a client and a
 week (`week_start` is a Monday).
@@ -125,7 +125,7 @@ object.
 
 ## To go live (on Tom's approval)
 
-1. Apply 0064, with the dry run and verification as for earlier
+1. Apply 0065, with the dry run and verification as for earlier
    migrations.
 2. Regenerate `src/lib/database.types.ts` from production. The planner
    entries in it are hand-written until then.

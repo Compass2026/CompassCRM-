@@ -1,4 +1,4 @@
--- Tests for migration 0064 (Content Planner), run by
+-- Tests for migration 0065 (Content Planner), run by
 -- scripts/test-portal-sandbox.sh on the same replay. Own harness schema (pl)
 -- and its own fictional clients.
 --

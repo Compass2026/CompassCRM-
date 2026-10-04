@@ -26,7 +26,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// The client's week of content (0064): what is planned per slot, why, and
+// The client's week of content (0065): what is planned per slot, why, and
 // where each piece stands. Every read is the teammate's own (is_team()).
 export default async function PlannerPage({ params, searchParams }: {
   params: Promise<{ clientId: string }>;

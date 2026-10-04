@@ -1,6 +1,7 @@
 -- Content Planner MVP (Oct 4 2026; Production MVP sprint). Database only.
 -- NOT APPLIED — written with its sandbox tests (content_planner.test.sql)
--- and held for approval.
+-- and held for approval. Numbered 0065: 0064 is Billing's runtime migration
+-- (PR #94, claude/amazing-gates-eak3wb); the two touch no common object.
 --
 -- One row per planned deliverable for a client and week: the weekly target
 -- per managed client is 2 Social, 2 Business Profile, 2 Blogs and 1 Web
@@ -45,10 +46,10 @@
 do $$
 begin
   if to_regclass('public.content_plan_items') is not null then
-    raise exception '0064: content_plan_items already exists';
+    raise exception '0065: content_plan_items already exists';
   end if;
   if to_regclass('public.authority_opportunities') is null or to_regclass('public.social_posts') is null then
-    raise exception '0064: needs 0045 (social_posts) and 0048 (authority_opportunities)';
+    raise exception '0065: needs 0045 (social_posts) and 0048 (authority_opportunities)';
   end if;
 end $$;
 
@@ -100,7 +101,7 @@ create table content_plan_items (
   constraint content_plan_items_blocked_reason check (hold is distinct from 'blocked' or hold_reason is not null)
 );
 comment on table content_plan_items is
-  'Content Planner (0064): one planned deliverable (social, gbp, blog, web_page) for a client and week (Monday), with its purpose, topic and the draft / output it links to. Status is derived in content_plan_board.';
+  'Content Planner (0065): one planned deliverable (social, gbp, blog, web_page) for a client and week (Monday), with its purpose, topic and the draft / output it links to. Status is derived in content_plan_board.';
 
 create index content_plan_items_week_idx on content_plan_items (week_start, client_id);
 create unique index content_plan_items_social_post_key on content_plan_items (social_post_id) where social_post_id is not null;
@@ -186,7 +187,7 @@ from content_plan_items i
 left join social_posts sp on sp.id = i.social_post_id
 left join content_posts cp on cp.id = i.content_post_id;
 comment on view content_plan_board is
-  'Content Planner (0064): plan items with their derived status (blocked, delivered, approved, in_review, drafting, ready_to_generate, planned). Security invoker: team only, through the base tables.';
+  'Content Planner (0065): plan items with their derived status (blocked, delivered, approved, in_review, drafting, ready_to_generate, planned). Security invoker: team only, through the base tables.';
 
 -- ── 4. Access ───────────────────────────────────────────────────────────────
 alter table content_plan_items enable row level security;
@@ -203,18 +204,18 @@ grant select on content_plan_board to authenticated, service_role;
 do $$
 begin
   if not (select relrowsecurity from pg_class where oid = 'public.content_plan_items'::regclass) then
-    raise exception '0064: RLS must be on';
+    raise exception '0065: RLS must be on';
   end if;
   if exists (select 1 from pg_policies where tablename = 'content_plan_items'
               and (qual not like '%is_team()%' or with_check not like '%is_team()%')) then
-    raise exception '0064: every policy reads is_team()';
+    raise exception '0065: every policy reads is_team()';
   end if;
   if has_table_privilege('anon', 'public.content_plan_items', 'select')
      or has_table_privilege('anon', 'public.content_plan_board', 'select') then
-    raise exception '0064: anon must not read plan items';
+    raise exception '0065: anon must not read plan items';
   end if;
   if (select array_agg(c) from unnest((select reloptions from pg_class where oid = 'public.content_plan_board'::regclass)) c)
      is distinct from array['security_invoker=true'] then
-    raise exception '0064: content_plan_board must be security invoker';
+    raise exception '0065: content_plan_board must be security invoker';
   end if;
 end $$;

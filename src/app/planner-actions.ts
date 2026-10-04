@@ -6,7 +6,7 @@ import { requireTeamMember } from "@/lib/team";
 import { isUuid } from "@/lib/tasks";
 import { addDays, OPPORTUNITY_DELIVERABLE, parsePlanFields, parseWeek } from "@/lib/content-planner";
 
-// Content Planner actions (0064). Each is the signed-in teammate's own write
+// Content Planner actions (0065). Each is the signed-in teammate's own write
 // through PostgREST; the database checks the shapes, the same-client links,
 // the Authority mapping and stamps who changed what (content_plan_items_guard).
 // Nothing here drafts, renders or publishes.

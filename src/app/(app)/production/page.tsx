@@ -12,7 +12,7 @@ import { SlotCount, WeekNav } from "@/components/planner/planner-bits";
 
 export const dynamic = "force-dynamic";
 
-// Production (0064): every managed client's week in one place — what is due,
+// Production (0065): every managed client's week in one place — what is due,
 // what is ready, what is stuck. Counts are approved or delivered pieces
 // against the weekly target; the chips say where the rest stand.
 export default async function ProductionPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
