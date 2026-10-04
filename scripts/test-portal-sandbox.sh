@@ -182,3 +182,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test
 # mapping, same-client links, one slot per post, the derived board status
 # through the review gate, holds, team-only access).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_planner.test.sql"
+# 0066 + 0067: content drafts (request / regenerate, the drafter-only write,
+# grounding, version-pinned idempotent approval to ONE content_posts row,
+# reopen / re-approve, reject, web pages with no final record yet, Billing
+# sees one article, team-only access).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_drafts.test.sql"
