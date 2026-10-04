@@ -40,6 +40,12 @@ export default async function PortalLayout({
   // So the Overview tab can show who has actually signed in.
   await supabase.rpc("portal_seen");
 
+  // Billing appears once the client has an agreement (plan) with Compass.
+  const { data: billing } = await supabase
+    .from("portal_billing_summary")
+    .select("collection")
+    .maybeSingle();
+
   return (
     <div className="min-h-screen">
       <header className="bg-navy-900 text-cream">
@@ -77,7 +83,7 @@ export default async function PortalLayout({
           </div>
         </div>
         <div className="mx-auto max-w-5xl px-4">
-          <PortalNav />
+          <PortalNav showBilling={!!billing?.collection} />
         </div>
         <div className="h-0.5 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-400" />
       </header>

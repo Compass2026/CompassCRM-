@@ -5,6 +5,13 @@ client per month, a blog post **every week**, publish on Compass-built sites
 without a look (one-click revert is the safety net), and the Astro line is
 retired — his Next.js builds are the sites of record.
 
+**Since B5 (migration 0062, not yet applied)** the numbers are each
+client's agreement, not a fixed pace: `client_quota_usage()` gives the
+month's `website_pages`, `website_refreshes` and `blog_posts` allocations
+and what remains. Website updates also need the `website` feature. A client
+with no agreement gets no automatic updates or weekly posts, and every skip
+is logged (`docs/billing.md`, "B5").
+
 ## What the monthly stage does
 
 Runs on the 1st after the monthly report, per active client, from the same

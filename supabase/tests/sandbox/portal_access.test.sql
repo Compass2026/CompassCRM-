@@ -88,7 +88,7 @@ do $$
 declare v record; n int;
 begin
   select count(*) into n from t.portal_views();
-  perform t.ok('A0 eight portal views exist', n = 8, n || ' views');
+  perform t.ok('A0 eleven portal views exist', n = 11, n || ' views');
 
   for v in
     select c.relname, pg_get_userbyid(c.relowner) owner, r.rolsuper, r.rolbypassrls,
@@ -124,14 +124,18 @@ begin
   -- authority-run function for accept / link): D11c here, P3 / P5 in
   -- authority.test.sql. authority_draft_start (0053) refuses anyone but a
   -- signed-in teammate or the service: D11e here, Q / I in
-  -- authority_drafter_handoff.test.sql. communication_record_consent,
+  -- authority_drafter_handoff.test.sql. billing_livemode (0062) returns only
+  -- the billing mode boolean, so the portal's billing views follow it;
+  -- portal_billing_summary_row / portal_entitlement_rows (0062) answer only
+  -- for portal_client_id(), with the client-safe columns (billing suite P*).
+  -- communication_record_consent,
   -- communication_set_primary_number and communication_update_conversation
   -- (0063) refuse anyone but a signed-in teammate: D11f here, communications.test.sql.
-  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, communication_record_consent, communication_set_primary_number, communication_update_conversation, is_team, portal_client_id, portal_seen, secret_present, social_post_readiness among security-definer functions',
+  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, communication_record_consent, communication_set_primary_number, communication_update_conversation, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, secret_present, social_post_readiness among security-definer functions',
     (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
      where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
        and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'communication_record_consent', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness']);
+    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_post_readiness']);
 
   -- portal_client and portal_site are simple views, so Postgres would let a
   -- write through them (as the owner, bypassing RLS) if a grant allowed it.
@@ -273,7 +277,7 @@ begin
   perform t.ok('D11 portal user cannot call any other security-definer function',
     not exists (select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
       where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
-        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'communication_record_consent', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_client_id', 'portal_seen', 'secret_present', 'social_post_readiness')
+        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_post_readiness')
         and has_function_privilege(p.oid, 'execute')));
   perform t.ok('D11b social_post_readiness refuses a portal user',
     t.try('select social_post_readiness(gen_random_uuid())') = '42501');

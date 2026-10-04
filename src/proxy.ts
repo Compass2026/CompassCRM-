@@ -32,8 +32,13 @@ export async function proxy(request: NextRequest) {
   const isAuthRoute =
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/auth");
+  // Where Stripe Checkout returns a client: static pages that read nothing
+  // (src/app/checkout). Exact paths only.
+  const isCheckoutReturn =
+    request.nextUrl.pathname === "/checkout/complete" ||
+    request.nextUrl.pathname === "/checkout/canceled";
 
-  if (!user && !isAuthRoute) {
+  if (!user && !isAuthRoute && !isCheckoutReturn) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

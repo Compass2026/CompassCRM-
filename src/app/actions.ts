@@ -16,13 +16,6 @@ function str(form: FormData, key: string): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-function num(form: FormData, key: string): number | null {
-  const v = str(form, key);
-  if (v === null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 // ── Clients ────────────────────────────────────────────────────────────────
 // The vertical is a slug (`interior_design`, `roofing`): the worker keys the
 // schema.org type, the citation list and the industry pulse off it.
@@ -214,29 +207,6 @@ export async function upsertAccessAction(
     );
   if (error) throw new Error(error.message);
   revalidatePath(`/clients/${clientId}`);
-}
-
-// ── Plan ───────────────────────────────────────────────────────────────────
-export async function upsertPlanAction(clientId: string, form: FormData) {
-  const supabase = await createClient();
-  const { error } = await supabase.from("plans").upsert(
-    {
-      client_id: clientId,
-      package_name: str(form, "package_name"),
-      monthly_fee: num(form, "monthly_fee"),
-      term_months: num(form, "term_months"),
-      start_date: str(form, "start_date"),
-      renewal_date: str(form, "renewal_date"),
-      gbp_posts_per_month: num(form, "gbp_posts_per_month"),
-      blog_posts_per_month: num(form, "blog_posts_per_month"),
-      social_posts_per_month: num(form, "social_posts_per_month"),
-      ad_budget_managed: num(form, "ad_budget_managed"),
-      notes: str(form, "notes"),
-    },
-    { onConflict: "client_id" }
-  );
-  if (error) throw new Error(error.message);
-  revalidatePath(`/clients/${clientId}/plan`);
 }
 
 // ── Enrollment ─────────────────────────────────────────────────────────────

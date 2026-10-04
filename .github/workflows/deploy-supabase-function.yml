@@ -20,6 +20,8 @@ on:
           - client-provision
           - portal-invite
           - stripe-billing
+          - stripe-reconcile
+          - stripe-webhook
           - source-assets
           - creative-engine
           - communications
@@ -76,9 +78,10 @@ jobs:
             exit 1
           }
           # Webhook receivers authenticate their callers themselves (the
-          # Twilio signature), so the gateway must not demand a Supabase JWT.
+          # Twilio signature, the Stripe signature), so the gateway must not
+          # demand a Supabase JWT. Every other function keeps verify_jwt.
           EXTRA=()
           case "$FUNCTION_NAME" in
-            twilio-webhook) EXTRA=(--no-verify-jwt) ;;
+            twilio-webhook|stripe-webhook) EXTRA=(--no-verify-jwt) ;;
           esac
           supabase functions deploy "$FUNCTION_NAME" --project-ref "$PROJECT_REF" --use-api "${EXTRA[@]}"
