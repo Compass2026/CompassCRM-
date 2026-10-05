@@ -1,0 +1,4299 @@
+[
+ {
+  "key": "lucas-service-spotlight-gbp",
+  "version": 1,
+  "channel": "google_business",
+  "name": "Lucas Service Spotlight — Business Profile 1200×900",
+  "description": "Deterministic Service Spotlight layout for Lucas Construction (Business Profile 1200×900). Governed slots only.",
+  "output_width": 1200,
+  "output_height": 900,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "service_spotlight",
+   "channel": "google_business",
+   "canvas": {
+    "width": 1200,
+    "height": 900,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 150,
+    "y": 0,
+    "w": 900,
+    "h": 900
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 1,
+     "max": 1,
+     "require_service_match": true
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "hero",
+     "x": 640,
+     "y": 0,
+     "w": 560,
+     "h": 780
+    },
+    {
+     "type": "rect",
+     "x": 636,
+     "y": 0,
+     "w": 4,
+     "h": 780,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 150,
+     "y": 88,
+     "w": 460,
+     "max_bottom": 752,
+     "gap": 22,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "service_segment",
+        "business_name"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 20,
+        "line_height": 28,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 460,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name",
+        "claim"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 52,
+        "line_height": 56,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 3,
+       "max_words": 6,
+       "w": 460,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "claim",
+        "tagline"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 24,
+        "line_height": 34,
+        "color": "muted"
+       },
+       "max_lines": 3,
+       "max_words": 12,
+       "w": 440,
+       "background": "charcoal"
+      },
+      {
+       "type": "list",
+       "slot": "points",
+       "roles": [
+        "claim"
+       ],
+       "required": false,
+       "min_items": 0,
+       "max_items": 3,
+       "max_words_each": 8,
+       "max_lines_each": 2,
+       "style": {
+        "font": "poppins-500",
+        "size": 21,
+        "line_height": 29,
+        "color": "text"
+       },
+       "icon": {
+        "size": 26,
+        "color": "sky",
+        "gap": 14
+       },
+       "item_gap": 12,
+       "w": 460,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 22,
+        "line_height": 28,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 26,
+       "pad_y": 14,
+       "max_words": 5,
+       "max_w": 460,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 120,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 150,
+     "y": 794,
+     "w": 140,
+     "h": 96,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 10
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 630,
+     "y": 804,
+     "w": 420,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 30,
+      "line_height": 38,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 630,
+     "y": 846,
+     "w": 420,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 22,
+      "line_height": 30,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:46d3a3defd76de74a7273b5645bcd7c5329ad7f9b0086716ed9b957a5cf9753c"
+ },
+ {
+  "key": "lucas-service-spotlight-facebook",
+  "version": 1,
+  "channel": "facebook",
+  "name": "Lucas Service Spotlight — Facebook 1080×1350",
+  "description": "Deterministic Service Spotlight layout for Lucas Construction (Facebook 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "service_spotlight",
+   "channel": "facebook",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 1,
+     "max": 1,
+     "require_service_match": true
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "hero",
+     "x": 0,
+     "y": 0,
+     "w": 1080,
+     "h": 790
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 790,
+     "w": 1080,
+     "h": 6,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 826,
+     "w": 936,
+     "max_bottom": 1170,
+     "gap": 20,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "service_segment",
+        "business_name"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name",
+        "claim"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 80,
+        "line_height": 86,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "claim",
+        "tagline"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 30,
+        "line_height": 42,
+        "color": "muted"
+       },
+       "max_lines": 2,
+       "max_words": 12,
+       "w": 900,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:0a9b64470ee134f4de858343b156bef8fd34aace555bed57a190b44afdc20ef4"
+ },
+ {
+  "key": "lucas-service-spotlight-instagram",
+  "version": 1,
+  "channel": "instagram",
+  "name": "Lucas Service Spotlight — Instagram 1080×1350",
+  "description": "Deterministic Service Spotlight layout for Lucas Construction (Instagram 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "service_spotlight",
+   "channel": "instagram",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 1,
+     "max": 1,
+     "require_service_match": true
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "hero",
+     "x": 0,
+     "y": 0,
+     "w": 1080,
+     "h": 790
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 790,
+     "w": 1080,
+     "h": 6,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 826,
+     "w": 936,
+     "max_bottom": 1170,
+     "gap": 20,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "service_segment",
+        "business_name"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name",
+        "claim"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 80,
+        "line_height": 86,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "claim",
+        "tagline"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 30,
+        "line_height": 42,
+        "color": "muted"
+       },
+       "max_lines": 2,
+       "max_words": 12,
+       "w": 900,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:26789b1878d8d18e9bd57dde5acd1bf3c95714c44cca260cecbdf0459c290f88"
+ },
+ {
+  "key": "lucas-trust-know-how-gbp",
+  "version": 1,
+  "channel": "google_business",
+  "name": "Lucas Trust & Know-How (authority) — Business Profile 1200×900",
+  "description": "Deterministic Trust & Know-How (authority) layout for Lucas Construction (Business Profile 1200×900). Governed slots only.",
+  "output_width": 1200,
+  "output_height": 900,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "trust_know_how",
+   "mode": "authority",
+   "channel": "google_business",
+   "canvas": {
+    "width": 1200,
+    "height": 900,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 150,
+    "y": 0,
+    "w": 900,
+    "h": 900
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 1,
+     "max": 1,
+     "require_service_match": false
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "feature",
+     "x": 0,
+     "y": 0,
+     "w": 560,
+     "h": 780
+    },
+    {
+     "type": "rect",
+     "x": 560,
+     "y": 0,
+     "w": 4,
+     "h": 780,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 612,
+     "y": 88,
+     "w": 438,
+     "max_bottom": 752,
+     "gap": 22,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "business_name",
+        "service_segment"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 20,
+        "line_height": 28,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 438,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "claim"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 42,
+        "line_height": 45,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 4,
+       "max_words": 6,
+       "w": 438,
+       "background": "charcoal"
+      },
+      {
+       "type": "list",
+       "slot": "points",
+       "roles": [
+        "claim"
+       ],
+       "required": true,
+       "min_items": 2,
+       "max_items": 3,
+       "max_words_each": 8,
+       "max_lines_each": 2,
+       "style": {
+        "font": "poppins-500",
+        "size": 21,
+        "line_height": 29,
+        "color": "text"
+       },
+       "icon": {
+        "size": 26,
+        "color": "sky",
+        "gap": 14
+       },
+       "item_gap": 12,
+       "w": 438,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 22,
+        "line_height": 28,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 26,
+       "pad_y": 14,
+       "max_words": 5,
+       "max_w": 438,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 120,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 150,
+     "y": 794,
+     "w": 140,
+     "h": 96,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 10
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 630,
+     "y": 804,
+     "w": 420,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 30,
+      "line_height": 38,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 630,
+     "y": 846,
+     "w": 420,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 22,
+      "line_height": 30,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:27f976cc47c5606e04bae9afc2523fc1d0fa6968145e3df4254772667a05b5d0"
+ },
+ {
+  "key": "lucas-trust-know-how-facebook",
+  "version": 1,
+  "channel": "facebook",
+  "name": "Lucas Trust & Know-How (authority) — Facebook 1080×1350",
+  "description": "Deterministic Trust & Know-How (authority) layout for Lucas Construction (Facebook 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "trust_know_how",
+   "mode": "authority",
+   "channel": "facebook",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 1,
+     "max": 1,
+     "require_service_match": false
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "feature",
+     "x": 0,
+     "y": 0,
+     "w": 1080,
+     "h": 600
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 600,
+     "w": 1080,
+     "h": 6,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 650,
+     "w": 936,
+     "max_bottom": 1174,
+     "gap": 22,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "business_name",
+        "service_segment"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "claim"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 62,
+        "line_height": 67,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "list",
+       "slot": "points",
+       "roles": [
+        "claim"
+       ],
+       "required": true,
+       "min_items": 2,
+       "max_items": 3,
+       "max_words_each": 8,
+       "max_lines_each": 2,
+       "style": {
+        "font": "poppins-500",
+        "size": 28,
+        "line_height": 38,
+        "color": "text"
+       },
+       "icon": {
+        "size": 32,
+        "color": "sky",
+        "gap": 18
+       },
+       "item_gap": 16,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:56f22484f329984fec5e94a46b77f1d935d3b360d478d0256e764fe4ea3acc95"
+ },
+ {
+  "key": "lucas-trust-know-how-instagram",
+  "version": 1,
+  "channel": "instagram",
+  "name": "Lucas Trust & Know-How (authority) — Instagram 1080×1350",
+  "description": "Deterministic Trust & Know-How (authority) layout for Lucas Construction (Instagram 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "trust_know_how",
+   "mode": "authority",
+   "channel": "instagram",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 1,
+     "max": 1,
+     "require_service_match": false
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "feature",
+     "x": 0,
+     "y": 0,
+     "w": 1080,
+     "h": 600
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 600,
+     "w": 1080,
+     "h": 6,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 650,
+     "w": 936,
+     "max_bottom": 1174,
+     "gap": 22,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "business_name",
+        "service_segment"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "claim"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 62,
+        "line_height": 67,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "list",
+       "slot": "points",
+       "roles": [
+        "claim"
+       ],
+       "required": true,
+       "min_items": 2,
+       "max_items": 3,
+       "max_words_each": 8,
+       "max_lines_each": 2,
+       "style": {
+        "font": "poppins-500",
+        "size": 28,
+        "line_height": 38,
+        "color": "text"
+       },
+       "icon": {
+        "size": 32,
+        "color": "sky",
+        "gap": 18
+       },
+       "item_gap": 16,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:fa68f4ef7591fc01747e8f17f23580133179cdca99ef7e5c49ff8ebb0dfe4fd8"
+ },
+ {
+  "key": "lucas-seasonal-gbp",
+  "version": 1,
+  "channel": "google_business",
+  "name": "Lucas Seasonal (non-offer) — Business Profile 1200×900",
+  "description": "Deterministic Seasonal (non-offer) layout for Lucas Construction (Business Profile 1200×900). Governed slots only.",
+  "output_width": 1200,
+  "output_height": 900,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "seasonal",
+   "mode": "seasonal",
+   "channel": "google_business",
+   "canvas": {
+    "width": 1200,
+    "height": 900,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 150,
+    "y": 0,
+    "w": 900,
+    "h": 900
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 2,
+     "max": 2,
+     "require_service_match": true
+    }
+   ],
+   "labels": [
+    {
+     "id": "spring",
+     "text": "Spring"
+    },
+    {
+     "id": "summer",
+     "text": "Summer"
+    },
+    {
+     "id": "fall",
+     "text": "Fall"
+    },
+    {
+     "id": "winter",
+     "text": "Winter"
+    },
+    {
+     "id": "storm_season",
+     "text": "Storm season"
+    }
+   ],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "cell",
+     "x": 640,
+     "y": 0,
+     "w": 560,
+     "h": 388
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 640,
+     "y": 392,
+     "w": 560,
+     "h": 388
+    },
+    {
+     "type": "rect",
+     "x": 636,
+     "y": 0,
+     "w": 4,
+     "h": 780,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 150,
+     "y": 96,
+     "w": 460,
+     "max_bottom": 752,
+     "gap": 22,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "template_label"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-700",
+        "size": 20,
+        "line_height": 28,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 460,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 52,
+        "line_height": 56,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 3,
+       "max_words": 6,
+       "w": 460,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "tagline",
+        "claim"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 24,
+        "line_height": 34,
+        "color": "muted"
+       },
+       "max_lines": 3,
+       "max_words": 12,
+       "w": 440,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 22,
+        "line_height": 28,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 26,
+       "pad_y": 14,
+       "max_words": 5,
+       "max_w": 460,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 120,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 150,
+     "y": 794,
+     "w": 140,
+     "h": 96,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 10
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 630,
+     "y": 804,
+     "w": 420,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 30,
+      "line_height": 38,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 630,
+     "y": 846,
+     "w": 420,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 22,
+      "line_height": 30,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:195639ea4b5ce382d216d4a76722cbb111638a4b589210c28aa888f3d523a266"
+ },
+ {
+  "key": "lucas-seasonal-facebook",
+  "version": 1,
+  "channel": "facebook",
+  "name": "Lucas Seasonal (non-offer) — Facebook 1080×1350",
+  "description": "Deterministic Seasonal (non-offer) layout for Lucas Construction (Facebook 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "seasonal",
+   "mode": "seasonal",
+   "channel": "facebook",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 2,
+     "max": 2,
+     "require_service_match": true
+    }
+   ],
+   "labels": [
+    {
+     "id": "spring",
+     "text": "Spring"
+    },
+    {
+     "id": "summer",
+     "text": "Summer"
+    },
+    {
+     "id": "fall",
+     "text": "Fall"
+    },
+    {
+     "id": "winter",
+     "text": "Winter"
+    },
+    {
+     "id": "storm_season",
+     "text": "Storm season"
+    }
+   ],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 80,
+     "w": 936,
+     "max_bottom": 560,
+     "gap": 20,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "template_label"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 76,
+        "line_height": 82,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "tagline",
+        "claim"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 30,
+        "line_height": 42,
+        "color": "muted"
+       },
+       "max_lines": 2,
+       "max_words": 12,
+       "w": 900,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "cell",
+     "x": 0,
+     "y": 600,
+     "w": 538,
+     "h": 586
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 542,
+     "y": 600,
+     "w": 538,
+     "h": 586
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 596,
+     "w": 1080,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:2c65893c8b140a0da248c47441377bfa3883cb96bbb9dfb9838e3b87add970b7"
+ },
+ {
+  "key": "lucas-seasonal-instagram",
+  "version": 1,
+  "channel": "instagram",
+  "name": "Lucas Seasonal (non-offer) — Instagram 1080×1350",
+  "description": "Deterministic Seasonal (non-offer) layout for Lucas Construction (Instagram 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "seasonal",
+   "mode": "seasonal",
+   "channel": "instagram",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 2,
+     "max": 2,
+     "require_service_match": true
+    }
+   ],
+   "labels": [
+    {
+     "id": "spring",
+     "text": "Spring"
+    },
+    {
+     "id": "summer",
+     "text": "Summer"
+    },
+    {
+     "id": "fall",
+     "text": "Fall"
+    },
+    {
+     "id": "winter",
+     "text": "Winter"
+    },
+    {
+     "id": "storm_season",
+     "text": "Storm season"
+    }
+   ],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 80,
+     "w": 936,
+     "max_bottom": 560,
+     "gap": 20,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "template_label"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 76,
+        "line_height": 82,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "tagline",
+        "claim"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 30,
+        "line_height": 42,
+        "color": "muted"
+       },
+       "max_lines": 2,
+       "max_words": 12,
+       "w": 900,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "cell",
+     "x": 0,
+     "y": 600,
+     "w": 538,
+     "h": 586
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 542,
+     "y": 600,
+     "w": 538,
+     "h": 586
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 596,
+     "w": 1080,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:79e04ef33ef15260fcc5adb6961a467443d6b3ce775e97d65f6d50b785468915"
+ },
+ {
+  "key": "lucas-real-work-gbp",
+  "version": 1,
+  "channel": "google_business",
+  "name": "Lucas Real Work Showcase — Business Profile 1200×900",
+  "description": "Deterministic Real Work Showcase layout for Lucas Construction (Business Profile 1200×900). Governed slots only.",
+  "output_width": 1200,
+  "output_height": 900,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "real_work",
+   "channel": "google_business",
+   "canvas": {
+    "width": 1200,
+    "height": 900,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 150,
+    "y": 0,
+    "w": 900,
+    "h": 900
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 3,
+     "max": 3,
+     "require_service_match": true
+    }
+   ],
+   "labels": [
+    {
+     "id": "our_work",
+     "text": "Our work",
+     "requires": "all_photos_own_work"
+    }
+   ],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "cell",
+     "x": 0,
+     "y": 0,
+     "w": 398,
+     "h": 600
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 401,
+     "y": 0,
+     "w": 398,
+     "h": 600
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 2,
+     "role": "cell",
+     "x": 802,
+     "y": 0,
+     "w": 398,
+     "h": 600
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 600,
+     "w": 1200,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 150,
+     "y": 616,
+     "w": 500,
+     "max_bottom": 768,
+     "gap": 8,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "template_label"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-700",
+        "size": 20,
+        "line_height": 28,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 500,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 40,
+        "line_height": 43,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 6,
+       "w": 500,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "pill",
+     "slot": "cta",
+     "roles": [
+      "standing_cta"
+     ],
+     "required": true,
+     "auto": "standing_cta",
+     "style": {
+      "font": "montserrat-800",
+      "size": 22,
+      "line_height": 28,
+      "color": "charcoal",
+      "tracking": 1,
+      "transform": "uppercase"
+     },
+     "fill": "sky",
+     "pad_x": 26,
+     "pad_y": 14,
+     "max_words": 5,
+     "max_w": 380,
+     "background": "charcoal",
+     "align": "right",
+     "x": 670,
+     "y": 662
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 120,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 150,
+     "y": 794,
+     "w": 140,
+     "h": 96,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 10
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 630,
+     "y": 804,
+     "w": 420,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 30,
+      "line_height": 38,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 630,
+     "y": 846,
+     "w": 420,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 22,
+      "line_height": 30,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:7e47e495d0a7611d7fa289234c2fb554969170ca6f9fb63177dd6d54cf8be370"
+ },
+ {
+  "key": "lucas-real-work-facebook",
+  "version": 1,
+  "channel": "facebook",
+  "name": "Lucas Real Work Showcase — Facebook 1080×1350",
+  "description": "Deterministic Real Work Showcase layout for Lucas Construction (Facebook 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "real_work",
+   "channel": "facebook",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 4,
+     "max": 4,
+     "require_service_match": true
+    }
+   ],
+   "labels": [
+    {
+     "id": "our_work",
+     "text": "Our work",
+     "requires": "all_photos_own_work"
+    }
+   ],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "cell",
+     "x": 0,
+     "y": 0,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 543,
+     "y": 0,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 2,
+     "role": "cell",
+     "x": 0,
+     "y": 456,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 3,
+     "role": "cell",
+     "x": 543,
+     "y": 456,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 906,
+     "w": 1080,
+     "h": 6,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 950,
+     "w": 936,
+     "max_bottom": 1176,
+     "gap": 18,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "template_label"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 64,
+        "line_height": 69,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:efed4e6a62772b389694ae68583e47f34b3a978ed29affc9880c314dbef6d0fd"
+ },
+ {
+  "key": "lucas-real-work-instagram",
+  "version": 1,
+  "channel": "instagram",
+  "name": "Lucas Real Work Showcase — Instagram 1080×1350",
+  "description": "Deterministic Real Work Showcase layout for Lucas Construction (Instagram 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "real_work",
+   "channel": "instagram",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "charcoal"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 4,
+     "max": 4,
+     "require_service_match": true
+    }
+   ],
+   "labels": [
+    {
+     "id": "our_work",
+     "text": "Our work",
+     "requires": "all_photos_own_work"
+    }
+   ],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "cell",
+     "x": 0,
+     "y": 0,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 543,
+     "y": 0,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 2,
+     "role": "cell",
+     "x": 0,
+     "y": 456,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 3,
+     "role": "cell",
+     "x": 543,
+     "y": 456,
+     "w": 537,
+     "h": 450
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 906,
+     "w": 1080,
+     "h": 6,
+     "fill": "blue"
+    },
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 950,
+     "w": 936,
+     "max_bottom": 1176,
+     "gap": 18,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "template_label"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 64,
+        "line_height": 69,
+        "color": "text",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 6,
+       "w": 936,
+       "background": "charcoal"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "charcoal",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "sky",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "charcoal"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:e1caa844dd7d5bb4327a44b44d6fef93393a823ad6be15c03b65a5d58bfc12f3"
+ },
+ {
+  "key": "lucas-service-light-gbp",
+  "version": 1,
+  "channel": "google_business",
+  "name": "Lucas Service Light — Business Profile 1200×900",
+  "description": "Deterministic Service Light layout for Lucas Construction (Business Profile 1200×900). Governed slots only.",
+  "output_width": 1200,
+  "output_height": 900,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "service_light",
+   "channel": "google_business",
+   "canvas": {
+    "width": 1200,
+    "height": 900,
+    "background": "text"
+   },
+   "safe_area": {
+    "x": 150,
+    "y": 0,
+    "w": 900,
+    "h": 900
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 3,
+     "max": 3,
+     "require_service_match": true
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "hero",
+     "x": 620,
+     "y": 40,
+     "w": 530,
+     "h": 452,
+     "radius": 20
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 620,
+     "y": 504,
+     "w": 261,
+     "h": 244,
+     "radius": 16
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 2,
+     "role": "cell",
+     "x": 889,
+     "y": 504,
+     "w": 261,
+     "h": 244,
+     "radius": 16
+    },
+    {
+     "type": "stack",
+     "x": 150,
+     "y": 88,
+     "w": 440,
+     "max_bottom": 752,
+     "gap": 22,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "service_segment",
+        "business_name"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 20,
+        "line_height": 28,
+        "color": "blue",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 440,
+       "background": "text"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 52,
+        "line_height": 56,
+        "color": "charcoal",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 3,
+       "max_words": 6,
+       "w": 440,
+       "background": "text"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "tagline",
+        "claim"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 24,
+        "line_height": 34,
+        "color": "panel"
+       },
+       "max_lines": 3,
+       "max_words": 12,
+       "w": 430,
+       "background": "text"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 22,
+        "line_height": 28,
+        "color": "sky",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "charcoal",
+       "pad_x": 26,
+       "pad_y": 14,
+       "max_words": 5,
+       "max_w": 440,
+       "background": "text"
+      }
+     ]
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 120,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 780,
+     "w": 1200,
+     "h": 4,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 150,
+     "y": 794,
+     "w": 140,
+     "h": 96,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 10
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 630,
+     "y": 804,
+     "w": 420,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 30,
+      "line_height": 38,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 630,
+     "y": 846,
+     "w": 420,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 22,
+      "line_height": 30,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:b83cc74883bda51ae20f721fab8e929bf448f9dcfedb47c7881abb8a7243060c"
+ },
+ {
+  "key": "lucas-service-light-facebook",
+  "version": 1,
+  "channel": "facebook",
+  "name": "Lucas Service Light — Facebook 1080×1350",
+  "description": "Deterministic Service Light layout for Lucas Construction (Facebook 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "service_light",
+   "channel": "facebook",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "text"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 3,
+     "max": 3,
+     "require_service_match": true
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 72,
+     "w": 936,
+     "max_bottom": 470,
+     "gap": 20,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "service_segment",
+        "business_name"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "blue",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "text"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 76,
+        "line_height": 82,
+        "color": "charcoal",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "text"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "tagline",
+        "claim"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 30,
+        "line_height": 42,
+        "color": "panel"
+       },
+       "max_lines": 1,
+       "max_words": 12,
+       "w": 936,
+       "background": "text"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "charcoal",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "text"
+      }
+     ]
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "hero",
+     "x": 72,
+     "y": 498,
+     "w": 936,
+     "h": 440,
+     "radius": 24
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 72,
+     "y": 952,
+     "w": 461,
+     "h": 236,
+     "radius": 20
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 2,
+     "role": "cell",
+     "x": 547,
+     "y": 952,
+     "w": 461,
+     "h": 236,
+     "radius": 20
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:870c7976acbdcf7135ffd354848331d6e322ab058b05e93ab91eeb3e5fb03e0a"
+ },
+ {
+  "key": "lucas-service-light-instagram",
+  "version": 1,
+  "channel": "instagram",
+  "name": "Lucas Service Light — Instagram 1080×1350",
+  "description": "Deterministic Service Light layout for Lucas Construction (Instagram 1080×1350). Governed slots only.",
+  "output_width": 1080,
+  "output_height": 1350,
+  "mime_type": "image/png",
+  "spec": {
+   "schema": "compass-creative-spec/1",
+   "family": "service_light",
+   "channel": "instagram",
+   "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "background": "text"
+   },
+   "safe_area": {
+    "x": 72,
+    "y": 0,
+    "w": 936,
+    "h": 1350
+   },
+   "palette": {
+    "charcoal": "#0d0f10",
+    "panel": "#1a1d1f",
+    "blue": "#128fb1",
+    "sky": "#72d2e4",
+    "text": "#f0f4f8",
+    "muted": "#8fa3b1"
+   },
+   "fonts": {
+    "montserrat-700": {
+     "family": "Montserrat",
+     "weight": 700,
+     "sha256": "ff51c769e51acaa5ffbb8091441ff4e365e41ff21f7e4c05d1cd5650514d6fd3"
+    },
+    "montserrat-800": {
+     "family": "Montserrat",
+     "weight": 800,
+     "sha256": "26f9e611260b72c43467d0a0ab4f56c5068ec431e41d9e3088fa74117ca086d8"
+    },
+    "poppins-500": {
+     "family": "Poppins",
+     "weight": 500,
+     "sha256": "abdc91ec7e4438b1e1d7f808d388614789d69037059b74a9d6166d00eb9b8b04"
+    },
+    "poppins-600": {
+     "family": "Poppins",
+     "weight": 600,
+     "sha256": "55fffef7b100460605349fa5215eb7dcd6e558e195d08e43eddc64c4b27d43b3"
+    }
+   },
+   "photo_groups": [
+    {
+     "slot": "photos",
+     "min": 3,
+     "max": 3,
+     "require_service_match": true
+    }
+   ],
+   "labels": [],
+   "blocked_phrases": [
+    "warrant(y|ies)",
+    "inspections?",
+    "st\\.? louis county",
+    "greater st\\.? louis",
+    "chesterfield",
+    "ballwin",
+    "wildwood",
+    "florissant",
+    "locally owned",
+    "family[- ](owned|operated)",
+    "storm chaser",
+    "out-of-town",
+    "high[- ]pressure"
+   ],
+   "logo_asset_id": "0c945d6f-c1ff-4b94-8c2b-afa777366e35",
+   "elements": [
+    {
+     "type": "stack",
+     "x": 72,
+     "y": 72,
+     "w": 936,
+     "max_bottom": 470,
+     "gap": 20,
+     "anchor": "center",
+     "items": [
+      {
+       "type": "text",
+       "slot": "eyebrow",
+       "roles": [
+        "service_segment",
+        "business_name"
+       ],
+       "required": false,
+       "style": {
+        "font": "montserrat-700",
+        "size": 24,
+        "line_height": 32,
+        "color": "blue",
+        "tracking": 3,
+        "transform": "uppercase"
+       },
+       "max_lines": 1,
+       "max_words": 5,
+       "w": 936,
+       "background": "text"
+      },
+      {
+       "type": "text",
+       "slot": "headline",
+       "roles": [
+        "service_name"
+       ],
+       "required": true,
+       "style": {
+        "font": "montserrat-800",
+        "size": 76,
+        "line_height": 82,
+        "color": "charcoal",
+        "tracking": 0.5,
+        "transform": "uppercase"
+       },
+       "max_lines": 2,
+       "max_words": 6,
+       "w": 936,
+       "background": "text"
+      },
+      {
+       "type": "text",
+       "slot": "subline",
+       "roles": [
+        "tagline",
+        "claim"
+       ],
+       "required": false,
+       "style": {
+        "font": "poppins-500",
+        "size": 30,
+        "line_height": 42,
+        "color": "panel"
+       },
+       "max_lines": 1,
+       "max_words": 12,
+       "w": 936,
+       "background": "text"
+      },
+      {
+       "type": "pill",
+       "slot": "cta",
+       "roles": [
+        "standing_cta"
+       ],
+       "required": true,
+       "auto": "standing_cta",
+       "style": {
+        "font": "montserrat-800",
+        "size": 26,
+        "line_height": 32,
+        "color": "sky",
+        "tracking": 1,
+        "transform": "uppercase"
+       },
+       "fill": "charcoal",
+       "pad_x": 32,
+       "pad_y": 16,
+       "max_words": 5,
+       "max_w": 936,
+       "background": "text"
+      }
+     ]
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 0,
+     "role": "hero",
+     "x": 72,
+     "y": 498,
+     "w": 936,
+     "h": 440,
+     "radius": 24
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 1,
+     "role": "cell",
+     "x": 72,
+     "y": 952,
+     "w": 461,
+     "h": 236,
+     "radius": 20
+    },
+    {
+     "type": "photo",
+     "slot": "photos",
+     "index": 2,
+     "role": "cell",
+     "x": 547,
+     "y": 952,
+     "w": 461,
+     "h": 236,
+     "radius": 20
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 144,
+     "fill": "panel"
+    },
+    {
+     "type": "rect",
+     "x": 0,
+     "y": 1206,
+     "w": 1080,
+     "h": 5,
+     "fill": "blue"
+    },
+    {
+     "type": "logo",
+     "x": 72,
+     "y": 1222,
+     "w": 168,
+     "h": 116,
+     "fill": "charcoal",
+     "keyline": {
+      "color": "blue",
+      "width": 2
+     },
+     "radius": 12,
+     "pad": 12
+    },
+    {
+     "type": "text",
+     "slot": "phone",
+     "x": 488,
+     "y": 1236,
+     "w": 520,
+     "roles": [
+      "phone"
+     ],
+     "required": true,
+     "auto": "phone",
+     "style": {
+      "font": "montserrat-800",
+      "size": 36,
+      "line_height": 45,
+      "color": "sky",
+      "tracking": 0.5,
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 3,
+     "background": "panel"
+    },
+    {
+     "type": "text",
+     "slot": "website",
+     "x": 488,
+     "y": 1285,
+     "w": 520,
+     "roles": [
+      "website"
+     ],
+     "required": true,
+     "auto": "website",
+     "style": {
+      "font": "poppins-500",
+      "size": 26,
+      "line_height": 35,
+      "color": "muted",
+      "align": "right"
+     },
+     "max_lines": 1,
+     "max_words": 1,
+     "background": "panel"
+    }
+   ]
+  },
+  "spec_hash": "sha256:34e379f1fac51b7a3044bb738eb98f014d6c6a03488c9f5a08ecaa999f2170d7"
+ }
+]

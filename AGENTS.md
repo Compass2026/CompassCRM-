@@ -30,8 +30,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   reconciliation, B4) and `0062` (entitlement contract + portal billing,
   B5) were applied Oct 4 2026 as `20261004023512`, `20261004031812`,
   `20261004032556`, `20261004032929` and `20261004033843` — after 0063,
-  which they share no object with (`0057` belongs to the Creative Engine
-  overlay-roles migration on its own branch, not applied;
+  which they share no object with (`0057` is the Creative Engine
+  overlay-roles migration, written and sandbox-tested, not applied (PR #95);
   `docs/billing-cutover.md`); `0064` (the dedicated billing runtime login,
   Option B; `docs/billing-runtime.md`) is written but **not yet applied**;
   `0063` (Compass Communications) was applied Oct 2 2026 as
@@ -1316,6 +1316,82 @@ scheduled or published by any of it.
   lifecycles), and generated creative is never stored in `brand_assets` (a
   future `creative_assets` model; approval will bind copy and the exact
   creative version). Nothing of the Creative Engine is built.
+
+## Creative Engine renderer (Sept 30 2026; post graphics Oct 3; 0057 written, not applied; nothing deployed)
+
+This is the deterministic renderer and the Lucas template pilot. Full
+design, rules and runbook: `docs/creative-engine.md`. Production state and
+the readiness matrix: `docs/lucas-creative-readiness.md`.
+
+- **Code:** `supabase/functions/creative-engine/`.
+  - **Pinned stack:** resvg-wasm 2.6.2, hash-checked; opentype.js 1.3.4;
+    Montserrat / Poppins embedded and hash-checked. Text is drawn as glyph
+    paths.
+  - **Determinism:** the same inputs give the same bytes, and Deno is
+    byte-identical to Node (`deno-check.ts`).
+  - **Hashes:** spec hash = `creative_spec_hash`; brief hash; copy hash;
+    re-hashed source bytes; the output hash.
+- **Governance (`govern.ts`):** the request carries references only (a
+  service id, claim ids, a label id, photo ids) and every word is resolved
+  from the record.
+  - **Words:** a claim must be confirmed or sourced-with-source. Compass-wide
+    and client (`kits.ts`) phrase blocks apply. Word limits apply, and copy
+    that does not fit is refused, never shrunk.
+  - **Photos:** approved, own work, unchanged, focal point set, no people
+    tags, showing the service. A hero needs ≥ 1080 px, and nothing is
+    enlarged.
+  - **Nothing falls back.**
+- **Templates:** `registry.ts` holds five cleared families (Service
+  Spotlight, Trust & Know-How authority mode, Seasonal non-offer, Real Work
+  Showcase, Service Light) × Business Profile 1200×900 / Facebook /
+  Instagram 1080×1350, as `lucas-*-{gbp,facebook,instagram}` v1. Review
+  Spotlight, Team & Community and Offer mode stay blocked.
+- **Function (`handler.ts`):**
+  - `version`
+  - `register`: through `creative_register_template`
+  - `plan`: a dry run, no writes
+  - `preview`: `creative_begin_run` → upload at the content address →
+    `creative_write`; proposes, never approves
+  - `post` (Oct 3 2026): the graphic for a draft post from a template
+    approved for the client. `post-bindings.ts` takes the post's service
+    and only its linked claims, and picks approved own-work photos of that
+    service. The run is bound to the post's copy hash and creative version.
+    `creative_write` links the image for review.
+  - It is **not deployed**.
+- **0057** adds overlay roles (phone, website, service segment, template
+  label; claims in previews; ≤ 12 lines) so the record matches what is
+  drawn. It is **not applied**.
+- **Previews and approval:** Brand › Creative use › **Creative previews**
+  (`/clients/[id]/brand/creative-preview`, `src/lib/creative-preview.ts`)
+  renders the Lucas preview set with the teammate's own session (viewing
+  writes nothing).
+  - Per template and channel: **Record preview for approval** (the
+    function's `preview` mode) and **Approve** / **Revoke**
+    (`client_creative_templates`).
+  - Per channel: the **graphic policy for new posts**
+    (`client_creative_settings`).
+- **Post graphics:** the post page's **Graphic** section (policy, Generate
+  graphic, Download PNG, Request new graphic), with
+  `src/app/creative-actions.ts` calling the function with the teammate's
+  JWT.
+  - `/clients/[id]/creative/[assetId]` serves recorded bytes, re-hashed.
+  - Reject asks copy / graphic / both.
+  - Approved posts get **Copy text**.
+- **Tests:**
+  - `npm test`: `creative-engine`, `creative-engine-handler`,
+    `creative-engine-post`
+  - the sandbox's `creative_overlay_roles.test.sql`
+  - `npm run test:creative-preview-ui`, `npm run test:creative-post-ui`
+    (end to end: register → preview → approve → render → download →
+    approve post → request new → reject graphic)
+  - `deno-check.ts`
+- **Runtime** (`docs/creative-engine-runtime.md`):
+  - Measured in Deno with photo-like JPEGs: 0.53–1.44 s for a cold
+    render, with a process peak of 165–216 MB RSS.
+  - Edge limits: 2 s CPU and 256 MB.
+  - The 1080×1350 formats miss the 1.0 s CPU margin in this container.
+  - Measure the deployed function (a write-free `measure` mode, not built
+    yet) before any production render.
 
 ## Canva folder mapping (0056, applied Sept 28 2026 as `20260928212948`)
 
