@@ -34,6 +34,26 @@ export const BLOG_RULES = {
   keyword_max_exact_uses: 5,
 } as const;
 
+// Compass's page rules (v1, 0069): a complete page, not a blog.
+export const PAGE_RULES = {
+  ...BLOG_RULES,
+  min_words: 400,
+  preferred_min_words: 500,
+  preferred_max_words: 1200,
+  max_words: 2000,
+  min_sections: 3,
+  objective_max: 300,
+} as const;
+
+// The JSON-LD types a page may recommend, by page type.
+export const SCHEMA_TYPES: Record<string, string[]> = {
+  service: ["Service", "WebPage", "FAQPage", "BreadcrumbList"],
+  location: ["Service", "LocalBusiness", "WebPage", "FAQPage", "BreadcrumbList"],
+  use_case: ["WebPage", "FAQPage", "BreadcrumbList", "Service"],
+  commercial_landing: ["WebPage", "Service", "FAQPage", "BreadcrumbList"],
+  comparison: ["WebPage", "FAQPage", "BreadcrumbList"],
+};
+
 // The draft row the request opened (0067), as the store reads it.
 export type DraftRow = {
   id: string;
@@ -49,6 +69,8 @@ export type DraftRow = {
   authority_opportunity_id: string | null;
   target_url: string | null;
   request_note: string | null;
+  page_type?: string | null;
+  page_change?: string | null;
 };
 
 // Other pages on the client's site the store found (published articles).
@@ -58,7 +80,7 @@ export type LinkTarget = { url: string; label: string; kind: "service" | "page" 
 
 export type BlogBrief = {
   version: typeof CONTENT_DRAFTER_VERSION;
-  kind: "blog";
+  kind: "blog" | "page";
   as_of: string;
   client: { id: string; name: string; phone: string; website: string };
   gate: Record<string, string>;
@@ -70,6 +92,9 @@ export type BlogBrief = {
     service: { id: string; name: string; page_url: string | null } | null;
     authority_opportunity_id: string | null;
     request_note: string | null;
+    // A page (0069): its type, new or refresh, the existing page a refresh
+    // keeps, and the structured-data types it may recommend.
+    page?: { type: string; change: string; existing_url: string | null; schema_types: string[] };
   };
   allowed_facts: {
     crm: { business_name: string; phone: string; website: string; places: string[]; services: string[] };
@@ -94,18 +119,28 @@ export type BlogBrief = {
   };
   links: { site: string | null; required: LinkTarget[]; allowed: LinkTarget[] };
   cta: { text: string | null; url: string | null };
-  rules: typeof BLOG_RULES;
+  rules: typeof BLOG_RULES | typeof PAGE_RULES;
 };
+export type ContentBrief = BlogBrief;
 
 export type BlogBriefResult = { ok: true; brief: BlogBrief } | { ok: false; refusals: Refusal[] };
 
 const filled = (s: string | null | undefined) => (s ?? "").trim().length > 0;
 
+// A blog (0067) or a web page (0069): one brief, the page's rules and fields
+// on top for a page.
+export function buildContentBrief(input: DrafterInput, draft: DraftRow, sitePages: SitePage[] = []): BlogBriefResult {
+  return buildBlogBrief(input, draft, sitePages);
+}
+
 export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: SitePage[] = []): BlogBriefResult {
   const refusals: Refusal[] = [];
   const refuse = (code: string, message: string) => refusals.push({ code, message });
 
-  if (draft.deliverable !== "blog") refuse("deliverable_unsupported", "The content drafter writes blogs in v1; web pages come next.");
+  const isPage = draft.deliverable === "web_page";
+  if (draft.deliverable !== "blog" && !isPage) refuse("deliverable_unsupported", "The content drafter writes blogs and web pages.");
+  if (isPage && !(draft.page_type && SCHEMA_TYPES[draft.page_type])) refuse("page_type_missing", "The page has no type.");
+  if (isPage && draft.page_change !== "page_added" && draft.page_change !== "page_rewrite") refuse("page_change_missing", "Say whether the page is new or a refresh.");
   const intent = normalizeIntent(draft.search_intent);
   if (!intent) refuse("intent_missing", "Set the search intent on the plan item before generating.");
 
@@ -160,7 +195,17 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
   for (const s of input.services) if (s.status === "approved") add(s.page_url, s.name, "service");
   for (const g of input.pageGroups) if (g.status === "approved") add(g.target_url, g.name, "page");
   for (const p of sitePages) add(p.url, p.title, "article");
-  const required = pageUrl ? allowed.filter((l) => normalizeUrl(l.url) === normalizeUrl(pageUrl)) : [];
+  // A refresh keeps an existing page on the client's site.
+  let existing: string | null = null;
+  if (isPage && draft.page_change === "page_rewrite") {
+    const n = normalizeUrl(draft.target_url);
+    if (!n || !siteHost || hostOf(n) !== siteHost) refuse("target_page_invalid", `A refresh names an existing page on the client's website; ${draft.target_url ?? "none"} is not.`);
+    else existing = draft.target_url;
+  }
+  if (isPage && draft.page_type === "service" && !service) refuse("service_missing", "A service page names its service.");
+  // A page links to its service's page, unless it is that page.
+  const isTheServicePage = isPage && (draft.page_type === "service" || (existing && pageUrl && normalizeUrl(existing) === normalizeUrl(pageUrl)));
+  const required = pageUrl && !isTheServicePage ? allowed.filter((l) => normalizeUrl(l.url) === normalizeUrl(pageUrl)) : [];
 
   const differentiators = (input.brand?.differentiators ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
   const places = [...new Set(input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name).filter(Boolean) as string[])];
@@ -181,7 +226,7 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
     ok: true,
     brief: {
       version: CONTENT_DRAFTER_VERSION,
-      kind: "blog",
+      kind: isPage ? "page" : "blog",
       as_of: input.asOf,
       client: { id: input.client.id, name: input.client.name, phone: input.client.phone ?? "", website: site ?? "" },
       gate,
@@ -193,6 +238,7 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
         service: service ? { id: service.id, name: service.name, page_url: pageUrl } : null,
         authority_opportunity_id: draft.authority_opportunity_id,
         request_note: draft.request_note,
+        ...(isPage ? { page: { type: draft.page_type!, change: draft.page_change!, existing_url: existing, schema_types: SCHEMA_TYPES[draft.page_type!] } } : {}),
       },
       allowed_facts: {
         crm: {
@@ -222,8 +268,8 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
         differentiators_citable: false,
       },
       links: { site, required, allowed },
-      cta: { text: input.board?.standing_cta ?? null, url: pageUrl ?? site },
-      rules: BLOG_RULES,
+      cta: { text: input.board?.standing_cta ?? null, url: isTheServicePage ? (site ?? pageUrl) : (pageUrl ?? site) },
+      rules: isPage ? PAGE_RULES : BLOG_RULES,
     },
   };
 }

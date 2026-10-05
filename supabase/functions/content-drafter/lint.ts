@@ -25,7 +25,19 @@ export type BlogDraft = {
   internal_links: { url: string; anchor: string; reason?: string }[];
   cta: { text: string; url: string | null };
   claim_ids: string[];
+  // A web page (0069).
+  page_path?: string | null;
+  page_objective?: string | null;
+  structured_data?: Record<string, unknown> | null;
 };
+
+// Every string inside a JSON-LD recommendation (what a search engine reads).
+function jsonStrings(v: unknown, out: string[] = []): string[] {
+  if (typeof v === "string") out.push(v);
+  else if (Array.isArray(v)) v.forEach((x) => jsonStrings(x, out));
+  else if (v && typeof v === "object") Object.values(v).forEach((x) => jsonStrings(x, out));
+  return out;
+}
 
 const MD_LINK = /\[([^\]]+)\]\(([^)\s]+)\)/g;
 const BARE_URL = /https?:\/\/\S+|\bwww\.\S+/gi;
@@ -42,6 +54,9 @@ function visibleBody(markdown: string): string {
   return markdown.replace(MD_LINK, "$1").replace(/^\s*\d+[.)]\s+/gm, "").replace(/[#*>_`|]+/g, " ");
 }
 
+// A blog or a web page (0069): the same rules, the page's on top.
+export const lintContent = (...a: Parameters<typeof lintBlog>) => lintBlog(...a);
+
 export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?: string[] } = {}): LintResult {
   const problems: LintProblem[] = [];
   const warnings: LintProblem[] = [];
@@ -51,6 +66,7 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   const warn = (code: string, message: string, match?: string) => warnings.push({ code, message, ...(match ? { match } : {}) });
   const R = brief.rules;
   const body = draft.body_markdown ?? "";
+  const page = brief.kind === "page" ? brief.target.page : undefined;
 
   // ── Structure ──
   const need = (v: string | null | undefined, label: string, code: string) => { if (!v || !v.trim()) add(code, `${label} is required.`); };
@@ -87,6 +103,47 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
     if (!bodyHeadings.some((h) => h.level === o.level && h.heading === o.heading.trim().toLowerCase())) {
       add("outline_mismatch", `The outline's "${o.heading}" is not a heading in the body.`, o.heading);
     }
+  }
+
+  // ── A page: its path, objective and structured data (0069) ──
+  let schemaText = "";
+  if (page) {
+    const path = draft.page_path ?? "";
+    if (!/^\/([a-z0-9]+(-[a-z0-9]+)*\/?)*$/.test(path) || path.length > 200) {
+      add("page_path_invalid", "The proposed URL path is lowercase words and hyphens from the site root, like /services/roof-replacement.", path);
+    } else if ((path.replace(/\/+$/, "").split("/").pop() ?? "") !== (draft.slug ?? "") && path !== "/") {
+      add("slug_not_path", `The slug is the path's last segment ("${path.replace(/\/+$/, "").split("/").pop()}").`, draft.slug);
+    }
+    if (page.change === "page_rewrite" && page.existing_url) {
+      let keep = "";
+      try { keep = new URL(page.existing_url).pathname.replace(/\/+$/, "") || "/"; } catch { /* the brief checked it */ }
+      if (keep && path.replace(/\/+$/, "") !== keep.replace(/\/+$/, "")) {
+        add("refresh_moves_page", `A refresh keeps the page's URL (${keep}); moving it is a new page.`, path);
+      }
+    }
+    const obj = (draft.page_objective ?? "").trim();
+    if (!obj) add("objective_missing", "Say what the page is for (its objective).");
+    else if (obj.length > (R as { objective_max?: number }).objective_max!) add("objective_too_long", "Keep the objective to one or two sentences.");
+    const sd = draft.structured_data;
+    if (sd != null) {
+      if (typeof sd !== "object" || Array.isArray(sd)) add("schema_invalid", "The structured data is one JSON-LD object.");
+      else {
+        if (sd["@context"] !== "https://schema.org") add("schema_invalid", "Structured data uses \"@context\": \"https://schema.org\".");
+        const types = Array.isArray(sd["@type"]) ? (sd["@type"] as unknown[]) : [sd["@type"]];
+        for (const t of types) {
+          if (typeof t !== "string" || !page.schema_types.includes(t)) {
+            add("schema_type_not_allowed", `A ${page.type.replace(/_/g, " ")} page recommends ${page.schema_types.join(", ")}; not ${String(t)}.`, String(t));
+          }
+        }
+        const strings = jsonStrings(sd);
+        for (const u of strings.filter((x) => /^https?:\/\//.test(x) && x !== "https://schema.org")) {
+          if (!brief.links.site || !u.startsWith(brief.links.site.replace(/\/+$/, ""))) add("schema_url_off_site", `Structured data links only to the client's site, not ${u}.`, u);
+        }
+        schemaText = strings.filter((x) => !/^https?:\/\//.test(x) && x !== "https://schema.org" && !types.includes(x)).join("\n");
+      }
+    }
+  } else if (draft.page_path || draft.page_objective) {
+    add("page_fields_on_blog", "A blog has no page path or objective.");
   }
 
   // ── Claims: only the brief's, within its limits ──
@@ -126,7 +183,8 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   if (draft.cta?.url) checkUrl(draft.cta.url, "The CTA");
 
   // ── Facts: everything a reader sees ──
-  const text = [draft.title, draft.meta_title, draft.meta_description, draft.h1, ...outline.map((o) => o.heading), visibleBody(body), draft.cta?.text]
+  const text = [draft.title, draft.meta_title, draft.meta_description, draft.h1, ...outline.map((o) => o.heading), visibleBody(body), draft.cta?.text,
+    page ? draft.page_objective : null, schemaText]
     .filter(Boolean).join("\n");
   const spans: [number, number][] = [];
   for (const c of linked) {

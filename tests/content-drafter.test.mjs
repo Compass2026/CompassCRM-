@@ -8,7 +8,7 @@ import { lintBlog, wordCount } from "../supabase/functions/content-drafter/lint.
 import { createContentDrafter, parseBlogDraft } from "../supabase/functions/content-drafter/handler.ts";
 import { toMarkdown } from "../supabase/functions/content-drafter/markdown.ts";
 import { lucas, GAZETTEER, OC, REVIEWS, FREE_QUOTES, PAGE, SITE } from "./fixtures/drafter-lucas.mjs";
-import { GOOD_BLOG, draftRow, DRAFT_ID } from "./fixtures/blog-lucas.mjs";
+import { GOOD_BLOG, GOOD_PAGE, draftRow, pageRow, DRAFT_ID, PAGE_DRAFT_ID } from "./fixtures/blog-lucas.mjs";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const brief = () => {
@@ -39,7 +39,7 @@ test("brief: refusals — a web page, no intent, an unapproved board, no usable 
     const r = buildBlogBrief(input, row);
     assert.ok(!r.ok && r.refusals.some((x) => x.code === code), `${code}: ${JSON.stringify(r)}`);
   };
-  no(lucas(), draftRow({ deliverable: "web_page" }), "deliverable_unsupported");
+  no(lucas(), draftRow({ deliverable: "podcast" }), "deliverable_unsupported");
   no(lucas(), draftRow({ search_intent: null }), "intent_missing");
   const unapproved = lucas(); unapproved.board.status = "draft";
   no(unapproved, draftRow(), "brand_board_not_approved");
@@ -160,4 +160,78 @@ test("handler: open (the weekly blog) is the worker's alone and names the task, 
   assert.equal(r.status, 201);
   assert.deepEqual(store.calls[0], ["open", { task_id: body.task_id, topic: body.topic, search_intent: "informational", keyword_id: null, service_id: null }]);
   assert.deepEqual((await call(fn, { mode: "version" })).body.modes, ["brief", "check", "submit", "open", "version"]);
+});
+
+// ── Web pages (0069) ─────────────────────────────────────────────────────────
+const pageBrief = (over = {}) => {
+  const r = buildBlogBrief(lucas(), pageRow(over));
+  assert.ok(r.ok, JSON.stringify(r));
+  return r.brief;
+};
+const lintPage = (over = {}, row = {}) => lintBlog(pageBrief(row), { ...clone(GOOD_PAGE), ...over }, { gazetteer: GAZETTEER });
+
+test("page brief: the page's type, new or refresh, its schema types, its links and CTA", () => {
+  const b = pageBrief();
+  assert.equal(b.kind, "page");
+  assert.deepEqual(b.target.page, { type: "service", change: "page_added", existing_url: null, schema_types: ["Service", "WebPage", "FAQPage", "BreadcrumbList"] });
+  assert.deepEqual(b.links.required, [], "a service page does not link to itself");
+  assert.equal(b.cta.url, SITE);
+  assert.equal(b.rules.min_words, 400);
+  const use = pageBrief({ page_type: "use_case" });
+  assert.deepEqual(use.links.required.map((l) => l.url), [PAGE], "another page type links to its service page");
+  const refresh = pageBrief({ page_change: "page_rewrite", target_url: PAGE });
+  assert.equal(refresh.target.page.existing_url, PAGE);
+  const no = (row, code) => { const r = buildBlogBrief(lucas(), pageRow(row)); assert.ok(!r.ok && r.refusals.some((x) => x.code === code), `${code}: ${JSON.stringify(r)}`); };
+  no({ page_type: null }, "page_type_missing");
+  no({ page_change: null }, "page_change_missing");
+  no({ page_change: "page_rewrite", target_url: "https://elsewhere.example.test/roofs" }, "target_page_invalid");
+  no({ service_id: null }, "service_missing");
+});
+
+test("page lint: the good page passes; path, slug, objective, refresh URL", () => {
+  assert.deepEqual(lintPage().problems, []);
+  assert.ok(codes(lintPage({ page_path: "/Services/Roof Replacement" })).includes("page_path_invalid"));
+  assert.ok(codes(lintPage({ slug: "roofs" })).includes("slug_not_path"));
+  assert.ok(codes(lintPage({ page_objective: " " })).includes("objective_missing"));
+  const moved = lintPage({}, { page_change: "page_rewrite", target_url: PAGE });
+  assert.ok(codes(moved).includes("refresh_moves_page"), "a refresh keeps its URL");
+  const kept = lintPage({ page_path: "/services/roof-replacement", slug: "roof-replacement" }, { page_change: "page_rewrite", target_url: PAGE });
+  assert.ok(!codes(kept).includes("refresh_moves_page"));
+  assert.ok(codes(lintPage({ body_markdown: GOOD_PAGE.body_markdown.split("## How we work")[0] })).includes("too_short"));
+});
+
+test("page lint: structured data — schema.org, the page type's types, the client's site, the same fact rule", () => {
+  const sd = (over) => ({ structured_data: { ...clone(GOOD_PAGE.structured_data), ...over } });
+  assert.ok(codes(lintPage(sd({ "@type": "Product" }))).includes("schema_type_not_allowed"));
+  assert.ok(codes(lintPage(sd({ "@context": "http://example.test" }))).includes("schema_invalid"));
+  assert.ok(codes(lintPage(sd({ url: "https://competitor.example.test/" }))).includes("schema_url_off_site"));
+  assert.ok(codes(lintPage(sd({ address: { "@type": "PostalAddress", streetAddress: "12618 Veterans Memorial Pkwy" } }))).includes("unsupported_address"));
+  assert.ok(codes(lintPage(sd({ aggregateRating: { "@type": "AggregateRating", ratingValue: "5", reviewCount: "97" } })))
+    .some((c) => c === "unsupported_review" || c === "unsupported_number"));
+  assert.ok(codes(lintPage(sd({ provider: { telephone: "(314) 555-0100" } }))).includes("wrong_phone"));
+  assert.deepEqual(lintPage({ structured_data: null }).problems, [], "a recommendation is optional");
+  assert.ok(codes(lintBlog(brief(), { ...clone(GOOD_BLOG), page_path: "/x" }, { gazetteer: GAZETTEER })).includes("page_fields_on_blog"));
+});
+
+test("handler: a page submit writes its path, objective and structured data", async () => {
+  const store = fakeStore({ row: pageRow() });
+  const fn = createContentDrafter({ store, gazetteer: { MO: GAZETTEER } });
+  const b = await call(fn, { mode: "brief", draft_id: PAGE_DRAFT_ID });
+  assert.equal(b.status, 200, JSON.stringify(b.body));
+  assert.equal(b.body.brief.kind, "page");
+  const ok = await call(fn, { mode: "submit", draft_id: PAGE_DRAFT_ID, brief_hash: b.body.brief_hash, runtime: "test", draft: GOOD_PAGE });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  const [p] = store.calls;
+  assert.equal(p.content.page_path, GOOD_PAGE.page_path);
+  assert.equal(p.content.page_objective, GOOD_PAGE.page_objective);
+  assert.equal(p.content.structured_data["@type"], "Service");
+  assert.match(parseBlogDraft({ ...GOOD_PAGE, structured_data: [1] }), /structured_data/);
+});
+
+test("Markdown export of a page: its URL path, type, change, objective and JSON-LD in the front matter", () => {
+  const md = toMarkdown({ ...GOOD_PAGE, page_type: "service", page_change: "page_added" });
+  assert.match(md, /\nurl_path: "\/services\/roof-replacement-wentzville"\npage_type: "service"\nchange: "new page"\nobjective: "Help Wentzville/);
+  const sd = md.match(/\nstructured_data: (.+)\n/)[1];
+  assert.deepEqual(JSON.parse(sd), GOOD_PAGE.structured_data);
+  assert.match(md, /\n---\n\n# Roof replacement in Wentzville\n\n## What a roof replacement involves/);
 });

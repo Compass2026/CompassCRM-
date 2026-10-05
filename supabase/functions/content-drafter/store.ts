@@ -26,7 +26,7 @@ export function createStore(supabase: Client) {
     },
     async draft(id: string): Promise<DraftRow | null> {
       const { data, error } = await supabase.from("content_drafts")
-        .select("id, client_id, plan_item_id, deliverable, status, topic, primary_keyword, keyword_id, search_intent, service_id, authority_opportunity_id, target_url, request_note")
+        .select("id, client_id, plan_item_id, deliverable, status, topic, primary_keyword, keyword_id, search_intent, service_id, authority_opportunity_id, target_url, request_note, page_type, page_change")
         .eq("id", id).maybeSingle();
       if (error) throw new Error(error.message);
       return (data as DraftRow | null) ?? null;

@@ -14,7 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
   const supabase = await createClient();
   if (!(await getCurrentTeamMember(supabase))) return NextResponse.json({ error: "team members only" }, { status: 403 });
   const { data: d } = await supabase.from("content_drafts")
-    .select("title, slug, meta_title, meta_description, h1, body_markdown, cta, primary_keyword")
+    .select("title, slug, meta_title, meta_description, h1, body_markdown, cta, primary_keyword, page_path, page_objective, page_type, page_change, structured_data")
     .eq("id", draftId).eq("client_id", clientId).maybeSingle();
   if (!d || !d.title) return NextResponse.json({ error: "not found" }, { status: 404 });
   const md = toMarkdown({ ...d, cta: (d.cta ?? null) as { text?: string; url?: string | null } | null });

@@ -1938,7 +1938,7 @@ published by you, ever.
 **Report:** client, opportunity key, `brief_hash`, attempts, and `post_id` /
 `run_id` / `review_task_id` on success, the conflict or refusals otherwise.
 
-### Content draft request (content-drafter, one blog)
+### Content draft request (content-drafter, one blog or web page)
 
 Work exactly the draft you found (a teammate asked for it). The plan item
 decided *what* the article is about; `content-drafter` rebuilds the brief
@@ -1959,8 +1959,9 @@ returning id;
 No row → skip it. Never mark the task done yourself: the successful submit
 closes it in the same transaction that writes the draft.
 
-**Preflight:** `{"mode": "version"}` must answer `version` ≥ 1 with `kinds`
-containing `blog`. Anything else → stop, leave the task `in_progress`, say so.
+**Preflight:** `{"mode": "version"}` must answer `version` ≥ 3 with `kinds`
+containing `blog` and `web_page`. Anything else → stop, leave the task
+`in_progress`, say so.
 
 1. **Brief** `{"mode": "brief", "draft_id"}`. `200` → keep `brief_hash` and
    the brief: the topic, primary keyword, intent, the service and its page,
@@ -1982,12 +1983,28 @@ containing `blog`. Anything else → stop, leave the task `in_progress`, say so.
    licences, response times, reviews, materials or superlatives unless they
    are inside the exact words of a claim you link; only the brief's places;
    never tell the reader what their home needs.
+   **A web page** (`brief.kind = "page"`; `brief.target.page` has its
+   `type`, `change` and `schema_types`) is a complete page, not a blog:
+   the same fields plus `page_path` (the proposed URL path from the site
+   root, its last segment the `slug`; a refresh keeps the existing page's
+   path, `existing_url`), `page_objective` (one or two sentences: what the
+   page is for), `outline` as its sections (at least three H2s), the
+   complete copy in `body_markdown` (400–2,000 words, aim 500–1,200), and
+   `structured_data`: one JSON-LD object (`"@context":
+   "https://schema.org"`, an `@type` from `schema_types`, the client's
+   name, canonical phone and site URLs only — the same fact rule as the
+   copy), or null when none fits. A service page is about its service; a
+   use-case / problem page answers one problem and links its service page;
+   a commercial landing page carries one offer of the client's services
+   (no prices); a comparison compares approaches, never names a
+   competitor; a location page exists only from its Authority opportunity
+   and speaks only of approved places.
 3. **Check** `{"mode": "check", "draft_id", "brief_hash", "draft"}` → fix
    every `problems` entry and check again until `ok`.
 4. **Submit** `{"mode": "submit", "draft_id", "brief_hash", "draft",
    "runtime": "claude-worker-skill"}`. `201` → done: the draft is in review,
    the request closed. Approval is a teammate's; it alone makes the final
-   article.
+   record (a blog's `content_posts` row, a page's `change_log` row).
 
 **Stop, never work around:**
 - `422` with `refusals` → the gate (brand board, voice, facts, rules, no

@@ -28,14 +28,18 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
   const { data: d } = await supabase.from("content_drafts").select("*").eq("id", draftId).eq("client_id", clientId).maybeSingle();
   if (!d || !isDraftStatus(d.status)) notFound();
 
-  const [members, { data: linked }, { data: claims }, { data: service }, { data: finalPost }, { data: problems }] = await Promise.all([
+  const [members, { data: linked }, { data: claims }, { data: service }, { data: finalPost }, { data: problems }, { data: finalChange }, { data: client }] = await Promise.all([
     listTeamMembers(supabase),
     supabase.from("content_draft_claims").select("claim_id, claims(id, claim, status, source)").eq("draft_id", draftId),
     supabase.from("claims").select("id, claim, status, source").eq("client_id", clientId).order("created_at"),
     d.service_id ? supabase.from("services").select("name, page_url").eq("id", d.service_id).maybeSingle() : Promise.resolve({ data: null }),
     d.final_content_post_id ? supabase.from("content_posts").select("id, title, status, url").eq("id", d.final_content_post_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.rpc("content_draft_problems_for", { p_draft_id: draftId }),
+    d.final_change_log_id ? supabase.from("change_log").select("id, change_type, status, reviewed_on").eq("id", d.final_change_log_id).maybeSingle() : Promise.resolve({ data: null }),
+    supabase.from("clients").select("website_url").eq("id", clientId).maybeSingle(),
   ]);
+  const isPage = d.deliverable === "web_page";
+  const site = (client?.website_url ?? "").replace(/\/+$/, "");
   const names = new Map(members.map((m) => [m.id, m.name]));
   const status = draftStatusLabels[d.status];
   const actions = draftActions(d);
@@ -48,6 +52,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
   const notReady = (problems as string[] | null) ?? [];
   const markdown = d.title ? toMarkdown({ ...d, cta }) : "";
   const kind = d.deliverable === "blog" ? "Blog" : "Web page";
+  const typeLabel = d.page_type ? d.page_type.replace(/_/g, " ") : null;
 
   return (
     <div className="max-w-4xl space-y-6" data-draft={d.status}>
@@ -56,7 +61,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
         <h2 className="text-lg font-semibold [overflow-wrap:anywhere]">{d.title ?? d.topic}</h2>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <Badge variant="outline" className={cn("text-[10px]", status.className)} data-draft-status>{status.label}</Badge>
-          <span>{kind}{d.page_type ? ` · ${d.page_type.replace(/_/g, " ")}` : ""}</span>
+          <span>{kind}{typeLabel ? ` · ${typeLabel}` : ""}</span>
           <span>· version {d.version}</span>
           {d.author_kind && <span>· {d.author_kind === "drafter" ? `written by the drafter${d.runtime ? ` (${d.runtime})` : ""}` : "edited by the team"}</span>}
           {d.word_count != null && <span>· {d.word_count} words</span>}
@@ -78,6 +83,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
         <p className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-900" data-draft-approved>
           Approved by {actorName(d.reviewed_by, names)}{d.reviewed_at ? ` on ${formatStamp(d.reviewed_at)}` : ""} (version {d.approved_version}).{" "}
           {finalPost ? <>Final article: <Link href={`/clients/${clientId}/content`} className="underline">{finalPost.title}</Link> ({finalPost.status}).</> : null}
+          {finalChange ? <span data-final-change>Final record: {finalChange.change_type === "page_rewrite" ? "page refresh" : "new page"} in the change log ({finalChange.status}).</span> : null}
         </p>
       )}
 
@@ -90,6 +96,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
           {service && (<><dt className="text-muted-foreground">Service page</dt><dd>{service.name}{service.page_url ? ` · ${service.page_url}` : ""}</dd></>)}
           {d.authority_opportunity_id && (<><dt className="text-muted-foreground">Authority</dt><dd><Link href={`/clients/${clientId}/authority`} className="underline">opportunity</Link></dd></>)}
           {d.request_note && (<><dt className="text-muted-foreground">Note</dt><dd>{d.request_note}</dd></>)}
+          {isPage && (<><dt className="text-muted-foreground">Page</dt><dd>{d.page_change === "page_rewrite" ? `Refresh of ${d.target_url}` : "New page"}</dd></>)}
         </dl>
       </section>
 
@@ -107,10 +114,13 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
             )}
           </div>
           <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-y-1 text-xs [&>dd]:[overflow-wrap:anywhere]">
-            <dt className="text-muted-foreground">Slug</dt><dd className="font-mono">/{d.slug}</dd>
+            {isPage ? (<>
+              <dt className="text-muted-foreground">Proposed URL</dt><dd className="font-mono" data-page-url>{site}{d.page_path}</dd>
+              <dt className="text-muted-foreground">Objective</dt><dd data-page-objective>{d.page_objective}</dd>
+            </>) : (<><dt className="text-muted-foreground">Slug</dt><dd className="font-mono">/{d.slug}</dd></>)}
             <dt className="text-muted-foreground">Meta title</dt><dd>{d.meta_title} <span className="text-muted-foreground">({(d.meta_title ?? "").length})</span></dd>
             <dt className="text-muted-foreground">Meta description</dt><dd>{d.meta_description} <span className="text-muted-foreground">({(d.meta_description ?? "").length})</span></dd>
-            <dt className="text-muted-foreground">Outline</dt>
+            <dt className="text-muted-foreground">{isPage ? "Sections" : "Outline"}</dt>
             <dd><ul className="space-y-0.5">{outline.map((o, i) => <li key={i} className={o.level === 3 ? "pl-4" : ""}>{o.heading}</li>)}</ul></dd>
           </dl>
           <div className="rounded-md border p-4">
@@ -118,6 +128,12 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
             <MarkdownPreview markdown={d.body_markdown ?? ""} />
             {cta.text && <p className="mt-4 text-sm font-medium">{cta.url ? <a href={cta.url} className="underline" target="_blank" rel="noreferrer">{cta.text}</a> : cta.text}</p>}
           </div>
+          {isPage && d.structured_data && (
+            <div className="text-xs" data-structured-data>
+              <p className="font-medium">Structured data (JSON-LD recommendation)</p>
+              <pre className="mt-1 overflow-x-auto rounded-md bg-muted p-2 text-[11px]" data-overflow-ok>{JSON.stringify(d.structured_data, null, 2)}</pre>
+            </div>
+          )}
           {links.length > 0 && (
             <div className="text-xs">
               <p className="font-medium">Internal-link recommendations</p>
@@ -167,7 +183,8 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
           <h3 className="text-sm font-semibold">Edit</h3>
           <EditDraftForm clientId={clientId} draftId={draftId} version={d.version} claims={usable} linked={linkedIds}
             draft={{ title: d.title, slug: d.slug, meta_title: d.meta_title, meta_description: d.meta_description, h1: d.h1,
-                     outline, body_markdown: d.body_markdown, internal_links: links, cta }} />
+                     outline, body_markdown: d.body_markdown, internal_links: links, cta,
+                     ...(isPage ? { page: { page_path: d.page_path, page_objective: d.page_objective, structured_data: d.structured_data } } : {}) }} />
         </section>
       )}
     </div>

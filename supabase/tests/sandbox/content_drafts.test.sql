@@ -1,4 +1,4 @@
--- Tests for migrations 0066 + 0067 + 0068 (content drafts: the Blog Drafter and the
+-- Tests for migrations 0066 + 0067 + 0068 + 0069 (content drafts: the Blog Drafter and the
 -- Web Page Drafter's foundation), run by scripts/test-portal-sandbox.sh on the
 -- same replay. Own harness schema (cd) and fictional clients.
 --
@@ -47,10 +47,11 @@ language sql immutable as $$
     'content', jsonb_build_object(
       'title', 'How long does a roof last in Missouri?', 'slug', 'how-long-does-a-roof-last-in-missouri',
       'meta_title', 'How Long Does a Roof Last in Missouri?', 'meta_description', 'What shortens a roof''s life here and when to plan a replacement.',
-      'h1', 'How long does a roof last in Missouri?', 'outline', '[{"level": 2, "heading": "What wears a roof out"}]'::jsonb,
+      'h1', 'How long does a roof last in Missouri?', 'outline', '[{"level": 2, "heading": "What wears a roof out"}, {"level": 2, "heading": "Planning ahead"}]'::jsonb,
       'body_markdown', '## What wears a roof out' || chr(10) || repeat('Shingles age with sun and storms. ', p_words / 6),
       'internal_links', '[{"url": "https://planner-roofing.example.test/services/roof-replacement", "anchor": "roof replacement"}]'::jsonb,
-      'cta', '{"text": "Request a quote", "url": "https://planner-roofing.example.test/contact"}'::jsonb))
+      'cta', '{"text": "Request a quote", "url": "https://planner-roofing.example.test/contact"}'::jsonb,
+      'page_path', '/services/roof-replacement', 'page_objective', 'Turn homeowners comparing roofers into quote requests.'))
 $$;
 grant execute on all functions in schema cd to anon, authenticated, service_role, authenticator, postgres;
 
@@ -68,7 +69,10 @@ insert into content_plan_items (id, client_id, week_start, deliverable, channel,
   (cd.id('i-blog'), cd.id('a'), date '2026-10-05', 'blog', null, 'educational', 'How long does a roof last', 'informational', cd.id('kw'), cd.id('svc'), date '2026-10-07'),
   (cd.id('i-blog-2'), cd.id('a'), date '2026-10-05', 'blog', null, 'educational', 'Signs of hail damage', 'informational', null, cd.id('svc'), null),
   (cd.id('i-page'), cd.id('a'), date '2026-10-05', 'web_page', null, 'service', 'Roof replacement page', 'commercial', null, cd.id('svc'), null),
-  (cd.id('i-gbp'), cd.id('a'), date '2026-10-05', 'gbp', 'google_business', 'service', 'Roof post', 'commercial', null, cd.id('svc'), null);
+  (cd.id('i-gbp'), cd.id('a'), date '2026-10-05', 'gbp', 'google_business', 'service', 'Roof post', 'commercial', null, cd.id('svc'), null),
+  (cd.id('i-page-2'), cd.id('a'), date '2026-10-05', 'web_page', null, 'service', 'Roof replacement page refresh', 'commercial', null, cd.id('svc'), null),
+  (cd.id('i-compare'), cd.id('a'), date '2026-10-05', 'web_page', null, 'educational', 'Repair or replace', 'commercial', null, null, null);
+update content_plan_items set target_url = 'https://a.example.test/services/roof-replacement' where id = cd.id('i-page-2');
 \o
 
 -- ── Person: request ─────────────────────────────────────────────────────────
@@ -91,8 +95,13 @@ begin
     cd.try(format('select content_draft_request(%L)', cd.id('i-gbp'))) like '22023%');
   perform cd.ok('R4 a web page needs its type; a location page needs a location_page opportunity',
     cd.try(format('select content_draft_request(%L)', cd.id('i-page'))) like '22023%'
-    and cd.try(format('select content_draft_request(%L, ''location'')', cd.id('i-page'))) like '22023%location_page%');
-  r := content_draft_request(cd.id('i-page'), 'service');
+    and cd.try(format('select content_draft_request(%L, ''location'', null, ''page_added'')', cd.id('i-page'))) like '22023%location_page%');
+  perform cd.ok('R7 a page says new or refresh; a refresh names the existing page; a comparison is justified',
+    cd.try(format('select content_draft_request(%L, ''service'')', cd.id('i-page'))) like '22023%new page or a refresh%'
+    and cd.try(format('select content_draft_request(%L, ''service'', null, ''page_rewrite'')', cd.id('i-page'))) like '22023%existing page%'
+    and cd.try(format('select content_draft_request(%L, ''comparison'', null, ''page_added'')', cd.id('i-compare'))) like '22023%justified%'
+    and cd.try(format('select content_draft_request(%L, null, null, ''page_added'')', cd.id('i-blog-2'))) like '22023%Only a web page%');
+  r := content_draft_request(cd.id('i-page'), 'service', null, 'page_added');
   perform cd.save('page', r->>'draft_id');
   r := content_draft_request(cd.id('i-blog-2'));
   perform cd.save('blog2', r->>'draft_id');
@@ -133,8 +142,13 @@ begin
     r->>'status' = 'in_review' and (r->>'version')::int = 1 and (r->>'word_count')::int >= 300
     and (select author_kind = 'drafter' and body_hash ~ '^[0-9a-f]{64}$' from content_drafts where id = cd.get('blog')::uuid)
     and (select status::text from tasks where key = 'content_draft:' || cd.get('blog')) = 'done');
-  r := content_draft_write(cd.payload(cd.get('page')::uuid, 200, array[cd.id('c-sourced')]));
-  perform cd.ok('D5 a web page draft has no 300-word floor', r->>'status' = 'in_review');
+  e := cd.try(format('select content_draft_write(%L::jsonb)', cd.payload(cd.get('page')::uuid, 200, array[cd.id('c-sourced')])));
+  perform cd.ok('D5 a page under 250 words is not submitted', e like '23514%250 words%', e);
+  r := content_draft_write(cd.payload(cd.get('page')::uuid, 270, array[cd.id('c-sourced')]));
+  perform cd.ok('D6 a page draft with its path and objective goes to review; no change_log row',
+    r->>'status' = 'in_review'
+    and (select page_path = '/services/roof-replacement' and page_change = 'page_added' from content_drafts where id = cd.get('page')::uuid)
+    and (select count(*) from change_log where client_id = cd.id('a')) = 0);
 end $$;
 \o
 reset role;
@@ -214,7 +228,7 @@ select set_config('request.jwt.claims', '', false);
 set role service_role;
 select cd.as_user('service_role', null);
 \o /dev/null
-select content_draft_write(cd.payload(cd.get('page')::uuid, 200, array[cd.id('c-sourced')]));
+select content_draft_write(cd.payload(cd.get('page')::uuid, 270, array[cd.id('c-sourced')]));
 \o
 reset role;
 set role authenticated;
@@ -224,15 +238,81 @@ do $$
 declare r jsonb; p uuid := cd.get('page')::uuid;
 begin
   r := content_draft_approve(p, (select version from content_drafts where id = p));
-  perform cd.ok('G1 a web page is approved with no final record yet (its target waits for Tom)',
-    (select status = 'approved' and final_content_post_id is null from content_drafts where id = p)
-    and (r->>'content_post_id') is null
+  perform cd.ok('G1 a new page finalizes to ONE change_log row: page_added, approved, the draft as its object, the URL and objective',
+    (select status = 'approved' and final_content_post_id is null and final_change_log_id = (r->>'change_log_id')::uuid from content_drafts where id = p)
+    and (select change_type = 'page_added' and object_type = 'site' and object_id = p and status::text = 'approved'
+                and after->>'path' = '/services/roof-replacement' and reasoning = 'Turn homeowners comparing roofers into quote requests.'
+                and evidence like 'Owens Corning Preferred Contractor (https://manufacturer%' and reviewed_by is not null
+           from change_log where id = (r->>'change_log_id')::uuid)
+    and (select count(*) from change_log where client_id = cd.id('a')) = 1
     and (select count(*) from content_posts where client_id = cd.id('a')) = 1);
+  perform cd.save('change', r->>'change_log_id');
   -- Billing's blog count (0062, client_quota_usage) reads Compass
   -- content_posts and open blog_post tasks: one row, no task.
   perform cd.ok('B1 what Billing counts: one Compass article for three drafts, two blog versions and a rejection',
     (select count(*) from content_posts where client_id = cd.id('a') and origin = 'compass') = 1
     and (select count(*) from tasks where client_id = cd.id('a') and key = 'blog_post') = 0);
+end $$;
+\o
+reset role;
+select set_config('request.jwt.claims', '', false);
+
+-- ── P. Web pages finalize to one change_log row (0069) ──────────────────────
+\c - authenticator
+set role authenticated;
+select cd.as_user('authenticated', :'team');
+\o /dev/null
+do $$
+declare r jsonb; p uuid := cd.get('page')::uuid; ch uuid := cd.get('change')::uuid; r2 jsonb; p2 uuid; e text;
+begin
+  r := content_draft_approve(p, (select approved_version from content_drafts where id = p));
+  perform cd.ok('P1 approving again is a no-op: the same row', (r->>'already')::boolean and (r->>'change_log_id')::uuid = ch);
+  perform cd.ok('P2 the final row is approval''s alone',
+    cd.try(format('update content_drafts set final_change_log_id = null where id = %L', p)) like '42501%');
+  update content_drafts set status = 'draft' where id = p;
+  perform cd.ok('P3 reopening returns the row to proposed (Billing: planned, not completed); the slot is not done',
+    (select status::text from change_log where id = ch) = 'proposed'
+    and (select status from content_plan_board where id = cd.id('i-page')) = 'drafting');
+  update content_drafts set page_objective = 'Answer what a roof replacement involves, then invite a quote request.' where id = p;
+  update content_drafts set status = 'in_review' where id = p;
+  r := content_draft_approve(p, (select version from content_drafts where id = p));
+  perform cd.ok('P4 re-approval updates the same row: approved, the new objective and version; still one row',
+    (r->>'change_log_id')::uuid = ch
+    and (select status::text = 'approved' and reasoning like 'Answer what a roof replacement involves%'
+                and (after->>'version')::int = (select version from content_drafts where id = p) from change_log where id = ch)
+    and (select count(*) from change_log where client_id = cd.id('a')) = 1
+    and (select status from content_plan_board where id = cd.id('i-page')) = 'approved');
+  -- A refresh: page_rewrite, with the existing page as before.
+  r2 := content_draft_request(cd.id('i-page-2'), 'service', null, 'page_rewrite');
+  p2 := (r2->>'draft_id')::uuid;
+  perform cd.save('page2', p2::text);
+  perform cd.ok('P5 a teammate cannot change a page''s kind or new / refresh',
+    cd.try(format('update content_drafts set page_change = ''page_added'' where id = %L', p2)) like '23514%');
+end $$;
+\o
+reset role;
+set role service_role;
+select cd.as_user('service_role', null);
+\o /dev/null
+select content_draft_write(cd.payload(cd.get('page2')::uuid, 270, array[cd.id('c-sourced')]));
+\o
+reset role;
+set role authenticated;
+select cd.as_user('authenticated', :'team');
+\o /dev/null
+do $$
+declare r jsonb; p2 uuid := cd.get('page2')::uuid;
+begin
+  perform cd.ok('P6 a refresh in review has no change_log row yet', (select count(*) from change_log where client_id = cd.id('a')) = 1);
+  update content_drafts set status = 'rejected', review_note = 'Keep the existing FAQ' where id = p2;
+  perform cd.ok('P7 rejection creates no row', (select count(*) from change_log where client_id = cd.id('a')) = 1);
+  update content_drafts set status = 'draft' where id = p2;
+  update content_drafts set status = 'in_review' where id = p2;
+  r := content_draft_approve(p2, (select version from content_drafts where id = p2));
+  perform cd.ok('P8 an approved refresh is ONE page_rewrite row naming the existing page',
+    (select change_type = 'page_rewrite' and before->>'url' = 'https://a.example.test/services/roof-replacement' and status::text = 'approved'
+       from change_log where id = (r->>'change_log_id')::uuid)
+    and (select count(*) from change_log where client_id = cd.id('a')) = 2);
 end $$;
 \o
 reset role;

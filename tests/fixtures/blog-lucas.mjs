@@ -50,3 +50,32 @@ export const GOOD_BLOG = {
 };
 
 export { SITE, PAGE };
+
+// A service page for the same fixture (0069) that the page lint passes.
+export const PAGE_DRAFT_ID = "0b10c0de-0000-4000-8000-000000000002";
+export const pageRow = (over = {}) => draftRow({ id: PAGE_DRAFT_ID, deliverable: "web_page", page_type: "service", page_change: "page_added",
+  topic: "Roof replacement in Wentzville", primary_keyword: "roof replacement wentzville", keyword_id: "0fd4fb44-379d-4b22-92ef-dfad62c26547",
+  search_intent: "commercial", ...over });
+const PAGE_OUTLINE = [
+  { level: 2, heading: "What a roof replacement involves" },
+  { level: 2, heading: "How we work" },
+  { level: 2, heading: "When replacing makes sense" },
+];
+export const GOOD_PAGE = {
+  title: "Roof replacement in Wentzville",
+  slug: "roof-replacement-wentzville",
+  page_path: "/services/roof-replacement-wentzville",
+  page_objective: "Help Wentzville homeowners understand a roof replacement and request a quote.",
+  meta_title: "Roof Replacement in Wentzville | Lucas Construction",
+  meta_description: "How a roof replacement works with a local Wentzville contractor, from the first inspection to a clear estimate and final walkthrough.",
+  h1: "Roof replacement in Wentzville",
+  outline: PAGE_OUTLINE,
+  body_markdown: PAGE_OUTLINE.map((o, k) => section(o.heading, k + 1)).join("\n") + "\nLucas Construction is an Owens Corning Preferred Contractor serving homeowners in Wentzville.\n",
+  internal_links: [{ url: SITE, anchor: "Lucas Construction", reason: "The home page." }],
+  cta: { text: "Request a quote", url: SITE },
+  claim_ids: [OC],
+  structured_data: {
+    "@context": "https://schema.org", "@type": "Service", name: "Roof Replacement", areaServed: "Wentzville",
+    provider: { "@type": "LocalBusiness", name: "Lucas Construction", telephone: "(636) 459-9328", url: SITE },
+  },
+};

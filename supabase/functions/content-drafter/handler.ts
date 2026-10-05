@@ -13,6 +13,10 @@
 //             repeat). The task closes only when the draft is approved.
 //   version → what this deployment is, for the worker's preflight.
 //
+// v3 (0069): web pages. The same modes for a web_page draft: the brief adds
+// the page type, new or refresh and the structured-data types it may
+// recommend; the draft adds page_path, page_objective and structured_data.
+//
 // Nothing here approves, finalizes or publishes: approval is a teammate's
 // (content_draft_approve), and that is the only way a blog becomes a
 // content_posts row. The model runtime is the caller's business: it sends a
@@ -20,11 +24,11 @@
 //
 // Callers: the worker (x-cron-secret) or a signed-in team member (JWT on
 // team_members). Nothing else.
-import { blogBriefHash, buildBlogBrief, CONTENT_DRAFTER_VERSION, type BlogBrief } from "./brief.ts";
-import { lintBlog, type BlogDraft } from "./lint.ts";
+import { blogBriefHash, buildContentBrief, CONTENT_DRAFTER_VERSION, type BlogBrief } from "./brief.ts";
+import { lintContent, type BlogDraft } from "./lint.ts";
 import type { Store } from "./store.ts";
 
-export const HANDLER_VERSION = 2;
+export const HANDLER_VERSION = 3;
 export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
@@ -49,7 +53,12 @@ export function parseBlogDraft(d: unknown): BlogDraft | string {
   const cta = o.cta as Json | undefined;
   if (!cta || typeof cta !== "object" || !isStr(cta.text) || !(cta.url == null || isStr(cta.url))) return "draft.cta is { text, url }";
   if (!Array.isArray(o.claim_ids) || o.claim_ids.some((c) => !isStr(c) || !UUID.test(c))) return "draft.claim_ids must be uuids";
+  for (const k of ["page_path", "page_objective"]) if (o[k] != null && !isStr(o[k])) return `draft.${k} must be a string`;
+  if (o.structured_data != null && (typeof o.structured_data !== "object" || Array.isArray(o.structured_data))) return "draft.structured_data is a JSON-LD object or null";
   return {
+    ...(o.page_path != null ? { page_path: o.page_path as string } : {}),
+    ...(o.page_objective != null ? { page_objective: o.page_objective as string } : {}),
+    ...(o.structured_data != null ? { structured_data: o.structured_data as Record<string, unknown> } : {}),
     title: o.title as string, slug: o.slug as string, meta_title: o.meta_title as string, meta_description: o.meta_description as string,
     h1: o.h1 as string, body_markdown: o.body_markdown as string,
     outline: (o.outline as Json[]).map((x) => ({ level: x.level as number, heading: x.heading as string })),
@@ -79,7 +88,7 @@ export function createContentDrafter(deps: Deps) {
     }
     const input = await store.input(draft.client_id);
     if (!input?.client) return { ok: false, status: 404, body: { error: "client_not_found" } };
-    const result = buildBlogBrief(input, draft, await store.sitePages(draft.client_id));
+    const result = buildContentBrief(input, draft, await store.sitePages(draft.client_id));
     if (!result.ok) return { ok: false, status: 422, body: { eligible: false, refusals: result.refusals } };
     return { ok: true, brief: result.brief, hash: await blogBriefHash(result.brief), state: input.client.state ?? null };
   }
@@ -91,7 +100,7 @@ export function createContentDrafter(deps: Deps) {
     const body = (await req.json().catch(() => null)) as Json | null;
     if (!body || typeof body !== "object") return reply(400, { error: "JSON body required" });
     const mode = body.mode;
-    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open"] });
+    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog", "web_page"], features: ["weekly_open", "web_page"] });
     if (mode === "open") {
       if (who.via !== "worker") return reply(403, { error: "open is the worker's (the weekly blog task)" });
       const taskId = body.task_id;
@@ -124,7 +133,7 @@ export function createContentDrafter(deps: Deps) {
     }
     const draft = parseBlogDraft(body.draft);
     if (typeof draft === "string") return reply(400, { error: draft });
-    const lint = lintBlog(built.brief, draft, { gazetteer: (built.state && deps.gazetteer?.[built.state]) || [] });
+    const lint = lintContent(built.brief, draft, { gazetteer: (built.state && deps.gazetteer?.[built.state]) || [] });
     if (mode === "check") return reply(200, { ...lint, brief_hash: built.hash });
 
     const runtime = body.runtime;

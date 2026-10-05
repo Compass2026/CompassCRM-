@@ -1765,7 +1765,11 @@ go-live: `docs/blog-drafter.md`.
     until approval closes it with the final row.
   - Reopening returns the final row to `draft`: the slot stops counting, and
     Billing's count is unchanged.
-- **Not yet:** the Web Page Drafter.
+- **Web Page Drafter v1 (0069, not applied):** the same drafts with page
+  type, new or refresh, the proposed URL path, objective and JSON-LD.
+  Approval finalizes into exactly ONE `change_log` row (`page_added` /
+  `page_rewrite`). A re-approval updates it; reopening returns it to
+  `proposed`. Drafts never create one. `docs/web-page-drafter.md`.
 
 ## Known state / open items (as of Sept 13 2026)
 

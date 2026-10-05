@@ -23,7 +23,7 @@ import {
   PlanFromAuthorityForm,
   UnlinkOutputButton,
 } from "@/components/planner/plan-forms";
-import { GenerateDraftForm } from "@/components/drafts/draft-forms";
+import { GenerateDraftForm, GeneratePageDraftForm } from "@/components/drafts/draft-forms";
 import { draftStatusLabels, isDraftStatus } from "@/lib/content-drafts";
 
 export const dynamic = "force-dynamic";
@@ -139,7 +139,7 @@ export default async function PlannerPage({ params, searchParams }: {
                       {i.hold_reason && (<><dt className="text-muted-foreground">{i.hold === "blocked" ? "Waiting on" : "Note"}</dt><dd>{i.hold_reason}</dd></>)}
                       {i.notes && (<><dt className="text-muted-foreground">Notes</dt><dd>{i.notes}</dd></>)}
                     </dl>
-                    {d === "blog" && i.draft_id && (
+                    {(d === "blog" || d === "web_page") && i.draft_id && (
                       <p className="text-sm" data-plan-draft>
                         <Link href={`${base}/drafts/${i.draft_id}`} className="font-medium underline">Open the draft</Link>
                         <span className="text-xs text-muted-foreground">
@@ -150,13 +150,16 @@ export default async function PlannerPage({ params, searchParams }: {
                     {d === "blog" && !i.draft_id && !blog && i.status === "ready_to_generate" && (
                       <GenerateDraftForm clientId={clientId} planItemId={i.id} />
                     )}
-                    {i.status === "ready_to_generate" && !post && !blog && d !== "blog" && (
+                    {d === "web_page" && !i.draft_id && i.search_intent && i.hold !== "delivered" && (
+                      <GeneratePageDraftForm clientId={clientId} planItemId={i.id} hasTarget={!!i.target_url} />
+                    )}
+                    {i.status === "ready_to_generate" && !post && !blog && d !== "blog" && d !== "web_page" && (
                       <p className="text-xs text-muted-foreground" data-next-step>
                         {d === "gbp" && i.authority_opportunity_id
                           ? <>Next: <Link href={`${base}/authority`} className="underline">Draft with AI</Link> on the Authority tab, then link the draft here.</>
                           : d === "social" || d === "gbp"
                             ? <>Next: <Link href={`${base}/social?view=new`} className="underline">write the post</Link>, then link it here.</>
-                            : "Next: draft the page, then mark it delivered with its link."}
+                            : null}
                       </p>
                     )}
                     <div className="flex flex-wrap items-start gap-2">

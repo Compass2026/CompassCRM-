@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireTeamMember } from "@/lib/team";
 import { isUuid } from "@/lib/tasks";
-import type { Database } from "@/lib/database.types";
+import type { Database, Json } from "@/lib/database.types";
 
 type DraftUpdate = Database["public"]["Tables"]["content_drafts"]["Update"];
 
@@ -49,7 +49,10 @@ export async function generateDraftAction(clientId: string, planItemId: string, 
   if (!supabase) return { error: NOT_TEAM };
   const note = String(form.get("note") ?? "").trim().slice(0, 2000);
   const pageType = String(form.get("page_type") ?? "").trim() || undefined;
-  const { data, error } = await supabase.rpc("content_draft_request", { p_plan_item_id: planItemId, p_note: note || undefined, p_page_type: pageType });
+  const pageChange = String(form.get("page_change") ?? "").trim() || undefined;
+  const { data, error } = await supabase.rpc("content_draft_request", {
+    p_plan_item_id: planItemId, p_note: note || undefined, p_page_type: pageType, p_page_change: pageChange,
+  });
   if (error) return { error: error.message };
   const draftId = (data as { draft_id?: string } | null)?.draft_id;
   revalidateDraft(clientId, draftId);
@@ -129,12 +132,22 @@ export async function saveDraftAction(clientId: string, draftId: string, version
   if (links.some((l) => !/^https?:\/\/\S+$/.test(l.url))) return { error: "Internal links are one per line: the URL, then the anchor text." };
   const ctaUrl = str("cta_url");
   if (ctaUrl && !/^https?:\/\/\S+$/.test(ctaUrl)) return { error: "The CTA link must be a full http(s) URL." };
+  // A web page's own fields (0069), when the form carries them.
+  const isPage = form.has("page_path");
+  const pagePath = str("page_path");
+  if (isPage && pagePath && !/^\/([a-z0-9]+(-[a-z0-9]+)*\/?)*$/.test(pagePath)) return { error: "The URL path is lowercase words and hyphens from the site root, like /services/roof-replacement." };
+  let structured: Json | null = null;
+  if (isPage && str("structured_data")) {
+    try { structured = JSON.parse(str("structured_data")); } catch { return { error: "The structured data is not valid JSON." }; }
+    if (!structured || typeof structured !== "object" || Array.isArray(structured)) return { error: "The structured data is one JSON-LD object." };
+  }
   const supabase = await start();
   if (!supabase) return { error: NOT_TEAM };
   const { data, error } = await supabase.from("content_drafts").update({
     title: str("title") || null, slug: slug || null, meta_title: str("meta_title") || null, meta_description: str("meta_description") || null,
     h1: str("h1") || null, body_markdown: String(form.get("body_markdown") ?? "") || null, outline, internal_links: links,
     cta: { text: str("cta_text"), url: ctaUrl || null },
+    ...(isPage ? { page_path: pagePath || null, page_objective: str("page_objective") || null, structured_data: structured } : {}),
   }).eq("id", draftId).eq("client_id", clientId).eq("version", version).in("status", ["draft", "rejected"]).select("id");
   if (error) return { error: draftError(error.message) };
   if (!data?.length) return { error: CHANGED };

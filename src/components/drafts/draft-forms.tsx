@@ -38,6 +38,45 @@ export function GenerateDraftForm({ clientId, planItemId, label = "Generate draf
   );
 }
 
+// Generate on a web page plan item (0069): the page type, and new or refresh.
+// A refresh rewrites the plan item's target page; a location page needs an
+// Authority location_page opportunity, a comparison an opportunity or a note.
+export const PAGE_TYPES = [
+  ["service", "Service page"],
+  ["use_case", "Use-case / problem page"],
+  ["commercial_landing", "Commercial landing page"],
+  ["comparison", "Comparison page (when justified)"],
+  ["location", "Location page (from an Authority opportunity)"],
+] as const;
+
+export function GeneratePageDraftForm({ clientId, planItemId, hasTarget }: { clientId: string; planItemId: string; hasTarget: boolean }) {
+  const [state, action, pending] = useActionState(generateDraftAction.bind(null, clientId, planItemId), {});
+  return (
+    <form action={action} className="space-y-2" data-generate-page>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={`pt-${planItemId}`}>Page type</Label>
+          <select id={`pt-${planItemId}`} name="page_type" className="field w-64" defaultValue="service">
+            {PAGE_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`pc-${planItemId}`}>New or refresh</Label>
+          <select id={`pc-${planItemId}`} name="page_change" className="field w-56" defaultValue="page_added">
+            <option value="page_added">New page</option>
+            <option value="page_rewrite" disabled={!hasTarget}>Refresh the target page{hasTarget ? "" : " (set a target first)"}</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Input name="note" placeholder="Why this page / anything the drafter should know" maxLength={2000} className="w-80 max-w-full" />
+        <Button type="submit" size="sm" disabled={pending}>{pending ? "Requesting…" : "Generate page draft"}</Button>
+      </div>
+      <Message state={state} />
+    </form>
+  );
+}
+
 export function StepButton({ action, label, variant = "default", confirm }: {
   action: () => Promise<DraftFormState>; label: string; variant?: "default" | "outline" | "ghost" | "destructive"; confirm?: string;
 }) {
@@ -112,7 +151,8 @@ type Claim = { id: string; claim: string; status: string; source: string | null 
 export function EditDraftForm({ clientId, draftId, version, draft, claims, linked }: {
   clientId: string; draftId: string; version: number; claims: Claim[]; linked: string[];
   draft: { title: string | null; slug: string | null; meta_title: string | null; meta_description: string | null; h1: string | null;
-    outline: { level: number; heading: string }[]; body_markdown: string | null; internal_links: { url: string; anchor: string }[]; cta: { text?: string; url?: string | null } };
+    outline: { level: number; heading: string }[]; body_markdown: string | null; internal_links: { url: string; anchor: string }[]; cta: { text?: string; url?: string | null };
+    page?: { page_path: string | null; page_objective: string | null; structured_data: unknown } };
 }) {
   const [state, action, pending] = useActionState(saveDraftAction.bind(null, clientId, draftId, version), {});
   const f = "space-y-1";
@@ -124,13 +164,19 @@ export function EditDraftForm({ clientId, draftId, version, draft, claims, linke
         <div className={f}><Label htmlFor="d_mt">Meta title</Label><Input id="d_mt" name="meta_title" defaultValue={draft.meta_title ?? ""} /></div>
         <div className={f}><Label htmlFor="d_h1">H1</Label><Input id="d_h1" name="h1" defaultValue={draft.h1 ?? ""} /></div>
         <div className={`${f} sm:col-span-2`}><Label htmlFor="d_md">Meta description</Label><Input id="d_md" name="meta_description" defaultValue={draft.meta_description ?? ""} /></div>
+        {draft.page && (
+          <>
+            <div className={f}><Label htmlFor="d_path">URL path</Label><Input id="d_path" name="page_path" defaultValue={draft.page.page_path ?? ""} /></div>
+            <div className={f}><Label htmlFor="d_obj">Page objective</Label><Input id="d_obj" name="page_objective" defaultValue={draft.page.page_objective ?? ""} /></div>
+          </>
+        )}
       </div>
       <div className={f}>
         <Label htmlFor="d_outline">Outline (one heading per line, ## or ###)</Label>
         <Textarea id="d_outline" name="outline" rows={4} defaultValue={draft.outline.map((o) => `${"#".repeat(o.level)} ${o.heading}`).join("\n")} />
       </div>
       <div className={f}>
-        <Label htmlFor="d_body">Article body (Markdown, from H2)</Label>
+        <Label htmlFor="d_body">Body (Markdown, from H2)</Label>
         <Textarea id="d_body" name="body_markdown" rows={18} defaultValue={draft.body_markdown ?? ""} className="font-mono text-xs" />
       </div>
       <div className={f}>
@@ -141,8 +187,15 @@ export function EditDraftForm({ clientId, draftId, version, draft, claims, linke
         <div className={f}><Label htmlFor="d_cta">CTA text</Label><Input id="d_cta" name="cta_text" defaultValue={draft.cta.text ?? ""} /></div>
         <div className={f}><Label htmlFor="d_cta_url">CTA link</Label><Input id="d_cta_url" name="cta_url" type="url" defaultValue={draft.cta.url ?? ""} /></div>
       </div>
+      {draft.page && (
+        <div className={f}>
+          <Label htmlFor="d_sd">Structured data (JSON-LD recommendation, optional)</Label>
+          <Textarea id="d_sd" name="structured_data" rows={6} className="font-mono text-xs"
+            defaultValue={draft.page.structured_data ? JSON.stringify(draft.page.structured_data, null, 2) : ""} />
+        </div>
+      )}
       <fieldset className="space-y-1">
-        <legend className="text-sm font-medium">Claims the article stands on</legend>
+        <legend className="text-sm font-medium">Claims it stands on</legend>
         {claims.map((c) => (
           <label key={c.id} className="flex items-start gap-2 text-sm">
             <input type="checkbox" name="claim_id" value={c.id} defaultChecked={linked.includes(c.id)} className="mt-1" />

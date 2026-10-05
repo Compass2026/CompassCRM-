@@ -3122,6 +3122,7 @@ export type Database = {
           created_by: string | null
           cta: Json | null
           deliverable: string
+          final_change_log_id: string | null
           final_content_post_id: string | null
           h1: string | null
           id: string
@@ -3131,6 +3132,9 @@ export type Database = {
           meta_description: string | null
           meta_title: string | null
           outline: Json | null
+          page_change: string | null
+          page_objective: string | null
+          page_path: string | null
           page_type: string | null
           plan_item_id: string | null
           primary_keyword: string | null
@@ -3171,6 +3175,7 @@ export type Database = {
           created_by?: string | null
           cta?: Json | null
           deliverable: string
+          final_change_log_id?: string | null
           final_content_post_id?: string | null
           h1?: string | null
           id?: string
@@ -3180,6 +3185,9 @@ export type Database = {
           meta_description?: string | null
           meta_title?: string | null
           outline?: Json | null
+          page_change?: string | null
+          page_objective?: string | null
+          page_path?: string | null
           page_type?: string | null
           plan_item_id?: string | null
           primary_keyword?: string | null
@@ -3220,6 +3228,7 @@ export type Database = {
           created_by?: string | null
           cta?: Json | null
           deliverable?: string
+          final_change_log_id?: string | null
           final_content_post_id?: string | null
           h1?: string | null
           id?: string
@@ -3229,6 +3238,9 @@ export type Database = {
           meta_description?: string | null
           meta_title?: string | null
           outline?: Json | null
+          page_change?: string | null
+          page_objective?: string | null
+          page_path?: string | null
           page_type?: string | null
           plan_item_id?: string | null
           primary_keyword?: string | null
@@ -8227,7 +8239,7 @@ export type Database = {
         Returns: Json
       }
       content_draft_request: {
-        Args: { p_note?: string; p_page_type?: string; p_plan_item_id: string }
+        Args: { p_note?: string; p_page_change?: string; p_page_type?: string; p_plan_item_id: string }
         Returns: Json
       }
       converge_client: { Args: { p_client_id: string }; Returns: boolean }

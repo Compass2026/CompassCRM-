@@ -16,6 +16,7 @@
     "test:posts-ui": "UI_SPEC=tests/posts-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:planner-ui": "UI_SPEC=tests/planner-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:blog-drafter-ui": "UI_SPEC=tests/blog-drafter-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:page-drafter-ui": "UI_SPEC=tests/page-drafter-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-use-ui": "UI_SPEC=tests/creative-use-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:publisher": "UI_SPEC=tests/publisher-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:drafter": "UI_SPEC=tests/drafter-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
