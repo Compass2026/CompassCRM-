@@ -1,4 +1,4 @@
--- Tests for migrations 0066 + 0067 (content drafts: the Blog Drafter and the
+-- Tests for migrations 0066 + 0067 + 0068 (content drafts: the Blog Drafter and the
 -- Web Page Drafter's foundation), run by scripts/test-portal-sandbox.sh on the
 -- same replay. Own harness schema (cd) and fictional clients.
 --
@@ -233,6 +233,77 @@ begin
   perform cd.ok('B1 what Billing counts: one Compass article for three drafts, two blog versions and a rejection',
     (select count(*) from content_posts where client_id = cd.id('a') and origin = 'compass') = 1
     and (select count(*) from tasks where client_id = cd.id('a') and key = 'blog_post') = 0);
+end $$;
+\o
+reset role;
+select set_config('request.jwt.claims', '', false);
+
+-- ── K. The weekly blog completes only at approval (0068) ────────────────────
+\c - supabase_admin
+\o /dev/null
+insert into tasks (id, client_id, title, owner, status, key) values (cd.id('weekly'), cd.id('b'), 'Weekly blog post', 'CLAUDE', 'open', 'blog_post');
+\o
+\c - authenticator
+set role authenticated;
+select cd.as_user('authenticated', :'team');
+\o /dev/null
+select cd.ok('K1 a teammate cannot open a weekly draft (the drafter''s only)',
+  cd.try(format('select content_draft_open_weekly(%L::jsonb)', jsonb_build_object('task_id', cd.id('weekly'), 'topic', 'x', 'search_intent', 'informational'))) like '42501%');
+\o
+reset role;
+set role service_role;
+select cd.as_user('service_role', null);
+\o /dev/null
+do $$
+declare r jsonb; r2 jsonb;
+begin
+  r := content_draft_open_weekly(jsonb_build_object('task_id', cd.id('weekly'), 'topic', 'When to clear a slow drain', 'search_intent', 'informational'));
+  perform cd.save('weekly_draft', r->>'draft_id');
+  perform cd.ok('K2 the worker opens a draft for the weekly task: requested, in this week''s blog slot, the task in progress',
+    (select status = 'requested' and source_task_id = cd.id('weekly') and plan_item_id = (r->>'plan_item_id')::uuid from content_drafts where id = (r->>'draft_id')::uuid)
+    and (select deliverable = 'blog' and week_start = date_trunc('week', (now() at time zone 'America/Chicago'))::date
+           from content_plan_items where id = (r->>'plan_item_id')::uuid)
+    and (select status::text from tasks where id = cd.id('weekly')) = 'in_progress');
+  r2 := content_draft_open_weekly(jsonb_build_object('task_id', cd.id('weekly'), 'topic', 'Something else', 'search_intent', 'informational'));
+  perform cd.ok('K3 opening it again returns the same draft', (r2->>'reused')::boolean and r2->>'draft_id' = r->>'draft_id');
+  r := content_draft_write(cd.payload(cd.get('weekly_draft')::uuid, 320, array[cd.id('c-b')]));
+  perform cd.ok('K4 submitted for review, the weekly task stays open (Billing counts it as planned); no content_posts row',
+    r->>'status' = 'in_review' and (select status::text from tasks where id = cd.id('weekly')) = 'in_progress'
+    and (select count(*) from content_posts where client_id = cd.id('b')) = 0
+    and (select status from content_plan_board where id = (select plan_item_id from content_drafts where id = cd.get('weekly_draft')::uuid)) = 'in_review');
+end $$;
+\o
+reset role;
+set role authenticated;
+select cd.as_user('authenticated', :'team');
+\o /dev/null
+do $$
+declare w uuid := cd.get('weekly_draft')::uuid; item uuid; r jsonb; v_post uuid;
+begin
+  select plan_item_id into item from content_drafts where id = w;
+  update content_drafts set status = 'rejected', review_note = 'Shorter intro' where id = w;
+  perform cd.ok('K5 rejection does not complete it', (select status::text from tasks where id = cd.id('weekly')) = 'in_progress'
+    and (select status from content_plan_board where id = item) = 'drafting');
+  update content_drafts set status = 'draft' where id = w;
+  update content_drafts set status = 'in_review' where id = w;
+  r := content_draft_approve(w, (select version from content_drafts where id = w));
+  v_post := (r->>'content_post_id')::uuid;
+  perform cd.ok('K6 approval completes it: the final row, the weekly task closed, the slot approved',
+    (select status::text from content_posts where id = v_post) = 'approved'
+    and (select status::text from tasks where id = cd.id('weekly')) = 'done'
+    and (select status from content_plan_board where id = item) = 'approved');
+  update content_drafts set status = 'draft' where id = w;
+  perform cd.ok('K7 reopening un-completes the slot: the final row back to draft, the task stays closed, still one row',
+    (select status::text from content_posts where id = v_post) = 'draft'
+    and (select status from content_plan_board where id = item) = 'drafting'
+    and (select status::text from tasks where id = cd.id('weekly')) = 'done'
+    and (select count(*) from content_posts where client_id = cd.id('b')) = 1);
+  update content_drafts set status = 'in_review' where id = w;
+  r := content_draft_approve(w, (select version from content_drafts where id = w));
+  perform cd.ok('K8 approved again: the same row, approved; the slot counts again',
+    (r->>'content_post_id')::uuid = v_post and (select status::text from content_posts where id = v_post) = 'approved'
+    and (select status from content_plan_board where id = item) = 'approved'
+    and (select count(*) from content_posts where client_id = cd.id('b')) = 1);
 end $$;
 \o
 reset role;

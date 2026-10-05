@@ -43,6 +43,12 @@ export function createStore(supabase: Client) {
       if (error) throw new Error(error.message);
       return (data ?? []) as SitePage[];
     },
+    // The weekly blog (0068): open the draft for a blog_post task.
+    async openWeekly(p: Record<string, unknown>): Promise<Record<string, unknown> | { error: WriteError }> {
+      const { data, error } = await supabase.rpc("content_draft_open_weekly", { p });
+      if (error) return { error: { code: error.code ?? null, message: error.message } };
+      return data as Record<string, unknown>;
+    },
     async write(p: Record<string, unknown>): Promise<Record<string, unknown> | { error: WriteError }> {
       const { data, error } = await supabase.rpc("content_draft_write", { p });
       if (error) return { error: { code: error.code ?? null, message: error.message } };

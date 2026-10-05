@@ -8,6 +8,9 @@
 //             content_draft_write (claims, content, lint, in_review; the
 //             request task closes). A draft that does not pass is not
 //             written anywhere.
+//   open    → the weekly blog (0068): the worker opens the draft for a
+//             blog_post task (content_draft_open_weekly; the same draft on a
+//             repeat). The task closes only when the draft is approved.
 //   version → what this deployment is, for the worker's preflight.
 //
 // Nothing here approves, finalizes or publishes: approval is a teammate's
@@ -21,8 +24,8 @@ import { blogBriefHash, buildBlogBrief, CONTENT_DRAFTER_VERSION, type BlogBrief 
 import { lintBlog, type BlogDraft } from "./lint.ts";
 import type { Store } from "./store.ts";
 
-export const HANDLER_VERSION = 1;
-export const MODES = ["brief", "check", "submit", "version"] as const;
+export const HANDLER_VERSION = 2;
+export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
 type Json = Record<string, unknown>;
@@ -88,7 +91,26 @@ export function createContentDrafter(deps: Deps) {
     const body = (await req.json().catch(() => null)) as Json | null;
     if (!body || typeof body !== "object") return reply(400, { error: "JSON body required" });
     const mode = body.mode;
-    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"] });
+    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open"] });
+    if (mode === "open") {
+      if (who.via !== "worker") return reply(403, { error: "open is the worker's (the weekly blog task)" });
+      const taskId = body.task_id;
+      if (!isStr(taskId) || !UUID.test(taskId)) return reply(400, { error: "task_id must be a uuid" });
+      if (!isStr(body.topic) || !body.topic.trim()) return reply(400, { error: "topic is required" });
+      if (!isStr(body.search_intent)) return reply(400, { error: "search_intent is required" });
+      for (const k of ["keyword_id", "service_id"]) {
+        if (body[k] != null && (!isStr(body[k]) || !UUID.test(body[k] as string))) return reply(400, { error: `${k} must be a uuid` });
+      }
+      const opened = await store.openWeekly({
+        task_id: taskId, topic: body.topic.trim(), search_intent: body.search_intent,
+        keyword_id: body.keyword_id ?? null, service_id: body.service_id ?? null,
+      });
+      if ("error" in opened) {
+        const status = opened.error.code === "P0002" ? 404 : opened.error.code === "22023" ? 409 : opened.error.code === "42501" ? 403 : 500;
+        return reply(status, { error: "open_refused", message: opened.error.message });
+      }
+      return reply(opened.reused ? 200 : 201, opened);
+    }
     if (mode !== "brief" && mode !== "check" && mode !== "submit") return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
     const draftId = body.draft_id;
     if (!isStr(draftId) || !UUID.test(draftId)) return reply(400, { error: "draft_id must be a uuid" });

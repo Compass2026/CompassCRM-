@@ -6,7 +6,7 @@ Planner / Authority → Generate draft → the worker writes it (content-drafter
   → Approve → ONE final content_posts row → Copy / Download Markdown
 ```
 
-**Status:** 0066 and 0067 are written and sandbox-tested, but **not
+**Status:** 0066, 0067 and 0068 are written and sandbox-tested, but **not
 applied**. The `content-drafter` Edge Function is **not deployed** (it is
 on the deploy workflow's list). Nothing publishes.
 
@@ -135,12 +135,12 @@ The worker's playbook is *Content draft request* in
 | Command | What it covers |
 |---|---|
 | `npm test` | `tests/content-drafter.test.mjs` (9): the brief (gate, claims, links, CTA, refusals, hash), the lint (every factual refusal, structure, links, CTA, keyword), the handler (callers, stale brief, lint failure writes nothing, one write), the Markdown export. `tests/content-drafts-lib.test.mjs` (2): actions per status, the safe Markdown preview. |
-| `npm run test:sandbox` | `content_drafts.test.sql` (33): request / regenerate, the drafter-only write, grounding, version-pinned idempotent approval to ONE row, reopen / re-approve, reject, web pages with no final record, Billing sees one article, team-only access. `portal_access.test.sql` lists the three team-callable draft functions (D11g). |
+| `npm run test:sandbox` | `content_drafts.test.sql` (41): request / regenerate, the drafter-only write, grounding, version-pinned idempotent approval to ONE row, reopen / re-approve, reject, web pages with no final record, Billing sees one article, the weekly blog completing only at approval (K), team-only access. `portal_access.test.sql` lists the three team-callable draft functions (D11g). |
 | `npm run test:blog-drafter-ui` | 8 browser checks, end to end with the real handler: Generate → the worker writes → review → Copy / Download → reject / revise / edit / submit → Approve (one row, Blogs 1/2) → reopen / regenerate / re-approve (the same row) → portal refused, phone width. |
 
 ## To go live (on Tom's approval)
 
-1. Apply 0065 (planner), then 0066, then 0067, each with the standard
+1. Apply 0065 (planner), then 0066, 0067 and 0068, each with the standard
    preflight, verification and rollback probes.
 2. Regenerate `src/lib/database.types.ts`. The planner and draft entries are
    hand-written until then.
@@ -149,13 +149,31 @@ The worker's playbook is *Content draft request* in
 4. The worker picks up *Content draft request* tasks on the next fire (the
    skill is versioned here).
 
-## Not in this slice
+## Completion: only at approval (0068; Tom, Oct 4 2026)
 
-- **The weekly blog (`blog_post`, 0035 / 0062)** still writes and files its
-  post itself. Tom decided (Oct 3) it should write into review instead.
-  Moving it onto `content_drafts` needs one more decision: when the weekly
-  `blog_post` task closes, given that Billing counts an open `blog_post`
-  task as planned until a `content_posts` row exists.
+`Planned → Ready → Drafting → In review → Approved`. A blog counts as done for
+its week only when approved; generation, rejection, regeneration and review
+never complete it.
+
+- **The weekly blog** (0062's `blog_post` task) now goes through review. The
+  worker opens the draft with `content-drafter` `{"mode": "open", task_id,
+  topic, search_intent, keyword_id, service_id}` (`content_draft_open_weekly`,
+  the drafter session only).
+  - The draft fills that week's empty blog slot on the Planner, or a new one.
+  - The task stays **open** (Billing counts it as planned) until a teammate
+    **approves**. `content_draft_approve` then closes it in the same
+    transaction that creates the final `content_posts` row, so Billing's
+    count moves from the task to the row with no gap and no double count.
+  - A repeat open returns the same draft. The worker files nothing; filing
+    is a person's step after approval (Copy / Download Markdown).
+- **Reopening** an approved draft returns its final row from `approved` to
+  `draft` (a published row stays published).
+  - The planner stops counting it until it is approved again.
+  - Billing counts it as planned, as before.
+  - The weekly task stays closed; reopening it would count the blog twice.
+- Sandbox section K (8 checks) proves each step.
+
+## Not in this slice
 - **Web Page Drafter v1:** the same foundation, the `change_log` promotion
   above, and page types (service, use-case, commercial landing,
   comparison; location only from a `location_page` opportunity).

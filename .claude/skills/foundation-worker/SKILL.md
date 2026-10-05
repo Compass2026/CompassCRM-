@@ -306,6 +306,8 @@ from tasks t
 join clients c on c.id = t.client_id
 left join sites s on s.client_id = c.id
 where t.key = 'blog_post' and t.status <> 'done' and c.status = 'active'
+  -- a draft already written (in review, rejected, …) waits for a person
+  and not exists (select 1 from content_drafts d where d.source_task_id = t.id and d.status <> 'requested')
 order by t.due_date, c.name;
 ```
 
@@ -1792,30 +1794,21 @@ the brand voice (`get_brand_profile`), sourced facts only.
    impressions and a `gsc_snapshots` position past 10, then volume. Note
    the service page it supports (`service_id` → the service's page group
    `target_url`).
-2. **Write it:** 700–1,100 words; title ≤ 60 chars carrying the keyword;
-   `description` ≤ 155 chars; an answer-first opening paragraph; H2s that
-   are the questions people ask; one internal link to the service page and
-   one to the relevant city page; a short FAQ (2–3) at the end; a closing
-   CTA using `brand_boards.standing_cta`. Numbers, years, licences and
-   guarantees only from `claims` (`sourced`) or the site itself; otherwise
-   leave them out. No stock phrases, no "in today's fast-paced world".
-3. **File it.** Per the adapter's `blog_post` mutation: `push` → append to
-   `content_paths.blog` (`blog_format: json` → an entry shaped like the
-   neighbours — `slug`, `title`, `description`, `datePublished`,
-   `dateModified`, `blocks[]` of the same block types the file already
-   uses; `markdown` → a new file in `blog_dir` with the same front-matter as
-   its neighbours) and push with `branch: "<sites.branch>"`, message `Blog:
-   <title> (Compass CRM)`; `pull_request` (Foundation typed content) → a
-   typed article file plus its registry import on a preview branch with a
-   PR; `proposed_document` → the Doc below.
-   Not on the contract: a Google Doc in `04 Website` named `Blog — <Client>
-   — <title>` and a line in the task notes for Tom.
-4. **Record:** verify the URL after ~90 s (200, one H1, canonical); a
-   `content_posts` row (`keyword_id`, `title`, `status = 'published'` or
-   `'draft'` for a Doc, `owner = 'CLAUDE'`, `url`, `published_at`,
-   `word_count`); a `change_log` row (`change_type = 'blog_post'`, `after`
-   `{url, title, keyword, commit}`); close `blog_post` done, flagged, with
-   `recommendation` = the title and URL.
+2. **Open the draft** (Tom, Oct 4 2026: the weekly blog goes through review;
+   nothing is filed or published by you). Call `content-drafter`
+   `{"mode": "open", "task_id": "<blog_post task id>", "topic": "<the
+   question the post answers>", "search_intent": "<the keyword's intent>",
+   "keyword_id": "<keyword>", "service_id": "<its service>"}`. `201` / `200`
+   → `draft_id` (the same draft if the task already has one; it sits in that
+   week's blog slot on the Planner). The task moves to `in_progress` and
+   **stays open until a teammate approves the draft**: approval closes it
+   and records the final article in the same step. Never close it yourself.
+3. **Write it** exactly as the *Content draft request* playbook below does
+   (brief → write → check → submit, the same rules and stops), for this
+   `draft_id`. The submit puts it in review.
+4. **Report:** the client, the keyword, `draft_id` and its status. Filing
+   to the site is a person's step after approval (Copy / Download Markdown
+   on the draft page).
 
 One post, then stop. The next task arrives next Wednesday.
 

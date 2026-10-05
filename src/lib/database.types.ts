@@ -3144,6 +3144,7 @@ export type Database = {
           search_intent: string | null
           service_id: string | null
           slug: string | null
+          source_task_id: string | null
           status: string
           structured_data: Json | null
           submitted_at: string | null
@@ -3192,6 +3193,7 @@ export type Database = {
           search_intent?: string | null
           service_id?: string | null
           slug?: string | null
+          source_task_id?: string | null
           status?: string
           structured_data?: Json | null
           submitted_at?: string | null
@@ -3240,6 +3242,7 @@ export type Database = {
           search_intent?: string | null
           service_id?: string | null
           slug?: string | null
+          source_task_id?: string | null
           status?: string
           structured_data?: Json | null
           submitted_at?: string | null
@@ -8213,6 +8216,7 @@ export type Database = {
         Args: { p_draft_id: string; p_note?: string; p_version: number }
         Returns: Json
       }
+      content_draft_open_weekly: { Args: { p: Json }; Returns: Json }
       content_draft_problems: {
         Args: { d: Database["public"]["Tables"]["content_drafts"]["Row"] }
         Returns: string[]

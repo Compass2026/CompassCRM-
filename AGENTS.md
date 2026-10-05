@@ -1728,7 +1728,7 @@ statuses, the scoped next slices and go-live: `docs/content-planner.md`.
 - **Tests:** `tests/content-planner.test.mjs`, the sandbox's
   `content_planner.test.sql` (41), `npm run test:planner-ui` (11).
 
-## Blog Drafter v1 (0066 + 0067 written, not applied; Oct 4 2026)
+## Blog Drafter v1 (0066–0068 written, not applied; Oct 4 2026)
 
 Planner / Authority → **Generate draft** → the worker writes it through the
 `content-drafter` function → human review → **Approve** → ONE final
@@ -1758,8 +1758,14 @@ go-live: `docs/blog-drafter.md`.
 - **Pages:** the planner's **Generate draft** / **Open the draft**, and
   `/clients/[id]/drafts/[draftId]` (preview, claims, review, edit,
   regenerate, Copy Markdown, Download .md).
-- **Not yet:** the weekly blog still files its own post (moving it onto
-  drafts needs a Billing-count decision); the Web Page Drafter.
+- **0068 (completion rules; Tom, Oct 4):** a blog completes only at
+  approval.
+  - The weekly `blog_post` task opens a draft (`content-drafter` `open` →
+    `content_draft_open_weekly`) in that week's Planner slot, and stays open
+    until approval closes it with the final row.
+  - Reopening returns the final row to `draft`: the slot stops counting, and
+    Billing's count is unchanged.
+- **Not yet:** the Web Page Drafter.
 
 ## Known state / open items (as of Sept 13 2026)
 

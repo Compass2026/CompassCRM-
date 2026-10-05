@@ -101,6 +101,7 @@ function fakeStore({ row = draftRow(), writeResult = null } = {}) {
     async input() { return lucas(); },
     async sitePages() { return []; },
     async write(p) { calls.push(p); return writeResult ?? { draft_id: p.draft_id, status: "in_review", version: 1, word_count: 820 }; },
+    async openWeekly(p) { calls.push(["open", p]); return { draft_id: DRAFT_ID, plan_item_id: "pi", status: "requested", reused: false }; },
   };
 }
 const call = async (fn, body, headers = { "x-cron-secret": "cron" }) => {
@@ -146,4 +147,17 @@ test("Markdown export: front matter, the H1, the body, the CTA", () => {
   assert.match(md, /^---\ntitle: "How long does a roof last\? What Wentzville homeowners should know"\nslug: "how-long-does-a-roof-last"\n/);
   assert.match(md, /\nmeta_description: ".+"\nprimary_keyword: "how long does a roof last"\n---\n\n# How long does a roof last\?\n\n## What wears a roof out/);
   assert.ok(md.trimEnd().endsWith(`[Request a quote](${PAGE})`));
+});
+
+test("handler: open (the weekly blog) is the worker's alone and names the task, topic and intent", async () => {
+  const store = fakeStore();
+  const fn = createContentDrafter({ store });
+  const body = { mode: "open", task_id: "11111111-1111-4111-8111-111111111111", topic: "When to clear a slow drain", search_intent: "informational" };
+  assert.equal((await call(fn, body, { authorization: "Bearer team-jwt" })).status, 403);
+  assert.equal((await call(fn, { ...body, topic: " " })).status, 400);
+  assert.equal((await call(fn, { ...body, keyword_id: "nope" })).status, 400);
+  const r = await call(fn, body);
+  assert.equal(r.status, 201);
+  assert.deepEqual(store.calls[0], ["open", { task_id: body.task_id, topic: body.topic, search_intent: "informational", keyword_id: null, service_id: null }]);
+  assert.deepEqual((await call(fn, { mode: "version" })).body.modes, ["brief", "check", "submit", "open", "version"]);
 });
