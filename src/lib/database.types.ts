@@ -3077,6 +3077,190 @@ export type Database = {
           },
         ]
       }
+      content_draft_claims: {
+        Row: {
+          claim_id: string
+          client_id: string
+          created_at: string
+          draft_id: string
+        }
+        Insert: {
+          claim_id: string
+          client_id: string
+          created_at?: string
+          draft_id: string
+        }
+        Update: {
+          claim_id?: string
+          client_id?: string
+          created_at?: string
+          draft_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_draft_claims_claim_fk"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_drafts: {
+        Row: {
+          approved_hash: string | null
+          approved_snapshot: Json | null
+          approved_version: number | null
+          author_kind: string | null
+          authority_opportunity_id: string | null
+          body_hash: string | null
+          body_markdown: string | null
+          brief: Json | null
+          brief_hash: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          cta: Json | null
+          deliverable: string
+          final_content_post_id: string | null
+          h1: string | null
+          id: string
+          internal_links: Json | null
+          keyword_id: string | null
+          lint: Json | null
+          meta_description: string | null
+          meta_title: string | null
+          outline: Json | null
+          page_type: string | null
+          plan_item_id: string | null
+          primary_keyword: string | null
+          request_note: string | null
+          request_task_id: string | null
+          requested_by: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          runtime: string | null
+          search_intent: string | null
+          service_id: string | null
+          slug: string | null
+          status: string
+          structured_data: Json | null
+          submitted_at: string | null
+          target_url: string | null
+          title: string | null
+          topic: string
+          updated_at: string
+          updated_by: string | null
+          version: number
+          word_count: number | null
+        }
+        Insert: {
+          approved_hash?: string | null
+          approved_snapshot?: Json | null
+          approved_version?: number | null
+          author_kind?: string | null
+          authority_opportunity_id?: string | null
+          body_hash?: string | null
+          body_markdown?: string | null
+          brief?: Json | null
+          brief_hash?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          cta?: Json | null
+          deliverable: string
+          final_content_post_id?: string | null
+          h1?: string | null
+          id?: string
+          internal_links?: Json | null
+          keyword_id?: string | null
+          lint?: Json | null
+          meta_description?: string | null
+          meta_title?: string | null
+          outline?: Json | null
+          page_type?: string | null
+          plan_item_id?: string | null
+          primary_keyword?: string | null
+          request_note?: string | null
+          request_task_id?: string | null
+          requested_by?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          runtime?: string | null
+          search_intent?: string | null
+          service_id?: string | null
+          slug?: string | null
+          status?: string
+          structured_data?: Json | null
+          submitted_at?: string | null
+          target_url?: string | null
+          title?: string | null
+          topic: string
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+          word_count?: number | null
+        }
+        Update: {
+          approved_hash?: string | null
+          approved_snapshot?: Json | null
+          approved_version?: number | null
+          author_kind?: string | null
+          authority_opportunity_id?: string | null
+          body_hash?: string | null
+          body_markdown?: string | null
+          brief?: Json | null
+          brief_hash?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          cta?: Json | null
+          deliverable?: string
+          final_content_post_id?: string | null
+          h1?: string | null
+          id?: string
+          internal_links?: Json | null
+          keyword_id?: string | null
+          lint?: Json | null
+          meta_description?: string | null
+          meta_title?: string | null
+          outline?: Json | null
+          page_type?: string | null
+          plan_item_id?: string | null
+          primary_keyword?: string | null
+          request_note?: string | null
+          request_task_id?: string | null
+          requested_by?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          runtime?: string | null
+          search_intent?: string | null
+          service_id?: string | null
+          slug?: string | null
+          status?: string
+          structured_data?: Json | null
+          submitted_at?: string | null
+          target_url?: string | null
+          title?: string | null
+          topic?: string
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+          word_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_drafts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_plan_items: {
         Row: {
           authority_opportunity_id: string | null
@@ -7353,6 +7537,8 @@ export type Database = {
           updated_at: string | null
           updated_by: string | null
           week_start: string | null
+          draft_id: string | null
+          draft_status: string | null
         }
         Relationships: [
           {
@@ -8023,6 +8209,23 @@ export type Database = {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined
       }
+      content_draft_approve: {
+        Args: { p_draft_id: string; p_note?: string; p_version: number }
+        Returns: Json
+      }
+      content_draft_problems: {
+        Args: { d: Database["public"]["Tables"]["content_drafts"]["Row"] }
+        Returns: string[]
+      }
+      content_draft_problems_for: { Args: { p_draft_id: string }; Returns: string[] }
+      content_draft_regenerate: {
+        Args: { p_draft_id: string; p_note?: string }
+        Returns: Json
+      }
+      content_draft_request: {
+        Args: { p_note?: string; p_page_type?: string; p_plan_item_id: string }
+        Returns: Json
+      }
       converge_client: { Args: { p_client_id: string }; Returns: boolean }
       create_monthly_cycles: { Args: { p_period?: string }; Returns: number }
       create_stage_tasks: {
@@ -8213,7 +8416,7 @@ export type Database = {
       claim_status: "sourced" | "unverified" | "confirmed"
       client_request_status: "draft" | "sent" | "answered" | "closed"
       client_status: "launching" | "active" | "paused" | "offboarded"
-      content_status: "idea" | "brief" | "draft" | "review" | "published"
+      content_status: "idea" | "brief" | "draft" | "review" | "approved" | "published"
       cycle_status: "open" | "complete"
       deliverable_type: "drive" | "site" | "sheet" | "report" | "other"
       department: "seo" | "website" | "social" | "paid_ads"
@@ -8443,7 +8646,7 @@ export const Constants = {
       claim_status: ["sourced", "unverified", "confirmed"],
       client_request_status: ["draft", "sent", "answered", "closed"],
       client_status: ["launching", "active", "paused", "offboarded"],
-      content_status: ["idea", "brief", "draft", "review", "published"],
+      content_status: ["idea", "brief", "draft", "review", "approved", "published"],
       cycle_status: ["open", "complete"],
       deliverable_type: ["drive", "site", "sheet", "report", "other"],
       department: ["seo", "website", "social", "paid_ads"],

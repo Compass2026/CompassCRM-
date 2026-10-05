@@ -1728,6 +1728,39 @@ statuses, the scoped next slices and go-live: `docs/content-planner.md`.
 - **Tests:** `tests/content-planner.test.mjs`, the sandbox's
   `content_planner.test.sql` (41), `npm run test:planner-ui` (11).
 
+## Blog Drafter v1 (0066 + 0067 written, not applied; Oct 4 2026)
+
+Planner / Authority → **Generate draft** → the worker writes it through the
+`content-drafter` function → human review → **Approve** → ONE final
+`content_posts` row → Copy / Download Markdown. Full design, rules, tests and
+go-live: `docs/blog-drafter.md`.
+
+- **0066** adds `content_status` `approved`, in its own migration (a new
+  enum value cannot be used in the transaction that adds it).
+- **0067** `content_drafts` + `content_draft_claims` are the mutable
+  drafting state for blogs, and next web pages.
+  - **Draft attempts never touch `content_posts`, so Billing never counts
+    one.**
+  - `content_draft_approve` is version-pinned and idempotent: one row per
+    draft, updated on re-approval.
+  - Generated content arrives only through `content_draft_write`, in the
+    drafter session. Only a teammate approves.
+  - `content_draft_request` / `_regenerate` / `_approve` are team-callable
+    security-definer functions on the portal suite's reviewed list.
+  - Web pages will finalize to ONE `change_log` row (`page_added` /
+    `page_rewrite`; Tom, Oct 4). That promotion is the Web Page Drafter's;
+    not built.
+- **`content-drafter`** (Edge Function, not deployed; on the deploy list)
+  reuses `post-drafter`'s loader, gate, claim rule (`eligibleClaims`),
+  detectors and place rule, on every word a reader sees, plus blog
+  structure and approved-page links. The worker's playbook is *Content
+  draft request*.
+- **Pages:** the planner's **Generate draft** / **Open the draft**, and
+  `/clients/[id]/drafts/[draftId]` (preview, claims, review, edit,
+  regenerate, Copy Markdown, Download .md).
+- **Not yet:** the weekly blog still files its own post (moving it onto
+  drafts needs a Billing-count decision); the Web Page Drafter.
+
 ## Known state / open items (as of Sept 13 2026)
 
 - **Stripe secrets are not in Vault yet.** Billing code is deployed but inert

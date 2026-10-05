@@ -32,8 +32,8 @@ export const COMMON_WORD_PLACES = new Set([
   "Advance", "Arcadia", "Bland", "Center", "Clever", "Competition", "Crane", "Diamond", "Excelsior", "Freedom",
   "Independence", "Liberal", "Liberty", "Paradise", "Peculiar", "Republic", "Success", "Summit", "Union", "Victoria",
 ]);
-const PLACE_BEFORE = "(?:[Ii]n|[Nn]ear|[Aa]round|[Ss]erving|[Tt]hroughout|[Ff]rom|[Tt]o|[Oo]f|[Aa]cross)\\s+";
-const PLACE_AFTER = "(?:,?\\s+(?:MO|Missouri|County)\\b)";
+export const PLACE_BEFORE = "(?:[Ii]n|[Nn]ear|[Aa]round|[Ss]erving|[Tt]hroughout|[Ff]rom|[Tt]o|[Oo]f|[Aa]cross)\\s+";
+export const PLACE_AFTER = "(?:,?\\s+(?:MO|Missouri|County)\\b)";
 
 export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {}): LintResult {
   const problems: LintProblem[] = [];

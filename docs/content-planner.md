@@ -96,7 +96,7 @@ object.
      rules, copy that is not a duplicate caption, and the same claim
      governance.
    - **Graphics** come from the Creative Engine's post mode (its own PR).
-2. **Blog Drafter v1.**
+2. **Blog Drafter v1** — built (`docs/blog-drafter.md`; 0066 + 0067, not applied). The original scope follows.
    - A brief from the plan item: topic, primary keyword, intent, Authority
      opportunity, service page, internal links, governed claims, CTA.
    - The worker drafts: title, slug, meta, H1, outline, body, internal

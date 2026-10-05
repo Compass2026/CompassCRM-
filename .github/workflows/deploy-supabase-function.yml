@@ -11,6 +11,7 @@ on:
           - authority-run
           - gsc-sync
           - post-drafter
+          - content-drafter
           - post-publisher
           - google-ops
           - rank-sync

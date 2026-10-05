@@ -203,6 +203,13 @@ begin
 end $$;
 revoke all on function content_draft_problems(content_drafts) from public, anon;
 grant execute on function content_draft_problems(content_drafts) to authenticated, service_role;
+-- The same, by id (what the draft page asks; RLS decides what can be read).
+create function content_draft_problems_for(p_draft_id uuid) returns text[]
+language sql stable security invoker set search_path = public as $$
+  select content_draft_problems(d) from content_drafts d where d.id = p_draft_id
+$$;
+revoke all on function content_draft_problems_for(uuid) from public, anon;
+grant execute on function content_draft_problems_for(uuid) to authenticated, service_role;
 
 -- ── 3. Guards ───────────────────────────────────────────────────────────────
 create function content_drafts_guard() returns trigger

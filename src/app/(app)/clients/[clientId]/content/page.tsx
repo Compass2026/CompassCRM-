@@ -19,7 +19,7 @@ import { ownerLabels, owners } from "@/lib/labels";
 import { chip } from "@/lib/nav-styles";
 import { cn } from "@/lib/utils";
 
-const CONTENT_STATUSES = ["idea", "brief", "draft", "review", "published"] as const;
+const CONTENT_STATUSES = ["idea", "brief", "draft", "review", "approved", "published"] as const;
 const selectClass =
   "field-sm";
 
@@ -28,6 +28,7 @@ const statusStyles: Record<string, string> = {
   brief: "bg-purple-100 text-purple-800",
   draft: "bg-blue-100 text-blue-800",
   review: "bg-amber-100 text-amber-800",
+  approved: "bg-teal-100 text-teal-800",
   published: "bg-green-100 text-green-800",
 };
 

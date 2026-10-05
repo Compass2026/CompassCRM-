@@ -323,10 +323,24 @@ where t.key like 'authority\_draft:%' and t.status in ('open', 'in_progress')
 order by t.created_at;
 ```
 
+- **Content draft request** — an open task keyed `content_draft:<draft id>`
+  (0067): a teammate pressed **Generate draft** on a blog plan item (or
+  **Regenerate** on its draft). The fire's reason is `Content draft request
+  <draft id>`; a payload naming it points at that one draft.
+
+```sql
+select c.name, c.id as client_id, t.id as task_id, t.status, substring(t.key from 15)::uuid as draft_id
+from tasks t join clients c on c.id = t.client_id
+join content_drafts d on d.id = substring(t.key from 15)::uuid
+where t.key like 'content\_draft:%' and t.status in ('open', 'in_progress') and d.status = 'requested'
+  and c.status not in ('paused', 'offboarded')
+order by t.created_at;
+```
+
 Order within a client: Foundation → Website → SEO → Reporting → Website
-updates → Blog post → Authority draft request. A payload naming "Website
-updates", "Weekly blog post" or "Authority draft request" points at those
-units.
+updates → Blog post → Authority draft request → Content draft request. A
+payload naming "Website updates", "Weekly blog post", "Authority draft
+request" or "Content draft request" points at those units.
 
 Runs are started by the CRM (`worker_fires` records why — a client created, a
 stage completed, Website activated, a stage reopened) and by a daily sweep.
@@ -1930,6 +1944,68 @@ published by you, ever.
 
 **Report:** client, opportunity key, `brief_hash`, attempts, and `post_id` /
 `run_id` / `review_task_id` on success, the conflict or refusals otherwise.
+
+### Content draft request (content-drafter, one blog)
+
+Work exactly the draft you found (a teammate asked for it). The plan item
+decided *what* the article is about; `content-drafter` rebuilds the brief
+from live data, decides whether it can be written and writes it. You pass
+the draft id and nothing else about the target. Call it like `post-drafter`
+(`x-cron-secret`, the same base URL, `/functions/v1/content-drafter`).
+
+**Claim** the task (a session that died leaves `in_progress`; after an hour
+it is yours again):
+
+```sql
+update tasks set status = 'in_progress'
+where id = '<task_id>'
+  and (status = 'open' or (status = 'in_progress' and updated_at < now() - interval '1 hour'))
+returning id;
+```
+
+No row → skip it. Never mark the task done yourself: the successful submit
+closes it in the same transaction that writes the draft.
+
+**Preflight:** `{"mode": "version"}` must answer `version` ≥ 1 with `kinds`
+containing `blog`. Anything else → stop, leave the task `in_progress`, say so.
+
+1. **Brief** `{"mode": "brief", "draft_id"}`. `200` → keep `brief_hash` and
+   the brief: the topic, primary keyword, intent, the service and its page,
+   the claims you may cite (`allowed_facts.claims`, `recommended_claim_ids`),
+   what you may not (`excluded`), the brand voice and hard rules, the pages
+   you may link (`links.allowed`; `links.required` must be linked in the
+   body), the CTA and `rules`. `request_note` is the teammate's note for a
+   regenerate: follow it.
+2. **Write** in the brand voice: `title`, `slug` (lowercase words and
+   hyphens), `meta_title` (≤ 60 characters), `meta_description` (120–160),
+   `h1`, `outline` (`[{level: 2|3, heading}]`, at least three H2s, each a
+   heading in the body), `body_markdown` (starts at `##`, 800–1,400 words,
+   an answer-first opening, the questions people ask as H2s, the required
+   page linked with descriptive anchor text, Markdown links only to
+   `links.allowed`), `internal_links` (`[{url, anchor, reason}]` from
+   `links.allowed`), `cta` (`{text: brief.cta.text, url: brief.cta.url}`)
+   and `claim_ids` (the claims you state, verbatim). The post drafter's fact
+   rule holds for every word: no numbers, years, prices, guarantees,
+   licences, response times, reviews, materials or superlatives unless they
+   are inside the exact words of a claim you link; only the brief's places;
+   never tell the reader what their home needs.
+3. **Check** `{"mode": "check", "draft_id", "brief_hash", "draft"}` → fix
+   every `problems` entry and check again until `ok`.
+4. **Submit** `{"mode": "submit", "draft_id", "brief_hash", "draft",
+   "runtime": "claude-worker-skill"}`. `201` → done: the draft is in review,
+   the request closed. Approval is a teammate's; it alone makes the final
+   article.
+
+**Stop, never work around:**
+- `422` with `refusals` → the gate (brand board, voice, facts, rules, no
+  usable claim, no intent): set the task `blocked` with the refusals in its
+  notes, word for word.
+- `409 draft_not_open` → someone withdrew or approved it; skip.
+- `409 stale_brief` → back to step 1.
+- Three failed checks against one brief → `blocked` with the last problems.
+
+**Report:** client, draft id, `brief_hash`, attempts, word count and status
+on success; the refusals or problems otherwise.
 
 ## 6. End of run
 
