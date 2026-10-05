@@ -27,3 +27,8 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run build
+      # The compass-billing Vercel project (Option B, docs/billing-runtime.md).
+      - run: npm ci --prefix billing
+      - run: npm run check --prefix billing
+      - run: npm run build --prefix billing
+      - run: npm test --prefix billing
