@@ -178,6 +178,11 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_cutover_kit
 # consent and opt-out, outbound rules, forward-only delivery status,
 # compliance registrations and checklist, tenancy, the worker kept out.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test.sql"
+# 0064: the dedicated billing runtime login (billing_sync writes billing only
+# through the billing functions, reads only billing tables and the columns it
+# needs, cannot reach Vault or switch the mode; the Edge Function path closes
+# when the owner flips billing_runtime, and service_role cannot reopen it).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_runtime.test.sql"
 # 0065: the Content Planner (plan item shapes, Authority opportunity ↔ slot
 # mapping, same-client links, one slot per post, the derived board status
 # through the review gate, holds, team-only access).

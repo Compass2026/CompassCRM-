@@ -623,11 +623,11 @@ test("the fictional test client's $2,500 TEST agreement sells its exact TEST pri
   const t = setup();
   const TEST_CLIENT = "c0ffee00-0000-4000-b000-00000000b111";
   const PP_TEST = "00000000-0000-4000-d000-000000002500";
-  t.s.put({ id: "prod_VMxmKG052epGVU", object: "product", livemode: false, name: "Compass Standard (TEST)", active: true, metadata: {}, created: 1 });
-  t.s.put({ id: "price_1UMDr54Zq9yMk653B7jdneFm", object: "price", livemode: false, product: "prod_VMxmKG052epGVU", active: true, type: "recurring",
+  t.s.put({ id: "prod_VMxmkG052epGVU", object: "product", livemode: false, name: "Compass Standard (TEST)", active: true, metadata: {}, created: 1 });
+  t.s.put({ id: "price_1UMDr54Zq9yMk653B7jdneFm", object: "price", livemode: false, product: "prod_VMxmkG052epGVU", active: true, type: "recurring",
     currency: "usd", unit_amount: 250000, billing_scheme: "per_unit", recurring: { interval: "month", interval_count: 1, usage_type: "licensed" }, metadata: {}, created: 1 });
-  assert.equal((await t.call("admin", { action: "import_product", target: "package", target_id: PKG_STD, product_id: "prod_VMxmKG052epGVU" })).status, 200);
-  t.store.db.packagePrices.set(PP_TEST, { id: PP_TEST, package_id: PKG_STD, package_kind: "standard", stripe_product_id: "prod_VMxmKG052epGVU",
+  assert.equal((await t.call("admin", { action: "import_product", target: "package", target_id: PKG_STD, product_id: "prod_VMxmkG052epGVU" })).status, 200);
+  t.store.db.packagePrices.set(PP_TEST, { id: PP_TEST, package_id: PKG_STD, package_kind: "standard", stripe_product_id: "prod_VMxmkG052epGVU",
     stripe_price_id: "price_1UMDr54Zq9yMk653B7jdneFm", client_id: null, active: true, is_default: true });
   t.store.db.clients.set(TEST_CLIENT, { id: TEST_CLIENT, name: "Compass Billing Test Client (TEST)", status: "paused" });
   t.store.db.plans.set(TEST_CLIENT, agreement(PKG_STD, 250000, PP_TEST));
