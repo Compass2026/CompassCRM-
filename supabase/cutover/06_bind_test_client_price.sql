@@ -4,7 +4,7 @@
 --
 -- Run after § 17 step 11 has imported Tom's TEST product onto the test
 -- client's package in the app (Settings › Billing catalog: import
--- prod_VMxmKG052epGVU onto "Test Standard (TEST)" and approve
+-- prod_VMxmkG052epGVU onto "Test Standard (TEST)" and approve
 -- price_1UMDr54Zq9yMk653B7jdneFm). Test-mode object ids, not secrets.
 -- Equivalent in the app: the test client's Plan tab › Agreed price › Bind price.
 --
