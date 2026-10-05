@@ -240,7 +240,7 @@ export function SubaccountForm({ clientId, clientName }: { clientId: string; cli
           <label className={label}>…or link one made in the Twilio Console (its AC… SID)</label>
           <Input value={sid} onChange={(e) => setSid(e.target.value.trim())} placeholder="AC…" />
         </div>
-        <Button size="sm" variant="outline" disabled={pending || !/^AC[0-9a-f]{32}$/.test(sid)} onClick={() => start(async () => {
+        <Button size="sm" variant="outline" disabled={pending || !/^AC[0-9a-fA-F]{32}$/.test(sid)} onClick={() => start(async () => {
           const r = await communicationsFunctionAction(clientId, "link_subaccount", { account_sid: sid });
           setMsg({ ok: r.ok, message: r.message });
         })}>Link subaccount</Button>
@@ -320,7 +320,7 @@ export function LinkNumberForm({ clientId }: { clientId: string }) {
         <label className={label}>Link a number already in the subaccount (its PN… SID)</label>
         <Input value={sid} onChange={(e) => setSid(e.target.value.trim())} placeholder="PN…" />
       </div>
-      <Button size="sm" variant="outline" disabled={pending || !/^PN[0-9a-f]{32}$/.test(sid)} onClick={() => start(async () => {
+      <Button size="sm" variant="outline" disabled={pending || !/^PN[0-9a-fA-F]{32}$/.test(sid)} onClick={() => start(async () => {
         const r = await communicationsFunctionAction(clientId, "link_number", { number_sid: sid });
         setMsg({ ok: r.ok, message: r.message });
       })}>Link number</Button>

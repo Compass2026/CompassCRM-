@@ -19,15 +19,16 @@
 //
 // Logs carry SIDs and outcome codes only — never a body, a phone number's
 // message, a token or the signature.
-import { INBOUND_PATH, STATUS_PATH, subaccountSecretNames, ACCOUNT_SID } from "../_shared/communications/credentials.ts";
+import { INBOUND_PATH, STATUS_PATH, ACCOUNT_SID, MESSAGE_SID } from "../_shared/communications/credentials.ts";
 import { optOutFromTwilio, optOutKeyword } from "../../../src/lib/communications.ts";
 
-export const HANDLER_VERSION = 1;
+export const HANDLER_VERSION = 2;
 
 export type Validator = (authToken: string, signature: string, url: string, params: Record<string, string>) => boolean;
 
 export type Store = {
-  secret(name: string): Promise<string | null>;
+  // The subaccount's Auth Token from Vault (TWILIO_SUB_<sid>_AUTH_TOKEN), or null.
+  authToken(accountSid: string): Promise<string | null>;
   accountKnown(accountSid: string): Promise<boolean>;
   recordInbound(p: Record<string, unknown>): Promise<Record<string, unknown>>;
   recordStatus(p: Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -35,7 +36,6 @@ export type Store = {
 
 export type Log = (event: string, detail: Record<string, unknown>) => void;
 
-const MESSAGE_SID = /^(SM|MM)[0-9a-f]{32}$/;
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
 const twiml = (status = 200) => new Response(EMPTY_TWIML, { status, headers: { "Content-Type": "text/xml" } });
@@ -83,7 +83,7 @@ export function createTwilioWebhook(deps: { store: Store; validate: Validator; p
       log("rejected", { route, reason: "unknown_account", account: accountSid });
       return text(403, "forbidden");
     }
-    const token = await store.secret(subaccountSecretNames(accountSid).authToken);
+    const token = await store.authToken(accountSid);
     if (!token) {
       log("rejected", { route, reason: "no_auth_token_in_vault", account: accountSid });
       return text(403, "forbidden");

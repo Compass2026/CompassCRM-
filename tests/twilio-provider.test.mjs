@@ -93,3 +93,23 @@ test("Twilio errors become ProviderError with Twilio's code, never the credentia
     return true;
   });
 });
+
+test("listSubaccounts: a read of /Accounts by friendly name with the parent key; tokens are never carried", async () => {
+  const f = fakeFetch([{ status: 200, body: { accounts: [
+    { sid: "AC" + "9".repeat(32), friendly_name: "Compass - X", status: "active", owner_account_sid: PARENT.accountSid, auth_token: "tok" },
+  ] } }]);
+  const t = createTwilioProvider(f.fn);
+  const list = await t.listSubaccounts(PARENT, "Compass - X");
+  assert.equal(f.calls[0].method, "GET");
+  assert.equal(f.calls[0].url, "https://api.twilio.com/2010-04-01/Accounts.json?FriendlyName=Compass+-+X&PageSize=50");
+  assert.equal(f.calls[0].auth, auth(PARENT));
+  assert.deepEqual(list, [{ sid: "AC" + "9".repeat(32), friendlyName: "Compass - X", status: "active", ownerAccountSid: PARENT.accountSid }]);
+  assert.ok(!JSON.stringify(list).includes("tok"));
+});
+
+test("createSubaccount with an API key: Twilio sends no auth_token → authToken is empty (the caller must not treat that as failure)", async () => {
+  const f = fakeFetch([{ status: 201, body: { sid: "AC" + "9".repeat(32), friendly_name: "Compass - X", status: "active", owner_account_sid: PARENT.accountSid } }]);
+  const sub = await createTwilioProvider(f.fn).createSubaccount(PARENT, "Compass - X");
+  assert.equal(sub.sid, "AC" + "9".repeat(32));
+  assert.equal(sub.authToken, "");
+});

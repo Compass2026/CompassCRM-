@@ -85,6 +85,13 @@ export function createTwilioProvider(fetchImpl: FetchLike): ProvisioningProvider
       return toSubaccount(await call(parent, "GET", `${API}/Accounts/${parent.accountSid}.json`));
     },
 
+    async listSubaccounts(parent: ParentCredential, friendlyName: string): Promise<Subaccount[]> {
+      const q = new URLSearchParams({ FriendlyName: friendlyName, PageSize: "50" });
+      const j = await call(parent, "GET", `${API}/Accounts.json?${q}`);
+      const list = Array.isArray(j.accounts) ? (j.accounts as Json[]) : [];
+      return list.map(toSubaccount);
+    },
+
     async createSubaccount(parent: ParentCredential, friendlyName: string): Promise<CreatedSubaccount> {
       const j = await call(parent, "POST", `${API}/Accounts.json`, { FriendlyName: friendlyName });
       return { ...toSubaccount(j), authToken: String(j.auth_token ?? "") };

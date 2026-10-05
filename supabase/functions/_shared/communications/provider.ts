@@ -56,6 +56,11 @@ export interface ProvisioningProvider {
   // Reads the parent account with the parent key; only a Main key may read
   // /Accounts, so this doubles as the "is it a Main key" check.
   fetchParentAccount(parent: ParentCredential): Promise<Subaccount>;
+  // The parent's subaccounts with this friendly name (read only): checked
+  // before creating one, so a client never gets a second subaccount.
+  listSubaccounts(parent: ParentCredential, friendlyName: string): Promise<Subaccount[]>;
+  // Twilio returns the new subaccount's Auth Token only to Auth Token
+  // callers; to an API key (Compass's Main key) authToken is "".
   createSubaccount(parent: ParentCredential, friendlyName: string): Promise<CreatedSubaccount>;
   fetchSubaccount(parent: ParentCredential, subaccountSid: string): Promise<SubaccountWithToken>;
   createSubaccountKey(parent: ParentCredential, subaccountSid: string, friendlyName: string): Promise<CreatedKey>;

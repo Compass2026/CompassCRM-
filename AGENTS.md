@@ -35,7 +35,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   `docs/billing-cutover.md`); `0064` (the dedicated billing runtime login,
   Option B; `docs/billing-runtime.md`) is written but **not yet applied**;
   `0063` (Compass Communications) was applied Oct 2 2026 as
-  `20261002211041`; `0056` (Canva folder ids on the client record) was
+  `20261002211041`; `0065` (Communications Vault reads by account SID +
+  mixed-case Twilio SIDs) was applied Oct 5 2026 as `20261005033418`; `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -1430,6 +1431,26 @@ and the remaining manual Twilio steps: `docs/communications.md`.
   answer 403. `database.types.ts` regenerated from production. No Twilio
   secret is in Vault, no subaccount or number exists, no row is in any
   Communications table and nothing has been sent.
+- **0065 (applied Oct 5 2026 as `20261005033418`; `communications` v2 and
+  `twilio-webhook` v2 deployed through the Supabase MCP).** The BHG link
+  failed because the functions looked up `TWILIO_SUB_<sid>_AUTH_TOKEN` by
+  the exact SID the request carried, and Twilio never returns a
+  subaccount's Auth Token to an API key, so the token is stored by hand.
+  Now: `communication_subaccount_secrets(<AC…>)` (service role only) reads
+  a subaccount's key, secret and token by SID (exact name, else the single
+  case-insensitive match, trimmed) and reports the expected names and the
+  other SIDs holding a token; `communication_secret_status()` gives the
+  pages yes / no and the expected name; Twilio SID checks accept
+  `[0-9a-fA-F]` (five constraints and three record functions rebuilt
+  unchanged otherwise). `create_subaccount` refuses when Twilio already
+  has a `Compass - <name>` subaccount and records a created one at once
+  (207 partial when the token or key is missing); `link_subaccount`
+  registers nothing until the token is in Vault (409 naming it). Errors
+  are 424 / 409 / 207 rather than 5xx (the gateway replaces 5xx bodies).
+  Tests: the sandbox's `communications_secrets.test.sql` (a 56-character
+  dynamic name through `get_secret` as service_role),
+  `tests/communications-store.test.mjs`, and the handler / integration /
+  UI suites.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 

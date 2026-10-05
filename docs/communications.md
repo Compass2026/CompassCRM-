@@ -1,9 +1,11 @@
 # Compass Communications (Phase 1: Twilio SMS, BHG Safety pilot)
 
-Issue #88. Migration `0063_communications.sql` (**applied Oct 2 2026** as
-`20261002211041`), Edge Functions `communications` (v1, JWT verified) and
-`twilio-webhook` (v1, `verify_jwt = false`) (**deployed Oct 2 2026**), the
-client **Communications** tab. No Twilio credential is in Vault yet. Phase 2 (CRM Lite:
+Issue #88. Migrations `0063_communications.sql` (**applied Oct 2 2026** as
+`20261002211041`) and `0065_communications_secret_access.sql` (**applied Oct
+5 2026** as `20261005033418`), Edge Functions `communications` (v2, JWT
+verified) and `twilio-webhook` (v2, `verify_jwt = false`) (**v2 deployed Oct
+5 2026**), the client **Communications** tab. The parent Main key and the
+BHG subaccount's Auth Token are in Vault; outbound sending is off. Phase 2 (CRM Lite:
 opportunities, pipelines, notes) is not started.
 
 ## Architecture
@@ -88,7 +90,7 @@ holds one.
 | `TWILIO_API_KEY` | Parent **Main** API key SID `SK…` (Console → API keys → Main) | Tom |
 | `TWILIO_API_SECRET` | Its secret | Tom |
 | `TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` | A Standard key created **in** the client's subaccount | the function (create / link subaccount) |
-| `TWILIO_SUB_<AC…>_AUTH_TOKEN` | The subaccount's Auth Token (webhook signatures) | the function |
+| `TWILIO_SUB_<AC…>_AUTH_TOKEN` | The subaccount's Auth Token (webhook signatures) | the function when Twilio returns it, **otherwise Tom by hand** (see below) |
 | `TWILIO_WEBHOOK_BASE_URL` (optional) | Public base of `twilio-webhook` if not `<SUPABASE_URL>/functions/v1/twilio-webhook` | Tom, only behind a proxy / custom domain |
 
 - The parent's Main key is used **only** for `/Accounts` and `/Keys`
@@ -103,7 +105,24 @@ holds one.
   `twilio-webhook` validates with it.
 - The parent `TWILIO_AUTH_TOKEN` is not used and should not be stored.
 - No key, secret or token is returned by a function, logged, or shown on a
-  page; the pages ask `secret_present()` (yes / no).
+  page; the pages ask `communication_secret_status()` (0065: yes / no and
+  the exact secret name expected, never a value).
+- **Twilio does not return a subaccount's Auth Token to an API key**, Main
+  key included (create and fetch answer without `auth_token`). So after
+  **Create subaccount** or **Link subaccount** the token is normally
+  missing: copy it from the subaccount in the Twilio Console into Vault
+  under the exact name the Numbers page shows
+  (`TWILIO_SUB_<AC…>_AUTH_TOKEN`), then press **Store the subaccount's key
+  and token again** / **Link subaccount** with the same SID.
+- **Vault reads by account SID (0065).** The functions read a
+  subaccount's secrets with `communication_subaccount_secrets(<AC…>)`
+  (service role only): the exact name, else the single name that differs
+  only in letter case (Twilio SIDs are mixed-case hex, so a SID typed in
+  another case still finds its token), with surrounding whitespace
+  trimmed; two such names are ambiguous and read as missing. A missing
+  token is answered with the exact name expected and the SIDs that *do*
+  have a stored token, so a token filed under another SID is visible.
+  A failed Vault read is an error (424), never "missing".
 
 ## Webhook endpoints
 
@@ -178,8 +197,21 @@ an edit.
 All admin, all explicit (Numbers page):
 
 1. **Create subaccount** (type the client's name) or **Link subaccount**
-   (an `AC…` made in the Console; must be a subaccount of the parent). The
-   function stores the Auth Token and mints the subaccount's own key.
+   (an `AC…` made in the Console; must be a subaccount of the parent;
+   any letter case). The function mints the subaccount's own Standard key
+   and stores the Auth Token when Twilio returns one.
+   - **Create** first lists the parent's subaccounts named
+     `Compass - <name>` and refuses (409 `subaccount_exists_in_twilio`)
+     when one exists — link it instead, never create a second. Once Twilio
+     has created the subaccount it is registered at once, so a later
+     failure (no Auth Token returned, the key not minted) is a **partial**
+     state (207, `auth_token: "missing"` and the secret name), never a
+     failure that invites another create.
+   - **Link** registers nothing until the Auth Token is in Vault (409
+     `auth_token_missing` with the exact name); then it registers the
+     subaccount, mints the key and answers 200.
+   - Twilio or Vault errors answer 424 with the detail (the Supabase
+     gateway replaces a function's 5xx body, so 5xx is not used).
 2. **Create Messaging Service** (“<display name> Messaging”, the client's
    Communications display name, else its name) with the webhooks.
 3. **Search available numbers**: US toll-free, SMS + voice, preferred

@@ -20,10 +20,9 @@ function fakeStore({ tokens = { [ACCT_A]: TOKEN_A, [ACCT_B]: TOKEN_B }, numbers 
   const s = { messages: new Map(), contacts: new Map(), threads: new Map(), statuses: [], calls: 0 };
   return {
     s,
-    async secret(name) {
-      const m = /^TWILIO_SUB_(AC[0-9a-f]{32})_AUTH_TOKEN$/.exec(name);
-      return m ? tokens[m[1]] ?? null : null;
-    },
+    // The store reads TWILIO_SUB_<sid>_AUTH_TOKEN by the account SID
+    // (communication_subaccount_secrets, 0065).
+    async authToken(acct) { return tokens[acct] ?? null; },
     async accountKnown(acct) { return acct in tokens; },
     async recordInbound(p) {
       s.calls++;
@@ -217,4 +216,17 @@ test("only the two routes, only POST, only form bodies", async () => {
   assert.equal((await fn.handle(twilioRequest("/voice", inbound()))).status, 404);
   const json = new Request("http://edge.local/twilio-webhook/messages/inbound", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   assert.equal((await fn.handle(json)).status, 415);
+});
+
+test("Twilio's documented SID format, [0-9a-fA-F]: an upper-case-hex account and MessageSid are accepted", async () => {
+  const ACCT_MIXED = "AC" + "4AF8abc31EFDB613f72edbfe769F8EA9";
+  const { fn, store } = setup({ tokens: { [ACCT_MIXED]: TOKEN_A }, numbers: { "+18005550100": ACCT_MIXED } });
+  const mixedSid = "SM" + "ABCDEF0123456789abcdef0123456789";
+  const res = await fn.handle(twilioRequest("/messages/inbound", inbound({ AccountSid: ACCT_MIXED, MessageSid: mixedSid, SmsMessageSid: mixedSid })));
+  assert.equal(res.status, 200);
+  assert.ok(store.s.messages.has(mixedSid));
+  // Still exactly two letters and 32 hex digits.
+  const bad = await fn.handle(twilioRequest("/messages/inbound", inbound({ AccountSid: ACCT_MIXED, MessageSid: "SM" + "G".repeat(32), SmsMessageSid: undefined })));
+  assert.equal(bad.status, 200);
+  assert.equal(store.s.messages.size, 1, "a malformed MessageSid is acknowledged, never recorded");
 });
