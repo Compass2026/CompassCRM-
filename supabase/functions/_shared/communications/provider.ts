@@ -73,6 +73,11 @@ export interface ProvisioningProvider {
   // parent's own /Accounts.json list, or null when the list has no such SID.
   // Never /Accounts/<sid>.json: Twilio answers 20404 to a parent API key there.
   findSubaccount(parent: ParentCredential, subaccountSid: string): Promise<Subaccount | null>;
+  // Verify one subaccount using its own SID + Auth Token. The returned
+  // ownerAccountSid proves whether it belongs to Compass's parent account.
+  // This is the authoritative recovery path when the parent Accounts list
+  // omits a subaccount that is visible in Console.
+  fetchSubaccountWithToken(sub: SubaccountTokenCredential): Promise<Subaccount>;
   // A Standard key minted inside the subaccount with the subaccount's own
   // Auth Token (a parent API key is refused on the subaccount's /Keys).
   createSubaccountKey(sub: SubaccountTokenCredential, friendlyName: string): Promise<CreatedKey>;
