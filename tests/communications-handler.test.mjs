@@ -124,13 +124,20 @@ function fakeTwilio(o = {}) {
       rec("fetchSubaccount", cred, { sid });
       throw new ProviderError(404, "20404", `The requested resource /2010-04-01/Accounts/${sid}.json was not found`);
     },
-    // The parent's own Accounts list: the subaccount as Twilio spells it
-    // (lower-case hex), never with a token.
+    // Parent list lookup remains for duplicate-create prevention and diagnostics.
     async findSubaccount(cred, sid) {
       rec("findSubaccount", cred, { sid });
       if (o.findError) throw o.findError;
       if (o.notInParent) return null;
       return { sid: "AC" + sid.slice(2).toLowerCase(), friendlyName: "x", status: o.closed ? "closed" : "active", ownerAccountSid: o.foreignOwner ? "AC" + "8".repeat(32) : PARENT };
+    },
+    // Link/recovery proves the relationship with the subaccount's own SID +
+    // Auth Token, then checks owner_account_sid.
+    async fetchSubaccountWithToken(cred) {
+      rec("fetchSubaccountWithToken", cred, { sid: cred.accountSid, withToken: !!cred.authToken });
+      if (o.selfFetchError) throw o.selfFetchError;
+      return { sid: "AC" + cred.accountSid.slice(2).toLowerCase(), friendlyName: "x", status: o.closed ? "closed" : "active",
+        ownerAccountSid: o.foreignOwner ? "AC" + "8".repeat(32) : PARENT };
     },
     // Minted with the subaccount's own SID + Auth Token, never the parent key.
     async createSubaccountKey(cred) {
@@ -355,7 +362,7 @@ test("link_subaccount: the Auth Token stored by hand under TWILIO_SUB_<sid>_AUTH
   assert.deepEqual(store.s.vaultWrites.sort(), [`TWILIO_SUB_${BHG_LIKE}_API_KEY`, `TWILIO_SUB_${BHG_LIKE}_API_SECRET`].sort(), "the token is read, never rewritten");
   assert.equal(store.s.secrets[`TWILIO_SUB_${BHG_LIKE}_API_KEY`], "SK" + "f".repeat(32));
   assert.deepEqual(twilio.calls.map((c) => [c.name, c.scope, c.accountSid]),
-    [["findSubaccount", "parent", PARENT], ["createSubaccountKey", "subaccount_token", BHG_LIKE]]);
+    [["fetchSubaccountWithToken", "subaccount_token", BHG_LIKE], ["createSubaccountKey", "subaccount_token", BHG_LIKE]]);
   assert.ok(noSecrets(r.text));
   // Linking again changes nothing: key exists, row exists.
   const again = await call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: BHG_LIKE });
@@ -409,7 +416,7 @@ test("link_subaccount: direct fetch would answer 20404 to the parent key, the pa
   const r = await call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: BHG_LIKE });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.key, "created");
-  assert.ok(!twilio.calls.some((c) => c.name === "fetchSubaccount"), "never the direct fetch");
+  assert.ok(twilio.calls.some((c) => c.name === "fetchSubaccountWithToken"), "the subaccount verifies itself with its Auth Token");
   const mint = twilio.calls.find((c) => c.name === "createSubaccountKey");
   assert.equal(mint.scope, "subaccount_token");
   assert.equal(mint.args.withToken, true);
@@ -420,7 +427,6 @@ test("link_subaccount: direct fetch would answer 20404 to the parent key, the pa
 test("link_subaccount: only a live subaccount of Compass's parent is linked; refusals register nothing and mint nothing", async () => {
   const cases = [
     [{ foreignOwner: true }, SUB_OTHER, "not_a_subaccount"],
-    [{ notInParent: true }, SUB_OTHER, "not_in_parent"],
     [{ closed: true }, SUB_OTHER, "subaccount_closed"],
     [{}, PARENT, "not_a_subaccount"],
   ];
@@ -459,7 +465,7 @@ test("Twilio failures answer 424, never 5xx (the gateway replaces a 5xx body)", 
   const r = await call("jwt-admin", { mode: "check_parent" });
   assert.equal(r.status, 200);
   const off = setup({ accounts: { [CLIENT]: null } });
-  off.twilio.findSubaccount = async () => { throw new ProviderError(401, "20003", "Authenticate"); };
+  off.twilio.fetchSubaccountWithToken = async () => { throw new ProviderError(401, "20003", "Authenticate"); };
   const l = await off.call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: BHG_LIKE });
   assert.equal(l.status, 424);
   assert.equal(l.body.twilio_code, "20003");
