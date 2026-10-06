@@ -464,7 +464,7 @@ test("Twilio failures answer 424, never 5xx (the gateway replaces a 5xx body)", 
   const { call } = setup({ standardKey: true });
   const r = await call("jwt-admin", { mode: "check_parent" });
   assert.equal(r.status, 200);
-  const off = setup({ accounts: { [CLIENT]: null } });
+  const off = setup({ accounts: { [CLIENT]: null }, secrets: { [BHG_TOKEN_NAME]: "bhg-token-placeholder-0000000000" } });
   off.twilio.fetchSubaccountWithToken = async () => { throw new ProviderError(401, "20003", "Authenticate"); };
   const l = await off.call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: BHG_LIKE });
   assert.equal(l.status, 424);
