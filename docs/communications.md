@@ -3,8 +3,8 @@
 Issue #88. Migrations `0063_communications.sql` (**applied Oct 2 2026** as
 `20261002211041`) and `0065_communications_secret_access.sql` (**applied Oct
 5 2026** as `20261005033418`), Edge Functions `communications` (v2, JWT
-verified) and `twilio-webhook` (v2, `verify_jwt = false`) (**v2 deployed Oct
-5 2026**), the client **Communications** tab. The parent Main key and the
+verified; **v3 deployed Oct 6 2026**) and `twilio-webhook` (v2,
+`verify_jwt = false`; deployed Oct 5 2026), the client **Communications** tab. The parent Main key and the
 BHG subaccount's Auth Token are in Vault; outbound sending is off. Phase 2 (CRM Lite:
 opportunities, pipelines, notes) is not started.
 
@@ -93,10 +93,16 @@ holds one.
 | `TWILIO_SUB_<AC…>_AUTH_TOKEN` | The subaccount's Auth Token (webhook signatures) | the function when Twilio returns it, **otherwise Tom by hand** (see below) |
 | `TWILIO_WEBHOOK_BASE_URL` (optional) | Public base of `twilio-webhook` if not `<SUPABASE_URL>/functions/v1/twilio-webhook` | Tom, only behind a proxy / custom domain |
 
-- The parent's Main key is used **only** for `/Accounts` and `/Keys`
-  (creating / reading a subaccount and minting its key). A Standard key
-  cannot read `/Accounts`; **Settings › Check the parent key** reports
-  whether the stored key is a Main key.
+- The parent's Main key is used **only** on the parent's own Accounts
+  collection, `/2010-04-01/Accounts.json` (create a subaccount, list /
+  find one). Twilio: “Main account API Keys are only available to access
+  main account resources. Access to subaccount resources will be denied.”
+  A parent API key on `/Accounts/<sub>.json` or `/Accounts/<sub>/Keys.json`
+  gets **20404** (not found), so Compass never fetches a subaccount
+  directly (v3: it is found in the parent's list) and mints the
+  subaccount's Standard key with the **subaccount's own SID + Auth Token**
+  from Vault. A Standard key cannot read `/Accounts`; **Settings › Check
+  the parent key** reports whether the stored key is a Main key.
 - Everything about a client (numbers, Messaging Service, messages,
   compliance reads) runs with **that subaccount's own key**. There is no
   fallback to the parent key.
@@ -198,18 +204,23 @@ All admin, all explicit (Numbers page):
 
 1. **Create subaccount** (type the client's name) or **Link subaccount**
    (an `AC…` made in the Console; must be a subaccount of the parent;
-   any letter case). The function mints the subaccount's own Standard key
-   and stores the Auth Token when Twilio returns one.
+   any letter case). The function finds it in the parent's
+   `/Accounts.json` list (owner = Compass's parent, not closed), then
+   mints the subaccount's own Standard key with the subaccount's Auth
+   Token, once that token is in Vault.
    - **Create** first lists the parent's subaccounts named
      `Compass - <name>` and refuses (409 `subaccount_exists_in_twilio`)
      when one exists — link it instead, never create a second. Once Twilio
      has created the subaccount it is registered at once, so a later
-     failure (no Auth Token returned, the key not minted) is a **partial**
-     state (207, `auth_token: "missing"` and the secret name), never a
-     failure that invites another create.
-   - **Link** registers nothing until the Auth Token is in Vault (409
-     `auth_token_missing` with the exact name); then it registers the
-     subaccount, mints the key and answers 200.
+     failure (no Auth Token returned, so no key yet: `key:
+     "waiting_for_auth_token"`) is a **partial** state (207,
+     `auth_token: "missing"` and the secret name), never a failure that
+     invites another create.
+   - **Link** refuses a SID the parent's list does not have (409
+     `not_in_parent`), one owned by another account (`not_a_subaccount`)
+     or a closed one (`subaccount_closed`); registers nothing until the
+     Auth Token is in Vault (409 `auth_token_missing` with the exact name);
+     then it registers the subaccount, mints the key and answers 200.
    - Twilio or Vault errors answer 424 with the detail (the Supabase
      gateway replaces a function's 5xx body, so 5xx is not used).
 2. **Create Messaging Service** (“<display name> Messaging”, the client's

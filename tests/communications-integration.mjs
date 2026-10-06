@@ -81,8 +81,9 @@ function consoleSubaccount(name) {
 const twilioFetch = async (url, init = {}) => {
   const u = new URL(url);
   const form = init.body ? Object.fromEntries(new URLSearchParams(init.body)) : {};
-  const [keySid] = Buffer.from(String(init.headers.Authorization).replace(/^Basic /, ""), "base64").toString().split(":");
+  const [keySid, pass] = Buffer.from(String(init.headers.Authorization).replace(/^Basic /, ""), "base64").toString().split(":");
   tw.authUsed.push({ path: u.pathname, keySid });
+  const parentKey = keySid === "SK" + "p".repeat(32) && pass === "parent-main-secret";
   const json = (status, body) => new Response(JSON.stringify(body), { status });
   const p = u.pathname;
   // Like Twilio with an API key: a subaccount's Auth Token is never in the
@@ -91,19 +92,26 @@ const twilioFetch = async (url, init = {}) => {
     const sid = consoleSubaccount(form.FriendlyName);
     return json(201, { sid, friendly_name: form.FriendlyName, status: "active", owner_account_sid: PARENT });
   }
+  // The parent's own list (the parent itself first, as Twilio lists it).
   if (p === "/2010-04-01/Accounts.json" && init.method === "GET") {
     const name = u.searchParams.get("FriendlyName");
-    return json(200, { accounts: [...tw.subaccounts].filter(([, a]) => a.name === name).map(([sid, a]) => ({ sid, friendly_name: a.name, status: "active", owner_account_sid: PARENT })) });
+    const all = [{ sid: PARENT, friendly_name: "Compass", status: "active", owner_account_sid: PARENT },
+      ...[...tw.subaccounts].map(([sid, a]) => ({ sid, friendly_name: a.name, status: "active", owner_account_sid: PARENT }))];
+    return json(200, { accounts: all.filter((a) => name == null || a.friendly_name === name), next_page_uri: null });
   }
+  // A parent API key reaches main-account resources only; on a subaccount
+  // resource Twilio answers 20404 — the production symptom.
   let m = /^\/2010-04-01\/Accounts\/(AC[0-9a-fA-F]{32})\.json$/.exec(p);
   if (m) {
     if (m[1] === PARENT) return json(200, { sid: PARENT, status: "active", owner_account_sid: PARENT });
-    const sid = "AC" + m[1].slice(2).toLowerCase();
-    const sa = tw.subaccounts.get(sid);
-    return sa ? json(200, { sid, friendly_name: sa.name, status: "active", owner_account_sid: PARENT }) : json(404, { code: 20404, message: "not found" });
+    return json(404, { code: 20404, message: `The requested resource ${p} was not found` });
   }
   m = /^\/2010-04-01\/Accounts\/(AC[0-9a-fA-F]{32})\/Keys\.json$/.exec(p);
-  if (m) { const secret = `key-secret-${randomUUID()}`; SECRETS_SEEN.add(secret); return json(201, { sid: hex(tw.nextSid++, "SK"), secret }); }
+  if (m) {
+    const sa = tw.subaccounts.get(m[1]);
+    if (!sa || keySid !== m[1] || pass !== sa.token) return json(404, { code: 20404, message: `The requested resource ${p} was not found` });
+    const secret = `key-secret-${randomUUID()}`; SECRETS_SEEN.add(secret); return json(201, { sid: hex(tw.nextSid++, "SK"), secret });
+  }
   if (p === "/v1/Services" && u.host === "messaging.twilio.com") { const sid = hex(tw.nextSid++, "MG"); tw.services.push({ sid, form }); return json(201, { sid, friendly_name: form.FriendlyName }); }
   if (/^\/v1\/Services\/MG[0-9a-f]{32}\/PhoneNumbers$/.test(p)) return json(201, { sid: form.PhoneNumberSid });
   if (/\/AvailablePhoneNumbers\/US\/TollFree\.json$/.test(p)) {
@@ -177,22 +185,22 @@ await check("a teammate turns communications on (PostgREST, team JWT)", async ()
 const storeToken = (name, value) => sql(`select vault.create_secret('${value}', '${name}')`);
 const tokenName = (sid) => `TWILIO_SUB_${sid}_AUTH_TOKEN`;
 
-await check("create_subaccount (A): Twilio creates it but returns no Auth Token → recorded at once, key minted, 207 naming the exact secret", async () => {
+await check("create_subaccount (A): Twilio creates it but returns no Auth Token → recorded at once, key waits for the token, 207 naming the exact secret", async () => {
   const a = await call({ mode: "create_subaccount", client_id: CA, confirm: sql(`select name from clients where id = '${CA}'`) });
   assert.equal(a.status, 207, JSON.stringify(a.body));
   acctA = a.body.account_sid;
-  assert.equal(a.body.key, "created");
+  assert.equal(a.body.key, "waiting_for_auth_token");
   assert.equal(a.body.auth_token, "missing");
   assert.equal(a.body.auth_token_secret, tokenName(acctA));
   assert.equal(tokenName(acctA).length, 56);
   assert.equal(sql(`select count(*) from communication_accounts where client_id = '${CA}'`), "1", "the subaccount is recorded");
-  assert.ok(vault(`TWILIO_SUB_${acctA}_API_SECRET`).startsWith("key-secret-"));
+  assert.equal(vault(`TWILIO_SUB_${acctA}_API_SECRET`), "", "no key without the token");
   assert.equal(vault(tokenName(acctA)), "");
   const again = await call({ mode: "create_subaccount", client_id: CA, confirm: sql(`select name from clients where id = '${CA}'`) });
   assert.equal(again.body.code, "account_exists");
   assert.equal(tw.subaccounts.size, 1, "never a second subaccount");
   const parentUses = tw.authUsed.filter((x) => x.keySid === "SK" + "p".repeat(32)).map((x) => x.path);
-  assert.ok(parentUses.every((pth) => /\/Accounts(\.json|\/AC[0-9a-f]{32}(\.json|\/Keys\.json))$/.test(pth)), parentUses.join(", "));
+  assert.ok(parentUses.every((pth) => pth === "/2010-04-01/Accounts.json"), `the parent key only on its own Accounts list: ${parentUses.join(", ")}`);
 });
 
 await check("the production symptom through PostgREST: get_secret answers a 56-character dynamic name, and null (200) for another SID's name", async () => {
@@ -206,10 +214,17 @@ await check("the production symptom through PostgREST: get_secret answers a 56-c
   assert.equal(miss.data, null, "a name that differs in its SID is a 200 with null, exactly what production logged");
 });
 
-await check("A: with the token stored by hand, “Store the subaccount's key and token again” finishes it (200, no second row)", async () => {
+await check("A: with the token stored by hand, “Store the subaccount's key and token again” finishes it — found in the parent's list (direct fetch is 20404), key minted with the subaccount's token (200, no second row)", async () => {
+  const before = tw.authUsed.length;
   const r = await call({ mode: "link_subaccount", client_id: CA, account_sid: acctA });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.key, "existing");
+  assert.equal(r.body.key, "created");
+  assert.ok(vault(`TWILIO_SUB_${acctA}_API_SECRET`).startsWith("key-secret-"));
+  assert.ok(/^SK[0-9a-f]{32}$/.test(vault(`TWILIO_SUB_${acctA}_API_KEY`)));
+  const used = tw.authUsed.slice(before);
+  assert.ok(!used.some((x) => x.path === `/2010-04-01/Accounts/${acctA}.json`), "never the direct fetch");
+  assert.deepEqual(used.map((x) => [x.path, x.keySid === acctA ? "subaccount token" : "parent key"]),
+    [["/2010-04-01/Accounts.json", "parent key"], [`/2010-04-01/Accounts/${acctA}/Keys.json`, "subaccount token"]]);
   assert.equal(r.body.auth_token, "stored in Vault");
   assert.equal(sql(`select count(*) from communication_accounts where client_id = '${CA}'`), "1");
   const status = await team.rpc("communication_secret_status", { p_account_sid: acctA });

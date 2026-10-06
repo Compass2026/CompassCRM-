@@ -118,13 +118,24 @@ function fakeTwilio(o = {}) {
       rec("createSubaccount", cred, { name });
       return { sid: o.createdSid ?? "AC" + "9".repeat(32), friendlyName: name, status: "active", ownerAccountSid: PARENT, authToken: o.tokenFromTwilio ? "new-sub-token" : "" };
     },
+    // What Twilio does with a parent API key on /Accounts/<sub>.json: 20404.
+    // Not part of the provider any more; kept to prove nothing calls it.
     async fetchSubaccount(cred, sid) {
       rec("fetchSubaccount", cred, { sid });
-      // Twilio's own spelling of the SID: lower-case hex.
-      return { sid: "AC" + sid.slice(2).toLowerCase(), friendlyName: "x", status: "active", ownerAccountSid: o.foreignOwner ? "AC" + "8".repeat(32) : PARENT, authToken: o.tokenFromTwilio ? "linked-token" : null };
+      throw new ProviderError(404, "20404", `The requested resource /2010-04-01/Accounts/${sid}.json was not found`);
     },
-    async createSubaccountKey(cred, sid) {
-      rec("createSubaccountKey", cred, { sid });
+    // The parent's own Accounts list: the subaccount as Twilio spells it
+    // (lower-case hex), never with a token.
+    async findSubaccount(cred, sid) {
+      rec("findSubaccount", cred, { sid });
+      if (o.findError) throw o.findError;
+      if (o.notInParent) return null;
+      return { sid: "AC" + sid.slice(2).toLowerCase(), friendlyName: "x", status: o.closed ? "closed" : "active", ownerAccountSid: o.foreignOwner ? "AC" + "8".repeat(32) : PARENT };
+    },
+    // Minted with the subaccount's own SID + Auth Token, never the parent key.
+    async createSubaccountKey(cred) {
+      rec("createSubaccountKey", cred, { sid: cred.accountSid, withToken: !!cred.authToken });
+      if (cred.scope !== "subaccount_token") throw new ProviderError(404, "20404", "The requested resource was not found");
       if (o.keyError) throw o.keyError;
       return { sid: "SK" + "f".repeat(32), secret: "new-key-secret" };
     },
@@ -263,7 +274,7 @@ test("check_parent: a Main key reads /Accounts; a Standard key is reported as no
   assert.equal(none.body.configured, false);
 });
 
-test("create_subaccount: Twilio creates it without an Auth Token (an API key never gets one) → recorded at once, key minted, 207 naming the exact secret", async () => {
+test("create_subaccount: Twilio creates it without an Auth Token (an API key never gets one) → recorded at once, key waits for the token, 207 naming the exact secret", async () => {
   const { call, twilio, store } = setup({ accounts: { [CLIENT]: null } });
   const wrong = await call("jwt-admin", { mode: "create_subaccount", client_id: CLIENT, confirm: "example safety" });
   assert.equal(wrong.body.code, "confirm");
@@ -272,13 +283,14 @@ test("create_subaccount: Twilio creates it without an Auth Token (an API key nev
   const created = "AC" + "9".repeat(32);
   assert.equal(r.status, 207, JSON.stringify(r.body));
   assert.equal(r.body.account_sid, created);
-  assert.equal(r.body.key, "created");
+  assert.equal(r.body.key, "waiting_for_auth_token");
   assert.equal(r.body.auth_token, "missing");
   assert.equal(r.body.auth_token_secret, `TWILIO_SUB_${created}_AUTH_TOKEN`);
   assert.match(r.body.detail, new RegExp(`TWILIO_SUB_${created}_AUTH_TOKEN`));
-  assert.deepEqual(twilio.calls.map((c) => [c.name, c.scope]), [["listSubaccounts", "parent"], ["createSubaccount", "parent"], ["createSubaccountKey", "parent"]]);
+  assert.deepEqual(twilio.calls.map((c) => [c.name, c.scope]), [["listSubaccounts", "parent"], ["createSubaccount", "parent"]],
+    "no key is minted with the parent key (Twilio refuses it on a subaccount)");
   assert.deepEqual(store.s.rpcs.filter((x) => x.fn === "communication_register_account").map((x) => x.p.account_sid), [created], "recorded once, at once");
-  assert.deepEqual(store.s.vaultWrites.sort(), [`TWILIO_SUB_${created}_API_KEY`, `TWILIO_SUB_${created}_API_SECRET`].sort());
+  assert.deepEqual(store.s.vaultWrites, []);
   assert.ok(noSecrets(r.text));
   // The partial state never invites a second creation.
   const again = await call("jwt-admin", { mode: "create_subaccount", client_id: CLIENT, confirm: "Example Safety Partners" });
@@ -293,6 +305,7 @@ test("create_subaccount: when Twilio does return a token, everything lands in Va
   const created = "AC" + "9".repeat(32);
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.auth_token, "stored in Vault");
+  assert.equal(r.body.key, "created");
   assert.deepEqual(store.s.vaultWrites.sort(), [`TWILIO_SUB_${created}_API_KEY`, `TWILIO_SUB_${created}_API_SECRET`, `TWILIO_SUB_${created}_AUTH_TOKEN`].sort());
   assert.ok(noSecrets(r.text));
 });
@@ -341,7 +354,8 @@ test("link_subaccount: the Auth Token stored by hand under TWILIO_SUB_<sid>_AUTH
   assert.deepEqual(store.s.rpcs.filter((x) => x.fn === "communication_register_account").map((x) => x.p.account_sid), [BHG_LIKE]);
   assert.deepEqual(store.s.vaultWrites.sort(), [`TWILIO_SUB_${BHG_LIKE}_API_KEY`, `TWILIO_SUB_${BHG_LIKE}_API_SECRET`].sort(), "the token is read, never rewritten");
   assert.equal(store.s.secrets[`TWILIO_SUB_${BHG_LIKE}_API_KEY`], "SK" + "f".repeat(32));
-  assert.deepEqual(twilio.calls.map((c) => [c.name, c.scope]), [["fetchSubaccount", "parent"], ["createSubaccountKey", "parent"]]);
+  assert.deepEqual(twilio.calls.map((c) => [c.name, c.scope, c.accountSid]),
+    [["findSubaccount", "parent", PARENT], ["createSubaccountKey", "subaccount_token", BHG_LIKE]]);
   assert.ok(noSecrets(r.text));
   // Linking again changes nothing: key exists, row exists.
   const again = await call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: BHG_LIKE });
@@ -388,14 +402,37 @@ test("link_subaccount: finishes a subaccount a partial create registered (no sec
   assert.equal(other.body.code, "account_exists");
 });
 
-test("link_subaccount: only a subaccount of Compass's parent is linked; a token Twilio does return goes to Vault", async () => {
-  const foreign = await setup({ accounts: { [CLIENT]: null }, foreignOwner: true }).call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: SUB_OTHER });
-  assert.equal(foreign.body.code, "not_a_subaccount");
-  const { call, store } = setup({ accounts: { [CLIENT]: null }, tokenFromTwilio: true });
-  const r = await call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: SUB_OTHER });
-  assert.equal(r.status, 200);
-  assert.ok(store.s.vaultWrites.includes(`TWILIO_SUB_${SUB_OTHER}_AUTH_TOKEN`));
+test("link_subaccount: direct fetch would answer 20404 to the parent key, the parent's Accounts list has the SID → linked, key minted with the subaccount's token", async () => {
+  const { call, twilio, store } = setup({ accounts: { [CLIENT]: null }, secrets: { [BHG_TOKEN_NAME]: "bhg-token-placeholder-0000000000" } });
+  await assert.rejects(twilio.fetchSubaccount({ scope: "parent", accountSid: PARENT }, BHG_LIKE), /20404|not found/);
+  twilio.calls.length = 0;
+  const r = await call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: BHG_LIKE });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.key, "created");
+  assert.ok(!twilio.calls.some((c) => c.name === "fetchSubaccount"), "never the direct fetch");
+  const mint = twilio.calls.find((c) => c.name === "createSubaccountKey");
+  assert.equal(mint.scope, "subaccount_token");
+  assert.equal(mint.args.withToken, true);
+  assert.equal(store.s.rpcs.filter((x) => x.fn === "communication_register_account").length, 1);
   assert.ok(noSecrets(r.text));
+});
+
+test("link_subaccount: only a live subaccount of Compass's parent is linked; refusals register nothing and mint nothing", async () => {
+  const cases = [
+    [{ foreignOwner: true }, SUB_OTHER, "not_a_subaccount"],
+    [{ notInParent: true }, SUB_OTHER, "not_in_parent"],
+    [{ closed: true }, SUB_OTHER, "subaccount_closed"],
+    [{}, PARENT, "not_a_subaccount"],
+  ];
+  for (const [o, sid, code] of cases) {
+    const { call, twilio, store } = setup({ accounts: { [CLIENT]: null }, secrets: { [`TWILIO_SUB_${sid}_AUTH_TOKEN`]: "sub-token" }, ...o });
+    const r = await call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: sid });
+    assert.equal(r.status, 409, `${code}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.code, code);
+    assert.ok(!store.s.rpcs.some((x) => x.fn === "communication_register_account"), code);
+    assert.ok(!twilio.calls.some((c) => c.name === "createSubaccountKey"), code);
+    assert.ok(noSecrets(r.text));
+  }
 });
 
 test("link_subaccount: the key could not be minted → 207 partial; the registration stays, a retry finishes it", async () => {
@@ -422,10 +459,10 @@ test("Twilio failures answer 424, never 5xx (the gateway replaces a 5xx body)", 
   const r = await call("jwt-admin", { mode: "check_parent" });
   assert.equal(r.status, 200);
   const off = setup({ accounts: { [CLIENT]: null } });
-  off.twilio.fetchSubaccount = async () => { throw new ProviderError(404, "20404", "The requested resource was not found"); };
+  off.twilio.findSubaccount = async () => { throw new ProviderError(401, "20003", "Authenticate"); };
   const l = await off.call("jwt-admin", { mode: "link_subaccount", client_id: CLIENT, account_sid: BHG_LIKE });
   assert.equal(l.status, 424);
-  assert.equal(l.body.twilio_code, "20404");
+  assert.equal(l.body.twilio_code, "20003");
 });
 
 test("link_number: a phone number SID with upper-case hex is accepted", async () => {

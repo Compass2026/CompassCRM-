@@ -1385,10 +1385,12 @@ and the remaining manual Twilio steps: `docs/communications.md`.
 
 - **Twilio shape:** Compass's parent account (ISV) holds one **subaccount
   per client**. Vault: the parent's **Main** API key (`TWILIO_ACCOUNT_SID` /
-  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only for `/Accounts` and
-  `/Keys`; per subaccount its own Standard key and its Auth Token
-  (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`), written by
-  the function. Every client operation uses the subaccount's key. No
+  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only on the parent's own
+  `/Accounts.json` (create, list / find a subaccount — Twilio denies a
+  parent API key every subaccount resource with 20404); per subaccount its
+  own Standard key (minted with the subaccount's own Auth Token) and its
+  Auth Token (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`;
+  the token copied from the Twilio Console by hand). Every client operation uses the subaccount's key. No
   credential is an env var, a column, a response or a log line; no EIN is
   stored anywhere.
 - **Functions:** `communications` (team JWT; admin modes check
@@ -1451,6 +1453,19 @@ and the remaining manual Twilio steps: `docs/communications.md`.
   dynamic name through `get_secret` as service_role),
   `tests/communications-store.test.mjs`, and the handler / integration /
   UI suites.
+- **`communications` v3 (deployed Oct 6 2026).** The BHG link then failed
+  with Twilio 20404 on `GET /Accounts/<sub>.json`: a parent API key may
+  touch only main-account resources, never a subaccount's (Twilio's
+  subaccount docs). `link_subaccount` now finds the SID in the parent's own
+  `/Accounts.json` list (paged, any letter case; owner must be the parent,
+  status not closed; 409 `not_in_parent` / `not_a_subaccount` /
+  `subaccount_closed`), and the subaccount's Standard key is minted with the
+  subaccount's own SID + Auth Token from Vault (the parent key would get
+  20404 on `/Accounts/<sub>/Keys.json` too). `create_subaccount` without a
+  returned token registers the subaccount and answers 207 with `key:
+  "waiting_for_auth_token"`; the link finishes it. Tests: the handler,
+  provider (a fake Twilio that answers 20404 to the parent key on any
+  subaccount resource) and integration suites.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
