@@ -65,7 +65,7 @@ import {
   type SubaccountTokenCredential,
 } from "../_shared/communications/provider.ts";
 
-export const HANDLER_VERSION = 3;
+export const HANDLER_VERSION = 4;
 export const MODES = [
   "version", "send", "search_numbers", "sync_compliance", "check_parent", "create_subaccount", "link_subaccount",
   "create_messaging_service", "purchase_number", "link_number", "attach_number",
@@ -280,17 +280,34 @@ export function createCommunications(deps: {
       if (sameSid(typed, p.accountSid)) {
         return reply(409, { code: "not_a_subaccount", error: "That is Compass's parent account, not a client's subaccount." });
       }
-      // Found in the parent's own Accounts list, never fetched directly:
-      // Twilio answers 20404 to a parent API key on /Accounts/<sub>.json.
+
+      // Recovery/link is proved by the subaccount itself. Twilio documents
+      // that a subaccount's own Account SID + Auth Token can access that
+      // subaccount's resources, including its Account resource. That resource
+      // returns owner_account_sid, so Compass can verify the parent without
+      // relying on the parent's Accounts list, which can omit a Console-visible
+      // child in some account configurations.
+      const requestedSid = account?.provider_account_sid ?? typed;
+      let vault = await store.subaccountSecrets(requestedSid);
+      if (!vault.authToken) {
+        log("auth_token_missing", { client: clientId, account: requestedSid, others: vault.otherAuthTokenAccounts.length });
+        const m = missingToken(vault);
+        return reply(409, { code: "auth_token_missing", account_sid: requestedSid, ...m, error: m.detail });
+      }
+
+      const tokenCred: SubaccountTokenCredential = {
+        scope: "subaccount_token",
+        accountSid: requestedSid,
+        authToken: vault.authToken,
+      };
       let sub;
       try {
-        sub = await provider.findSubaccount(p, typed);
+        sub = await provider.fetchSubaccountWithToken(tokenCred);
       } catch (e) {
         return reply(424, providerFailure(e));
       }
-      if (!sub) {
-        return reply(409, { code: "not_in_parent", account_sid: typed,
-          error: `Twilio's list of Compass's subaccounts (parent ${p.accountSid}) has no ${typed}. Check the SID in the Twilio Console; only a subaccount of Compass's parent account can be linked.` });
+      if (!sameSid(sub.sid, requestedSid)) {
+        return reply(409, { code: "wrong_subaccount", error: "The stored Auth Token did not authenticate the requested Twilio subaccount." });
       }
       if (!sameSid(sub.ownerAccountSid, p.accountSid)) {
         return reply(409, { code: "not_a_subaccount", error: "That account is not a subaccount of Compass's parent account." });
@@ -298,13 +315,15 @@ export function createCommunications(deps: {
       if (sub.status === "closed") {
         return reply(409, { code: "subaccount_closed", account_sid: sub.sid, error: `Subaccount ${sub.sid} is closed in Twilio; a closed subaccount cannot be linked.` });
       }
-      // Twilio's own spelling of the SID names the registry row and the Vault
-      // secrets; a link typed in another letter case finds the same ones.
-      const sid = account?.provider_account_sid ?? (ACCOUNT_SID.test(sub.sid) ? sub.sid : typed);
-      const vault = await store.subaccountSecrets(sid);
+
+      // Twilio's own spelling of the SID names the registry row and future
+      // Vault writes. 0065 can still read a token stored under another SID case.
+      const sid = account?.provider_account_sid ?? (ACCOUNT_SID.test(sub.sid) ? sub.sid : requestedSid);
+      if (!sameSid(sid, requestedSid)) {
+        return reply(409, { code: "wrong_subaccount", error: "Twilio returned a different subaccount than the one requested." });
+      }
+      vault = await store.subaccountSecrets(sid);
       if (!vault.authToken) {
-        // Nothing is registered without the token that validates the
-        // subaccount's webhooks; the answer names the secret to store.
         log("auth_token_missing", { client: clientId, account: sid, others: vault.otherAuthTokenAccounts.length });
         const m = missingToken(vault);
         return reply(409, { code: "auth_token_missing", account_sid: sid, ...m, error: m.detail });
