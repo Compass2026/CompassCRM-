@@ -1,8 +1,10 @@
 // Twilio implementation of the Communications provider contract, over an
 // injected fetch (tests pass a fake; nothing here reaches Twilio on its own).
 // REST calls use API keys (Twilio's recommended production auth):
-//   * the parent's Main key only for /Accounts and /Keys (subaccount
-//     management),
+//   * the parent's Main key only on the parent's own /Accounts.json
+//     (create, list / find a subaccount) — Twilio denies a parent API key
+//     every subaccount resource, /Accounts/<sub>.json included (20404),
+//   * the subaccount's Auth Token only to mint the subaccount's own key,
 //   * the subaccount's own key for everything about the client.
 // The official SDK is used for what it must be used for — webhook signature
 // validation (twilio-webhook/index.ts) — and not for REST, which keeps the
@@ -21,7 +23,7 @@ import {
   type SendResult,
   type Subaccount,
   type SubaccountCredential,
-  type SubaccountWithToken,
+  type SubaccountTokenCredential,
 } from "./provider.ts";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -31,14 +33,20 @@ const MESSAGING = "https://messaging.twilio.com/v1";
 const TRUSTHUB = "https://trusthub.twilio.com/v1";
 const TIMEOUT_MS = 20_000;
 
-type Cred = ParentCredential | SubaccountCredential;
+type Cred = ParentCredential | SubaccountCredential | SubaccountTokenCredential;
 type Json = Record<string, unknown>;
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : v == null ? null : String(v));
 
 function basic(cred: Cred): string {
+  if (cred.scope === "subaccount_token") return "Basic " + btoa(`${cred.accountSid}:${cred.authToken}`);
   return "Basic " + btoa(`${cred.keySid}:${cred.keySecret}`);
 }
+
+// The parent's Accounts list is paged; Compass has a handful of subaccounts,
+// so 20 pages of 1,000 is a bound, not a limit anyone reaches.
+const ACCOUNT_PAGE_SIZE = 1000;
+const MAX_ACCOUNT_PAGES = 20;
 
 // Capabilities come as {voice, SMS, MMS} on available numbers and as
 // {voice, sms, mms} on owned numbers.
@@ -85,18 +93,35 @@ export function createTwilioProvider(fetchImpl: FetchLike): ProvisioningProvider
       return toSubaccount(await call(parent, "GET", `${API}/Accounts/${parent.accountSid}.json`));
     },
 
+    async listSubaccounts(parent: ParentCredential, friendlyName: string): Promise<Subaccount[]> {
+      const q = new URLSearchParams({ FriendlyName: friendlyName, PageSize: "50" });
+      const j = await call(parent, "GET", `${API}/Accounts.json?${q}`);
+      const list = Array.isArray(j.accounts) ? (j.accounts as Json[]) : [];
+      return list.map(toSubaccount);
+    },
+
     async createSubaccount(parent: ParentCredential, friendlyName: string): Promise<CreatedSubaccount> {
       const j = await call(parent, "POST", `${API}/Accounts.json`, { FriendlyName: friendlyName });
       return { ...toSubaccount(j), authToken: String(j.auth_token ?? "") };
     },
 
-    async fetchSubaccount(parent: ParentCredential, subaccountSid: string): Promise<SubaccountWithToken> {
-      const j = await call(parent, "GET", `${API}/Accounts/${subaccountSid}.json`);
-      return { ...toSubaccount(j), authToken: str(j.auth_token) };
+    async findSubaccount(parent: ParentCredential, subaccountSid: string): Promise<Subaccount | null> {
+      const want = subaccountSid.toLowerCase();
+      let url: string | null = `${API}/Accounts.json?PageSize=${ACCOUNT_PAGE_SIZE}`;
+      for (let page = 0; url && page < MAX_ACCOUNT_PAGES; page++) {
+        const j = await call(parent, "GET", url);
+        const list = Array.isArray(j.accounts) ? (j.accounts as Json[]) : [];
+        const hit = list.find((a) => String(a.sid ?? "").toLowerCase() === want);
+        if (hit) return toSubaccount(hit);
+        // Only Twilio's own next page of the same list is followed.
+        const next = typeof j.next_page_uri === "string" ? j.next_page_uri : "";
+        url = next.startsWith("/2010-04-01/Accounts.json?") ? `https://api.twilio.com${next}` : null;
+      }
+      return null;
     },
 
-    async createSubaccountKey(parent: ParentCredential, subaccountSid: string, friendlyName: string): Promise<CreatedKey> {
-      const j = await call(parent, "POST", `${API}/Accounts/${subaccountSid}/Keys.json`, { FriendlyName: friendlyName });
+    async createSubaccountKey(sub: SubaccountTokenCredential, friendlyName: string): Promise<CreatedKey> {
+      const j = await call(sub, "POST", `${API}/Accounts/${sub.accountSid}/Keys.json`, { FriendlyName: friendlyName });
       return { sid: String(j.sid), secret: String(j.secret ?? "") };
     },
 

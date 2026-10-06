@@ -10,18 +10,37 @@
 //                           (any teammate; reads Twilio, writes the status)
 //   check_parent            is the parent credential a working MAIN key (admin)
 //   create_subaccount       a new subaccount for the client (admin, confirm =
-//                           the client's name)
-//   link_subaccount         register an existing subaccount (admin)
+//                           the client's name); refused when Twilio already
+//                           has one by that name; recorded as soon as Twilio
+//                           answers, so a missing Auth Token is a partial
+//                           state to finish, never a reason to create again
+//   link_subaccount         register an existing subaccount, or finish one
+//                           (admin): found in the parent's own Accounts list
+//                           (never /Accounts/<sid>.json, which Twilio refuses
+//                           to a parent API key with 20404); needs its Auth
+//                           Token in Vault
 //   create_messaging_service  the client's Messaging Service (admin)
 //   purchase_number         buy ONE toll-free number the admin picked (admin,
 //                           confirm = the number); never automatic
 //   link_number             register a number already in the subaccount (admin)
 //   attach_number           put a number in the client's Messaging Service (admin)
 //
-// Credentials: the parent's Main key only for create / link subaccount
-// (/Accounts and /Keys); everything else with the subaccount's own key. Keys,
+// Credentials: the parent's Main key only on the parent's own Accounts
+// collection (create, list / find a subaccount). Twilio denies a parent API
+// key every subaccount resource, so the subaccount's Standard key is minted
+// with the subaccount's own Auth Token (Vault), and everything else runs with
+// that key. Keys,
 // secrets and auth tokens go from Twilio straight to Vault and never appear in
-// a response or a log. Every database write is a 0063 function.
+// a response or a log. Twilio returns a subaccount's Auth Token only to Auth
+// Token callers, never to an API key, so with Compass's Main key it is copied
+// from the Twilio Console into Vault as TWILIO_SUB_<sid>_AUTH_TOKEN; the
+// response names that secret exactly. Every database write is a 0063
+// function; a subaccount's credentials are read in one call
+// (communication_subaccount_secrets, 0065).
+//
+// Status codes: a Twilio failure is 424 and a missing prerequisite 409 / 412,
+// never 5xx — Supabase's gateway replaces a function's 5xx body with its own,
+// so the reason (and the secret name to store) would not reach the person.
 import {
   isUsTollFree,
   mapCustomerProfileStatus,
@@ -29,21 +48,24 @@ import {
 } from "../../../src/lib/communications.ts";
 import {
   ACCOUNT_SID,
+  API_KEY_SID,
   INBOUND_PATH,
+  NUMBER_SID,
   STATUS_PATH,
   parentCredential,
   subaccountCredential,
   subaccountSecretNames,
+  type SubaccountSecrets,
 } from "../_shared/communications/credentials.ts";
 import {
   ProviderError,
   type MessagingProvider,
-  type ParentCredential,
   type ProvisioningProvider,
   type SubaccountCredential,
+  type SubaccountTokenCredential,
 } from "../_shared/communications/provider.ts";
 
-export const HANDLER_VERSION = 1;
+export const HANDLER_VERSION = 3;
 export const MODES = [
   "version", "send", "search_numbers", "sync_compliance", "check_parent", "create_subaccount", "link_subaccount",
   "create_messaging_service", "purchase_number", "link_number", "attach_number",
@@ -60,6 +82,7 @@ export type RegistrationRow = { id: string; profile_type: "secondary_customer_pr
 
 export type Store = {
   secret(name: string): Promise<string | null>;
+  subaccountSecrets(accountSid: string): Promise<SubaccountSecrets>;
   setSecret(name: string, value: string): Promise<void>;
   caller(jwt: string): Promise<Caller>;
   client(id: string): Promise<{ id: string; name: string; status: string } | null>;
@@ -73,7 +96,6 @@ export type Store = {
 
 type Json = Record<string, unknown>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const NUMBER_SID = /^PN[0-9a-f]{32}$/;
 const reply = (status: number, body: Json) => Response.json(body, { status });
 const dbCode = (e: unknown) => {
   const m = e instanceof Error ? e.message : String(e);
@@ -94,17 +116,62 @@ export function createCommunications(deps: {
   const log = deps.log ?? (() => {});
 
   const parent = () => parentCredential((n) => store.secret(n));
-  const subFor = (accountSid: string) => subaccountCredential((n) => store.secret(n), accountSid);
+  const subFor = async (accountSid: string) => subaccountCredential(await store.subaccountSecrets(accountSid));
+  const sameSid = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-  // Mints a Standard key inside the subaccount (parent Main key) and keeps it
-  // in Vault. The secret is never returned.
-  async function ensureSubaccountKey(p: ParentCredential, accountSid: string): Promise<"existing" | "created"> {
-    if (await subFor(accountSid)) return "existing";
-    const key = await provider.createSubaccountKey(p, accountSid, "Compass CRM communications");
-    const names = subaccountSecretNames(accountSid);
-    await store.setSecret(names.keySid, key.sid);
-    await store.setSecret(names.keySecret, key.secret);
+  // Mints a Standard key inside the subaccount with the subaccount's own Auth
+  // Token (Twilio refuses the parent's API key there) and keeps it in Vault.
+  // Without the token there is nothing to mint with: the key waits for it.
+  // The secret is never returned.
+  async function ensureSubaccountKey(vault: SubaccountSecrets): Promise<"existing" | "created" | "waiting_for_auth_token"> {
+    if (subaccountCredential(vault)) return "existing";
+    if (!vault.authToken) return "waiting_for_auth_token";
+    const tokenCred: SubaccountTokenCredential = { scope: "subaccount_token", accountSid: vault.accountSid, authToken: vault.authToken };
+    const key = await provider.createSubaccountKey(tokenCred, "Compass CRM communications");
+    if (!API_KEY_SID.test(key.sid) || !key.secret) throw new Error("twilio_key: Twilio's answer had no API key");
+    await store.setSecret(vault.names.keySid, key.sid);
+    await store.setSecret(vault.names.keySecret, key.secret);
     return "created";
+  }
+
+  // What is still missing for a registered subaccount, said so a person can
+  // act on it: the exact Vault name for the Auth Token, and any other SIDs
+  // Vault holds a token for (a token stored under the wrong SID).
+  function missingToken(vault: SubaccountSecrets): Json {
+    const others = vault.otherAuthTokenAccounts;
+    return {
+      auth_token: "missing",
+      auth_token_secret: vault.names.authToken,
+      other_auth_token_accounts: others,
+      detail: `Twilio does not return a subaccount's Auth Token to an API key. Copy it from the Twilio Console (subaccount ${vault.accountSid}) into Vault as ${vault.names.authToken}, then use “Store the subaccount's key and token again”.`
+        + (others.length ? ` Vault holds an Auth Token for ${others.join(", ")} instead — check that SID is this client's subaccount.` : ""),
+    };
+  }
+
+  // After the subaccount is registered: the key (minted if missing) and the
+  // Auth Token (Vault). 200 when both are in place, else 207 saying what is
+  // left; the registration stays either way.
+  async function finishSubaccount(accountSid: string, extra: Json): Promise<Response> {
+    let vault = await store.subaccountSecrets(accountSid);
+    let key: "existing" | "created" | "waiting_for_auth_token" | "missing";
+    let keyFailure: Json = {};
+    try {
+      key = await ensureSubaccountKey(vault);
+      vault = await store.subaccountSecrets(accountSid);
+    } catch (e) {
+      key = "missing";
+      keyFailure = e instanceof ProviderError ? providerFailure(e) : { key_error: dbCode(e).code };
+    }
+    const tokenStored = !!vault.authToken;
+    const body: Json = { account_sid: accountSid, ...extra, key, auth_token: tokenStored ? "stored in Vault" : "missing",
+      auth_token_secret: vault.names.authToken };
+    if ((key === "existing" || key === "created") && tokenStored) return reply(200, body);
+    const parts: Json = { ...body, ...(tokenStored ? {} : missingToken(vault)), ...keyFailure, next: "link_subaccount" };
+    if (key === "missing") {
+      parts.detail = `The subaccount's API key could not be created${keyFailure.twilio_code ? ` (Twilio ${String(keyFailure.twilio_code)})` : ""}.`
+        + (tokenStored ? "" : ` ${String(missingToken(vault).detail)}`);
+    }
+    return reply(207, parts);
   }
 
   // Unexpected errors answer 500 with no detail (it could name a row or a
@@ -113,7 +180,11 @@ export function createCommunications(deps: {
     try {
       return await route(req);
     } catch (e) {
-      log("error", { code: dbCode(e).code });
+      const code = dbCode(e).code;
+      log("error", { code });
+      // A failed Vault read is said as such (424: the gateway would replace a
+      // 5xx body), never as a credential to go and store.
+      if (code === "vault_read") return reply(424, { code, error: "Compass could not read its credentials from Vault just now. Try again; if it persists, check the function's logs." });
       return reply(500, { error: "internal error" });
     }
   }
@@ -145,7 +216,7 @@ export function createCommunications(deps: {
           return reply(200, { configured: true, main_key: false, account_sid: p.accountSid,
             detail: "Twilio refused the parent key on /Accounts. Subaccount management needs a Main API key (created in the Twilio Console)." });
         }
-        return reply(502, providerFailure(e));
+        return reply(424, providerFailure(e));
       }
     }
 
@@ -165,61 +236,91 @@ export function createCommunications(deps: {
       if (!p) return reply(412, { code: "parent_not_configured", error: "The parent Twilio Main key is not in Vault (TWILIO_ACCOUNT_SID / TWILIO_API_KEY / TWILIO_API_SECRET)." });
 
       if (mode === "create_subaccount") {
-        if (account) return reply(409, { code: "account_exists", account_sid: account.provider_account_sid });
+        if (account) return reply(409, { code: "account_exists", account_sid: account.provider_account_sid,
+          error: `This client already has subaccount ${account.provider_account_sid}. Use “Store the subaccount's key and token again” to finish it.` });
         if (String(body?.confirm ?? "") !== client.name) {
           return reply(400, { code: "confirm", error: "Type the client's name exactly to create its Twilio subaccount." });
         }
+        const friendly = `Compass - ${client.name}`;
+        // Never a second subaccount for the client: a creation whose answer
+        // was lost, or one made in the Console, is linked instead.
+        let existing;
+        try {
+          existing = (await provider.listSubaccounts(p, friendly))
+            .filter((a) => !sameSid(a.sid, p.accountSid) && a.status !== "closed" && (!a.ownerAccountSid || sameSid(a.ownerAccountSid, p.accountSid)));
+        } catch (e) {
+          return reply(424, providerFailure(e));
+        }
+        if (existing.length) {
+          const sids = existing.map((a) => a.sid);
+          return reply(409, { code: "subaccount_exists_in_twilio", account_sids: sids,
+            error: `Twilio already has a subaccount named “${friendly}” (${sids.join(", ")}). Link it instead of creating another.` });
+        }
         let created;
         try {
-          created = await provider.createSubaccount(p, `Compass - ${client.name}`);
+          created = await provider.createSubaccount(p, friendly);
         } catch (e) {
-          return reply(502, providerFailure(e));
+          return reply(424, { ...providerFailure(e), next: "Check the Twilio Console for a new subaccount before trying again; link it if it exists." });
         }
-        if (!ACCOUNT_SID.test(created.sid) || !created.authToken) {
-          return reply(502, { code: "twilio_error", detail: "Twilio's answer had no subaccount SID or auth token", account_sid: created.sid });
+        if (!ACCOUNT_SID.test(created.sid)) {
+          return reply(424, { code: "twilio_error", detail: "Twilio's answer named no subaccount SID. Check the Twilio Console before trying again; link the subaccount if it exists." });
         }
-        await store.setSecret(subaccountSecretNames(created.sid).authToken, created.authToken);
+        // Recorded at once: from here the client has its subaccount, whatever
+        // is still missing.
         await store.rpc("communication_register_account", { client_id: clientId, account_sid: created.sid,
           friendly_name: created.friendlyName, status: created.status, created_by: who.member });
-        log("subaccount_created", { client: clientId, account: created.sid });
-        try {
-          await ensureSubaccountKey(p, created.sid);
-        } catch (e) {
-          return reply(207, { account_sid: created.sid, key: "missing", next: "link_subaccount", ...providerFailure(e) });
-        }
-        return reply(200, { account_sid: created.sid, key: "created", auth_token: "stored in Vault" });
+        log("subaccount_created", { client: clientId, account: created.sid, auth_token_returned: !!created.authToken });
+        if (created.authToken) await store.setSecret(subaccountSecretNames(created.sid).authToken, created.authToken);
+        return finishSubaccount(created.sid, { created: true });
       }
 
-      const sid = String(body?.account_sid ?? "");
-      if (!ACCOUNT_SID.test(sid)) return reply(400, { error: "account_sid must be a Twilio account SID (AC…)" });
-      if (account && account.provider_account_sid !== sid) return reply(409, { code: "account_exists", account_sid: account.provider_account_sid });
+      const typed = String(body?.account_sid ?? "").trim();
+      if (!ACCOUNT_SID.test(typed)) return reply(400, { error: "account_sid must be a Twilio account SID (AC…)" });
+      if (account && !sameSid(account.provider_account_sid, typed)) return reply(409, { code: "account_exists", account_sid: account.provider_account_sid });
+      if (sameSid(typed, p.accountSid)) {
+        return reply(409, { code: "not_a_subaccount", error: "That is Compass's parent account, not a client's subaccount." });
+      }
+      // Found in the parent's own Accounts list, never fetched directly:
+      // Twilio answers 20404 to a parent API key on /Accounts/<sub>.json.
       let sub;
       try {
-        sub = await provider.fetchSubaccount(p, sid);
+        sub = await provider.findSubaccount(p, typed);
       } catch (e) {
-        return reply(502, providerFailure(e));
+        return reply(424, providerFailure(e));
       }
-      if (sub.ownerAccountSid !== p.accountSid || sid === p.accountSid) {
+      if (!sub) {
+        return reply(409, { code: "not_in_parent", account_sid: typed,
+          error: `Twilio's list of Compass's subaccounts (parent ${p.accountSid}) has no ${typed}. Check the SID in the Twilio Console; only a subaccount of Compass's parent account can be linked.` });
+      }
+      if (!sameSid(sub.ownerAccountSid, p.accountSid)) {
         return reply(409, { code: "not_a_subaccount", error: "That account is not a subaccount of Compass's parent account." });
       }
-      if (sub.authToken) {
-        await store.setSecret(subaccountSecretNames(sid).authToken, sub.authToken);
-      } else if (!(await store.secret(subaccountSecretNames(sid).authToken))) {
-        return reply(502, { code: "no_auth_token", error: `Twilio did not return the subaccount's auth token; store it in Vault as ${subaccountSecretNames(sid).authToken}.` });
+      if (sub.status === "closed") {
+        return reply(409, { code: "subaccount_closed", account_sid: sub.sid, error: `Subaccount ${sub.sid} is closed in Twilio; a closed subaccount cannot be linked.` });
       }
-      try {
-        await store.rpc("communication_register_account", { client_id: clientId, account_sid: sid,
-          friendly_name: sub.friendlyName, status: sub.status, created_by: who.member });
-      } catch (e) {
-        return reply(409, dbCode(e));
+      // Twilio's own spelling of the SID names the registry row and the Vault
+      // secrets; a link typed in another letter case finds the same ones.
+      const sid = account?.provider_account_sid ?? (ACCOUNT_SID.test(sub.sid) ? sub.sid : typed);
+      const vault = await store.subaccountSecrets(sid);
+      if (!vault.authToken) {
+        // Nothing is registered without the token that validates the
+        // subaccount's webhooks; the answer names the secret to store.
+        log("auth_token_missing", { client: clientId, account: sid, others: vault.otherAuthTokenAccounts.length });
+        const m = missingToken(vault);
+        return reply(409, { code: "auth_token_missing", account_sid: sid, ...m, error: m.detail });
       }
-      let key: string;
-      try {
-        key = await ensureSubaccountKey(p, sid);
-      } catch (e) {
-        return reply(207, { account_sid: sid, key: "missing", ...providerFailure(e) });
+      if (vault.authTokenFoundAs && vault.authTokenFoundAs !== vault.names.authToken) {
+        log("auth_token_found_as", { account: sid, found_as: vault.authTokenFoundAs });
       }
-      return reply(200, { account_sid: sid, status: sub.status, key, auth_token: "stored in Vault" });
+      if (!account) {
+        try {
+          await store.rpc("communication_register_account", { client_id: clientId, account_sid: sid,
+            friendly_name: sub.friendlyName, status: sub.status, created_by: who.member });
+        } catch (e) {
+          return reply(409, dbCode(e));
+        }
+      }
+      return finishSubaccount(sid, { status: sub.status });
     }
 
     // Everything below runs with the client's own subaccount key.
@@ -252,7 +353,7 @@ export function createCommunications(deps: {
         friendlyName, useCase, inboundUrl: base + INBOUND_PATH, statusCallbackUrl: base + STATUS_PATH,
       });
     } catch (e) {
-      return reply(502, providerFailure(e));
+      return reply(424, providerFailure(e));
     }
     await store.rpc("communication_register_messaging_service", { client_id: clientId, service_sid: svc.sid,
       friendly_name: svc.friendlyName, use_case: useCase });
@@ -273,7 +374,7 @@ export function createCommunications(deps: {
           preferred_prefix: n.phoneNumber.startsWith(`+1${prefer}`) }));
       return reply(200, { numbers, preferred_prefix: prefer, purchased: false });
     } catch (e) {
-      return reply(502, providerFailure(e));
+      return reply(424, providerFailure(e));
     }
   }
 
@@ -287,7 +388,7 @@ export function createCommunications(deps: {
     try {
       bought = await provider.purchaseNumber(sub, phone, `${clientName} toll-free`);
     } catch (e) {
-      return reply(502, providerFailure(e));
+      return reply(424, providerFailure(e));
     }
     log("number_purchased", { client: clientId, number: bought.sid });
     await store.rpc("communication_register_number", { client_id: clientId, number_sid: bought.sid, phone_number: bought.phoneNumber,
@@ -318,7 +419,7 @@ export function createCommunications(deps: {
     try {
       n = await provider.fetchNumber(sub, sid);
     } catch (e) {
-      return reply(502, providerFailure(e));
+      return reply(424, providerFailure(e));
     }
     if (n.accountSid !== sub.accountSid) return reply(409, { code: "wrong_account", error: "That number is not in this client's subaccount." });
     try {

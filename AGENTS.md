@@ -35,7 +35,8 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   `docs/billing-cutover.md`); `0064` (the dedicated billing runtime login,
   Option B; `docs/billing-runtime.md`) is written but **not yet applied**;
   `0063` (Compass Communications) was applied Oct 2 2026 as
-  `20261002211041`; `0056` (Canva folder ids on the client record) was
+  `20261002211041`; `0065` (Communications Vault reads by account SID +
+  mixed-case Twilio SIDs) was applied Oct 5 2026 as `20261005033418`; `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -1460,10 +1461,12 @@ and the remaining manual Twilio steps: `docs/communications.md`.
 
 - **Twilio shape:** Compass's parent account (ISV) holds one **subaccount
   per client**. Vault: the parent's **Main** API key (`TWILIO_ACCOUNT_SID` /
-  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only for `/Accounts` and
-  `/Keys`; per subaccount its own Standard key and its Auth Token
-  (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`), written by
-  the function. Every client operation uses the subaccount's key. No
+  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only on the parent's own
+  `/Accounts.json` (create, list / find a subaccount — Twilio denies a
+  parent API key every subaccount resource with 20404); per subaccount its
+  own Standard key (minted with the subaccount's own Auth Token) and its
+  Auth Token (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`;
+  the token copied from the Twilio Console by hand). Every client operation uses the subaccount's key. No
   credential is an env var, a column, a response or a log line; no EIN is
   stored anywhere.
 - **Functions:** `communications` (team JWT; admin modes check
@@ -1506,6 +1509,39 @@ and the remaining manual Twilio steps: `docs/communications.md`.
   answer 403. `database.types.ts` regenerated from production. No Twilio
   secret is in Vault, no subaccount or number exists, no row is in any
   Communications table and nothing has been sent.
+- **0065 (applied Oct 5 2026 as `20261005033418`; `communications` v2 and
+  `twilio-webhook` v2 deployed through the Supabase MCP).** The BHG link
+  failed because the functions looked up `TWILIO_SUB_<sid>_AUTH_TOKEN` by
+  the exact SID the request carried, and Twilio never returns a
+  subaccount's Auth Token to an API key, so the token is stored by hand.
+  Now: `communication_subaccount_secrets(<AC…>)` (service role only) reads
+  a subaccount's key, secret and token by SID (exact name, else the single
+  case-insensitive match, trimmed) and reports the expected names and the
+  other SIDs holding a token; `communication_secret_status()` gives the
+  pages yes / no and the expected name; Twilio SID checks accept
+  `[0-9a-fA-F]` (five constraints and three record functions rebuilt
+  unchanged otherwise). `create_subaccount` refuses when Twilio already
+  has a `Compass - <name>` subaccount and records a created one at once
+  (207 partial when the token or key is missing); `link_subaccount`
+  registers nothing until the token is in Vault (409 naming it). Errors
+  are 424 / 409 / 207 rather than 5xx (the gateway replaces 5xx bodies).
+  Tests: the sandbox's `communications_secrets.test.sql` (a 56-character
+  dynamic name through `get_secret` as service_role),
+  `tests/communications-store.test.mjs`, and the handler / integration /
+  UI suites.
+- **`communications` v3 (deployed Oct 6 2026).** The BHG link then failed
+  with Twilio 20404 on `GET /Accounts/<sub>.json`: a parent API key may
+  touch only main-account resources, never a subaccount's (Twilio's
+  subaccount docs). `link_subaccount` now finds the SID in the parent's own
+  `/Accounts.json` list (paged, any letter case; owner must be the parent,
+  status not closed; 409 `not_in_parent` / `not_a_subaccount` /
+  `subaccount_closed`), and the subaccount's Standard key is minted with the
+  subaccount's own SID + Auth Token from Vault (the parent key would get
+  20404 on `/Accounts/<sub>/Keys.json` too). `create_subaccount` without a
+  returned token registers the subaccount and answers 207 with `key:
+  "waiting_for_auth_token"`; the link finishes it. Tests: the handler,
+  provider (a fake Twilio that answers 20404 to the parent key on any
+  subaccount resource) and integration suites.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 

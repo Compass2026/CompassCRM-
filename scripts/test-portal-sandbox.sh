@@ -183,6 +183,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_cutover_kit
 # consent and opt-out, outbound rules, forward-only delivery status,
 # compliance registrations and checklist, tenancy, the worker kept out.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test.sql"
+# 0065: per-subaccount Vault access (the long TWILIO_SUB_<sid>_* names through
+# the Edge Functions' identity, case-variant and whitespace handling, who may
+# read what) and Twilio's mixed-case SIDs through the registry and messages.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications_secrets.test.sql"
 # 0064: the dedicated billing runtime login (billing_sync writes billing only
 # through the billing functions, reads only billing tables and the columns it
 # needs, cannot reach Vault or switch the mode; the Edge Function path closes

@@ -59,6 +59,27 @@ export type Database = {
             foreignKeyName: "alerts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -192,6 +213,27 @@ export type Database = {
           topic?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "authority_opportunities_client_id_fkey"
             columns: ["client_id"]
@@ -498,6 +540,27 @@ export type Database = {
             foreignKeyName: "authority_runs_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -570,6 +633,27 @@ export type Database = {
             foreignKeyName: "automation_entitlement_log_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "automation_entitlement_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "automation_entitlement_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "automation_entitlement_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -621,20 +705,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "billing_audit_events_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "billing_audit_events_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "portal_client"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "billing_audit_events_actor_portal_user_id_fkey"
             columns: ["actor_portal_user_id"]
             isOneToOne: false
@@ -646,6 +716,41 @@ export type Database = {
             columns: ["actor_team_member_id"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_audit_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
         ]
@@ -742,11 +847,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "billing_package_prices_package_id_stripe_product_id_packag_fkey"
-            columns: ["package_id", "stripe_product_id", "package_kind"]
+            foreignKeyName: "billing_package_prices_client_id_fkey"
+            columns: ["client_id"]
             isOneToOne: false
-            referencedRelation: "billing_packages"
-            referencedColumns: ["id", "stripe_product_id", "kind"]
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "billing_package_prices_client_id_fkey"
@@ -761,6 +880,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_client"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_package_prices_package_id_stripe_product_id_packag_fkey"
+            columns: ["package_id", "stripe_product_id", "package_kind"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id", "stripe_product_id", "kind"]
           },
           {
             foreignKeyName: "billing_package_prices_stripe_price_id_stripe_product_id_p_fkey"
@@ -863,11 +989,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "billing_reconciliation_results_run_id_fkey"
-            columns: ["run_id"]
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
             isOneToOne: false
-            referencedRelation: "billing_reconciliation_runs"
-            referencedColumns: ["id"]
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "billing_reconciliation_results_client_id_fkey"
@@ -882,6 +1022,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_client"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "billing_reconciliation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "billing_sync_health"
+            referencedColumns: ["last_run_id"]
           },
         ]
       }
@@ -945,6 +1099,34 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "billing_reconciliation_runs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
+            columns: ["scope_client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
+            columns: ["scope_client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
+            columns: ["scope_client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "billing_reconciliation_runs_scope_client_id_fkey"
             columns: ["scope_client_id"]
             isOneToOne: false
@@ -958,14 +1140,25 @@ export type Database = {
             referencedRelation: "portal_client"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "billing_reconciliation_runs_requested_by_fkey"
-            columns: ["requested_by"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
         ]
+      }
+      billing_runtime: {
+        Row: {
+          edge_functions: boolean
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          edge_functions?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          edge_functions?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       brand_assets: {
         Row: {
@@ -1066,6 +1259,27 @@ export type Database = {
             foreignKeyName: "brand_assets_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -1136,6 +1350,27 @@ export type Database = {
             foreignKeyName: "brand_boards_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_boards_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_boards_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_boards_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -1180,6 +1415,27 @@ export type Database = {
           usage?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "brand_colors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_colors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_colors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "brand_colors_client_id_fkey"
             columns: ["client_id"]
@@ -1234,6 +1490,27 @@ export type Database = {
           weights?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "brand_fonts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_fonts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "brand_fonts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "brand_fonts_client_id_fkey"
             columns: ["client_id"]
@@ -1297,6 +1574,27 @@ export type Database = {
           status?: Database["public"]["Enums"]["change_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "change_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "change_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "change_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "change_log_client_id_fkey"
             columns: ["client_id"]
@@ -1385,11 +1683,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "checkout_sessions_package_id_fkey"
-            columns: ["package_id"]
+            foreignKeyName: "checkout_sessions_client_id_fkey"
+            columns: ["client_id"]
             isOneToOne: false
-            referencedRelation: "billing_packages"
-            referencedColumns: ["id"]
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "checkout_sessions_client_id_fkey"
@@ -1406,18 +1718,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "checkout_sessions_stripe_customer_id_client_id_fkey"
-            columns: ["stripe_customer_id", "client_id"]
-            isOneToOne: false
-            referencedRelation: "stripe_customers"
-            referencedColumns: ["stripe_customer_id", "client_id"]
-          },
-          {
             foreignKeyName: "checkout_sessions_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkout_sessions_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
           },
         ]
       }
@@ -1453,6 +1772,27 @@ export type Database = {
           status?: Database["public"]["Enums"]["claim_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "claims_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "claims_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "claims_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "claims_client_id_fkey"
             columns: ["client_id"]
@@ -1495,6 +1835,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "client_access_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_access_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_access_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "client_access_client_id_fkey"
             columns: ["client_id"]
@@ -1547,6 +1908,34 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "client_agreement_events_actor_team_member_id_fkey"
+            columns: ["actor_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agreement_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_agreement_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_agreement_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "client_agreement_events_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
@@ -1558,13 +1947,6 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "portal_client"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_agreement_events_actor_team_member_id_fkey"
-            columns: ["actor_team_member_id"]
-            isOneToOne: false
-            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -1632,6 +2014,27 @@ export type Database = {
             foreignKeyName: "client_brands_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: true
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_brands_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_brands_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_brands_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -1676,6 +2079,27 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "client_communication_settings_client_id_fkey"
             columns: ["client_id"]
@@ -1732,6 +2156,27 @@ export type Database = {
             foreignKeyName: "client_contacts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -1770,6 +2215,27 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "client_creative_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_creative_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_creative_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "client_creative_settings_client_id_fkey"
             columns: ["client_id"]
@@ -1845,6 +2311,27 @@ export type Database = {
             foreignKeyName: "client_creative_templates_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_creative_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -1914,6 +2401,27 @@ export type Database = {
             foreignKeyName: "client_entitlement_overrides_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -1923,6 +2431,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_client"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_entitlement_overrides_service_key_service_kind_fkey"
+            columns: ["service_key", "service_kind"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["service_key", "service_kind"]
           },
           {
             foreignKeyName: "client_entitlement_overrides_service_key_service_kind_fkey"
@@ -1966,6 +2481,27 @@ export type Database = {
           status?: Database["public"]["Enums"]["enrollment_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "client_pipelines_client_id_fkey"
             columns: ["client_id"]
@@ -2021,6 +2557,27 @@ export type Database = {
           status?: Database["public"]["Enums"]["client_request_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "client_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "client_requests_client_id_fkey"
             columns: ["client_id"]
@@ -2229,6 +2786,27 @@ export type Database = {
             foreignKeyName: "communication_accounts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -2298,6 +2876,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "communication_compliance_items_client_id_fkey"
@@ -2480,6 +3079,27 @@ export type Database = {
             foreignKeyName: "communication_compliance_profiles_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_compliance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -2570,6 +3190,27 @@ export type Database = {
             foreignKeyName: "communication_consent_events_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -2642,6 +3283,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "communication_consents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_consents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_consents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "communication_consents_client_id_fkey"
             columns: ["client_id"]
@@ -2725,6 +3387,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "communication_conversations_client_id_fkey"
@@ -2831,6 +3514,27 @@ export type Database = {
             foreignKeyName: "communication_messages_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -2904,6 +3608,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "communication_accounts"
             referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "communication_messaging_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_messaging_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_messaging_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "communication_messaging_services_client_id_fkey"
@@ -2984,6 +3709,27 @@ export type Database = {
             foreignKeyName: "communication_numbers_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "communication_numbers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -3058,6 +3804,27 @@ export type Database = {
             foreignKeyName: "contacts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -3121,6 +3888,27 @@ export type Database = {
           word_count?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "content_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "content_posts_client_id_fkey"
             columns: ["client_id"]
@@ -3288,6 +4076,27 @@ export type Database = {
             foreignKeyName: "creative_assets_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -3377,6 +4186,27 @@ export type Database = {
             foreignKeyName: "creative_governance_events_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_governance_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_governance_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_governance_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -3460,6 +4290,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "creative_assets"
             referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "creative_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "creative_runs_client_id_fkey"
@@ -3588,6 +4439,27 @@ export type Database = {
             foreignKeyName: "decisions_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "decisions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "decisions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "decisions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -3636,6 +4508,27 @@ export type Database = {
           url?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "deliverables_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "deliverables_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "deliverables_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "deliverables_client_id_fkey"
             columns: ["client_id"]
@@ -3710,6 +4603,27 @@ export type Database = {
           url?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "documents_client_id_fkey"
             columns: ["client_id"]
@@ -3801,6 +4715,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "authority_opportunity_state"
             referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "drafter_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "drafter_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "drafter_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "drafter_runs_client_id_fkey"
@@ -4020,6 +4955,27 @@ export type Database = {
           recorded_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "gsc_snapshots_client_id_fkey"
             columns: ["client_id"]
@@ -4258,6 +5214,27 @@ export type Database = {
             foreignKeyName: "invoices_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -4349,6 +5326,27 @@ export type Database = {
           volume?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "keywords_client_id_fkey"
             columns: ["client_id"]
@@ -4461,6 +5459,27 @@ export type Database = {
             foreignKeyName: "locations_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "locations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "locations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "locations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -4505,6 +5524,27 @@ export type Database = {
           keyword_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "money_keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "money_keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "money_keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "money_keywords_client_id_fkey"
             columns: ["client_id"]
@@ -4563,6 +5603,27 @@ export type Database = {
           summary?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "monthly_cycles_client_id_fkey"
             columns: ["client_id"]
@@ -4633,6 +5694,27 @@ export type Database = {
             foreignKeyName: "offers_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "offers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "offers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "offers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -4692,6 +5774,13 @@ export type Database = {
             foreignKeyName: "package_entitlements_service_key_service_kind_fkey"
             columns: ["service_key", "service_kind"]
             isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["service_key", "service_kind"]
+          },
+          {
+            foreignKeyName: "package_entitlements_service_key_service_kind_fkey"
+            columns: ["service_key", "service_kind"]
+            isOneToOne: false
             referencedRelation: "service_catalog"
             referencedColumns: ["key", "kind"]
           },
@@ -4738,6 +5827,27 @@ export type Database = {
           target_url?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "page_groups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "page_groups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "page_groups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "page_groups_client_id_fkey"
             columns: ["client_id"]
@@ -4857,6 +5967,27 @@ export type Database = {
             foreignKeyName: "payments_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -4868,18 +5999,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "payments_stripe_customer_id_client_id_fkey"
-            columns: ["stripe_customer_id", "client_id"]
-            isOneToOne: false
-            referencedRelation: "stripe_customers"
-            referencedColumns: ["stripe_customer_id", "client_id"]
-          },
-          {
             foreignKeyName: "payments_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_stripe_customer_id_client_id_fkey"
+            columns: ["stripe_customer_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "stripe_customers"
+            referencedColumns: ["stripe_customer_id", "client_id"]
           },
           {
             foreignKeyName: "payments_voided_by_fkey"
@@ -4952,6 +6083,27 @@ export type Database = {
           type?: Database["public"]["Enums"]["placeholder_type"]
         }
         Relationships: [
+          {
+            foreignKeyName: "placeholders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "placeholders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "placeholders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "placeholders_client_id_fkey"
             columns: ["client_id"]
@@ -5051,18 +6203,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "plans_price_of_package"
-            columns: ["billing_package_price_id", "package_id"]
-            isOneToOne: false
-            referencedRelation: "billing_package_prices"
-            referencedColumns: ["id", "package_id"]
+            foreignKeyName: "plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
           },
           {
-            foreignKeyName: "plans_package_id_fkey"
-            columns: ["package_id"]
-            isOneToOne: false
-            referencedRelation: "billing_packages"
-            referencedColumns: ["id"]
+            foreignKeyName: "plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "plans_client_id_fkey"
@@ -5077,6 +6236,20 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "portal_client"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_price_of_package"
+            columns: ["billing_package_price_id", "package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_package_prices"
+            referencedColumns: ["id", "package_id"]
           },
           {
             foreignKeyName: "plans_updated_by_fkey"
@@ -5125,6 +6298,27 @@ export type Database = {
           name?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "portal_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "portal_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "portal_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "portal_users_client_id_fkey"
             columns: ["client_id"]
@@ -5382,6 +6576,27 @@ export type Database = {
             foreignKeyName: "rank_runs_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "rank_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "rank_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "rank_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -5521,6 +6736,27 @@ export type Database = {
             foreignKeyName: "report_measurements_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "report_measurements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "report_measurements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "report_measurements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -5619,6 +6855,27 @@ export type Database = {
           status?: Database["public"]["Enums"]["taxonomy_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "services_client_id_fkey"
             columns: ["client_id"]
@@ -5742,6 +6999,27 @@ export type Database = {
             foreignKeyName: "sites_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -5789,6 +7067,27 @@ export type Database = {
           token_expires_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "social_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "social_accounts_client_id_fkey"
             columns: ["client_id"]
@@ -5942,6 +7241,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "social_accounts"
             referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "social_posts_client_id_fkey"
@@ -6136,6 +7456,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "stripe_customers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "stripe_customers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "stripe_customers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "stripe_customers_client_id_fkey"
             columns: ["client_id"]
@@ -6402,6 +7743,27 @@ export type Database = {
             foreignKeyName: "stripe_refunds_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -6576,6 +7938,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "subscriptions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "subscriptions_client_id_fkey"
             columns: ["client_id"]
@@ -6825,6 +8208,27 @@ export type Database = {
             foreignKeyName: "tasks_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -6922,6 +8326,27 @@ export type Database = {
             foreignKeyName: "worker_fires_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "worker_fires_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "worker_fires_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "worker_fires_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -6960,6 +8385,27 @@ export type Database = {
           stale_sections: string[] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "authority_runs_client_id_fkey"
             columns: ["client_id"]
@@ -7072,6 +8518,27 @@ export type Database = {
             foreignKeyName: "authority_opportunities_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "authority_opportunities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -7137,23 +8604,6 @@ export type Database = {
         }
         Relationships: []
       }
-      client_billing_reconciliation: {
-        Row: {
-          attention_reasons: string[] | null
-          changes: Json | null
-          checked_at: string | null
-          client_id: string | null
-          error: string | null
-          livemode: boolean | null
-          records_changed: number | null
-          run_id: string | null
-          status: string | null
-          stripe_customer_id: string | null
-          trigger: string | null
-          warnings: string[] | null
-        }
-        Relationships: []
-      }
       client_agreement_price: {
         Row: {
           agreed_amount_cents: number | null
@@ -7172,7 +8622,89 @@ export type Database = {
           price_status: string | null
           stripe_price_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "plans_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_price_of_package"
+            columns: ["billing_package_price_id", "package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_package_prices"
+            referencedColumns: ["id", "package_id"]
+          },
+        ]
+      }
+      client_billing_reconciliation: {
+        Row: {
+          attention_reasons: string[] | null
+          changes: Json | null
+          checked_at: string | null
+          client_id: string | null
+          error: string | null
+          livemode: boolean | null
+          records_changed: number | null
+          run_id: string | null
+          status: string | null
+          stripe_customer_id: string | null
+          trigger: string | null
+          warnings: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "billing_reconciliation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_reconciliation_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "billing_sync_health"
+            referencedColumns: ["last_run_id"]
+          },
+        ]
       }
       client_billing_status: {
         Row: {
@@ -7215,7 +8747,15 @@ export type Database = {
           subscription_package_ids: string[] | null
           subscription_status: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "plans_package_id_fkey"
+            columns: ["agreement_package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       client_entitlements: {
         Row: {
@@ -7234,7 +8774,15 @@ export type Database = {
           source: string | null
           unit: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "plans_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       portal_billing_invoices: {
         Row: {
@@ -7252,7 +8800,73 @@ export type Database = {
           status: string | null
           total_cents: number | null
         }
-        Relationships: []
+        Insert: {
+          amount_paid_cents?: number | null
+          amount_remaining_cents?: number | null
+          client_id?: string | null
+          currency?: string | null
+          due_date?: string | null
+          hosted_invoice_url?: string | null
+          invoice_date?: string | null
+          invoice_pdf?: string | null
+          number?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          status?: string | null
+          total_cents?: number | null
+        }
+        Update: {
+          amount_paid_cents?: number | null
+          amount_remaining_cents?: number | null
+          client_id?: string | null
+          currency?: string | null
+          due_date?: string | null
+          hosted_invoice_url?: string | null
+          invoice_date?: string | null
+          invoice_pdf?: string | null
+          number?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          status?: string | null
+          total_cents?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       portal_billing_summary: {
         Row: {
@@ -7330,6 +8944,27 @@ export type Database = {
             foreignKeyName: "client_pipelines_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -7354,6 +8989,27 @@ export type Database = {
           result_type: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "keywords_client_id_fkey"
             columns: ["client_id"]
@@ -7400,6 +9056,27 @@ export type Database = {
             foreignKeyName: "monthly_cycles_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "monthly_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -7423,6 +9100,27 @@ export type Database = {
           queries: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "gsc_snapshots_client_id_fkey"
             columns: ["client_id"]
@@ -7478,6 +9176,27 @@ export type Database = {
             foreignKeyName: "gsc_snapshots_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "gsc_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
@@ -7513,6 +9232,27 @@ export type Database = {
           url?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "sites_client_id_fkey"
             columns: ["client_id"]
@@ -7657,33 +9397,19 @@ export type Database = {
       }
       authority_url_decode: { Args: { p: string }; Returns: string }
       authority_write_active: { Args: never; Returns: boolean }
-      billing_audit: {
-        Args: {
-          p: Json
-        }
-        Returns: string
-      }
+      billing_audit: { Args: { p: Json }; Returns: string }
       billing_caller_is_service: { Args: never; Returns: boolean }
       billing_caller_is_superuser: { Args: never; Returns: boolean }
       billing_catalog_fingerprint: {
-        Args: {
-          p_livemode: boolean
-        }
+        Args: { p_livemode: boolean }
         Returns: Json
       }
       billing_event_begin: {
-        Args: {
-          p: Json
-          p_lease_seconds?: number
-        }
+        Args: { p: Json; p_lease_seconds?: number }
         Returns: Json
       }
       billing_event_fail: {
-        Args: {
-          p_attempt: number
-          p_error: string
-          p_id: string
-        }
+        Args: { p_attempt: number; p_error: string; p_id: string }
         Returns: Json
       }
       billing_event_finish: {
@@ -7696,18 +9422,10 @@ export type Database = {
         Returns: Json
       }
       billing_fire_reconciliation: { Args: never; Returns: number }
-      billing_link_customer: {
-        Args: {
-          p: Json
-        }
-        Returns: Json
-      }
+      billing_link_customer: { Args: { p: Json }; Returns: Json }
       billing_livemode: { Args: never; Returns: boolean }
       billing_mirror_fingerprint: {
-        Args: {
-          p_client: string
-          p_livemode: boolean
-        }
+        Args: { p_client: string; p_livemode: boolean }
         Returns: Json
       }
       billing_monthly_cents: {
@@ -7723,72 +9441,24 @@ export type Database = {
         Args: { p_customer: string; p_livemode: boolean }
         Returns: Record<string, unknown>
       }
-      billing_reconcile_begin: {
-        Args: {
-          p: Json
-        }
-        Returns: Json
-      }
-      billing_reconcile_client: {
-        Args: {
-          p: Json
-        }
-        Returns: undefined
-      }
-      billing_reconcile_finish: {
-        Args: {
-          p: Json
-        }
-        Returns: undefined
-      }
-      billing_record_checkout: {
-        Args: {
-          p: Json
-        }
-        Returns: Json
-      }
-      billing_record_external_payment: {
-        Args: {
-          p: Json
-        }
-        Returns: Json
-      }
+      billing_reconcile_begin: { Args: { p: Json }; Returns: Json }
+      billing_reconcile_client: { Args: { p: Json }; Returns: undefined }
+      billing_reconcile_finish: { Args: { p: Json }; Returns: undefined }
+      billing_record_checkout: { Args: { p: Json }; Returns: Json }
+      billing_record_external_payment: { Args: { p: Json }; Returns: Json }
       billing_require_service: { Args: never; Returns: undefined }
-      billing_row_digest: {
-        Args: {
-          r: Json
-        }
-        Returns: string
-      }
+      billing_row_digest: { Args: { r: Json }; Returns: string }
       billing_sync_active: { Args: never; Returns: boolean }
-      billing_sync_apply: {
-        Args: {
-          p: Json
-        }
-        Returns: Json
-      }
+      billing_sync_apply: { Args: { p: Json }; Returns: Json }
       billing_update: {
-        Args: {
-          p_key: string
-          p_row: Json
-          p_table: string
-        }
+        Args: { p_key: string; p_row: Json; p_table: string }
         Returns: string
       }
       billing_upsert: {
-        Args: {
-          p_keys: string[]
-          p_row: Json
-          p_table: string
-        }
+        Args: { p_keys: string[]; p_row: Json; p_table: string }
         Returns: Json
       }
-      billing_void_external_payment: {
-        Args: {
-          p: Json
-        }
-        Returns: Json
-      }
+      billing_void_external_payment: { Args: { p: Json }; Returns: Json }
       brand_asset_record_hash: { Args: { p: Json }; Returns: Json }
       client_canva_folders: {
         Args: { p_client_id?: string }
@@ -7877,6 +9547,10 @@ export type Database = {
         Returns: Json
       }
       communication_register_number: { Args: { p: Json }; Returns: Json }
+      communication_secret_status: {
+        Args: { p_account_sid?: string }
+        Returns: Json
+      }
       communication_set_primary_number: {
         Args: { p_number_id: string }
         Returns: undefined
@@ -7890,7 +9564,18 @@ export type Database = {
         }[]
       }
       communication_status_rank: { Args: { p: string }; Returns: number }
+      communication_subaccount_secrets: {
+        Args: { p_account_sid: string }
+        Returns: Json
+      }
       communication_update_conversation: { Args: { p: Json }; Returns: Json }
+      communication_vault_match: {
+        Args: { p_name: string }
+        Returns: {
+          matched_name: string
+          secret: string
+        }[]
+      }
       compute_location_index: {
         Args: { p_location_id: string; p_period: string }
         Returns: undefined

@@ -248,6 +248,8 @@ try {
   assert.ok(await team.getByLabel("Communications enabled for this client").isChecked());
   const settings = await team.locator("main").innerText();
   for (const t of ["/functions/v1/twilio-webhook/messages/inbound", "/functions/v1/twilio-webhook/messages/status", "Parent Main key"]) assert.ok(settings.includes(t), `settings shows ${t}`);
+  // Answered by communication_secret_status (0065): yes / no only.
+  for (const re of [/Parent Main key\s+Yes/, /Subaccount API key\s+Yes/, /Subaccount auth token\s+Yes/]) assert.match(settings, re);
   await noSecrets(team, "Settings");
   await shot(team, "settings");
   ok("Settings: switches and configuration; no credential on any page");
