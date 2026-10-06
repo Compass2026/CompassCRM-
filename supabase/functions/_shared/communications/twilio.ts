@@ -120,6 +120,10 @@ export function createTwilioProvider(fetchImpl: FetchLike): ProvisioningProvider
       return null;
     },
 
+    async fetchSubaccountWithToken(sub: SubaccountTokenCredential): Promise<Subaccount> {
+      return toSubaccount(await call(sub, "GET", `${API}/Accounts/${sub.accountSid}.json`));
+    },
+
     async createSubaccountKey(sub: SubaccountTokenCredential, friendlyName: string): Promise<CreatedKey> {
       const j = await call(sub, "POST", `${API}/Accounts/${sub.accountSid}/Keys.json`, { FriendlyName: friendlyName });
       return { sid: String(j.sid), secret: String(j.secret ?? "") };
