@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { historyLine, reviewCounts, type ReviewAsset } from "@/lib/creative-use";
 import { ReviewCard } from "@/components/creative-use/review-card";
+import { KITS } from "../../../../../../../supabase/functions/creative-engine/kits.ts";
 
 // Creative use (0054 / 0055): which of the client's stored photos and logos
 // the Creative Engine may use. Each decision is a teammate's; hashes come
@@ -68,7 +69,10 @@ export default async function CreativeUsePage({ params }: { params: Promise<{ cl
       <div className="surface space-y-2 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-base font-semibold">Creative use</h1>
-          <Link href={`/clients/${clientId}/brand`} className="ml-auto text-xs underline underline-offset-2">Back to the brand board</Link>
+          {Object.values(KITS).some((k) => k.client_id === clientId) && (
+            <Link href={`/clients/${clientId}/brand/creative-preview`} className="ml-auto text-xs underline underline-offset-2" data-creative-previews>Creative previews</Link>
+          )}
+          <Link href={`/clients/${clientId}/brand`} className="text-xs underline underline-offset-2 [&:first-of-type]:ml-auto">Back to the brand board</Link>
         </div>
         <p className="text-sm text-muted-foreground">
           Decide which of {client.name}&apos;s stored photos and logos the Creative Engine may use. Approval needs the stored

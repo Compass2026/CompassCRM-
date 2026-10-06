@@ -150,9 +150,16 @@ export async function rejectPostAction(
   const note = String(form.get("review_note") ?? "").trim();
   if (!note) return { error: "Say why the post is rejected, so it can be fixed." };
   if (!submittedAt) return { error: "The post is not in review." };
+  // With a graphic linked, the reviewer says what is rejected (0054); the
+  // database requires it then and fixes it to "copy" otherwise.
+  const category = String(form.get("rejection_category") ?? "");
   return step(clientId, postId, {
     from: { review_status: "in_review", submitted_at: submittedAt },
-    set: { review_status: "rejected", review_note: note.slice(0, 2000) },
+    set: {
+      review_status: "rejected",
+      review_note: note.slice(0, 2000),
+      ...(["copy", "creative", "both"].includes(category) ? { rejection_category: category } : {}),
+    },
   });
 }
 

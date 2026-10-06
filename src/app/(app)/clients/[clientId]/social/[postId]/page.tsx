@@ -40,6 +40,9 @@ import {
 } from "@/lib/social-posts";
 import { approvedChannelProblems, MAX_ATTEMPTS, modeLabels, outcomeLabels, parsePublisherSettings } from "@/lib/publisher";
 import { drafterSummary } from "@/lib/drafter-run";
+import { canRenderCreative, canRequestNewCreative, creativeStatusLabels, isCreativePolicy } from "@/lib/creative-post";
+import { CreativePolicyForm, GenerateCreativeForm, RequestNewCreativeForm } from "@/components/creative/post-creative-forms";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { cn } from "@/lib/utils";
 
 const claimStyles: Record<string, string> = {
@@ -101,6 +104,29 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       })
     : null;
   const channel = isGbp && post.review_status === "approved" ? approvedChannelProblems(post.approved_snapshot) : [];
+  // The post's rendered graphic (0054), the templates approved for this
+  // client on this channel, and the last render if it failed.
+  const [{ data: creativeLinks }, { data: approvedTemplates }, { data: lastRun }] = await Promise.all([
+    supabase
+      .from("post_assets")
+      .select("creative_asset_id, creative_assets(id, content_hash, width, height, alt_text, created_at, creative_templates(key, name))")
+      .eq("post_id", postId)
+      .not("creative_asset_id", "is", null),
+    supabase
+      .from("client_creative_templates")
+      .select("template_id, creative_templates!inner(id, key, version, name, channel, status)")
+      .eq("client_id", clientId)
+      .eq("status", "approved")
+      .eq("creative_templates.channel", post.platform)
+      .eq("creative_templates.status", "published"),
+    supabase.from("creative_runs").select("status, error, created_at").eq("post_id", postId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const creative = creativeLinks?.[0]?.creative_assets ?? null;
+  const templateChoices = (approvedTemplates ?? [])
+    .flatMap((r) => (r.creative_templates ? [{ id: r.creative_templates.id, label: `${r.creative_templates.name} (v${r.creative_templates.version})` }] : []))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const creativePolicy = isCreativePolicy(post.creative_policy) ? post.creative_policy : "none";
+  const creativeStatus = creativeStatusLabels[post.creative_status] ?? { label: post.creative_status, className: "" };
   const { data: brandAssets } = await supabase
     .from("brand_assets")
     .select("id, label, kind")
@@ -112,7 +138,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const problems = readiness.data ?? [];
   const actions = availableActions(post);
   const topic = topicProblem(post);
-  // Brand-asset links only; creative links (0054) are not shown here yet.
+  // Brand-asset links; a rendered graphic is shown in its own section.
   const brandLinks = (assets ?? []).flatMap((a) => (a.brand_asset_id ? [{ ...a, brand_asset_id: a.brand_asset_id }] : []));
   const linkedAssetIds = new Set(brandLinks.map((a) => a.brand_asset_id));
   const linkedIds = new Set((linked ?? []).map((l) => l.claim_id));
@@ -223,7 +249,8 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
         ) : (
           <div className="space-y-2 text-sm">
             <p className="whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-3">{post.copy}</p>
-            <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-xs">
+            {post.review_status === "approved" && post.copy && <CopyTextButton text={post.copy} />}
+            <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-1 text-xs [&>dd]:[overflow-wrap:anywhere]">
               {post.cta_type && (<><dt className="text-muted-foreground">Button</dt><dd>{post.cta_type.replace("_", " ").toLowerCase()} → {post.cta_url ?? "—"}</dd></>)}
               {service && (<><dt className="text-muted-foreground">Service</dt><dd>{service.name}{service.status !== "approved" && ` (${service.status})`}</dd></>)}
               {offer && (<><dt className="text-muted-foreground">Offer</dt><dd>{offer.title}: “{offer.terms}” ({offer.status}{offer.ends_on ? `, ends ${offer.ends_on}` : ", no end date"})</dd></>)}
@@ -285,6 +312,53 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
             <p className="text-sm text-green-800">Grounding checks pass.</p>
           )
         ) : null}
+      </section>
+
+      {/* Graphic: rendered by the Creative Engine from governed inputs. */}
+      <section aria-label="Graphic" className="surface space-y-3 p-4 sm:p-5" data-post-creative>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">Graphic</h3>
+          {post.creative_status !== "none" && (
+            <Badge variant="outline" className={cn("text-[10px]", creativeStatus.className)}>{creativeStatus.label}</Badge>
+          )}
+        </div>
+        {creative ? (
+          <div className="space-y-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/clients/${clientId}/creative/${creative.id}`}
+              alt={creative.alt_text ?? "Rendered graphic"}
+              className={cn("w-full rounded-md border bg-muted", creative.width > creative.height ? "max-w-[600px]" : "max-w-[420px]")}
+              data-creative-image
+            />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <a href={`/clients/${clientId}/creative/${creative.id}?download=1`} className="font-medium text-foreground underline underline-offset-2" data-creative-download>
+                Download PNG
+              </a>
+              <span>· {creative.creative_templates?.name ?? "manual upload"} · {creative.width}×{creative.height}</span>
+              <span className="font-mono" title={creative.content_hash}>· {creative.content_hash.slice(0, 12)}</span>
+            </div>
+            {creative.alt_text && <p className="text-xs text-muted-foreground">Alt text: {creative.alt_text}</p>}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {creativePolicy === "none" ? "This post goes out without a rendered graphic." : "No graphic is linked yet."}
+          </p>
+        )}
+        {post.creative_status === "failed" && lastRun?.status === "failed" && lastRun.error && (
+          <p className="text-sm text-red-700">Last render failed: {lastRun.error}</p>
+        )}
+        {post.review_status === "draft" && <CreativePolicyForm clientId={clientId} postId={postId} policy={creativePolicy} />}
+        {canRenderCreative(post) &&
+          (templateChoices.length > 0 ? (
+            <GenerateCreativeForm clientId={clientId} postId={postId} templates={templateChoices} hasCreative={!!creative} />
+          ) : (
+            <p className="text-sm text-amber-900">
+              No template is approved for this client on {platform}.{" "}
+              <Link href={`/clients/${clientId}/brand/creative-preview`} className="underline">Approve one on its preview</Link> first.
+            </p>
+          ))}
+        {canRequestNewCreative(post) && <RequestNewCreativeForm clientId={clientId} postId={postId} from={post.review_status} />}
       </section>
 
       {/* Media: brand assets, in order. */}
@@ -370,7 +444,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           )}
         </div>
         {actions.includes("approve") && post.submitted_at && (
-          <ReviewForms clientId={clientId} postId={postId} submittedAt={post.submitted_at} ready={problems.length === 0} />
+          <ReviewForms clientId={clientId} postId={postId} submittedAt={post.submitted_at} ready={problems.length === 0} hasCreative={!!creative} />
         )}
         {actions.includes("schedule") && (
           <ScheduleForm clientId={clientId} postId={postId} fromPublish={post.publish_status} />

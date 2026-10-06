@@ -23,6 +23,7 @@ on:
           - stripe-reconcile
           - stripe-webhook
           - source-assets
+          - creative-engine
           - communications
           - twilio-webhook
       expected_sha:

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { REJECTION_CATEGORIES, rejectionLabels } from "@/lib/creative-post";
 import {
   COPY_MAX,
   CRM_FACTS_HELP,
@@ -293,11 +294,13 @@ export function ReviewForms({
   postId,
   submittedAt,
   ready,
+  hasCreative = false,
 }: {
   clientId: string;
   postId: string;
   submittedAt: string;
   ready: boolean;
+  hasCreative?: boolean;
 }) {
   const [approveState, approve, approving] = useActionState(
     approvePostAction.bind(null, clientId, postId, submittedAt),
@@ -324,6 +327,18 @@ export function ReviewForms({
       <form action={reject} className="space-y-2">
         <Label htmlFor="reject_note">Reject</Label>
         <Textarea id="reject_note" name="review_note" rows={2} placeholder="What needs to change (required)" required />
+        {hasCreative && (
+          <fieldset className="space-y-1 text-sm" data-rejection-category>
+            <legend className="text-xs text-muted-foreground">What is rejected</legend>
+            <div className="flex flex-wrap gap-3">
+              {REJECTION_CATEGORIES.map((c) => (
+                <label key={c} className="flex items-center gap-1">
+                  <input type="radio" name="rejection_category" value={c} required defaultChecked={c === "copy"} /> {rejectionLabels[c]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <Button type="submit" variant="outline" disabled={rejecting}>
           Reject
         </Button>
