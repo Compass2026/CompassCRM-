@@ -36,6 +36,10 @@ Those choices remain part of the existing reviewed billing setup.
 through the Supavisor transaction pooler. This role has no table grants, Stripe
 credentials, Vault access or general database write access. It can execute only
 three validating functions in the unexposed `agreement_private` schema.
+TLS always verifies the server certificate and hostname. Set
+`AGREEMENTS_DATABASE_CA` to the Supabase server root certificate PEM from
+Database settings for poolers using Supabase's private certificate authority.
+Safe diagnostic logs include only failure codes, never connection credentials.
 `agreement_private.set_password(text)` provisions the login without recording
 plaintext credentials in migration history; only SQL as postgres can call it.
 
