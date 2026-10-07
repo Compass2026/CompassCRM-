@@ -14,7 +14,7 @@ grant usage on schema agreement_private to agreement_service;
 create function agreement_private.set_password(p_password text) returns void
 language plpgsql security invoker set search_path=public,pg_temp as $$
 begin
-  if session_user <> 'postgres' or current_user <> 'postgres' or length(p_password)<40 then
+  if session_user <> 'postgres' or current_user <> 'postgres' or coalesce(length(p_password),0)<40 then
     raise exception 'agreement_password_provisioning_refused';
   end if;
   execute format('alter role agreement_service password %L',p_password);
@@ -88,7 +88,7 @@ begin
   if current_user <> 'postgres' or session_user <> 'agreement_service' then
     raise exception 'agreement_write_boundary';
   end if;
-  if tg_op='DELETE' then raise exception 'agreement_records_retained'; end if;
+  if tg_op='DELETE' and tg_table_name<>'links' then raise exception 'agreement_records_retained'; end if;
   if tg_table_name='agreement_events' or tg_table_name='artifacts' then
     if tg_op <> 'INSERT' then raise exception 'agreement_append_only'; end if;
   elsif tg_table_name='agreement_contracts' and tg_op='UPDATE' then
@@ -102,12 +102,14 @@ begin
       is distinct from (old.status,old.signer_name,old.signed_at,old.signer_ip,old.signer_agent,old.consent_text)
     then raise exception 'agreement_signature_locked'; end if;
   end if;
+  if tg_op='DELETE' then return old; end if;
   return new;
 end $$;
 create trigger agreement_contracts_guard before insert or update or delete on public.agreement_contracts for each row execute function agreement_private.guard();
 create trigger agreement_issuers_guard before insert or update or delete on public.agreement_issuers for each row execute function agreement_private.guard();
 create trigger agreement_events_guard before insert or update or delete on public.agreement_events for each row execute function agreement_private.guard();
 create trigger agreement_artifacts_guard before insert or update or delete on agreement_private.artifacts for each row execute function agreement_private.guard();
+create trigger agreement_links_guard before insert or update or delete on agreement_private.links for each row execute function agreement_private.guard();
 
 create function agreement_private.scope(p_client uuid) returns jsonb language sql stable set search_path=public,pg_temp as $$
   select jsonb_build_object('client_name',c.name,'plan',
@@ -220,7 +222,7 @@ begin
   if l.contract_id is null then return jsonb_build_object('error','unavailable'); end if;
   if a.status not in ('issued','signed','declined') or (a.status<>'signed' and a.expires_at<now())
     or (a.status='signed' and a.signed_at<now()-interval '90 days') then return jsonb_build_object('error','unavailable'); end if;
-  verified := l.session_hash is not null and l.session_hash=p_session and l.session_until>now();
+  verified := coalesce(l.session_hash is not null and l.session_hash=p_session and l.session_until>now(),false);
   if p_action='code' then
     if a.status='declined' then return jsonb_build_object('error','unavailable'); end if;
     if l.last_code_at>now()-interval '60 seconds' or (l.code_day=current_date and l.code_count>=10)
@@ -242,7 +244,7 @@ begin
   elsif p_action='read' and not verified then
     return jsonb_build_object('verified',false,'issuer',a.snapshot->>'issuer_name');
   end if;
-  if not verified then return jsonb_build_object('error','verification_required'); end if;
+  if verified is not true then return jsonb_build_object('error','verification_required'); end if;
   if p_action='read' then
     if l.last_view_at is null then
       insert into public.agreement_events(contract_id,kind,actor) values(a.id,'viewed','recipient');

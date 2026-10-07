@@ -175,6 +175,31 @@ test("native agreement lifecycle, isolation, verification limits, immutability a
       }),
       { ok: true },
     );
+    // Verification belongs to the browser session, not everyone with the link.
+    assert.deepEqual(await signer(hash("link"), null, "read"), {
+      verified: false,
+      issuer: "Compass Marketing Advisors LLC",
+    });
+    assert.equal(
+      (
+        await signer(hash("link"), null, "sign", {
+          name: "Unverified visitor",
+          consent: true,
+          content_hash: issued.content_hash,
+        })
+      ).error,
+      "verification_required",
+    );
+    assert.equal(
+      (
+        await signer(hash("link"), hash("other browser"), "sign", {
+          name: "Other visitor",
+          consent: true,
+          content_hash: issued.content_hash,
+        })
+      ).error,
+      "verification_required",
+    );
     assert.equal(
       (await signer(hash("link"), hash("session"), "read")).snapshot.terms,
       terms,
@@ -324,6 +349,13 @@ test("native agreement lifecycle, isolation, verification limits, immutability a
       db.query("delete from agreement_events where contract_id=$1", [
         signed.id,
       ]),
+      /agreement_write_boundary/,
+    );
+    await assert.rejects(
+      db.query(
+        "update agreement_private.links set session_until=now()+interval '1 year' where contract_id=$1",
+        [signed.id],
+      ),
       /agreement_write_boundary/,
     );
     await db.exec("set session authorization authenticated");

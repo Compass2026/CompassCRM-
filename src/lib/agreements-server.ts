@@ -10,6 +10,7 @@ function database() {
     throw new Error("Agreement storage is not configured.");
   pool ??= new Pool({
     connectionString: process.env.AGREEMENTS_DATABASE_URL,
+    ssl: { rejectUnauthorized: true },
     max: 3,
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 10000,
