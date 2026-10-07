@@ -10,7 +10,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 // The Communications pages' reads (0063), all as the signed-in teammate under
 // RLS. Nothing here writes, and no credential is ever read: whether Vault
-// holds one is answered by secret_present() (yes / no only).
+// holds one is answered by communication_secret_status() (yes / no only).
 
 export type CommsSettings = { enabled: boolean; outbound_enabled: boolean; display_name: string | null; notes: string | null; updated_at: string };
 export type CommsAccount = { id: string; provider_account_sid: string; friendly_name: string | null; status: string; created_at: string };
@@ -118,15 +118,21 @@ export async function loadChecklist(supabase: Supabase, clientId: string): Promi
 }
 
 // Whether the Vault holds a credential — names only, answered yes / no.
+// Yes / no for the Twilio credentials in Vault, by the same matching the
+// functions use (communication_secret_status, 0065): the exact
+// TWILIO_SUB_<sid>_* name, or the one name that differs only in the SID's
+// letter case. Never a value; the expected Auth Token secret name is given so
+// a person knows exactly what to store.
 export async function credentialPresence(supabase: Supabase, accountSid: string | null) {
-  const names = ["TWILIO_ACCOUNT_SID", "TWILIO_API_KEY", "TWILIO_API_SECRET"];
-  if (accountSid) names.push(`TWILIO_SUB_${accountSid}_API_KEY`, `TWILIO_SUB_${accountSid}_API_SECRET`, `TWILIO_SUB_${accountSid}_AUTH_TOKEN`);
-  const answers = await Promise.all(names.map((n) => supabase.rpc("secret_present", { secret_name: n })));
-  const present = Object.fromEntries(names.map((n, i) => [n, answers[i].data === true]));
+  const { data } = await supabase.rpc("communication_secret_status", accountSid ? { p_account_sid: accountSid } : {});
+  const d = (data ?? {}) as { parent?: boolean; subaccount_key?: boolean; subaccount_auth_token?: boolean;
+    auth_token_name?: string | null; other_auth_token_accounts?: string[] };
   return {
-    parent: present.TWILIO_ACCOUNT_SID && present.TWILIO_API_KEY && present.TWILIO_API_SECRET,
-    subaccountKey: accountSid ? present[`TWILIO_SUB_${accountSid}_API_KEY`] && present[`TWILIO_SUB_${accountSid}_API_SECRET`] : false,
-    webhookToken: accountSid ? present[`TWILIO_SUB_${accountSid}_AUTH_TOKEN`] : false,
+    parent: d.parent === true,
+    subaccountKey: !!accountSid && d.subaccount_key === true,
+    webhookToken: !!accountSid && d.subaccount_auth_token === true,
+    authTokenSecret: accountSid ? d.auth_token_name ?? `TWILIO_SUB_${accountSid}_AUTH_TOKEN` : null,
+    otherAuthTokenAccounts: Array.isArray(d.other_auth_token_accounts) ? d.other_auth_token_accounts : [],
   };
 }
 

@@ -1,3 +1,4 @@
+import { PendingButton } from "@/components/ui/pending-button";
 import Link from "next/link";
 import { toggleTaskAction } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -55,8 +56,9 @@ export function TaskList({
             className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_10rem] gap-x-3 gap-y-2 px-4 py-3.5 text-sm transition-colors hover:bg-royal-50/60"
           >
             <form action={toggle} className="pt-0.5">
-              <button
+              <PendingButton
                 type="submit"
+                loadingLabel=""
                 className={cn("size-4 rounded-[5px] border border-input bg-card hover:border-navy-500", done && "border-primary bg-primary")}
                 title={done ? "Reopen" : "Mark done"}
                 aria-label={done ? `Reopen “${task.title}”` : `Mark “${task.title}” done`}

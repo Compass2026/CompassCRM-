@@ -4,6 +4,12 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function proxy(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
+  // Public capability route only. The private agreement runtime checks the
+  // high-entropy link and email verification; all other CRM routes keep auth.
+  if (/^\/sign\/[A-Za-z0-9_-]{43}(?:\/(?:action|pdf))?$/.test(pathname)) {
+    return NextResponse.next();
+  }
+
   // A reset link whose redirect URL Supabase did not accept falls back to
   // the Site URL (or the page's origin), so it arrives at "/" carrying the
   // token: hand it to /auth/confirm, which is where it was meant to go.

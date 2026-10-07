@@ -80,7 +80,7 @@ export function OpportunityLifecycle({ clientId, topic, workflow }: { clientId: 
     <div className="mt-2 space-y-1.5" data-lifecycle={workflow.opportunityId}>
       <div className="flex flex-wrap items-center gap-2">
         {primary && (
-          <Button type="button" size="xs" variant="outline" disabled={pending} data-verb={primary.verb} onClick={() => choose(primary)}>
+          <Button loading={pending} type="button" size="xs" variant="outline" disabled={pending} data-verb={primary.verb} onClick={() => choose(primary)}>
             {primary.label}
           </Button>
         )}
@@ -154,6 +154,7 @@ export function OpportunityLifecycle({ clientId, topic, workflow }: { clientId: 
               <Button
                 type="button"
                 variant={suppress ? "destructive" : "default"}
+                loading={pending}
                 disabled={!canConfirm}
                 data-confirm
                 onClick={() => run(dialog, reason)}

@@ -20,7 +20,7 @@ function fakeFetch(answers) {
 }
 const auth = (c) => "Basic " + Buffer.from(`${c.keySid}:${c.keySecret}`).toString("base64");
 
-test("subaccount management uses the parent key on /Accounts and /Keys", async () => {
+test("a subaccount is created with the parent key on the parent's /Accounts.json; its key is minted with the subaccount's own SID + Auth Token", async () => {
   const f = fakeFetch([
     { status: 201, body: { sid: "AC" + "9".repeat(32), friendly_name: "Compass - X", status: "active", owner_account_sid: PARENT.accountSid, auth_token: "tok" } },
     { status: 201, body: { sid: "SKnew", secret: "s" } },
@@ -28,11 +28,58 @@ test("subaccount management uses the parent key on /Accounts and /Keys", async (
   const t = createTwilioProvider(f.fn);
   const sub = await t.createSubaccount(PARENT, "Compass - X");
   assert.equal(sub.authToken, "tok");
-  await t.createSubaccountKey(PARENT, sub.sid, "Compass CRM communications");
+  const key = await t.createSubaccountKey({ scope: "subaccount_token", accountSid: sub.sid, authToken: "tok" }, "Compass CRM communications");
+  assert.deepEqual(key, { sid: "SKnew", secret: "s" });
   assert.equal(f.calls[0].url, "https://api.twilio.com/2010-04-01/Accounts.json");
   assert.deepEqual(f.calls[0].form, { FriendlyName: "Compass - X" });
+  assert.equal(f.calls[0].auth, auth(PARENT));
   assert.equal(f.calls[1].url, `https://api.twilio.com/2010-04-01/Accounts/${sub.sid}/Keys.json`);
-  assert.ok(f.calls.every((c) => c.auth === auth(PARENT)));
+  assert.equal(f.calls[1].auth, "Basic " + Buffer.from(`${sub.sid}:tok`).toString("base64"), "the subaccount's own credentials, never the parent key");
+});
+
+// Twilio as it behaves with a parent API key: the parent's Accounts list
+// answers, any subaccount resource (/Accounts/<sub>.json) is 20404.
+function parentKeyTwilio(accounts, { pageSize = 1000 } = {}) {
+  const calls = [];
+  const fn = async (url, init) => {
+    calls.push({ url, method: init.method, auth: init.headers.Authorization });
+    const u = new URL(url);
+    if (u.pathname === "/2010-04-01/Accounts.json" && init.method === "GET") {
+      const page = Number(u.searchParams.get("Page") ?? 0);
+      const slice = accounts.slice(page * pageSize, (page + 1) * pageSize);
+      const more = (page + 1) * pageSize < accounts.length;
+      return new Response(JSON.stringify({ accounts: slice, next_page_uri: more ? `/2010-04-01/Accounts.json?PageSize=${pageSize}&Page=${page + 1}` : null }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ code: 20404, message: `The requested resource ${u.pathname} was not found` }), { status: 404 });
+  };
+  return { fn, calls };
+}
+const acct = (sid, extra = {}) => ({ sid, friendly_name: "Compass - X", status: "active", owner_account_sid: PARENT.accountSid, ...extra });
+
+test("findSubaccount: the SID is found in the parent's own Accounts list although a direct fetch is 20404 for the parent key", async () => {
+  const BHG = "AC" + "4af8abc3".repeat(4);
+  const tw = parentKeyTwilio([acct(PARENT.accountSid), acct("AC" + "2".repeat(32)), acct(BHG)]);
+  const t = createTwilioProvider(tw.fn);
+  // What v2 did, and what Twilio answers.
+  const direct = await tw.fn(`https://api.twilio.com/2010-04-01/Accounts/${BHG}.json`, { method: "GET", headers: { Authorization: auth(PARENT) } });
+  assert.equal(direct.status, 404);
+  assert.equal((await direct.json()).code, 20404);
+  tw.calls.length = 0;
+  const found = await t.findSubaccount(PARENT, "AC" + BHG.slice(2).toUpperCase());
+  assert.deepEqual(found, { sid: BHG, friendlyName: "Compass - X", status: "active", ownerAccountSid: PARENT.accountSid });
+  assert.deepEqual(tw.calls.map((c) => new URL(c.url).pathname), ["/2010-04-01/Accounts.json"], "only the list, never /Accounts/<sid>.json");
+  assert.ok(tw.calls.every((c) => c.auth === auth(PARENT)));
+  assert.equal(await t.findSubaccount(PARENT, "AC" + "7".repeat(32)), null);
+});
+
+test("findSubaccount: follows Twilio's next page of the same list (and only that)", async () => {
+  const target = "AC" + "c".repeat(32);
+  const tw = parentKeyTwilio([acct("AC" + "a".repeat(32)), acct("AC" + "b".repeat(32)), acct(target)], { pageSize: 1 });
+  const t = createTwilioProvider(tw.fn);
+  assert.equal((await t.findSubaccount(PARENT, target)).sid, target);
+  assert.equal(tw.calls.length, 3);
+  const evil = createTwilioProvider(async () => new Response(JSON.stringify({ accounts: [], next_page_uri: "https://elsewhere.example/steal" }), { status: 200 }));
+  assert.equal(await evil.findSubaccount(PARENT, target), null);
 });
 
 test("a send names the subaccount, uses its own key and the Messaging Service", async () => {
@@ -92,4 +139,24 @@ test("Twilio errors become ProviderError with Twilio's code, never the credentia
     assert.ok(!e.message.includes("sub-secret"));
     return true;
   });
+});
+
+test("listSubaccounts: a read of /Accounts by friendly name with the parent key; tokens are never carried", async () => {
+  const f = fakeFetch([{ status: 200, body: { accounts: [
+    { sid: "AC" + "9".repeat(32), friendly_name: "Compass - X", status: "active", owner_account_sid: PARENT.accountSid, auth_token: "tok" },
+  ] } }]);
+  const t = createTwilioProvider(f.fn);
+  const list = await t.listSubaccounts(PARENT, "Compass - X");
+  assert.equal(f.calls[0].method, "GET");
+  assert.equal(f.calls[0].url, "https://api.twilio.com/2010-04-01/Accounts.json?FriendlyName=Compass+-+X&PageSize=50");
+  assert.equal(f.calls[0].auth, auth(PARENT));
+  assert.deepEqual(list, [{ sid: "AC" + "9".repeat(32), friendlyName: "Compass - X", status: "active", ownerAccountSid: PARENT.accountSid }]);
+  assert.ok(!JSON.stringify(list).includes("tok"));
+});
+
+test("createSubaccount with an API key: Twilio sends no auth_token → authToken is empty (the caller must not treat that as failure)", async () => {
+  const f = fakeFetch([{ status: 201, body: { sid: "AC" + "9".repeat(32), friendly_name: "Compass - X", status: "active", owner_account_sid: PARENT.accountSid } }]);
+  const sub = await createTwilioProvider(f.fn).createSubaccount(PARENT, "Compass - X");
+  assert.equal(sub.sid, "AC" + "9".repeat(32));
+  assert.equal(sub.authToken, "");
 });

@@ -180,10 +180,10 @@ export function ConversationControls({ clientId, conversationId, status, assigne
         <option value="">Unassigned</option>
         {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
       </select>
-      <Button size="sm" variant="outline" disabled={pending} onClick={() => run({ status: status === "open" ? "closed" : "open" })}>
+      <Button loading={pending} size="sm" variant="outline" disabled={pending} onClick={() => run({ status: status === "open" ? "closed" : "open" })}>
         {status === "open" ? "Close" : "Reopen"}
       </Button>
-      {msg && !msg.ok && <Result state={msg} />}
+      {msg && <Result state={msg} />}
     </div>
   );
 }
@@ -208,7 +208,7 @@ export function FunctionButton({ clientId, mode, payload, label: text, variant =
   const [msg, setMsg] = useState<ActionState>(null);
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <Button size="sm" variant={variant} disabled={pending || disabled} onClick={() => {
+      <Button loading={pending} size="sm" variant={variant} disabled={pending || disabled} onClick={() => {
         if (confirm && !window.confirm(confirm)) return;
         start(async () => { const r = await communicationsFunctionAction(clientId, mode, payload); setMsg({ ok: r.ok, message: r.message }); });
       }}>{pending ? "Working…" : text}</Button>
@@ -230,7 +230,7 @@ export function SubaccountForm({ clientId, clientName }: { clientId: string; cli
           <label className={label}>Create a new subaccount — type “{clientName}” to confirm</label>
           <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
-        <Button size="sm" disabled={pending || confirm !== clientName} onClick={() => start(async () => {
+        <Button loading={pending} size="sm" disabled={pending || confirm !== clientName} onClick={() => start(async () => {
           const r = await communicationsFunctionAction(clientId, "create_subaccount", { confirm });
           setMsg({ ok: r.ok, message: r.message });
         })}>Create subaccount</Button>
@@ -240,7 +240,7 @@ export function SubaccountForm({ clientId, clientName }: { clientId: string; cli
           <label className={label}>…or link one made in the Twilio Console (its AC… SID)</label>
           <Input value={sid} onChange={(e) => setSid(e.target.value.trim())} placeholder="AC…" />
         </div>
-        <Button size="sm" variant="outline" disabled={pending || !/^AC[0-9a-f]{32}$/.test(sid)} onClick={() => start(async () => {
+        <Button loading={pending} size="sm" variant="outline" disabled={pending || !/^AC[0-9a-fA-F]{32}$/.test(sid)} onClick={() => start(async () => {
           const r = await communicationsFunctionAction(clientId, "link_subaccount", { account_sid: sid });
           setMsg({ ok: r.ok, message: r.message });
         })}>Link subaccount</Button>
@@ -270,7 +270,7 @@ export function NumberSearch({ clientId, canPurchase }: { clientId: string; canP
             {["800", "888", "877", "866", "855", "844", "833"].map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <Button size="sm" variant="outline" disabled={pending} onClick={() => start(async () => {
+        <Button loading={pending} size="sm" variant="outline" disabled={pending} onClick={() => start(async () => {
           const r = await communicationsFunctionAction(clientId, "search_numbers", { area_code: areaCode });
           setMsg({ ok: r.ok, message: r.message });
           setResults(r.ok ? ((r.data?.numbers as Available[]) ?? []) : null);
@@ -298,7 +298,7 @@ export function NumberSearch({ clientId, canPurchase }: { clientId: string; canP
           </p>
           <div className="flex flex-wrap items-end gap-2">
             <Input className="max-w-56" value={confirm} onChange={(e) => setConfirm(e.target.value.trim())} placeholder={picked} />
-            <Button size="sm" variant="accent" disabled={pending || confirm !== picked} onClick={() => start(async () => {
+            <Button loading={pending} size="sm" variant="accent" disabled={pending || confirm !== picked} onClick={() => start(async () => {
               const r = await communicationsFunctionAction(clientId, "purchase_number", { phone_number: picked, confirm });
               setMsg({ ok: r.ok, message: r.ok ? `${r.message} ${formatPhone(picked)} is in the client's subaccount.` : r.message });
               if (r.ok) { setResults(null); setPicked(null); }
@@ -320,7 +320,7 @@ export function LinkNumberForm({ clientId }: { clientId: string }) {
         <label className={label}>Link a number already in the subaccount (its PN… SID)</label>
         <Input value={sid} onChange={(e) => setSid(e.target.value.trim())} placeholder="PN…" />
       </div>
-      <Button size="sm" variant="outline" disabled={pending || !/^PN[0-9a-f]{32}$/.test(sid)} onClick={() => start(async () => {
+      <Button loading={pending} size="sm" variant="outline" disabled={pending || !/^PN[0-9a-fA-F]{32}$/.test(sid)} onClick={() => start(async () => {
         const r = await communicationsFunctionAction(clientId, "link_number", { number_sid: sid });
         setMsg({ ok: r.ok, message: r.message });
       })}>Link number</Button>
@@ -334,8 +334,8 @@ export function PrimaryButton({ clientId, numberId }: { clientId: string; number
   const [msg, setMsg] = useState<ActionState>(null);
   return (
     <span className="inline-flex items-center gap-2">
-      <Button size="xs" variant="outline" disabled={pending} onClick={() => start(async () => setMsg(await setPrimaryNumberAction(clientId, numberId)))}>Make primary</Button>
-      {msg && !msg.ok && <Result state={msg} />}
+      <Button loading={pending} size="xs" variant="outline" disabled={pending} onClick={() => start(async () => setMsg(await setPrimaryNumberAction(clientId, numberId)))}>Make primary</Button>
+      {msg && <Result state={msg} />}
     </span>
   );
 }
@@ -457,7 +457,7 @@ export function EnsureChecklistButton({ clientId, profileId }: { clientId: strin
   const [msg, setMsg] = useState<ActionState>(null);
   return (
     <span className="inline-flex items-center gap-2">
-      <Button size="sm" variant="outline" disabled={pending} onClick={() => start(async () => setMsg(await ensureChecklistAction(clientId, profileId)))}>Add the standard checklist</Button>
+      <Button loading={pending} size="sm" variant="outline" disabled={pending} onClick={() => start(async () => setMsg(await ensureChecklistAction(clientId, profileId)))}>Add the standard checklist</Button>
       <Result state={msg} />
     </span>
   );

@@ -154,7 +154,7 @@ export function LocationsPanel({
                 )}
                 {!loc.is_active && <Badge variant="outline">inactive</Badge>}
                 <span className="ml-auto flex items-center gap-1">
-                  <Button
+                  <Button loading={pending}
                     variant="outline"
                     size="sm"
                     disabled={pending}
@@ -204,7 +204,7 @@ export function LocationsPanel({
                       max="50"
                     />
                     <span>miles</span>
-                    <Button size="sm" variant="outline" disabled={pending} onClick={() => suggest(loc)}>
+                    <Button loading={pending} size="sm" variant="outline" disabled={pending} onClick={() => suggest(loc)}>
                       Refresh
                     </Button>
                   </div>
@@ -239,7 +239,7 @@ export function LocationsPanel({
                         ))}
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" disabled={pending || checked.size === 0} onClick={addSelected}>
+                        <Button loading={pending} size="sm" disabled={pending || checked.size === 0} onClick={addSelected}>
                           Add {checked.size || ""} selected
                         </Button>
                         <Button
@@ -272,7 +272,7 @@ export function LocationsPanel({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
             />
-            <Button variant="outline" disabled={pending || query.length < 3} onClick={search}>
+            <Button loading={pending} variant="outline" disabled={pending || query.length < 3} onClick={search}>
               Search
             </Button>
           </div>
@@ -284,10 +284,10 @@ export function LocationsPanel({
               {results.map((r) => (
                 <li key={r.display_name} className="flex items-center gap-2 text-xs border rounded px-2 py-1.5">
                   <span className="flex-1 truncate">{r.display_name}</span>
-                  <Button size="sm" variant="outline" disabled={pending} onClick={() => addResult(r, false)}>
+                  <Button loading={pending} size="sm" variant="outline" disabled={pending} onClick={() => addResult(r, false)}>
                     Track city
                   </Button>
-                  <Button size="sm" disabled={pending} onClick={() => addResult(r, true)}>
+                  <Button loading={pending} size="sm" disabled={pending} onClick={() => addResult(r, true)}>
                     Add as physical
                   </Button>
                 </li>

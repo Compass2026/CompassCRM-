@@ -115,9 +115,9 @@ export default async function DocumentsPage({
                 <li key={d.id} className="flex items-center gap-2 border rounded-md px-3 py-2 text-sm">
                   <div className="flex-1 min-w-0">
                     <form action={open}>
-                      <button type="submit" className="font-medium hover:underline truncate">
+                      <Button type="submit" variant="link" size="sm" className="h-auto justify-start p-0 font-medium truncate" loadingLabel="Opening…">
                         {d.label}
-                      </button>
+                      </Button>
                     </form>
                     <div className="text-xs text-muted-foreground truncate">
                       {d.file_name} · {d.uploaded_by ?? "unknown"} ·{" "}

@@ -185,7 +185,7 @@ export function ReviewCard({ clientId, asset, imageUrl, history }: {
           {decision === "approved" && blockers.length > 0 && (
             <ul className="list-disc pl-5 text-xs text-amber-900" data-blockers>{blockers.map((b) => <li key={b}>{b}</li>)}</ul>
           )}
-          <Button type="button" size="sm" onClick={submit} disabled={pending} data-save-review>
+          <Button loading={pending} type="button" size="sm" onClick={submit} disabled={pending} data-save-review>
             {pending ? "Saving…" : "Save decision"}
           </Button>
         </fieldset>

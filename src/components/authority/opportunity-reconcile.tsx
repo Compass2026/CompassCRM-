@@ -191,8 +191,8 @@ function ReconcileDialog({ clientId, card, action, onClose, onDone }: {
         <DialogFooter className="border-t pt-3">
           <Button type="button" variant="outline" disabled={pending} onClick={onClose}>Cancel</Button>
           {error?.changed || (preview && !preview.ok && preview.changed)
-            ? <Button type="button" disabled={pending} onClick={reviewAgain} data-review-again>Preview again</Button>
-            : <Button type="button" disabled={!canApply} onClick={confirm} data-confirm-reconcile>
+            ? <Button loading={pending} type="button" disabled={pending} onClick={reviewAgain} data-review-again>Preview again</Button>
+            : <Button loading={pending} type="button" disabled={!canApply} onClick={confirm} data-confirm-reconcile>
                 {pending && ok ? "Saving…" : `Apply ${count} change${count === 1 ? "" : "s"}`}
               </Button>}
         </DialogFooter>

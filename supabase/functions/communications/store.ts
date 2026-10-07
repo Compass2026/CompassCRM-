@@ -1,7 +1,12 @@
 // communications' only door to the database and Vault: supabase-js with the
 // service role. Reads the registry and settings; writes only through the 0063
 // functions (rpc) and set_secret() (credentials Twilio hands back once).
+//
+// A Vault read that fails is an error, never "not in Vault": PostgREST answers
+// a missing secret with 200 and null, and anything else (a refused key, a
+// timeout) must not be reported to a person as a credential to go and store.
 import type { AccountRow, Caller, NumberRow, RegistrationRow, ServiceRow } from "./handler.ts";
+import type { SubaccountSecrets } from "../_shared/communications/credentials.ts";
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -14,8 +19,26 @@ const WRITE_FUNCTIONS = new Set([
 export function createStore(supabase: Client) {
   return {
     async secret(name: string): Promise<string | null> {
-      const { data } = await supabase.rpc("get_secret", { secret_name: name });
+      const { data, error } = await supabase.rpc("get_secret", { secret_name: name });
+      if (error) throw new Error(`vault_read: could not read ${name}`);
       return (data as string | null) || null;
+    },
+
+    // One read for a subaccount's key, key secret and Auth Token (0065).
+    async subaccountSecrets(accountSid: string): Promise<SubaccountSecrets> {
+      const { data, error } = await supabase.rpc("communication_subaccount_secrets", { p_account_sid: accountSid });
+      if (error || !data) throw new Error(`vault_read: could not read the credentials of ${accountSid}`);
+      const d = data as Record<string, unknown>;
+      const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+      return {
+        accountSid,
+        keySid: str(d.api_key),
+        keySecret: str(d.api_secret),
+        authToken: str(d.auth_token),
+        names: { keySid: String(d.api_key_name), keySecret: String(d.api_secret_name), authToken: String(d.auth_token_name) },
+        authTokenFoundAs: str(d.auth_token_found_as),
+        otherAuthTokenAccounts: Array.isArray(d.other_auth_token_accounts) ? (d.other_auth_token_accounts as string[]) : [],
+      };
     },
 
     async setSecret(name: string, value: string): Promise<void> {

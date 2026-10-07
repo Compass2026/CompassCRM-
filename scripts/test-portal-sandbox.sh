@@ -133,6 +133,11 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/source_asset_hashin
 # saw it, formats, no shared folders between live clients, the read model,
 # nothing else reads them).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_canva_folders.test.sql"
+# 0057: overlay roles (phone, website, service segment, template label; claims
+# in previews; up to 12 lines), and the renderer's spec hash equals
+# creative_spec_hash for every Lucas template (the fixture is passed in).
+psql_as postgres -d sandbox -v specs="$(cat "$ROOT/tests/fixtures/creative-lucas-templates.json")" \
+  -f "$ROOT/supabase/tests/sandbox/creative_overlay_roles.test.sql"
 # 0058: billing foundation (Stripe mirror is team read-only and service-role
 # written, client / customer / subscription / invoice belong together, the
 # catalog's package ↔ price rules, entitlements and overrides, the derived
@@ -178,3 +183,12 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_cutover_kit
 # consent and opt-out, outbound rules, forward-only delivery status,
 # compliance registrations and checklist, tenancy, the worker kept out.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test.sql"
+# 0065: per-subaccount Vault access (the long TWILIO_SUB_<sid>_* names through
+# the Edge Functions' identity, case-variant and whitespace handling, who may
+# read what) and Twilio's mixed-case SIDs through the registry and messages.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications_secrets.test.sql"
+# 0064: the dedicated billing runtime login (billing_sync writes billing only
+# through the billing functions, reads only billing tables and the columns it
+# needs, cannot reach Vault or switch the mode; the Edge Function path closes
+# when the owner flips billing_runtime, and service_role cannot reopen it).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_runtime.test.sql"

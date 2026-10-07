@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { setWorkModeAction, type WorkModeState } from "@/app/foundation-actions";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const OPTIONS: { value: "new_build" | "upgrade_existing" | "client_retains"; label: string }[] = [
   { value: "new_build", label: "new build (Foundation)" },
@@ -33,9 +34,9 @@ export function WorkModeSelect({ clientId, value }: { clientId: string; value: s
           </option>
         ))}
       </select>
-      <button type="submit" className="text-xs underline underline-offset-2 disabled:opacity-50" disabled={pending}>
+      <Button type="submit" size="xs" variant="link" loadingLabel="Saving…" className="h-auto p-0 text-xs underline" disabled={pending}>
         save
-      </button>
+      </Button>
       {state && <span className={cn("text-xs", state.ok ? "text-muted-foreground" : "text-destructive")}>{state.message}</span>}
     </form>
   );

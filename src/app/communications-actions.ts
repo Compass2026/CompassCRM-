@@ -173,7 +173,7 @@ export async function communicationsFunctionAction(clientId: string, mode: Funct
   const b = r.body ?? {};
   if (r.status === null) return { ok: false, message: "Could not reach the communications service. Check Twilio before retrying a purchase." };
   if (r.status === 200) return { ok: true, message: DONE[mode], data: b };
-  if (r.status === 207) return { ok: false, message: `Partly done: ${String(b.detail ?? "the subaccount's API key could not be created")}. Run Link subaccount to finish.`, data: b };
+  if (r.status === 207) return { ok: false, message: `Partly done: ${String(b.detail ?? "the subaccount's API key could not be created. Use “Store the subaccount's key and token again” to finish.")}`, data: b };
   if (r.status === 403 && b.code === "admin_only") return { ok: false, message: "Only a Compass admin can do this." };
   const twilio = b.twilio_code ? ` (Twilio ${String(b.twilio_code)})` : "";
   return { ok: false, message: `${String(b.error ?? b.detail ?? "Refused")}${twilio}`, data: b };

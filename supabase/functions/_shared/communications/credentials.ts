@@ -6,8 +6,10 @@
 //   TWILIO_ACCOUNT_SID   AC… of the parent account
 //   TWILIO_API_KEY       SK… of the Main key
 //   TWILIO_API_SECRET    its secret
-// Per client subaccount — written by the communications function when it
-// creates or links the subaccount:
+// Per client subaccount — the key written by the communications function
+// when it creates or links the subaccount; the Auth Token written by it only
+// when Twilio returns one (Twilio does not return Auth Tokens to API-key
+// callers, so it is normally copied from the Twilio Console into Vault):
 //   TWILIO_SUB_<AC…>_API_KEY     a Standard key created IN the subaccount
 //   TWILIO_SUB_<AC…>_API_SECRET  its secret
 //   TWILIO_SUB_<AC…>_AUTH_TOKEN  the subaccount's Auth Token: Twilio signs the
@@ -24,7 +26,14 @@ export const PARENT_SECRETS = {
   keySecret: "TWILIO_API_SECRET",
 } as const;
 
-export const ACCOUNT_SID = /^AC[0-9a-f]{32}$/;
+// Twilio SIDs: two letters and 32 hex digits, which Twilio documents as
+// [0-9a-fA-F] (in practice lower case; both are accepted everywhere).
+export const twilioSid = (prefix: string) => new RegExp(`^${prefix}[0-9a-fA-F]{32}$`);
+export const ACCOUNT_SID = twilioSid("AC");
+export const API_KEY_SID = twilioSid("SK");
+export const NUMBER_SID = twilioSid("PN");
+export const SERVICE_SID = twilioSid("MG");
+export const MESSAGE_SID = /^(SM|MM)[0-9a-fA-F]{32}$/;
 
 export function subaccountSecretNames(accountSid: string) {
   if (!ACCOUNT_SID.test(accountSid)) throw new Error("not a Twilio account SID");
@@ -45,11 +54,26 @@ export async function parentCredential(secret: SecretReader): Promise<ParentCred
   return { scope: "parent", accountSid, keySid, keySecret };
 }
 
-export async function subaccountCredential(secret: SecretReader, accountSid: string): Promise<SubaccountCredential | null> {
-  const names = subaccountSecretNames(accountSid);
-  const [keySid, keySecret] = await Promise.all([secret(names.keySid), secret(names.keySecret)]);
-  if (!keySid || !keySecret) return null;
-  return { scope: "subaccount", accountSid, keySid, keySecret };
+// A subaccount's three credentials as one Vault read returns them
+// (communication_subaccount_secrets, 0065): each value, the exact name it
+// belongs under, and the name it was found under (the same name, or the one
+// name that differs only in the SID's letter case). Values never leave the
+// function that reads them.
+export type SubaccountSecrets = {
+  accountSid: string;
+  keySid: string | null;
+  keySecret: string | null;
+  authToken: string | null;
+  names: { keySid: string; keySecret: string; authToken: string };
+  authTokenFoundAs: string | null;
+  // Other subaccount SIDs Vault holds an Auth Token for: how a token stored
+  // under the wrong SID is spotted. SIDs only.
+  otherAuthTokenAccounts: string[];
+};
+
+export function subaccountCredential(s: SubaccountSecrets): SubaccountCredential | null {
+  if (!s.keySid || !s.keySecret) return null;
+  return { scope: "subaccount", accountSid: s.accountSid, keySid: s.keySid, keySecret: s.keySecret };
 }
 
 export function webhookBase(override: string | null, supabaseUrl: string): string {

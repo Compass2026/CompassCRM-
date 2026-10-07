@@ -1,4 +1,88 @@
-# Lucas Creative Readiness (Sept 28 2026)
+# Lucas Creative Readiness (Sept 28 2026; updated Sept 30 2026)
+
+## Production state and readiness matrix (Sept 30 2026)
+
+**Source:** a fresh read of production on Sept 30 2026 (`brand_assets`,
+`creative_governance_events`), plus a read-only `source-assets` inventory
+that re-downloaded and re-hashed every stored file.
+
+**Totals:**
+
+- **15 assets:** 12 approved, 3 excluded, 0 unreviewed.
+- **15/15 hashed.** Every stored file still hashes to its recorded value,
+  and every approval's recorded hash equals the current hash.
+- All reviews are Thomas's, Sept 29–30 2026.
+
+**Approved (12):**
+
+| Asset | What | Size | Own work | Subjects | Focal (x, y) |
+|---|---|---|---|---|---|
+| `0c945d6f` | **v3 wordmark** (`logo_primary`, primary) | 1200×886 | — | logo, wordmark, lucas construction, roofing, siding, guttering, brand | — |
+| `3a5e930a` | IMG_7051, finished roof | **1536×2048 (hero-grade)** | **yes** | roof, architectural shingles, residential roofing, completed project | 0.514, 0.323 |
+| `c7db9166` | crane lift, active jobsite | 980×1307 | **yes** | roof replacement, residential roofing, roof installation, architectural shingles, crane lift, material delivery, active jobsite | 0.559, 0.334 |
+| `db8e7148` | active project | 950×1200 | **yes** | roof replacement, residential roofing, architectural shingles, roof installation, active project | 0.514, 0.304 |
+| `1979f6aa` | active project | 950×1200 | **yes** | roof replacement, residential roofing, architectural shingles, roof installation, active project | 0.605, 0.330 |
+| `db6eec44` | completed exterior | 950×1200 | **yes** | roof replacement, residential roofing, architectural shingles, completed project, exterior | 0.500, 0.301 |
+| `8dfb59dd` | roof edge / gutters detail | 950×1200 | **yes** | roofing detail, architectural shingles, gutters, roof edge, completed project | 0.482, 0.463 |
+| `57d63a06` | owner / team member | 1366×2048 | no | owner, team member, roofing professional, branded uniform, local business | 0.486, 0.286 |
+| `d3bb7aac` | team member | 1366×2048 | no | team member, roofing professional, branded uniform, local business | 0.495, 0.259 |
+| `03437409` | team member | 1066×1600 | no | team member, roofing professional, branded uniform, local business | 0.459, 0.250 |
+| `9f599e07` | team member | 1066×1600 | no | (as above) | 0.477, 0.304 |
+| `c097fe30` | team member | 1066×1600 | no | (as above) | 0.514, 0.339 |
+
+**Excluded (3):**
+
+- **`c387232b`**, the 192 px site icon: "Low-resolution site icon; retained
+  for favicon/legacy use".
+- **`81a697a7`**, the 512 px legacy square mark: "superseded by current v3
+  wordmark".
+- **`3b515e61`**, a team photo: "No longer is an employee".
+
+**What that means for creative:**
+
+- **The v3 wordmark is approved.** It is the logo on every template.
+- **Six approved photos are Lucas's own work, all roofing.** Only
+  **IMG_7051** meets the 1,080 px hero threshold. Every hero-led layout
+  therefore uses that one photo; the other five serve as cells and feature
+  panels, and are never enlarged.
+- **The five approved team photos are not usable.** They are approved but
+  not marked own work, and they show people, so the renderer refuses them
+  until a governed consent / usage record exists (Team & Community).
+- **Which services can be illustrated:**
+  - Roof Replacement and Roof Repair: yes, every own-work photo is tagged
+    roof / roofing.
+  - Gutters: one photo (`8dfb59dd`), too small for a hero and too few for a
+    grid.
+  - Storm Damage, Siding, Soffit & Fascia and the lighting services: no
+    approved photo shows them, so their creative is refused (no stand-in
+    image).
+
+### Readiness matrix (recomputed from production)
+
+| Family | Status | Inputs in use / blocker |
+|---|---|---|
+| **Service Spotlight** | **Cleared: renderer built, previews ready** | IMG_7051 as hero; Roof Replacement; segment, service, a sourced claim; points (GBP): Owens Corning Preferred Contractor, BBB Accredited since 6/30/2025; standing CTA; phone; website. |
+| **Trust & Know-How (authority)** | **Cleared: renderer built, previews ready** | Headline: Owens Corning Preferred Contractor; points: Duration shingles, BBB accreditation, scope of work. GBP feature: the crane-lift jobsite photo; social: IMG_7051 (the only own-work photo 1,080 px wide). Educational mode waits for approved educational copy. |
+| **Seasonal (non-offer)** | **Cleared: renderer built, preview available** | A season label from the template's fixed list; Roof Replacement; tagline; two own-work cells. No offer language. |
+| **Real Work Showcase** | **Cleared: renderer built, previews ready** | 3 (GBP) / 4 (social) own-work cells; "Our work"; Roof Replacement. **No project location**: none is governed on any photo. The single-aerial hero layout waits for an aerial own-work photo. |
+| **Service Light** | **Cleared: renderer built, preview available** | IMG_7051 as hero with two own-work support photos; light ground. |
+| Seasonal: Offer mode | **Blocked: missing governed data** | No confirmed offer ("Free quotes offered" is unverified). |
+| Review Spotlight | **Blocked: missing governed data** | No governed review record system and no review records. |
+| Team & Community | **Blocked: missing governed data** | No consent / usage record for people imagery. Five approved team photos exist and are refused. |
+
+**Still unavailable, enforced by the renderer:**
+
+- The Lifetime Workmanship Warranty is still `sourced` in the CRM. The Lucas
+  kit blocks "warranty" until the owner confirms it, so Tom may want to
+  mark the claim `unverified` there too.
+- Also blocked: free quote / estimate / inspection, 24/7 / same-day,
+  licensed / bonded, counts, founding years, review counts and ratings,
+  superlatives and guarantees, emergency language, the street address, St.
+  Louis County and its legacy cities, and "Roof Inspections".
+
+The renderer, the templates and the previews are described in
+`docs/creative-engine.md`.
+
 
 ## Decisions (Tom, Sept 28 2026)
 

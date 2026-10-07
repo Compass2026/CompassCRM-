@@ -97,7 +97,18 @@ export default async function NumbersPage({ params }: { params: Promise<{ client
                 <dt className="text-muted-foreground">API key in Vault</dt><dd>{creds.subaccountKey ? "Yes" : <span className="text-amber-900">No</span>}</dd>
                 <dt className="text-muted-foreground">Auth token in Vault</dt><dd>{creds.webhookToken ? "Yes (webhooks validate)" : <span className="text-amber-900">No — incoming messages are refused</span>}</dd>
               </dl>
-            ) : admin ? (
+            ) : null}
+            {setup.account && !creds.webhookToken && (
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                Twilio does not hand a subaccount&apos;s Auth Token to an API key. Copy it from the Twilio Console (subaccount{" "}
+                <span className="font-mono">{setup.account.provider_account_sid}</span>) into Vault as{" "}
+                <span className="break-all font-mono">{creds.authTokenSecret}</span>, then store the key and token again below.
+                {creds.otherAuthTokenAccounts.length > 0 && (
+                  <> Vault holds an Auth Token for <span className="font-mono">{creds.otherAuthTokenAccounts.join(", ")}</span> instead.</>
+                )}
+              </p>
+            )}
+            {setup.account ? null : admin ? (
               enabled ? <SubaccountForm clientId={clientId} clientName={client?.name ?? ""} />
                 : <p className="text-muted-foreground">Turn communications on for this client (Settings) first.</p>
             ) : (

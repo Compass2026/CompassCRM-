@@ -10,6 +10,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Compass Client Platform
 
+## Native Agreements (October 7, 2026)
+
+`docs/native-agreements.md` describes the Compass-only contract workflow,
+private agreement runtime, signing verification and immutable PDF records.
+Migration `20261007180518_native_agreements.sql` is additive. It does not switch
+Stripe live mode or change operational plans. The future client issuer model
+is present, but Lucas/BHG issuance for their own customers is not enabled.
+Never edit or delete an issued/signed document; prepare a new agreement.
+Verification email configuration and reviewed terms are required before issue.
+Payment handoff attaches an existing live Checkout only when the signed scope
+matches the operational plan. Signing never authorizes or creates a charge.
+
 Internal Compass Marketing Advisors agency tool — every client, their department
 pipelines (SEO / Website / Social / CRM / Paid Ads), and the recurring monthly
 Reporting cycle. Full build spec: `docs/spec.md`.
@@ -28,10 +40,15 @@ Reporting cycle. Full build spec: `docs/spec.md`.
   **not yet applied**; `0058` (billing foundation, B1), `0059` (Stripe sync
   boundary, B2), `0060` (billing operations, B3), `0061` (billing
   reconciliation, B4) and `0062` (entitlement contract + portal billing,
-  B5) are written but **not yet applied** (final numbers set Sept 30 2026; `0057` belongs to the Creative Engine overlay-roles migration on its own branch; `docs/billing-cutover.md`); `0063` (Compass Communications) was applied Oct 2
-  2026 as `20261002211041` (0057–0062 are taken by the unmerged
-  creative-overlay and Billing branches and are not applied, so in production
-  they apply after 0063; the two sets touch no common object); `0056` (Canva folder ids on the client record) was
+  B5) were applied Oct 4 2026 as `20261004023512`, `20261004031812`,
+  `20261004032556`, `20261004032929` and `20261004033843` — after 0063,
+  which they share no object with (`0057` is the Creative Engine
+  overlay-roles migration, written and sandbox-tested, not applied (PR #95);
+  `docs/billing-cutover.md`); `0064` (the dedicated billing runtime login,
+  Option B; `docs/billing-runtime.md`) is written but **not yet applied**;
+  `0063` (Compass Communications) was applied Oct 2 2026 as
+  `20261002211041`; `0065` (Communications Vault reads by account SID +
+  mixed-case Twilio SIDs) was applied Oct 5 2026 as `20261005033418`; `0056` (Canva folder ids on the client record) was
   applied Sept 28 2026 as `20260928212948`; `0054` (Creative Engine schema) was applied Sept 28
   2026 as `20260928021735` (recorded under the name `creative_engine`; nothing
   enabled); `0055` (source-asset hashing) was applied Sept 28
@@ -224,7 +241,7 @@ retainers + one-time work; link existing Stripe customers, never duplicate;
 card + ACH debit, external arrangements admin-recorded; Stripe owns dunning
 (Compass derives `billing_attention` only); entitlements now, never switched
 off by billing; Checkout link copied by a teammate. **B1 = 0058** (written,
-sandbox-tested, **not applied**): the Stripe mirror (team read-only, money
+sandbox-tested, applied Oct 4 2026): the Stripe mirror (team read-only, money
 in minor units, `livemode` on every row, `stripe_refunds` one row per
 refund), the package / price / one-time catalog, the 14-service
 `service_catalog`, `package_entitlements`, `client_entitlement_overrides`,
@@ -234,13 +251,12 @@ retired. **Financial configuration is admin-only** (`team_members.role` via
 `is_team_admin()`): the catalog and its Stripe mapping, the billing mode
 (`app_settings` `billing…`), and team roles (members cannot mint or take
 over an admin). **B2 = 0059 + `supabase/functions/_shared/stripe/` +
-`stripe-webhook`** (written and tested, **not applied / not deployed**): one
+`stripe-webhook`** (applied and deployed Oct 4 2026): one
 shared sync layer (fetch-on-event, pinned API version, newest read wins)
 behind the webhook, B3 and future reconciliation; a claim / lease / fail
 ledger; the mirror writable only inside the sync functions by an
 authenticator + service_role session (the worker's SQL is refused). **B3 =
-0060 + `stripe-billing` + the app** (written and tested, **not applied /
-not deployed**): explicit admin actions (search / link an existing customer
+0060 + `stripe-billing` + the app** (applied and deployed Oct 4 2026): explicit admin actions (search / link an existing customer
 with confirmation, create a customer, import a Stripe product, a client's
 Custom Retainer price, Checkout from an approved price only with
 duplicate-subscription protection, expire a link, configure and open the
@@ -251,7 +267,7 @@ source, invoices, payments with individual refunds, history), Settings ›
 Billing catalog, public `/checkout/complete` and `/checkout/canceled`.
 Members read everything and edit agreements / overrides; portal contacts
 can only open their own client's Customer Portal. **B4 = 0061 +
-`stripe-reconcile`** (written and tested, **not applied / not deployed**):
+`stripe-reconcile`** (applied and deployed Oct 4 2026):
 the safety net behind the webhook, reusing the shared sync (never a second
 one) — mapped catalog products and prices, every linked customer
 (`resyncCustomer`, invoices Stripe no longer lists, non-final Checkout
@@ -263,8 +279,7 @@ scheduler (`BILLING_RECONCILE_SECRET`; daily schedule enabled only at
 cutover) or an admin (Settings › Run Billing Reconciliation, Billing tab ›
 Reconcile This Client). Stripe wins; nothing is written to Stripe, and
 agreements, entitlements and external payments are never touched. **B5 =
-0062 + the app + the worker skill** (written and tested, **not applied / not
-deployed**): `client_entitlements_for()` is the one read of what the
+0062 + the app + the worker skill** (applied and deployed Oct 4 2026): `client_entitlements_for()` is the one read of what the
 agreement includes (package + client overrides; a disabled or absent quota
 is 0, never unlimited; never reads billing) and `client_quota_usage()` the
 monthly accounting (America/Chicago month; allocation, completed, planned,
@@ -315,7 +330,16 @@ readable by every Edge Function and the worker's SQL). **Decided Sept 30
 2026: Option A for Stripe TEST MODE only; no live Stripe secret may ever go
 into the shared Edge Function / Vault architecture — Option B (dedicated
 billing runtime, billing-only Stripe credentials, least-privilege database
-role) is a hard go-live blocker, not yet built.** Operator steps:
+role) is a hard go-live blocker.** The Stripe TEST lifecycle passed on
+production on Oct 4 2026 (subscription active, invoice paid $2,500, payment
+succeeded, all `livemode = false`) through the Edge Functions. **Option B is
+built (Oct 4 2026, not yet deployed): `billing/` is the `compass-billing`
+Vercel project (the same three handlers as Node functions, a `pg` store as
+the `billing_sync` login from 0064, daily reconciliation by Vercel Cron), and
+the CRM calls it with the signed-in user's JWT once `BILLING_API_URL` is set
+on `compass-crm`. `billing_runtime.edge_functions` keeps the Edge Function
+path open until the owner closes it; ordered deployment, verification and
+rollback in `docs/billing-runtime.md`.** Operator steps:
 `docs/stripe-test-mode-operator-checklist.md`; the agreement questions
 (`docs/active-client-agreement-questions.md`) are answered. Every Edge Function
 shares the service-role key, so isolation between functions is code review
@@ -1314,6 +1338,82 @@ scheduled or published by any of it.
   future `creative_assets` model; approval will bind copy and the exact
   creative version). Nothing of the Creative Engine is built.
 
+## Creative Engine renderer (Sept 30 2026; post graphics Oct 3; 0057 written, not applied; nothing deployed)
+
+This is the deterministic renderer and the Lucas template pilot. Full
+design, rules and runbook: `docs/creative-engine.md`. Production state and
+the readiness matrix: `docs/lucas-creative-readiness.md`.
+
+- **Code:** `supabase/functions/creative-engine/`.
+  - **Pinned stack:** resvg-wasm 2.6.2, hash-checked; opentype.js 1.3.4;
+    Montserrat / Poppins embedded and hash-checked. Text is drawn as glyph
+    paths.
+  - **Determinism:** the same inputs give the same bytes, and Deno is
+    byte-identical to Node (`deno-check.ts`).
+  - **Hashes:** spec hash = `creative_spec_hash`; brief hash; copy hash;
+    re-hashed source bytes; the output hash.
+- **Governance (`govern.ts`):** the request carries references only (a
+  service id, claim ids, a label id, photo ids) and every word is resolved
+  from the record.
+  - **Words:** a claim must be confirmed or sourced-with-source. Compass-wide
+    and client (`kits.ts`) phrase blocks apply. Word limits apply, and copy
+    that does not fit is refused, never shrunk.
+  - **Photos:** approved, own work, unchanged, focal point set, no people
+    tags, showing the service. A hero needs ≥ 1080 px, and nothing is
+    enlarged.
+  - **Nothing falls back.**
+- **Templates:** `registry.ts` holds five cleared families (Service
+  Spotlight, Trust & Know-How authority mode, Seasonal non-offer, Real Work
+  Showcase, Service Light) × Business Profile 1200×900 / Facebook /
+  Instagram 1080×1350, as `lucas-*-{gbp,facebook,instagram}` v1. Review
+  Spotlight, Team & Community and Offer mode stay blocked.
+- **Function (`handler.ts`):**
+  - `version`
+  - `register`: through `creative_register_template`
+  - `plan`: a dry run, no writes
+  - `preview`: `creative_begin_run` → upload at the content address →
+    `creative_write`; proposes, never approves
+  - `post` (Oct 3 2026): the graphic for a draft post from a template
+    approved for the client. `post-bindings.ts` takes the post's service
+    and only its linked claims, and picks approved own-work photos of that
+    service. The run is bound to the post's copy hash and creative version.
+    `creative_write` links the image for review.
+  - It is **not deployed**.
+- **0057** adds overlay roles (phone, website, service segment, template
+  label; claims in previews; ≤ 12 lines) so the record matches what is
+  drawn. It is **not applied**.
+- **Previews and approval:** Brand › Creative use › **Creative previews**
+  (`/clients/[id]/brand/creative-preview`, `src/lib/creative-preview.ts`)
+  renders the Lucas preview set with the teammate's own session (viewing
+  writes nothing).
+  - Per template and channel: **Record preview for approval** (the
+    function's `preview` mode) and **Approve** / **Revoke**
+    (`client_creative_templates`).
+  - Per channel: the **graphic policy for new posts**
+    (`client_creative_settings`).
+- **Post graphics:** the post page's **Graphic** section (policy, Generate
+  graphic, Download PNG, Request new graphic), with
+  `src/app/creative-actions.ts` calling the function with the teammate's
+  JWT.
+  - `/clients/[id]/creative/[assetId]` serves recorded bytes, re-hashed.
+  - Reject asks copy / graphic / both.
+  - Approved posts get **Copy text**.
+- **Tests:**
+  - `npm test`: `creative-engine`, `creative-engine-handler`,
+    `creative-engine-post`
+  - the sandbox's `creative_overlay_roles.test.sql`
+  - `npm run test:creative-preview-ui`, `npm run test:creative-post-ui`
+    (end to end: register → preview → approve → render → download →
+    approve post → request new → reject graphic)
+  - `deno-check.ts`
+- **Runtime** (`docs/creative-engine-runtime.md`):
+  - Measured in Deno with photo-like JPEGs: 0.53–1.44 s for a cold
+    render, with a process peak of 165–216 MB RSS.
+  - Edge limits: 2 s CPU and 256 MB.
+  - The 1080×1350 formats miss the 1.0 s CPU margin in this container.
+  - Measure the deployed function (a write-free `measure` mode, not built
+    yet) before any production render.
+
 ## Canva folder mapping (0056, applied Sept 28 2026 as `20260928212948`)
 
 Every Compass client keeps its designs in one primary Canva folder with one
@@ -1381,10 +1481,12 @@ and the remaining manual Twilio steps: `docs/communications.md`.
 
 - **Twilio shape:** Compass's parent account (ISV) holds one **subaccount
   per client**. Vault: the parent's **Main** API key (`TWILIO_ACCOUNT_SID` /
-  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only for `/Accounts` and
-  `/Keys`; per subaccount its own Standard key and its Auth Token
-  (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`), written by
-  the function. Every client operation uses the subaccount's key. No
+  `TWILIO_API_KEY` / `TWILIO_API_SECRET`), used only on the parent's own
+  `/Accounts.json` (create, list / find a subaccount — Twilio denies a
+  parent API key every subaccount resource with 20404); per subaccount its
+  own Standard key (minted with the subaccount's own Auth Token) and its
+  Auth Token (`TWILIO_SUB_<AC…>_API_KEY` / `_API_SECRET` / `_AUTH_TOKEN`;
+  the token copied from the Twilio Console by hand). Every client operation uses the subaccount's key. No
   credential is an env var, a column, a response or a log line; no EIN is
   stored anywhere.
 - **Functions:** `communications` (team JWT; admin modes check
@@ -1427,6 +1529,39 @@ and the remaining manual Twilio steps: `docs/communications.md`.
   answer 403. `database.types.ts` regenerated from production. No Twilio
   secret is in Vault, no subaccount or number exists, no row is in any
   Communications table and nothing has been sent.
+- **0065 (applied Oct 5 2026 as `20261005033418`; `communications` v2 and
+  `twilio-webhook` v2 deployed through the Supabase MCP).** The BHG link
+  failed because the functions looked up `TWILIO_SUB_<sid>_AUTH_TOKEN` by
+  the exact SID the request carried, and Twilio never returns a
+  subaccount's Auth Token to an API key, so the token is stored by hand.
+  Now: `communication_subaccount_secrets(<AC…>)` (service role only) reads
+  a subaccount's key, secret and token by SID (exact name, else the single
+  case-insensitive match, trimmed) and reports the expected names and the
+  other SIDs holding a token; `communication_secret_status()` gives the
+  pages yes / no and the expected name; Twilio SID checks accept
+  `[0-9a-fA-F]` (five constraints and three record functions rebuilt
+  unchanged otherwise). `create_subaccount` refuses when Twilio already
+  has a `Compass - <name>` subaccount and records a created one at once
+  (207 partial when the token or key is missing); `link_subaccount`
+  registers nothing until the token is in Vault (409 naming it). Errors
+  are 424 / 409 / 207 rather than 5xx (the gateway replaces 5xx bodies).
+  Tests: the sandbox's `communications_secrets.test.sql` (a 56-character
+  dynamic name through `get_secret` as service_role),
+  `tests/communications-store.test.mjs`, and the handler / integration /
+  UI suites.
+- **`communications` v3 (deployed Oct 6 2026).** The BHG link then failed
+  with Twilio 20404 on `GET /Accounts/<sub>.json`: a parent API key may
+  touch only main-account resources, never a subaccount's (Twilio's
+  subaccount docs). `link_subaccount` now finds the SID in the parent's own
+  `/Accounts.json` list (paged, any letter case; owner must be the parent,
+  status not closed; 409 `not_in_parent` / `not_a_subaccount` /
+  `subaccount_closed`), and the subaccount's Standard key is minted with the
+  subaccount's own SID + Auth Token from Vault (the parent key would get
+  20404 on `/Accounts/<sub>/Keys.json` too). `create_subaccount` without a
+  returned token registers the subaccount and answers 207 with `key:
+  "waiting_for_auth_token"`; the link finishes it. Tests: the handler,
+  provider (a fake Twilio that answers 20404 to the parent key on any
+  subaccount resource) and integration suites.
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
