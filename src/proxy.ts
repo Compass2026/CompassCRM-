@@ -2,11 +2,23 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  const { pathname, searchParams } = request.nextUrl;
+
   // Public capability route only. The private agreement runtime checks the
   // high-entropy link and email verification; all other CRM routes keep auth.
-  if (/^\/sign\/[A-Za-z0-9_-]{43}(?:\/(?:action|pdf))?$/.test(request.nextUrl.pathname)) {
+  if (/^\/sign\/[A-Za-z0-9_-]{43}(?:\/(?:action|pdf))?$/.test(pathname)) {
     return NextResponse.next();
   }
+
+  // A reset link whose redirect URL Supabase did not accept falls back to
+  // the Site URL (or the page's origin), so it arrives at "/" carrying the
+  // token: hand it to /auth/confirm, which is where it was meant to go.
+  if (pathname === "/" && searchParams.has("token_hash") && searchParams.has("type")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/confirm";
+    return NextResponse.redirect(url);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -34,14 +46,18 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // /update-password is open to signed-out visitors (a reset link is often
+  // opened in a browser that is not signed in); the page admits only a
+  // visitor carrying an unspent reset token.
   const isAuthRoute =
-    request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/auth");
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth") ||
+    pathname === "/update-password";
   // Where Stripe Checkout returns a client: static pages that read nothing
   // (src/app/checkout). Exact paths only.
   const isCheckoutReturn =
-    request.nextUrl.pathname === "/checkout/complete" ||
-    request.nextUrl.pathname === "/checkout/canceled";
+    pathname === "/checkout/complete" ||
+    pathname === "/checkout/canceled";
 
   if (!user && !isAuthRoute && !isCheckoutReturn) {
     const url = request.nextUrl.clone();
@@ -49,7 +65,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && request.nextUrl.pathname.startsWith("/login")) {
+  // Signed in → home, unless /login was asked to explain an error (a failed
+  // reset link in a browser that is signed in to someone).
+  if (user && pathname.startsWith("/login") && !searchParams.has("error")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
