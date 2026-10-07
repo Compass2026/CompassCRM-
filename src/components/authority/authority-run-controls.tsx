@@ -66,6 +66,8 @@ export function AuthorityRunControls({ clientId, state }: { clientId: string; st
             key={mode}
             type="button"
             variant={b.primary ? "default" : "outline"}
+            loading={starting === mode || (busy && b.primary)}
+            loadingLabel="Analyzing…"
             disabled={!b.enabled || busy}
             aria-describedby="authority-controls-help"
             data-run={mode}

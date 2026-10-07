@@ -44,7 +44,7 @@ export function Composer({ clientId, conversationId, contactId, blockedReason, o
       <Textarea aria-label="Message" value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={1600}
         placeholder="Write a reply…" disabled={pending} />
       <div className="flex items-center gap-3">
-        <Button type="submit" size="sm" disabled={pending || !body.trim()}>{pending ? "Sending…" : "Send SMS"}</Button>
+        <Button loading={pending} type="submit" size="sm" disabled={pending || !body.trim()}>{pending ? "Sending…" : "Send SMS"}</Button>
         <span className="text-xs text-muted-foreground tabular-nums">{body.length}/1600 · {segments} segment{segments === 1 ? "" : "s"}</span>
         {result && <span role="status" className={cn("text-xs", result.ok ? "text-green-800" : "text-red-700")}>{result.message}</span>}
       </div>

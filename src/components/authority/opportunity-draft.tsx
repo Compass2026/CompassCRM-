@@ -49,7 +49,7 @@ export function OpportunityDraft({ clientId, card }: { clientId: string; card: C
       {d.state === "requested" && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-navy-800" data-draft-status>{d.label}</span>
-          <Button type="button" size="xs" variant="outline" disabled={pending} data-restart-draft
+          <Button loading={pending} type="button" size="xs" variant="outline" disabled={pending} data-restart-draft
             onClick={() => run(() => restartDraftAction(clientId, d.taskId))}>
             {pending ? "Restarting…" : "Restart"}
           </Button>
@@ -84,7 +84,7 @@ export function OpportunityDraft({ clientId, card }: { clientId: string; card: C
             </ul>
             <DialogFooter>
               <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="button" disabled={pending} onClick={request} data-confirm-draft>{pending ? "Requesting…" : "Request the draft"}</Button>
+              <Button loading={pending} type="button" disabled={pending} onClick={request} data-confirm-draft>{pending ? "Requesting…" : "Request the draft"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

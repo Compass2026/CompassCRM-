@@ -81,7 +81,7 @@ export function StripeSyncCard({ health, result, livemode, scope, action, action
         )}
         {action && (
           <form action={action}>
-            <Button type="submit" size="sm" variant="outline">{actionLabel}</Button>
+            <Button type="submit" size="sm" variant="outline" loadingLabel="Reconciling…">{actionLabel}</Button>
           </form>
         )}
         <p className="text-xs text-muted-foreground">
