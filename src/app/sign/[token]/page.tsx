@@ -25,7 +25,14 @@ export default async function SigningPage({
   let result: Answer;
   try {
     result = await agreementSigner<Answer>(token, session, "read");
-  } catch {
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String(error.code)
+        : "unknown";
+    console.error("Agreement storage read failed", {
+      code: /^[A-Z0-9_]{1,64}$/.test(code) ? code : "unknown",
+    });
     result = { error: "temporarily_unavailable" };
   }
   if (result.error)
