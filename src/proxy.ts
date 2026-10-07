@@ -2,6 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  // Public capability route only. The private agreement runtime checks the
+  // high-entropy link and email verification; all other CRM routes keep auth.
+  if (/^\/sign\/[A-Za-z0-9_-]{43}(?:\/(?:action|pdf))?$/.test(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

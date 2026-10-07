@@ -10,6 +10,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Compass Client Platform
 
+## Native Agreements (October 7, 2026)
+
+`docs/native-agreements.md` describes the Compass-only contract workflow,
+private agreement runtime, signing verification and immutable PDF records.
+Migration `20261007180518_native_agreements.sql` is additive. It does not switch
+Stripe live mode or change operational plans. The future client issuer model
+is present, but Lucas/BHG issuance for their own customers is not enabled.
+Never edit or delete an issued/signed document; prepare a new agreement.
+Verification email configuration and reviewed terms are required before issue.
+Payment handoff attaches an existing live Checkout only when the signed scope
+matches the operational plan. Signing never authorizes or creates a charge.
+
 Internal Compass Marketing Advisors agency tool — every client, their department
 pipelines (SEO / Website / Social / CRM / Paid Ads), and the recurring monthly
 Reporting cycle. Full build spec: `docs/spec.md`.
