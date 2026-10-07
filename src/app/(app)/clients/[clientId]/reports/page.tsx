@@ -1,3 +1,4 @@
+import { PendingButton } from "@/components/ui/pending-button";
 import { createClient } from "@/lib/supabase/server";
 import { toggleTaskAction } from "@/app/actions";
 import { startCycleAction, updateCycleAction } from "@/app/tracker-actions";
@@ -226,8 +227,10 @@ export default async function ReportsPage({
                         task.status !== "done"
                       )}
                     >
-                      <button
+                      <PendingButton
                         type="submit"
+                        loadingLabel=""
+                        aria-label={task.status === "done" ? `Reopen ${task.title}` : `Mark ${task.title} done`}
                         className={cn(
                           "size-4 rounded border border-input",
                           task.status === "done" && "bg-primary"

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { AppNav } from "@/components/app-nav";
+import { Suspense } from "react";
+import { ActionFeedback } from "@/components/action-feedback";
 
 async function signOut() {
   "use server";
@@ -105,6 +107,7 @@ export default async function AppLayout({
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">{children}</main>
+      <Suspense fallback={null}><ActionFeedback /></Suspense>
     </div>
   );
 }

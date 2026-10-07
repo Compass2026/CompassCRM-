@@ -160,8 +160,8 @@ function DecisionDialog({
           <DialogFooter>
             <Button type="button" variant="outline" disabled={pending} onClick={onClose}>Cancel</Button>
             {error?.changed || (preview && !preview.ok && preview.changed)
-              ? <Button type="button" disabled={pending} onClick={load} data-review-again>Review again</Button>
-              : <Button type="button" disabled={!valid || pending} onClick={confirm} data-confirm-decision>{pending && ok ? "Saving…" : "Confirm"}</Button>}
+              ? <Button loading={pending} type="button" disabled={pending} onClick={load} data-review-again>Review again</Button>
+              : <Button loading={pending} type="button" disabled={!valid || pending} onClick={confirm} data-confirm-decision>{pending && ok ? "Saving…" : "Confirm"}</Button>}
           </DialogFooter>
         </DialogContent>
       )}
@@ -201,7 +201,7 @@ function LaterDialog({ open, onClose, clientId, card, onDone }: { open: boolean;
           {error && <p role="alert" className="text-sm text-red-800">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={pending} onClick={onClose}>Cancel</Button>
-            <Button type="button" disabled={!reason.trim() || pending} onClick={confirm} data-confirm-decision>Later: until {formatDay(dismissUntil(days, new Date()))}</Button>
+            <Button loading={pending} type="button" disabled={!reason.trim() || pending} onClick={confirm} data-confirm-decision>Later: until {formatDay(dismissUntil(days, new Date()))}</Button>
           </DialogFooter>
         </DialogContent>
       )}
@@ -344,7 +344,7 @@ export function MarketBatchBar({ clientId }: { clientId: string }) {
             <DialogFooter>
               <Button type="button" variant="outline" disabled={pending} onClick={() => setMode(null)}>{results ? "Close" : "Cancel"}</Button>
               {!results && (
-                <Button type="button" disabled={pending || !ready.length || (mode === "decline_market" && !reason.trim())} onClick={confirm} data-confirm-decision>
+                <Button loading={pending} type="button" disabled={pending || !ready.length || (mode === "decline_market" && !reason.trim())} onClick={confirm} data-confirm-decision>
                   {mode === "approve_market" ? `Approve ${ready.length}` : `Decline ${ready.length}`}
                 </Button>
               )}
