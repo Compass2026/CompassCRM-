@@ -192,3 +192,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications_secr
 # needs, cannot reach Vault or switch the mode; the Edge Function path closes
 # when the owner flips billing_runtime, and service_role cannot reopen it).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_runtime.test.sql"
+# 0065: the Content Planner (plan item shapes, Authority opportunity ↔ slot
+# mapping, same-client links, one slot per post, the derived board status
+# through the review gate, holds, team-only access).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_planner.test.sql"

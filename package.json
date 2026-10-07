@@ -14,6 +14,7 @@
     "test:billing-rollback": "scripts/test-billing-rollback.sh",
     "test:tasks-ui": "scripts/test-tasks-ui.sh",
     "test:posts-ui": "UI_SPEC=tests/posts-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:planner-ui": "UI_SPEC=tests/planner-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-use-ui": "UI_SPEC=tests/creative-use-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-preview-ui": "UI_SPEC=tests/creative-preview-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-post-ui": "UI_SPEC=tests/creative-post-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",

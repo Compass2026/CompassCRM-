@@ -3844,6 +3844,92 @@ export type Database = {
           },
         ]
       }
+      content_plan_items: {
+        Row: {
+          authority_opportunity_id: string | null
+          channel: Database["public"]["Enums"]["social_platform"] | null
+          client_id: string
+          content_post_id: string | null
+          created_at: string
+          created_by: string | null
+          deliverable: string
+          hold: string | null
+          hold_reason: string | null
+          id: string
+          keyword_id: string | null
+          notes: string | null
+          output_url: string | null
+          planned_date: string | null
+          purpose: string
+          search_intent: string | null
+          service_id: string | null
+          social_post_id: string | null
+          target_url: string | null
+          topic: string
+          updated_at: string
+          updated_by: string | null
+          week_start: string
+        }
+        Insert: {
+          authority_opportunity_id?: string | null
+          channel?: Database["public"]["Enums"]["social_platform"] | null
+          client_id: string
+          content_post_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deliverable: string
+          hold?: string | null
+          hold_reason?: string | null
+          id?: string
+          keyword_id?: string | null
+          notes?: string | null
+          output_url?: string | null
+          planned_date?: string | null
+          purpose: string
+          search_intent?: string | null
+          service_id?: string | null
+          social_post_id?: string | null
+          target_url?: string | null
+          topic: string
+          updated_at?: string
+          updated_by?: string | null
+          week_start: string
+        }
+        Update: {
+          authority_opportunity_id?: string | null
+          channel?: Database["public"]["Enums"]["social_platform"] | null
+          client_id?: string
+          content_post_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deliverable?: string
+          hold?: string | null
+          hold_reason?: string | null
+          id?: string
+          keyword_id?: string | null
+          notes?: string | null
+          output_url?: string | null
+          planned_date?: string | null
+          purpose?: string
+          search_intent?: string | null
+          service_id?: string | null
+          social_post_id?: string | null
+          target_url?: string | null
+          topic?: string
+          updated_at?: string
+          updated_by?: string | null
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_posts: {
         Row: {
           client_id: string
@@ -8780,6 +8866,48 @@ export type Database = {
             columns: ["package_id"]
             isOneToOne: false
             referencedRelation: "billing_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_plan_board: {
+        Row: {
+          authority_opportunity_id: string | null
+          channel: Database["public"]["Enums"]["social_platform"] | null
+          client_id: string | null
+          content_post_id: string | null
+          content_status: string | null
+          content_url: string | null
+          created_at: string | null
+          created_by: string | null
+          deliverable: string | null
+          hold: string | null
+          hold_reason: string | null
+          id: string | null
+          keyword_id: string | null
+          notes: string | null
+          output_url: string | null
+          planned_date: string | null
+          post_publish_status: string | null
+          post_published_url: string | null
+          post_review_status: string | null
+          purpose: string | null
+          search_intent: string | null
+          service_id: string | null
+          social_post_id: string | null
+          status: string | null
+          target_url: string | null
+          topic: string | null
+          updated_at: string | null
+          updated_by: string | null
+          week_start: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
