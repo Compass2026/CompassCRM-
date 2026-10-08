@@ -1,8 +1,163 @@
-# Social History / Client Social Style (architecture review, Oct 7 2026)
+# Social History / Client Social Style
 
-**Status: proposal for review.** Nothing in this document is built, connected
-or applied. No Zernio key, secret, migration, function or app code exists.
-Pilot client: Lucas Construction (`102d3b20-2795-44ae-bd64-d1e43916291c`).
+**Status (Oct 8 2026):**
+
+- The architecture was approved on Oct 7 2026; the decisions are recorded
+  below.
+- **SH1 is built and tested but not applied or deployed.**
+  - Migration: `20261008120000_social_history.sql`.
+  - Function: `supabase/functions/social-history/`.
+  - Tests: `npm test` and the sandbox's `social_history.test.sql`.
+- No Zernio key is in Vault yet, so the Lucas dry run has not run. See
+  "SH1 as built" for the steps to the first import.
+- Nothing of SH2–SH4 (analyzer, profile, drafter, Creative Engine) exists.
+- Pilot client: Lucas Construction (`102d3b20-2795-44ae-bd64-d1e43916291c`).
+
+## Approved decisions (Oct 7 2026)
+
+1. A proposed Social Style Profile must be approved by a human teammate
+   before the AI Drafter or the Creative Engine may use it.
+2. Historical posts are style / performance evidence only. They never
+   become factual grounding or usable claims; the existing Authority /
+   Client Intelligence claim rules remain the only factual authority. A
+   client's own past post is not, by itself, a source for a claim.
+3. A same-platform recent-content duplicate guard with a 90-day window. It
+   targets substantially similar copy, not topic repetition: a recurring
+   service or topic is never blocked just because it was discussed recently.
+   This arrives with SH3 (the drafter). The drafter writes Business Profile
+   posts only today, and the imported history is Facebook, so a
+   same-platform check has nothing to compare until a Facebook drafting
+   channel exists.
+4. A dedicated read-only Zernio key in Vault (`ZERNIO_READ_API_KEY`). It is
+   never reused for publishing, and no write-capable Zernio credential is
+   created.
+5. The profile distinguishes representative posts, top performers relative
+   to the client's own baseline, and excluded / do-not-learn posts.
+6. Compass-generated content never feeds style learning.
+7. Performance is measured against the client's own historical baseline,
+   never generic engagement benchmarks.
+8. Social History stays outside factual grounding: no history table is read
+   by Client Intelligence or Authority evidence functions.
+
+## SH1 as built (Oct 8 2026)
+
+**Schema** (`supabase/migrations/20261008120000_social_history.sql`,
+additive):
+
+- **Tables:** `social_history_imports`, `social_history_posts` (natural key
+  `(platform, platform_post_id)`) and `social_history_metrics` (append-only
+  snapshots).
+- **Views:** `social_history_post_latest`, and
+  `social_history_learnable_posts`, the only input SH2's analyzer may read.
+- **`social_accounts`** gets a partial unique index per external (Page) id.
+- **Writers:**
+  - `social_history_begin_import`, `_record_posts` and `_finish_import`,
+    for the social-history function's session only (authenticator +
+    service_role). A guard trigger refuses every other write, including
+    the worker's SQL, SET ROLE and the write flag set by hand.
+  - `social_history_set_learning`, for a signed-in teammate only: include or
+    exclude a post, with a note to exclude.
+- **Decided by the database, never by the caller:**
+  - **Origin.** `compass` when the post matches a Compass `social_posts`
+    row by platform id, published URL or (40+ characters) the same copy.
+    It never reverts.
+  - **The copy hash.**
+  - **Snapshots.** A new one is recorded only when the provider's numbers
+    changed.
+- **Missing posts.** A complete listing that no longer returns a post sets
+  `missing_since`; nothing is deleted.
+- **The learnable view** excludes:
+  - Compass posts, both stored and matched live, so a Compass post published
+    after the import is excluded at once (decision 6);
+  - paid posts (Zernio `isAd`);
+  - posts the Page did not author (`isOwner = false`);
+  - posts a teammate excluded;
+  - posts missing from the platform.
+- **The verify block** refuses the migration if any function or view
+  outside the `social_history_*` family reads these tables, or if a
+  Social History function writes a grounding table.
+- **Rollback** is in the migration header.
+
+**Function** (`supabase/functions/social-history/`, team JWT,
+`verify_jwt = true`, on the deploy workflow's list):
+
+- `zernio.ts`, the only Zernio client:
+  - It sends GET only, with no body and no redirects.
+  - Four allowlisted paths, each with its own allowlisted query names:
+    `/v1/profiles`, `/v1/accounts`, `/v1/accounts/{id}/facebook-page` and
+    `/v1/analytics`. Anything else throws before fetch.
+  - The key travels only in the Authorization header and is scrubbed from
+    every error.
+  - A 429 with Retry-After of 20 s or less is retried once.
+- `map.ts` holds the mapping rules:
+  - Zernio's `likes` is stored as `reactions`.
+  - `saves` is NULL (not a Facebook metric).
+  - Zero reach and impressions next to real engagement are recorded as "not
+    supplied" (NULL plus `unavailable`), never as 0.
+  - Story clicks are NULL.
+  - Pending analytics give no snapshot.
+  - No media dimensions are recorded (Zernio has none).
+  - A post without this account's entry, a platform id or a publish time is
+    skipped with a reason.
+- `handler.ts` modes:
+  - `version`.
+  - `plan` is the dry run and writes nothing. It returns what the key sees,
+    the account and Page, and a sample of up to 25 posts (default 20) as
+    Zernio returned them next to the row Compass would store. It also
+    returns a field-quality report, the blockers, and the exact import
+    request.
+  - `import` is admin only. The request must repeat the plan's `account_id`
+    and `page_id`, and Zernio must still agree. It imports the latest 1–100
+    posts (default 100) over the last 365 days, in batches of 25, and
+    finishes `completed` / `partial` / `failed`.
+- Metric refresh is a re-run of `import`: unchanged posts are no-ops, and
+  changed numbers append a snapshot. A scheduled refresh is not built.
+
+**Tests:**
+
+- `tests/social-history-zernio.test.mjs` proves the credential cannot write.
+  The reader exposes only read methods. Every request the fake Zernio sees
+  is a GET with no body. Every write path (publish, sync-external, connect,
+  inbox, webhooks, keys, media) is refused before fetch. The function's
+  sources name no other HTTP method. No other function or app file mentions
+  Zernio or its key.
+- `tests/social-history-map.test.mjs` and
+  `tests/social-history-handler.test.mjs` cover the mapping and the handler.
+  The plan writes nothing. A plan never picks one of several accounts. A
+  Page recorded for another client is a blocker. The import is bound to the
+  plan. Re-import is a no-op. Edits and metric changes are the only updates.
+  An import ends partial or failed as it should.
+- The sandbox's `social_history.test.sql` proves that history cannot become
+  grounding:
+  - no function, view or trigger outside the family, and no Client
+    Intelligence / Authority / grounding / drafter function, reads history;
+  - Client Intelligence's input, the Authority fingerprint and every claim,
+    offer, service, keyword, post and post claim are identical before and
+    after the imports;
+  - only the function writes, and the teammate, portal, stranger and anon
+    boundaries hold;
+  - Compass posts never reach the learnable view.
+
+**To the first Lucas import** (each step a person's go-ahead):
+
+1. **In Zernio (Tom):**
+   - Create a profile, "Compass – Lucas Construction".
+   - Connect Lucas's Facebook Page to it with the analytics scope only
+     (`scopes=analytics`) and select the Page.
+   - Create an API key: `permission: read`, `scope: profiles` (that profile
+     only), the engagement, messages, contacts, ads, telephony, billing and
+     webhooks groups disabled, and an expiry.
+2. **In Supabase (Tom):** add the key to Vault as `ZERNIO_READ_API_KEY`
+   (Dashboard › Vault). Never paste it into a chat or the repository.
+3. **Apply and deploy:**
+   - Apply the migration: a rolled-back dry run first, then for real,
+     verified by md5.
+   - Deploy `social-history`.
+   - Check `{"mode": "version"}` reports `key_present: true`.
+4. **The dry run:** `{"mode": "plan", "client_id": "<Lucas>"}` returns a
+   20-post sample. Read the field quality together.
+5. **If the fields look right:** send the plan's `import_request` (50–100
+   posts), then spot-check 10 posts against Facebook.
 
 ## Purpose and boundaries
 
@@ -636,15 +791,10 @@ no consumers, no UI beyond a count.**
 **SH3:** drafter `brief.style` and the warnings. **SH4:** Creative Engine
 family and photo ordering.
 
-## Decisions for review
+The questions this review raised were answered on Oct 7 2026: see
+"Approved decisions" at the top. The architecture sections above (1–9) are
+kept as reviewed. Where SH1 differs, "SH1 as built" is authoritative:
 
-1. Approve four new tables and reuse `social_accounts` as above (versus
-   folding metrics into the post row).
-2. The profile requires a teammate's approval before any drafter or Creative
-   Engine use (recommended), versus being used as soon as it is computed.
-3. Section 8.5: a client's own past post is not, by itself, a source for a
-   `sourced` claim.
-4. Same-platform history counts for `duplicate_recent_post` (a blocking
-   lint) for 90 days.
-5. The Zernio key's storage, depending on how narrowly it can be scoped
-   (section 3).
+- no `refresh_metrics` mode (re-run the import instead);
+- the dry run is a 20-post sample;
+- SH3's duplicate guard targets substantially similar copy, not topics.
