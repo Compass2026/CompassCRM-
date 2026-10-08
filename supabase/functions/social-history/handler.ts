@@ -16,8 +16,9 @@
 //             then in the background: pages of the listing, mapped, recorded
 //             in batches of 25, finished completed / partial / failed.
 //
-// Callers: a signed-in teammate (JWT on team_members); `import` needs an
-// admin. No cron caller and no schedule in SH1. Deployed with verify_jwt.
+// Callers: a signed-in teammate (JWT on team_members; `import` needs an
+// admin), or the operator door (x-cron-secret = SYNC_CRON_SECRET, as every
+// worker-callable Compass function has). No schedule. Deployed with verify_jwt.
 // Every Zernio request is a GET (zernio.ts).
 import { createZernioReader, ZernioError, ZERNIO_GET_ALLOWLIST, ZERNIO_KEY_SECRET, type ZernioAccount, type ZernioReader } from "./zernio.ts";
 import { fieldReport, mapPost, type Mapped, type PostRow } from "./map.ts";
@@ -230,7 +231,7 @@ export function createSocialHistory(deps: Deps) {
     }
   }
 
-  async function importMode(clientId: string, body: Json, memberId: string): Promise<Response> {
+  async function importMode(clientId: string, body: Json, memberId: string | null): Promise<Response> {
     const { account_id: accountId, page_id: pageId } = body;
     const limit = body.limit === undefined ? IMPORT_LIMIT.default : body.limit;
     if (typeof accountId !== "string" || !ACCOUNT.test(accountId)) return reply(400, { error: "account_id (from the plan) is required" });
@@ -265,10 +266,22 @@ export function createSocialHistory(deps: Deps) {
 
   async function handle(req: Request): Promise<Response> {
     if (req.method !== "POST") return reply(405, { error: "POST only" });
-    const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer /, "");
-    const who = await store.caller(jwt);
-    if (who === "none") return reply(401, { error: "unauthorized" });
-    if (!who.member) return reply(403, { error: "forbidden" });
+    // The operator door every worker-callable Compass function has: Postgres
+    // (pg_net) with x-cron-secret = SYNC_CRON_SECRET. It may run version, plan
+    // and import; the import records no teammate (requested_by NULL).
+    const cronHeader = req.headers.get("x-cron-secret");
+    const cron = cronHeader ? await store.secret("SYNC_CRON_SECRET") : null;
+    let who: { member: string | null; role: string | null; via: "team" | "worker" };
+    if (cronHeader) {
+      if (!cron || cronHeader !== cron) return reply(403, { error: "forbidden" });
+      who = { member: null, role: null, via: "worker" };
+    } else {
+      const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer /, "");
+      const c = await store.caller(jwt);
+      if (c === "none") return reply(401, { error: "unauthorized" });
+      if (!c.member) return reply(403, { error: "forbidden" });
+      who = { ...c, via: "team" };
+    }
     const body = (await req.json().catch(() => null)) as Json | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) return reply(400, { error: "JSON body required" });
     const mode = body.mode;
@@ -287,7 +300,9 @@ export function createSocialHistory(deps: Deps) {
     if (extra.length) return reply(400, { error: `unexpected field(s): ${extra.join(", ")}` });
     const clientId = body.client_id;
     if (typeof clientId !== "string" || !UUID.test(clientId)) return reply(400, { error: "client_id (a uuid) is required" });
-    if (mode === "import" && who.role !== "admin") return reply(403, { error: "admin_only", message: "Only an admin starts an import." });
+    if (mode === "import" && who.via === "team" && who.role !== "admin") {
+      return reply(403, { error: "admin_only", message: "Only an admin (or the operator door) starts an import." });
+    }
     const client = await store.client(clientId);
     if (!client) return reply(404, { error: "client_not_found" });
     if (client.status === "offboarded") return reply(409, { error: "client_offboarded" });

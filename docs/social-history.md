@@ -4,14 +4,57 @@
 
 - The architecture was approved on Oct 7 2026; the decisions are recorded
   below.
-- **SH1 is built and tested but not applied or deployed.**
-  - Migration: `20261008120000_social_history.sql`.
-  - Function: `supabase/functions/social-history/`.
-  - Tests: `npm test` and the sandbox's `social_history.test.sql`.
-- No Zernio key is in Vault yet, so the Lucas dry run has not run. See
-  "SH1 as built" for the steps to the first import.
-- Nothing of SH2–SH4 (analyzer, profile, drafter, Creative Engine) exists.
+- **SH1 is live for Lucas.**
+  - Migration `20261008015642_social_history.sql` was applied Oct 8 2026 as
+    `20261008015642`. The recorded SQL is identical to the file (md5
+    `a8c3d1f0…`).
+  - `social-history` v1 is deployed with `verify_jwt = true`.
+  - Lucas's Facebook history is imported; see "SH1 production" below.
+- SH2 (the Social Style Analyzer) is in progress. SH3 (drafter use) and SH4
+  (Creative Engine use) do not exist.
 - Pilot client: Lucas Construction (`102d3b20-2795-44ae-bd64-d1e43916291c`).
+
+## SH1 production (Oct 8 2026)
+
+**How it was called:** through the operator door (`x-cron-secret`, sent by
+Postgres via pg_net, as every worker-callable Compass function is), because
+no teammate session exists in the agent's environment. `requested_by` is
+therefore NULL on both imports.
+
+**Steps:**
+
+1. `version`: 200, `key_present: true`, GET-only allowlist.
+2. `plan`: 53 available, no blockers. Same profile, account and Page as the
+   dry run.
+3. `import` with limit 100: `completed`. 53 fetched, 53 inserted, 53
+   snapshots, 0 skipped, 0 missing.
+4. `import` again (the metrics refresh): `completed`. 53 unchanged, 0 new
+   snapshots, because Zernio had not re-synced since 01:23:04 UTC.
+
+**Binding:** one `social_accounts` row, Lucas / facebook / `103977857788955`
+"LUCAS Construction", `manual_only`, no token. Both imports bound to Zernio
+account `6ac6efe9621dc76465184742`.
+
+**Posts:**
+
+- 53 posts with 53 distinct Facebook ids (0 duplicates), Oct 11 2025 → Sep
+  23 2026.
+- All external: 0 Compass, 0 paid, 0 not authored by the Page, 0 missing.
+- 34 reels, 17 photos, 1 album, 1 text; 3 without a caption.
+- Every post has one snapshot. `saves` is NULL / unavailable on all of them.
+  Reach and impressions are present on all.
+- All 53 are learnable: Lucas has no Compass Facebook post to exclude.
+
+**Isolation:**
+
+- No function, view or trigger outside `social_history_*` reads the history.
+- `client_intelligence_input(Lucas)` and Lucas's claims, services, keywords
+  and posts are hash-identical to before. Offers 0; latest Authority run
+  Sep 28.
+- anon has no access, and the pg_net queue is empty.
+
+**Difference from the dry run:** none in content. The count is 53 (not ~55),
+and the metrics are the same snapshot the dry run saw.
 
 ## Approved decisions (Oct 7 2026)
 
@@ -41,7 +84,7 @@
 
 ## SH1 as built (Oct 8 2026)
 
-**Schema** (`supabase/migrations/20261008120000_social_history.sql`,
+**Schema** (`supabase/migrations/20261008015642_social_history.sql`,
 additive):
 
 - **Tables:** `social_history_imports`, `social_history_posts` (natural key

@@ -270,3 +270,29 @@ test("a Facebook platformUserId of the form <user>:page:<page> resolves to the P
   const rec = setup({ zernio: { accounts: composite }, store: { accounts: [{ id: "acct-1", client_id: CLIENT, external_account_id: PAGE }] } });
   assert.equal((await rec.call({ mode: "plan", client_id: CLIENT })).status, 200);
 });
+
+test("the operator door (x-cron-secret) runs version, plan and import; a wrong secret is refused", async () => {
+  const { store, z, settle } = setup({ store: { secrets: { SYNC_CRON_SECRET: "cron-secret-value" } } });
+  const fn = createSocialHistory({ store, fetch: z.fetch, now: NOW, sleep: async () => {}, waitUntil: (p) => p });
+  const call = async (body, secret) => {
+    const res = await fn.handle(new Request("https://fn.example/social-history", {
+      method: "POST", headers: { Authorization: "Bearer anon-key", "x-cron-secret": secret, "content-type": "application/json" }, body: JSON.stringify(body),
+    }));
+    return { status: res.status, body: await res.json() };
+  };
+  assert.equal((await call({ mode: "version" }, "wrong")).status, 403);
+  assert.equal((await call({ mode: "version" }, "cron-secret-value")).status, 200);
+  assert.equal((await call({ mode: "plan", client_id: CLIENT }, "cron-secret-value")).status, 200);
+  const imp = await call({ mode: "import", client_id: CLIENT, account_id: ACCOUNT, page_id: PAGE, limit: 5 }, "cron-secret-value");
+  assert.equal(imp.status, 202);
+  await settle();
+  assert.equal(store.s.imports[0].requestedBy, null, "the operator door records no teammate");
+  assert.ok(z.requests.every((q) => q.method === "GET"));
+});
+
+test("without SYNC_CRON_SECRET in Vault the operator door is closed", async () => {
+  const { store, z } = setup();
+  const fn = createSocialHistory({ store, fetch: z.fetch, now: NOW });
+  const res = await fn.handle(new Request("https://fn.example", { method: "POST", headers: { "x-cron-secret": "anything" }, body: JSON.stringify({ mode: "version" }) }));
+  assert.equal(res.status, 403);
+});

@@ -1466,7 +1466,7 @@ Show Me Electrical only because its id sits inside that client's folder).
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
 
-## Social History (SH1, Oct 8 2026; migration written, not applied; function not deployed)
+## Social History (SH1 live Oct 8 2026: migration `20261008015642` applied, `social-history` v1 deployed, Lucas's 53 Facebook posts imported)
 
 A client's real published social posts, imported read-only, are evidence of
 how the client writes and what performs. They are never grounding. Design,
@@ -1488,7 +1488,9 @@ approved decisions and the steps to the first import:
 - **Writes.** Only the function's session writes history (`begin` /
   `record` / `finish`). A teammate only includes / excludes posts from
   learning. The function's modes are `version`, `plan` (the dry run, writes
-  nothing) and `import` (admin; bound to the plan's account and Page).
+  nothing) and `import` (an admin, or the operator door `x-cron-secret`;
+  bound to the plan's account and Page). Re-running `import` is the metrics
+  refresh: unchanged posts are no-ops, and new numbers append a snapshot.
 - **Not built:** the analyzer and the style profile (SH2), drafter use and
   the 90-day duplicate-copy guard (SH3), and Creative Engine use (SH4).
 

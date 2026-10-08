@@ -14,6 +14,238 @@ export type Database = {
   }
   public: {
     Tables: {
+      agreement_contracts: {
+        Row: {
+          client_id: string
+          consent_text: string | null
+          content_hash: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          issued_at: string | null
+          issuer_id: string
+          payment_expires_at: string | null
+          payment_url: string | null
+          pdf_hash: string | null
+          provider_name: string | null
+          provider_signed_at: string | null
+          recipient_email: string
+          recipient_name: string
+          signed_at: string | null
+          signer_agent: string | null
+          signer_ip: string | null
+          signer_name: string | null
+          snapshot: Json
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          consent_text?: string | null
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          issued_at?: string | null
+          issuer_id: string
+          payment_expires_at?: string | null
+          payment_url?: string | null
+          pdf_hash?: string | null
+          provider_name?: string | null
+          provider_signed_at?: string | null
+          recipient_email?: string
+          recipient_name?: string
+          signed_at?: string | null
+          signer_agent?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          snapshot: Json
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          consent_text?: string | null
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          issued_at?: string | null
+          issuer_id?: string
+          payment_expires_at?: string | null
+          payment_url?: string | null
+          pdf_hash?: string | null
+          provider_name?: string | null
+          provider_signed_at?: string | null
+          recipient_email?: string
+          recipient_name?: string
+          signed_at?: string | null
+          signer_agent?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          snapshot?: Json
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agreement_contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agreement_contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agreement_contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agreement_contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_contracts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_contracts_issuer_id_fkey"
+            columns: ["issuer_id"]
+            isOneToOne: false
+            referencedRelation: "agreement_issuers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agreement_events: {
+        Row: {
+          actor: string
+          contract_id: string
+          created_at: string
+          detail: Json
+          id: number
+          kind: string
+        }
+        Insert: {
+          actor: string
+          contract_id: string
+          created_at?: string
+          detail?: Json
+          id?: never
+          kind: string
+        }
+        Update: {
+          actor?: string
+          contract_id?: string
+          created_at?: string
+          detail?: Json
+          id?: never
+          kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agreement_events_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "agreement_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agreement_issuers: {
+        Row: {
+          client_id: string | null
+          enabled: boolean
+          id: string
+          name: string
+          terms: string
+          terms_reviewed: boolean
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          enabled?: boolean
+          id?: string
+          name: string
+          terms?: string
+          terms_reviewed?: boolean
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          enabled?: boolean
+          id?: string
+          name?: string
+          terms?: string
+          terms_reviewed?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agreement_issuers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agreement_issuers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agreement_issuers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agreement_issuers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_issuers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alerts: {
         Row: {
           acknowledged: boolean
@@ -7104,6 +7336,383 @@ export type Database = {
           },
         ]
       }
+      social_history_imports: {
+        Row: {
+          client_id: string
+          error: string | null
+          fetched: number
+          finished_at: string | null
+          id: string
+          inserted: number
+          limit_requested: number
+          metrics_captured: number
+          mode: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          provider: string
+          provider_account_id: string
+          provider_state: Json
+          requested_by: string | null
+          skipped: number
+          social_account_id: string
+          started_at: string
+          status: string
+          unchanged: number
+          updated: number
+          window_from: string
+        }
+        Insert: {
+          client_id: string
+          error?: string | null
+          fetched?: number
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          limit_requested: number
+          metrics_captured?: number
+          mode?: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          provider?: string
+          provider_account_id: string
+          provider_state?: Json
+          requested_by?: string | null
+          skipped?: number
+          social_account_id: string
+          started_at?: string
+          status?: string
+          unchanged?: number
+          updated?: number
+          window_from: string
+        }
+        Update: {
+          client_id?: string
+          error?: string | null
+          fetched?: number
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          limit_requested?: number
+          metrics_captured?: number
+          mode?: string
+          platform?: Database["public"]["Enums"]["social_platform"]
+          provider?: string
+          provider_account_id?: string
+          provider_state?: Json
+          requested_by?: string | null
+          skipped?: number
+          social_account_id?: string
+          started_at?: string
+          status?: string
+          unchanged?: number
+          updated?: number
+          window_from?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_history_imports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_imports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_imports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_imports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_imports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_imports_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_imports_social_account_id_client_id_fkey"
+            columns: ["social_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      social_history_metrics: {
+        Row: {
+          age_hours: number
+          captured_at: string
+          clicks: number | null
+          client_id: string
+          comments: number | null
+          engagement_rate: number | null
+          id: number
+          import_id: string
+          impressions: number | null
+          post_id: string
+          provider_updated_at: string | null
+          raw: Json
+          reach: number | null
+          reactions: number | null
+          saves: number | null
+          shares: number | null
+          sync_status: string
+          unavailable: string[]
+          views: number | null
+        }
+        Insert: {
+          age_hours: number
+          captured_at?: string
+          clicks?: number | null
+          client_id: string
+          comments?: number | null
+          engagement_rate?: number | null
+          id?: never
+          import_id: string
+          impressions?: number | null
+          post_id: string
+          provider_updated_at?: string | null
+          raw?: Json
+          reach?: number | null
+          reactions?: number | null
+          saves?: number | null
+          shares?: number | null
+          sync_status: string
+          unavailable?: string[]
+          views?: number | null
+        }
+        Update: {
+          age_hours?: number
+          captured_at?: string
+          clicks?: number | null
+          client_id?: string
+          comments?: number | null
+          engagement_rate?: number | null
+          id?: never
+          import_id?: string
+          impressions?: number | null
+          post_id?: string
+          provider_updated_at?: string | null
+          raw?: Json
+          reach?: number | null
+          reactions?: number | null
+          saves?: number | null
+          shares?: number | null
+          sync_status?: string
+          unavailable?: string[]
+          views?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_history_metrics_import_id_client_id_fkey"
+            columns: ["import_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_history_imports"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_metrics_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_history_learnable_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_metrics_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_history_post_latest"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_metrics_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_history_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      social_history_posts: {
+        Row: {
+          client_id: string
+          compass_post_id: string | null
+          copy: string
+          copy_changed_at: string | null
+          copy_hash: string
+          first_imported_at: string
+          format: string
+          id: string
+          is_owner: boolean | null
+          is_paid: boolean
+          last_import_id: string
+          last_seen_at: string
+          learning_note: string | null
+          learning_set_at: string | null
+          learning_set_by: string | null
+          learning_status: string
+          media: Json
+          missing_since: string | null
+          origin: string
+          permalink: string | null
+          platform: Database["public"]["Enums"]["social_platform"]
+          platform_post_id: string
+          provider: string
+          provider_post_id: string | null
+          provider_scheduled_id: string | null
+          published_at: string
+          raw: Json
+          social_account_id: string
+          thumbnail_url: string | null
+        }
+        Insert: {
+          client_id: string
+          compass_post_id?: string | null
+          copy?: string
+          copy_changed_at?: string | null
+          copy_hash: string
+          first_imported_at?: string
+          format: string
+          id?: string
+          is_owner?: boolean | null
+          is_paid?: boolean
+          last_import_id: string
+          last_seen_at?: string
+          learning_note?: string | null
+          learning_set_at?: string | null
+          learning_set_by?: string | null
+          learning_status?: string
+          media?: Json
+          missing_since?: string | null
+          origin: string
+          permalink?: string | null
+          platform: Database["public"]["Enums"]["social_platform"]
+          platform_post_id: string
+          provider?: string
+          provider_post_id?: string | null
+          provider_scheduled_id?: string | null
+          published_at: string
+          raw?: Json
+          social_account_id: string
+          thumbnail_url?: string | null
+        }
+        Update: {
+          client_id?: string
+          compass_post_id?: string | null
+          copy?: string
+          copy_changed_at?: string | null
+          copy_hash?: string
+          first_imported_at?: string
+          format?: string
+          id?: string
+          is_owner?: boolean | null
+          is_paid?: boolean
+          last_import_id?: string
+          last_seen_at?: string
+          learning_note?: string | null
+          learning_set_at?: string | null
+          learning_set_by?: string | null
+          learning_status?: string
+          media?: Json
+          missing_since?: string | null
+          origin?: string
+          permalink?: string | null
+          platform?: Database["public"]["Enums"]["social_platform"]
+          platform_post_id?: string
+          provider?: string
+          provider_post_id?: string | null
+          provider_scheduled_id?: string | null
+          published_at?: string
+          raw?: Json
+          social_account_id?: string
+          thumbnail_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_compass_post_id_client_id_fkey"
+            columns: ["compass_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_last_import_id_client_id_fkey"
+            columns: ["last_import_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_history_imports"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_learning_set_by_fkey"
+            columns: ["learning_set_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_social_account_id_client_id_fkey"
+            columns: ["social_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
       social_posts: {
         Row: {
           approved_hash: string | null
@@ -9280,6 +9889,278 @@ export type Database = {
         }
         Relationships: []
       }
+      social_history_learnable_posts: {
+        Row: {
+          client_id: string | null
+          compass_post_id: string | null
+          copy: string | null
+          copy_changed_at: string | null
+          copy_hash: string | null
+          first_imported_at: string | null
+          format: string | null
+          id: string | null
+          is_owner: boolean | null
+          is_paid: boolean | null
+          last_import_id: string | null
+          last_seen_at: string | null
+          learning_note: string | null
+          learning_set_at: string | null
+          learning_set_by: string | null
+          learning_status: string | null
+          media: Json | null
+          missing_since: string | null
+          origin: string | null
+          permalink: string | null
+          platform: Database["public"]["Enums"]["social_platform"] | null
+          platform_post_id: string | null
+          provider: string | null
+          provider_post_id: string | null
+          provider_scheduled_id: string | null
+          published_at: string | null
+          raw: Json | null
+          social_account_id: string | null
+          thumbnail_url: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          compass_post_id?: string | null
+          copy?: string | null
+          copy_changed_at?: string | null
+          copy_hash?: string | null
+          first_imported_at?: string | null
+          format?: string | null
+          id?: string | null
+          is_owner?: boolean | null
+          is_paid?: boolean | null
+          last_import_id?: string | null
+          last_seen_at?: string | null
+          learning_note?: string | null
+          learning_set_at?: string | null
+          learning_set_by?: string | null
+          learning_status?: string | null
+          media?: Json | null
+          missing_since?: string | null
+          origin?: string | null
+          permalink?: string | null
+          platform?: Database["public"]["Enums"]["social_platform"] | null
+          platform_post_id?: string | null
+          provider?: string | null
+          provider_post_id?: string | null
+          provider_scheduled_id?: string | null
+          published_at?: string | null
+          raw?: Json | null
+          social_account_id?: string | null
+          thumbnail_url?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          compass_post_id?: string | null
+          copy?: string | null
+          copy_changed_at?: string | null
+          copy_hash?: string | null
+          first_imported_at?: string | null
+          format?: string | null
+          id?: string | null
+          is_owner?: boolean | null
+          is_paid?: boolean | null
+          last_import_id?: string | null
+          last_seen_at?: string | null
+          learning_note?: string | null
+          learning_set_at?: string | null
+          learning_set_by?: string | null
+          learning_status?: string | null
+          media?: Json | null
+          missing_since?: string | null
+          origin?: string | null
+          permalink?: string | null
+          platform?: Database["public"]["Enums"]["social_platform"] | null
+          platform_post_id?: string | null
+          provider?: string | null
+          provider_post_id?: string | null
+          provider_scheduled_id?: string | null
+          published_at?: string | null
+          raw?: Json | null
+          social_account_id?: string | null
+          thumbnail_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_compass_post_id_client_id_fkey"
+            columns: ["compass_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_last_import_id_client_id_fkey"
+            columns: ["last_import_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_history_imports"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_learning_set_by_fkey"
+            columns: ["learning_set_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_social_account_id_client_id_fkey"
+            columns: ["social_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      social_history_post_latest: {
+        Row: {
+          clicks: number | null
+          client_id: string | null
+          comments: number | null
+          compass_post_id: string | null
+          copy: string | null
+          copy_changed_at: string | null
+          copy_hash: string | null
+          engagement_rate: number | null
+          first_imported_at: string | null
+          format: string | null
+          id: string | null
+          impressions: number | null
+          is_owner: boolean | null
+          is_paid: boolean | null
+          last_import_id: string | null
+          last_seen_at: string | null
+          learning_note: string | null
+          learning_set_at: string | null
+          learning_set_by: string | null
+          learning_status: string | null
+          media: Json | null
+          metrics_age_hours: number | null
+          metrics_captured_at: string | null
+          metrics_id: number | null
+          metrics_sync_status: string | null
+          metrics_unavailable: string[] | null
+          missing_since: string | null
+          origin: string | null
+          permalink: string | null
+          platform: Database["public"]["Enums"]["social_platform"] | null
+          platform_post_id: string | null
+          provider: string | null
+          provider_post_id: string | null
+          provider_scheduled_id: string | null
+          published_at: string | null
+          raw: Json | null
+          reach: number | null
+          reactions: number | null
+          saves: number | null
+          shares: number | null
+          social_account_id: string | null
+          thumbnail_url: string | null
+          views: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_compass_post_id_client_id_fkey"
+            columns: ["compass_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_last_import_id_client_id_fkey"
+            columns: ["last_import_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_history_imports"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_learning_set_by_fkey"
+            columns: ["learning_set_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_posts_social_account_id_client_id_fkey"
+            columns: ["social_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
     }
     Functions: {
       authority_apply: {
@@ -9699,6 +10580,50 @@ export type Database = {
         Args: { secret_name: string; secret_value: string }
         Returns: undefined
       }
+      social_history_begin_import: {
+        Args: {
+          p_client_id: string
+          p_limit: number
+          p_page_id: string
+          p_page_name: string
+          p_platform: string
+          p_provider_account_id: string
+          p_requested_by: string
+          p_window_from: string
+        }
+        Returns: Json
+      }
+      social_history_caller_is_service: { Args: never; Returns: boolean }
+      social_history_compass_match: {
+        Args: {
+          p_client_id: string
+          p_copy: string
+          p_permalink: string
+          p_platform: Database["public"]["Enums"]["social_platform"]
+          p_platform_post_id: string
+        }
+        Returns: string
+      }
+      social_history_copy_hash: { Args: { p: string }; Returns: string }
+      social_history_finish_import: {
+        Args: {
+          p_error: string
+          p_import_id: string
+          p_listing: Json
+          p_status: string
+        }
+        Returns: Json
+      }
+      social_history_norm_copy: { Args: { p: string }; Returns: string }
+      social_history_record_posts: {
+        Args: { p_import_id: string; p_posts: Json }
+        Returns: Json
+      }
+      social_history_set_learning: {
+        Args: { p_note?: string; p_post_id: string; p_status: string }
+        Returns: undefined
+      }
+      social_history_write_active: { Args: never; Returns: boolean }
       social_post_close_review_task: {
         Args: { p_outcome: string; p_task_id: string }
         Returns: undefined

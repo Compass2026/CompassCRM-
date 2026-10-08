@@ -1,4 +1,4 @@
--- Tests for migration 20261008120000_social_history (Social History SH1),
+-- Tests for migration 20261008015642_social_history (Social History SH1),
 -- run by scripts/test-portal-sandbox.sh on the same replay. Own harness
 -- schema (shx) and its own fictional client; no real platform identifier.
 --
