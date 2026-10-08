@@ -10,9 +10,206 @@
     `a8c3d1f0…`).
   - `social-history` v1 is deployed with `verify_jwt = true`.
   - Lucas's Facebook history is imported; see "SH1 production" below.
-- SH2 (the Social Style Analyzer) is in progress. SH3 (drafter use) and SH4
-  (Creative Engine use) do not exist.
+- **SH2 (the Social Style Analyzer) is live, up to a proposed profile.**
+  - Migration `20261008024508_social_history_style.sql` was applied Oct 8
+    2026 as `20261008024508`. The recorded SQL is identical to the file (md5
+    `f32f7e2d…`).
+  - `social-history` v2 is deployed (adds `analyze`). Every deployed file
+    matches the repository.
+  - Lucas has one profile, version 1, **proposed**. No teammate has approved
+    it, and nothing reads it. See "SH2 production" below.
+- SH3 (drafter use, the 90-day duplicate guard) and SH4 (Creative Engine use)
+  do not exist.
 - Pilot client: Lucas Construction (`102d3b20-2795-44ae-bd64-d1e43916291c`).
+
+## SH2 as built (Oct 8 2026)
+
+**The analyzer** (`supabase/functions/social-history/analyze.ts`):
+
+- It is pure and deterministic: the same rows give the same profile, byte
+  for byte. `as_of` is the newest data, never the clock.
+- It reads only what the store gives it:
+  - the client's imported posts with their newest snapshot
+    (`social_history_post_latest`);
+  - which of them `social_history_learnable_posts` admits;
+  - the client's governed rules (`client_intelligence_input`: phone, website,
+    active locations, usable claims, words to avoid, board hard rules).
+- The rules flow into the analysis. Nothing flows back.
+
+**Post roles.** A post can hold more than one role.
+
+- **Representative:** in the voice corpus (learnable, captioned, not
+  do-not-learn, not an outlier). It is nearest the corpus's median on
+  standardised features: length, sentence length, emoji, hashtags, bullets,
+  CTAs and tone. Up to two are taken per major content category, then the
+  set is filled to four to six, preferring categories not yet shown. A post
+  with more than 25% of its caption masked is never representative.
+- **Top performer:** engagement per reach at least 1.25× the client's own
+  median for the same format family (video = reel or video; static =
+  everything else). A family needs eight posts for its own median, or the
+  overall median is used. It is never an outlier or do-not-learn. At most six
+  are kept, and at most one per seven days.
+- **Outlier:** a modified z-score of at least 3.5 on log lift or log reach,
+  **and** at least 3× the baseline or the median reach. Outliers inform the
+  performance patterns and never the voice.
+- **Do-not-learn:**
+  - not in the learnable view (Compass, paid, not the Page's own, missing,
+    teammate-excluded);
+  - no caption, or under 40 characters;
+  - hiring or testimonial;
+  - a one-off or date-bound promotion;
+  - built on scarcity wording or the brand's words to avoid;
+  - more than 35% of the caption masked.
+
+  Milder urgency ("call now", "don't wait") and a street address in a
+  signature are masked and listed as phrases; the post itself stays in.
+
+**Performance:**
+
+- Engagement per reach is (reactions + comments + shares) / reach, and only
+  when reach is present.
+- No engagement rate is computed without reach, and no generic benchmark is
+  used.
+- Posts younger than seven days are left out.
+- Groups under five posts get no median lift.
+- Performance confidence is capped at **medium** while each post has a
+  single snapshot.
+
+**Masking.** Every example post's copy is masked with the AI Drafter's own
+detectors (`post-drafter/rules.ts`), plus:
+
+- counted reviews;
+- scarcity and urgency wording;
+- the brand's words to avoid;
+- places and place hashtags that are not approved locations.
+
+The client's own phone and website stay visible, and so does the exact text
+of a usable claim (never a review, address, price or phone claim). A masked
+span reads `[price/offer]`, `[place not approved]` and so on. No historical
+sentence can therefore carry a fact into a draft.
+
+**Traits.** Each trait carries `n`, a confidence and its basis:
+
+- caption length, structure, openings / hooks, sentences and rhythm;
+- conversational vs promotional tone, emoji, hashtags, CTAs;
+- location mentions, content mix, media mix, cadence;
+- recurring language, engagement.
+
+Confidence is high at 30 or more posts, medium at 15 or more, and low
+otherwise. Heuristic traits (tone, locations, content mix, recurring
+language) and performance are capped at medium.
+
+**Storage** (`social_history_style_profiles`):
+
+- One row per analysis, versioned per client and platform.
+- At most one `proposed` and one `approved` at a time (partial unique
+  indexes). Statuses are `proposed`, `approved`, `rejected` and
+  `superseded`.
+- The content, fingerprint and hash never change; the guard refuses it.
+  `rejected` and `superseded` are final.
+- The hash is computed by the database over the stored jsonb.
+
+**Writers:**
+
+- `social_history_style_record`: the function's service session only.
+  - It is idempotent on fingerprint plus analyzer version.
+  - A new analysis supersedes the open proposal, never the approved profile.
+  - It refuses example posts that are not this client's.
+  - It refuses representative or top-performing posts outside the learnable
+    view (decision 6).
+- `social_history_style_review`: a signed-in teammate through PostgREST only
+  (decision 1).
+  - The review is bound to the hash the page showed (`SH409` otherwise).
+  - A rejection needs a reason.
+  - Approval is refused if an example post has left the learnable view since
+    the analysis.
+  - Approving supersedes the previous approved profile.
+- `social_history_style_approved(client, platform)` is the only read a later
+  drafter may use. It returns NULL until a profile is approved. **Nothing
+  calls it yet.**
+
+**Isolation.** Every object is in the `social_history_*` family, so SH1's
+decision-8 check covers it. The migration's own verify block also refuses:
+
+- any function or view outside the family that reads profiles;
+- any style function that writes a claim, post, service, keyword, brand row
+  or history row;
+- grants wider than designed.
+
+**Function:** `social-history` v2 adds `analyze`.
+
+- Callers: any teammate, or the operator door.
+- Body: `{client_id, platform?: "facebook", dry_run?: boolean}`.
+- `dry_run` returns the profile and writes nothing.
+- Otherwise it records a proposal and answers 201 (new) or 200 (unchanged).
+- It never calls Zernio.
+
+**App:** Social › **Style** (`/clients/[id]/social/style`;
+`src/lib/social-style.ts`, `src/app/social-style-actions.ts`,
+`src/components/social-style/controls.tsx`).
+
+- It shows the profile version and status, every trait with its confidence
+  and basis, the representative posts, top performers, outliers, and the
+  do-not-learn posts and phrases.
+- A teammate can **Approve profile** or **Reject** (with a note).
+- A teammate can re-run the analysis.
+- A teammate can include or exclude any imported post from learning
+  (`social_history_set_learning`). Compass, paid and other-author posts are
+  locked out.
+
+**Tests:**
+
+- `tests/social-history-style.test.mjs`: the analyzer, the input, the
+  handler's `analyze` mode and the page model.
+- The sandbox's `social_history_style.test.sql` (45 checks).
+- `portal_access.test.sql`: A7 / D11 now list `social_history_style_review`.
+
+## SH2 production (Oct 8 2026)
+
+**Rollout:**
+
+1. Migration applied; recorded SQL identical to the file.
+2. RLS on, with the one `is_team()` policy. anon reads nothing; nobody
+   writes directly. The service role records but cannot review; a teammate
+   reviews but cannot record.
+3. Types regenerated (additions only).
+4. `social-history` v2 deployed; `version` answers 2 with `analyze`.
+5. `analyze` with `dry_run`, then `analyze` through the operator door.
+
+**Result:** profile `a8c7cb68-1ba5-4b0b-a658-208efa3dcf26`, version 1,
+**proposed**.
+
+- Fingerprint `6eca35f6…`, hash `b39f2cc0…`; the stored hash recomputes
+  correctly.
+- `requested_by` is NULL (operator door).
+- `social_history_style_approved(Lucas)` returns NULL.
+- Re-running `analyze` answered 200 `unchanged` with the same version.
+
+**Rolled-back probes, all refused (42501):**
+
+- the worker's SQL recording, approving, updating (with and without the
+  write flag) and deleting;
+- `SET ROLE service_role` approving;
+- `SET ROLE authenticated` with a team JWT approving;
+- anon reading.
+
+**Grounding:** `client_intelligence_input(Lucas)` is still md5
+`738e0db7…`. The 53 posts, 53 snapshots, claims and posts are unchanged, and
+the latest Authority run is still Sep 28.
+
+**Corpus:**
+
+- 53 imported, 53 learnable, 43 in the voice corpus.
+- 53 eligible for performance (all 7+ days old).
+- 9 do-not-learn, 4 outliers.
+- One snapshot per post, so performance confidence is medium at most.
+
+**Known follow-up:** the drafter's price detector masks only `$1` of
+"$15/hour". In the hiring outlier the example reads `[price/offer]5/hour`,
+and in `#AffordableRoofing` it reads `#[price/offer]`. Neither post is a
+voice example: the hiring post is do-not-learn, and an outlier never
+defines the voice. Widen the price span (a whole money figure and its unit)
+with the next analyzer version.
 
 ## SH1 production (Oct 8 2026)
 

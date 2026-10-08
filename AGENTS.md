@@ -1466,7 +1466,7 @@ Show Me Electrical only because its id sits inside that client's folder).
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
 
-## Social History (SH1 live Oct 8 2026: migration `20261008015642` applied, `social-history` v1 deployed, Lucas's 53 Facebook posts imported)
+## Social History (SH1 live Oct 8 2026, Lucas's 53 Facebook posts imported; SH2 live Oct 8 2026: migration `20261008024508` applied, `social-history` v2 deployed, Lucas profile v1 **proposed**, not approved)
 
 A client's real published social posts, imported read-only, are evidence of
 how the client writes and what performs. They are never grounding. Design,
@@ -1491,8 +1491,25 @@ approved decisions and the steps to the first import:
   nothing) and `import` (an admin, or the operator door `x-cron-secret`;
   bound to the plan's account and Page). Re-running `import` is the metrics
   refresh: unchanged posts are no-ops, and new numbers append a snapshot.
-- **Not built:** the analyzer and the style profile (SH2), drafter use and
-  the 90-day duplicate-copy guard (SH3), and Creative Engine use (SH4).
+- **Style profiles (SH2).** `analyze.ts` is a pure, deterministic analyzer
+  over the learnable posts and the client's governed rules
+  (`client_intelligence_input`, read only to mask). The function's `analyze`
+  mode (any teammate or the operator door; `dry_run` writes nothing) records
+  a **proposed** row in `social_history_style_profiles` through
+  `social_history_style_record` (service session only; idempotent on the
+  fingerprint; examples must be the client's own learnable posts).
+- **A profile is active only once a teammate approves it** on Social ›
+  Style: `social_history_style_review`, PostgREST teammate only, bound to the
+  profile hash, refused with `SH409` when an example has left the learnable
+  view. `social_history_style_approved()` is the only read for later use.
+  Profile content is immutable; re-analysis makes a new version.
+- **Performance is relative to the client's own history.** It is never
+  computed without reach and never compared with generic benchmarks.
+  Performance confidence is capped at medium on one snapshot. Example posts
+  are masked with the drafter's detectors, plus unapproved places, urgency
+  and the words to avoid.
+- **Not built:** drafter use and the 90-day duplicate-copy guard (SH3), and
+  Creative Engine use (SH4). Nothing reads a profile yet.
 
 ## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 

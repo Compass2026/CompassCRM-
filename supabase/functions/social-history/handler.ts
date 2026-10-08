@@ -15,6 +15,12 @@
 //             Zernio now says otherwise nothing is written. 202 {import_id},
 //             then in the background: pages of the listing, mapped, recorded
 //             in batches of 25, finished completed / partial / failed.
+//   analyze → (SH2) the Social Style Analyzer over the imported history:
+//             reads the learnable posts and the client's governed rules,
+//             returns the proposed Client Social Style Profile and, unless
+//             dry_run, records it as PROPOSED (social_history_style_record).
+//             Never approves; a teammate does that in the app. Nothing reads
+//             a profile yet. Any teammate or the operator door.
 //
 // Callers: a signed-in teammate (JWT on team_members; `import` needs an
 // admin), or the operator door (x-cron-secret = SYNC_CRON_SECRET, as every
@@ -23,9 +29,11 @@
 import { createZernioReader, ZernioError, ZERNIO_GET_ALLOWLIST, ZERNIO_KEY_SECRET, type ZernioAccount, type ZernioReader } from "./zernio.ts";
 import { fieldReport, mapPost, type Mapped, type PostRow } from "./map.ts";
 import type { Store } from "./store.ts";
+import { analyze, ANALYZER_VERSION, PROFILE_SCHEMA } from "./analyze.ts";
+import { buildStyleInput, fingerprint } from "./style-input.ts";
 
-export const HANDLER_VERSION = 1;
-export const MODES = ["version", "plan", "import"] as const;
+export const HANDLER_VERSION = 2;
+export const MODES = ["version", "plan", "import", "analyze"] as const;
 export const PLAN_SAMPLE = { default: 20, max: 25 } as const;
 export const IMPORT_LIMIT = { default: 100, max: 100 } as const;
 export const BATCH = 25;
@@ -264,6 +272,37 @@ export function createSocialHistory(deps: Deps) {
     return reply(202, { import_id: begun.import_id, social_account_id: begun.social_account_id, limit });
   }
 
+  async function analyzeMode(clientId: string, body: Json, memberId: string | null): Promise<Response> {
+    const platform = body.platform === undefined ? "facebook" : body.platform;
+    if (platform !== "facebook") return reply(400, { error: "platform is facebook" });
+    if (body.dry_run !== undefined && typeof body.dry_run !== "boolean") return reply(400, { error: "dry_run is true or false" });
+    const [intel, rows, learnable] = await Promise.all([
+      store.intelligence(clientId), store.history(clientId, platform), store.learnable(clientId, platform),
+    ]);
+    if (!intel) return reply(404, { error: "client_not_found" });
+    if (!rows.length) return reply(409, { error: "no_history", message: "Import the client's history first (plan, then import)." });
+    if (!learnable.size) return reply(409, { error: "nothing_learnable", message: "No imported post is in the learnable set." });
+    const input = buildStyleInput(intel, rows, learnable, platform);
+    const profile = analyze(input);
+    const fp = await fingerprint(input);
+    const summary = {
+      corpus: profile.corpus,
+      representative: profile.representative.map((r) => r.post_id),
+      top_performers: profile.top_performers.map((r) => r.post_id),
+      outliers: profile.outliers.map((r) => r.post_id),
+      do_not_learn: profile.do_not_learn.posts.length,
+    };
+    if (body.dry_run === true) {
+      return reply(200, { mode: "analyze", writes: "none", analyzer_version: ANALYZER_VERSION, fingerprint: fp, summary, profile });
+    }
+    const recorded = await store.recordProfile(clientId, platform, fp, profile, memberId);
+    return reply(recorded.unchanged ? 200 : 201, {
+      mode: "analyze", profile_id: recorded.id, version: recorded.version, status: recorded.status,
+      profile_hash: recorded.profile_hash, unchanged: recorded.unchanged, superseded: recorded.superseded ?? null,
+      analyzer_version: ANALYZER_VERSION, fingerprint: fp, summary,
+    });
+  }
+
   async function handle(req: Request): Promise<Response> {
     if (req.method !== "POST") return reply(405, { error: "POST only" });
     // The operator door every worker-callable Compass function has: Postgres
@@ -292,10 +331,13 @@ export function createSocialHistory(deps: Deps) {
         zernio: { methods: ["GET"], allowlist: ZERNIO_GET_ALLOWLIST.map((r) => ({ path: r.path.source, query: r.query })) },
         key_present: !!(await store.secret(ZERNIO_KEY_SECRET)), secret: ZERNIO_KEY_SECRET,
         limits: { plan_sample: PLAN_SAMPLE, import_limit: IMPORT_LIMIT, batch: BATCH, window_days: WINDOW_DAYS },
+        style: { analyzer_version: ANALYZER_VERSION, schema: PROFILE_SCHEMA },
       });
     }
-    if (mode !== "plan" && mode !== "import") return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
-    const allowed = mode === "plan" ? ["mode", "client_id", "sample", "account_id"] : ["mode", "client_id", "account_id", "page_id", "limit"];
+    if (mode !== "plan" && mode !== "import" && mode !== "analyze") return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
+    const allowed = mode === "plan" ? ["mode", "client_id", "sample", "account_id"]
+      : mode === "analyze" ? ["mode", "client_id", "platform", "dry_run"]
+      : ["mode", "client_id", "account_id", "page_id", "limit"];
     const extra = Object.keys(body).filter((k) => !allowed.includes(k));
     if (extra.length) return reply(400, { error: `unexpected field(s): ${extra.join(", ")}` });
     const clientId = body.client_id;
@@ -306,6 +348,7 @@ export function createSocialHistory(deps: Deps) {
     const client = await store.client(clientId);
     if (!client) return reply(404, { error: "client_not_found" });
     if (client.status === "offboarded") return reply(409, { error: "client_offboarded" });
+    if (mode === "analyze") return await analyzeMode(clientId, body, who.member);
     return mode === "plan" ? await plan(clientId, body, client) : await importMode(clientId, body, who.member);
   }
 

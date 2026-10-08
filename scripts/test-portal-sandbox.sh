@@ -198,3 +198,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_runtime.tes
 # view; and history is never grounding (no evidence function reads it, an
 # import changes no Client Intelligence / Authority input, claim or post).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history.test.sql"
+# Social History SH2 (20261008024508): style profiles are recorded only by the
+# social-history function, approved or rejected only by a signed-in teammate
+# against the hash they saw, one proposed and one approved at a time, never
+# edited; examples come only from the client's learnable posts; nothing
+# outside the family reads them and recording one changes no grounding.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history_style.test.sql"

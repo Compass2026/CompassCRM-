@@ -7713,6 +7713,135 @@ export type Database = {
           },
         ]
       }
+      social_history_style_profiles: {
+        Row: {
+          analyzer_version: string
+          as_of: string
+          client_id: string
+          created_at: string
+          id: string
+          input_fingerprint: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          posts_imported: number
+          posts_learnable: number
+          posts_performance: number
+          posts_voice: number
+          profile: Json
+          profile_hash: string
+          requested_by: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          superseded_at: string | null
+          superseded_by: string | null
+          version: number
+        }
+        Insert: {
+          analyzer_version: string
+          as_of: string
+          client_id: string
+          created_at?: string
+          id?: string
+          input_fingerprint: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          posts_imported: number
+          posts_learnable: number
+          posts_performance: number
+          posts_voice: number
+          profile: Json
+          profile_hash: string
+          requested_by?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          version: number
+        }
+        Update: {
+          analyzer_version?: string
+          as_of?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          input_fingerprint?: string
+          platform?: Database["public"]["Enums"]["social_platform"]
+          posts_imported?: number
+          posts_learnable?: number
+          posts_performance?: number
+          posts_voice?: number
+          profile?: Json
+          profile_hash?: string
+          requested_by?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_history_style_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_style_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_style_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "social_history_style_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_style_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_style_profiles_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_style_profiles_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_history_style_profiles_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "social_history_style_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_posts: {
         Row: {
           approved_hash: string | null
@@ -10622,6 +10751,29 @@ export type Database = {
       social_history_set_learning: {
         Args: { p_note?: string; p_post_id: string; p_status: string }
         Returns: undefined
+      }
+      social_history_style_approved: {
+        Args: { p_client_id: string; p_platform?: string }
+        Returns: Json
+      }
+      social_history_style_record: {
+        Args: {
+          p_client_id: string
+          p_fingerprint: string
+          p_platform: string
+          p_profile: Json
+          p_requested_by?: string
+        }
+        Returns: Json
+      }
+      social_history_style_review: {
+        Args: {
+          p_decision: string
+          p_expected_hash: string
+          p_note?: string
+          p_profile_id: string
+        }
+        Returns: Json
       }
       social_history_write_active: { Args: never; Returns: boolean }
       social_post_close_review_task: {
