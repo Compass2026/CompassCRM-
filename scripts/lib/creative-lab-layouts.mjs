@@ -16,6 +16,8 @@ export const LAB_LABELS = [
   { id: "our_work", text: "Our work", requires: "all_photos_own_work" },
   { id: "spring", text: "Spring" }, { id: "summer", text: "Summer" }, { id: "fall", text: "Fall" },
   { id: "winter", text: "Winter" }, { id: "storm_season", text: "Storm season" },
+  // Neutral design text for photo-first posts: invitations, never facts.
+  { id: "look_closer", text: "Look closer" }, { id: "on_the_job", text: "On the job", requires: "all_photos_own_work" },
 ];
 
 const logo = (x, y, w, h) => ({ type: "logo", x, y, w, h, fill: "charcoal", keyline: { color: "blue", width: 2 }, radius: 12, pad: Math.round(h / 10) });
@@ -84,7 +86,64 @@ function gbpField(kit) {
   ]);
 }
 
+// Plain: the photo and nothing else, the way a contractor posts from the
+// job. Sized so 950 px sources are never enlarged.
+function plain(kit, channel, w, h) {
+  return spec(kit, "real_work", channel, w, h, [{ slot: "photos", min: 1, max: 1, require_service_match: false }], [
+    { type: "photo", slot: "photos", index: 0, role: "cell", x: 0, y: 0, w, h },
+  ]);
+}
+
+// The photo with one small label in the corner.
+function pillPhoto(kit, channel, w, h) {
+  return spec(kit, "real_work", channel, w, h, [{ slot: "photos", min: 1, max: 1, require_service_match: false }], [
+    { type: "photo", slot: "photos", index: 0, role: "cell", x: 0, y: 0, w, h },
+    { type: "pill", slot: "label", roles: ["template_label"], required: true, x: 32, y: 32,
+      style: { font: "montserrat-800", size: 26, line_height: 32, color: "sky", tracking: 2, transform: "uppercase" },
+      fill: "charcoal", pad_x: 24, pad_y: 14, max_words: 4, max_w: 600, background: "charcoal" },
+  ]);
+}
+
+// Facebook 4:5: two job photos side by side at full height; slim signature.
+// (Portrait sources keep their whole frame: wide strips crop them to sky.)
+function diptych(kit, channel) {
+  return spec(kit, "real_work", channel, 1080, 1350, [{ slot: "photos", min: 2, max: 2, require_service_match: false }], [
+    { type: "photo", slot: "photos", index: 0, role: "cell", x: 72, y: 72, w: 462, h: 990, radius: 14 },
+    { type: "photo", slot: "photos", index: 1, role: "cell", x: 546, y: 72, w: 462, h: 990, radius: 14 },
+    logo(72, 1132, 168, 116),
+    { type: "stack", x: 272, y: 1100, w: 736, max_bottom: 1300, gap: 8, anchor: "center",
+      items: [eyebrow(736, 22), line(736, 36, 2), website(736, 24)] },
+  ]);
+}
+
+// Business Profile 4:3: two photos side by side, nothing else.
+function plainPair(kit) {
+  return spec(kit, "real_work", "google_business", 1200, 900, [{ slot: "photos", min: 2, max: 2, require_service_match: false }], [
+    { type: "photo", slot: "photos", index: 0, role: "cell", x: 0, y: 0, w: 596, h: 900 },
+    { type: "photo", slot: "photos", index: 1, role: "cell", x: 604, y: 0, w: 596, h: 900 },
+  ]);
+}
+
+// Facebook 4:5: three job photos stacked as a story strip; slim signature.
+function strip(kit, channel) {
+  return spec(kit, "real_work", channel, 1080, 1350, [{ slot: "photos", min: 3, max: 3, require_service_match: false }], [
+    { type: "photo", slot: "photos", index: 0, role: "cell", x: 72, y: 60, w: 936, h: 330, radius: 14 },
+    { type: "photo", slot: "photos", index: 1, role: "cell", x: 72, y: 402, w: 936, h: 330, radius: 14 },
+    { type: "photo", slot: "photos", index: 2, role: "cell", x: 72, y: 744, w: 936, h: 330, radius: 14 },
+    logo(72, 1132, 168, 116),
+    { type: "stack", x: 272, y: 1112, w: 736, max_bottom: 1300, gap: 8, anchor: "center",
+      items: [eyebrow(736, 22), line(736, 36, 2), website(736, 24)] },
+  ]);
+}
+
 const LAB = {
+  "plain-portrait-facebook": (k) => plain(k, "facebook", 944, 1180),
+  "plain-landscape-gbp": (k) => plain(k, "google_business", 944, 708),
+  "pill-portrait-facebook": (k) => pillPhoto(k, "facebook", 944, 1180),
+  "pill-landscape-gbp": (k) => pillPhoto(k, "google_business", 944, 708),
+  "strip-facebook": (k) => strip(k, "facebook"),
+  "diptych-facebook": (k) => diptych(k, "facebook"),
+  "plain-pair-gbp": plainPair,
   "field-photo-facebook": (k) => fieldPhoto(k, "facebook"),
   "field-photo-instagram": (k) => fieldPhoto(k, "instagram"),
   "photo-gbp": gbpPhoto,

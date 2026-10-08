@@ -116,7 +116,7 @@ for (const c of sprint.concepts) {
   const built = buildBrief(input, { channel: "google_business", postType: "standard", intent: s.intent, serviceId: service?.id ?? null,
     keywordId: keyword?.id ?? null, ctaType: c.gbp?.cta ?? "LEARN_MORE", offerId: null, assetIds: [] });
   const brief = built.ok ? built.brief : null;
-  const out = { id: c.id, title: c.title, strategy: s, why: c.why, brief: built.ok
+  const out = { id: c.id, group: c.group ?? null, version: c.version ?? null, title: c.title, strategy: s, why: c.why, brief: built.ok
     ? { ok: true, hash: await briefHash(brief), cta: brief.target.cta, places: brief.allowed_facts.crm.places,
         claims: brief.allowed_facts.claims.map((x) => ({ id: x.id, text: x.text })) }
     : { ok: false, refusals: built.refusals } };
@@ -126,8 +126,16 @@ for (const c of sprint.concepts) {
     out[ch] = {
       copy: d.copy, claim_ids: d.claim_ids ?? [], cta: ch === "gbp" ? brief?.target.cta ?? null : d.cta ?? null,
       lint: brief ? lintCopy(brief, ch, d) : { ok: false, problems: built.refusals },
-      creative: d.creative ? await renderCreative(d.creative, brief, `${c.id}-${ch}.png`) : null,
-      treatment: d.creative?.why ?? null,
+      creative: !d.creative ? null : Array.isArray(d.creative)
+        ? await (async () => {
+          // A Facebook album: one render per photo.
+          const frames = [];
+          for (const [i, f] of d.creative.entries()) frames.push(await renderCreative(f, brief, `${c.id}-${ch}-${i + 1}.png`));
+          return { ok: frames.every((f) => f.ok), album: true, frames, template: frames[0]?.template,
+            code: frames.find((f) => !f.ok)?.code, message: frames.find((f) => !f.ok)?.message };
+        })()
+        : await renderCreative(d.creative, brief, `${c.id}-${ch}.png`),
+      treatment: d.why ?? (Array.isArray(d.creative) ? d.creative[0]?.why : d.creative?.why) ?? null,
     };
   }
   results.push(out);
