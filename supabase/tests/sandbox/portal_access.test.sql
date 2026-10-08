@@ -141,12 +141,13 @@ begin
   -- so does communication_secret_status (0065, yes / no only):
   -- communications_secrets.test.sql. social_history_set_learning (Social
   -- History SH1) refuses anyone but a signed-in teammate: P2 in
-  -- social_history.test.sql.
-  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, communication_record_consent, communication_secret_status, communication_set_primary_number, communication_update_conversation, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, secret_present, social_history_set_learning, social_post_readiness among security-definer functions',
+  -- social_history.test.sql; so does social_history_style_review (SH2): R10,
+  -- R11 and P3 in social_history_style.test.sql.
+  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, communication_record_consent, communication_secret_status, communication_set_primary_number, communication_update_conversation, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, secret_present, social_history_set_learning, social_history_style_review, social_post_readiness among security-definer functions',
     (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
      where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
        and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_history_set_learning', 'social_post_readiness']);
+    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_history_set_learning', 'social_history_style_review', 'social_post_readiness']);
 
   -- portal_client and portal_site are simple views, so Postgres would let a
   -- write through them (as the owner, bypassing RLS) if a grant allowed it.
@@ -288,7 +289,7 @@ begin
   perform t.ok('D11 portal user cannot call any other security-definer function',
     not exists (select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
       where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
-        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_history_set_learning', 'social_post_readiness')
+        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'secret_present', 'social_history_set_learning', 'social_history_style_review', 'social_post_readiness')
         and has_function_privilege(p.oid, 'execute')));
   perform t.ok('D11b social_post_readiness refuses a portal user',
     t.try('select social_post_readiness(gen_random_uuid())') = '42501');
