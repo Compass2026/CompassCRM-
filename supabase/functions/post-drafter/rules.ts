@@ -107,8 +107,11 @@ export function spansOf(hay: string, needle: string): [number, number][] {
   return out;
 }
 
+// Spans are UTF-16 indices (String.prototype.matchAll), so the text is split
+// into UTF-16 code units: splitting by code point shifts every span that
+// follows an emoji or other astral character.
 export function mask(text: string, spans: [number, number][]): string {
-  const chars = [...text];
+  const chars = text.split("");
   for (const [a, b] of spans) for (let i = a; i < b && i < chars.length; i++) chars[i] = " ";
   return chars.join("");
 }

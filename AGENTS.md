@@ -1466,6 +1466,30 @@ Show Me Electrical only because its id sits inside that client's folder).
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
 
+## Creative Lab / Preview Mode (Oct 8 2026; `docs/creative-lab.md`)
+
+Explore freely → choose → promote to review → human approves → publish.
+Market signals, the **proposed** Social Style Profile (soft style signal
+only), concepts, variations and regenerations need no approval. The final
+publication gate is unchanged.
+
+- **What still applies to every preview:**
+  - the AI Drafter's brief and linter;
+  - the creative kit;
+  - Creative Engine governance on images (governed words, approved own-work
+    photos, re-hashed).
+- **Precedence:** Truth / Client Intelligence / E-E-A-T → Authority → intent →
+  market signals → brand rules → Social Style → presentation.
+- **Pieces:**
+  - `supabase/functions/creative-lab` (read-only: signed five-minute source
+    links; deployed Oct 8 2026 as v1);
+  - `scripts/creative-lab.mjs` and `scripts/lib/creative-lab-layouts.mjs`
+    (render a sprint locally; writes nothing anywhere);
+  - `lab/<client>/` (sprint files and the market packet).
+- **Lucas Sprint 01:** six concepts, all passing. It surfaced a `mask()`
+  UTF-16 bug in `post-drafter/rules.ts`, now fixed. The deployed
+  `post-drafter` still carries the old `mask()` until it is redeployed.
+
 ## Social History (SH1 live Oct 8 2026, Lucas's 53 Facebook posts imported; SH2 live Oct 8 2026: migration `20261008024508` applied, `social-history` v2 deployed, merged as #106, Lucas profile v1 **proposed**, not approved)
 
 A client's real published social posts, imported read-only, are evidence of

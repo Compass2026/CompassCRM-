@@ -86,6 +86,13 @@ plan decisions. The SH3 / SH4 tests must prove that two profiles differing
 only in descriptive signals produce the same topic, target, intent and
 schedule.
 
+
+**Preview Mode exception (Oct 8 2026, `docs/creative-lab.md`).** The Creative
+Lab may use the latest *proposed* profile as a soft style signal while
+exploring. That use is limited to the influences above and never to strategy.
+Nothing produced this way is approved, scheduled or published. Production
+consumers (SH3 / SH4) still read only `social_history_style_approved()`.
+
 ## SH2 as built (Oct 8 2026)
 
 **The analyzer** (`supabase/functions/social-history/analyze.ts`):
