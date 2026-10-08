@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/clients/**/agreements/**": ["./public/compass-agreement-logo.png"],
+    "/agreements/**": ["./public/compass-agreement-logo.png"],
+    "/sign/**": ["./public/compass-agreement-logo.png"],
+  },
   async headers() {
     return [
       {
