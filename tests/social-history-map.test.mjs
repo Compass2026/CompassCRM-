@@ -107,3 +107,11 @@ test("the field report counts what arrived across a sample", () => {
   assert.deepEqual(rep.metrics.per_metric.reactions, { present: 2, zero: 0, unavailable: 0 });
   assert.deepEqual(rep.metrics.per_metric.saves, { present: 0, zero: 0, unavailable: 2 });
 });
+
+test("Zernio's bare analytics timestamp is read as UTC (real Lucas shape, Oct 8 2026)", async () => {
+  const { iso } = await import("../supabase/functions/social-history/map.ts");
+  assert.equal(iso("2026-10-08 01:23:04"), "2026-10-08T01:23:04.000Z");
+  assert.equal(iso("2026-09-23T20:42:41.000Z"), "2026-09-23T20:42:41.000Z");
+  const m = mapPost(zPost(20, { analytics: { impressions: 10, reach: 8, likes: 1, comments: 0, shares: 0, clicks: 0, views: 0, lastUpdated: "2026-10-08 01:23:04" } }), ACCOUNT);
+  assert.equal(m.row.metrics.provider_updated_at, "2026-10-08T01:23:04.000Z");
+});

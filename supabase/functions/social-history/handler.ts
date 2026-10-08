@@ -45,10 +45,17 @@ const reply = (status: number, body: Json) => Response.json(body, { status });
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
+// Zernio's platformUserId for a Facebook account is "<user id>:page:<page id>"
+// (seen on Lucas, Oct 8 2026); a bare id is the Page id itself.
+export function pageIdOf(platformUserId: string | null | undefined): string | null {
+  if (typeof platformUserId !== "string") return null;
+  const m = /^(?:\d+:page:)?(\d{5,30})$/.exec(platformUserId.trim());
+  return m ? m[1] : null;
+}
 const profileIdOf = (a: ZernioAccount) => (typeof a.profileId === "string" ? a.profileId : a.profileId?._id ?? null);
 const accountView = (a: ZernioAccount) => ({
   id: a._id, platform: a.platform, display_name: a.displayName ?? null, username: a.username ?? null,
-  platform_user_id: a.platformUserId ?? null, profile_id: profileIdOf(a), profile_url: a.profileUrl ?? null,
+  platform_user_id: a.platformUserId ?? null, page_id: pageIdOf(a.platformUserId), profile_id: profileIdOf(a), profile_url: a.profileUrl ?? null,
   is_active: a.isActive ?? null, needs_reconnection: a.needsReconnection ?? null,
 });
 const safe = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
@@ -88,7 +95,7 @@ export function createSocialHistory(deps: Deps) {
       chosen = accounts.find((a) => a._id === accountId) ?? null;
       if (!chosen) return { refusal: reply(404, { error: "account_not_visible", account_id: accountId, visible: accounts.map(accountView) }) };
     } else if (recorded?.external_account_id) {
-      const hits = accounts.filter((a) => a.platformUserId === recorded.external_account_id);
+      const hits = accounts.filter((a) => pageIdOf(a.platformUserId) === recorded.external_account_id);
       if (hits.length !== 1) {
         return { refusal: reply(409, { error: hits.length ? "account_ambiguous" : "recorded_page_not_visible",
           recorded_page_id: recorded.external_account_id, visible: accounts.map(accountView) }) };
@@ -103,8 +110,9 @@ export function createSocialHistory(deps: Deps) {
         visible: accounts.map(accountView) }) };
     }
     const page = await z.facebookPage(chosen._id);
-    const pageId = page.selectedPageId ?? chosen.platformUserId ?? null;
-    const pageMatch = !!pageId && (!chosen.platformUserId || !page.selectedPageId || chosen.platformUserId === page.selectedPageId);
+    const accountPage = pageIdOf(chosen.platformUserId);
+    const pageId = page.selectedPageId ?? accountPage;
+    const pageMatch = !!pageId && (!accountPage || !page.selectedPageId || accountPage === page.selectedPageId);
     const pageName = page.pages?.find((p) => p.id === pageId)?.name ?? chosen.displayName ?? null;
     return { accounts, hasAnalyticsAccess, recorded, chosen, page, pageId, pageMatch, pageName };
   }
@@ -147,7 +155,7 @@ export function createSocialHistory(deps: Deps) {
         account: accountView(r.chosen),
         page: {
           id: r.pageId, name: r.pageName, selected_page_id: r.page.selectedPageId ?? null,
-          platform_user_id: r.chosen.platformUserId ?? null, match: r.pageMatch,
+          platform_user_id: r.chosen.platformUserId ?? null, account_page_id: pageIdOf(r.chosen.platformUserId), match: r.pageMatch,
           recorded_for_client: r.recorded?.external_account_id ?? null,
         },
         listing: {

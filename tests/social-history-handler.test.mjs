@@ -110,7 +110,7 @@ test("plan is a dry run: a 20-post sample, Zernio's objects beside what would be
   assert.equal(r.body.posts[0].zernio._id, "ext000000000000000000001");
   assert.equal(r.body.posts[0].would_store.platform_post_id, `${PAGE}_9001`);
   assert.equal(r.body.account.id, ACCOUNT);
-  assert.deepEqual(r.body.page, { id: PAGE, name: "Fictional Roofing Co", selected_page_id: PAGE, platform_user_id: PAGE, match: true, recorded_for_client: null });
+  assert.deepEqual(r.body.page, { id: PAGE, name: "Fictional Roofing Co", selected_page_id: PAGE, platform_user_id: PAGE, account_page_id: PAGE, match: true, recorded_for_client: null });
   assert.deepEqual(r.body.key.visible_profiles, [{ id: PROFILE, name: "Compass – Fictional Roofing", account_count: 1 }]);
   assert.equal(r.body.listing.available, 30);
   assert.equal(r.body.field_quality.mappable, 20);
@@ -250,4 +250,23 @@ test("an offboarded or unknown client and unexpected fields are refused", async 
   assert.equal((await call({ mode: "plan", client_id: "00000000-0000-4000-8000-000000000999" })).status, 404);
   assert.equal((await call({ mode: "plan", client_id: CLIENT, copy: "x" })).status, 400);
   assert.equal((await call({ mode: "publish", client_id: CLIENT })).status, 400);
+});
+
+test("a Facebook platformUserId of the form <user>:page:<page> resolves to the Page (real Lucas shape, Oct 8 2026)", async () => {
+  const { pageIdOf } = await import("../supabase/functions/social-history/handler.ts");
+  assert.equal(pageIdOf("1083389328003208:page:103977857788955"), "103977857788955");
+  assert.equal(pageIdOf("103977857788955"), "103977857788955");
+  assert.equal(pageIdOf("abc:page:x"), null);
+  assert.equal(pageIdOf(null), null);
+  const composite = [{ _id: ACCOUNT, platform: "facebook", platformUserId: `1083389328003208:page:${PAGE}`, displayName: "Fictional Roofing Co" }];
+  const { call } = setup({ zernio: { accounts: composite } });
+  const r = await call({ mode: "plan", client_id: CLIENT });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.page.id, PAGE);
+  assert.equal(r.body.page.match, true);
+  assert.deepEqual(r.body.blockers, []);
+  assert.equal(r.body.import_request.page_id, PAGE);
+  // A recorded Page is matched against the composite id too.
+  const rec = setup({ zernio: { accounts: composite }, store: { accounts: [{ id: "acct-1", client_id: CLIENT, external_account_id: PAGE }] } });
+  assert.equal((await rec.call({ mode: "plan", client_id: CLIENT })).status, 200);
 });

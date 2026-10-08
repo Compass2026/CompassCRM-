@@ -54,9 +54,13 @@ export type Mapped =
   | { ok: false; reason: string; provider_post_id: string | null };
 
 const https = (u: unknown): string | null => (typeof u === "string" && /^https:\/\/\S+$/.test(u) ? u : null);
-const iso = (v: unknown): string | null => {
+// Zernio sends both ISO 8601 ("2026-09-23T20:42:41.000Z") and, for
+// analytics.lastUpdated, a bare "2026-10-08 01:23:04" (UTC, no zone); the bare
+// form is read as UTC, never as the runtime's local time.
+export const iso = (v: unknown): string | null => {
   if (typeof v !== "string" || !v) return null;
-  const t = Date.parse(v);
+  const bare = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(v);
+  const t = Date.parse(bare ? `${v.replace(" ", "T")}Z` : v);
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 };
 const count = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.trunc(v) : null);

@@ -159,6 +159,55 @@ additive):
 5. **If the fields look right:** send the plan's `import_request` (50–100
    posts), then spot-check 10 posts against Facebook.
 
+## Lucas dry run (Oct 8 2026; nothing imported, applied or deployed)
+
+**How it ran:** the real `plan` handler, replayed over Zernio responses that
+Postgres fetched through pg_net with `get_secret('ZERNIO_READ_API_KEY')`.
+The key never left the database. The responses were checked by md5 against
+`net._http_response`.
+
+**Result:** 200, no blockers, four GETs, zero writes.
+
+**Profile and Page:**
+
+- Profile **Compass - Lucas Construction**: the only one the key sees.
+- Account `6ac6efe9621dc76465184742`, Page `103977857788955` (LUCAS
+  Construction, 1,835 followers).
+
+**The key:**
+
+- Restricted (`zrk_`; key management refused with 403
+  `insufficient_permissions`) and profile-scoped.
+- `read` vs `read-write` is not visible to a restricted key; Tom confirms it
+  in the dashboard.
+- The Zernio connection itself holds `pages_manage_posts`,
+  `pages_messaging` and ads permissions. The Facebook token expires
+  2026-11-27.
+
+**Posts:**
+
+- 53 posts, Oct 11 2025 → Sep 23 2026 (Zernio keeps ~12 months; the year
+  before returns 0).
+- All external and owned by the Page. 0 stories, 0 paid, 0 Compass posts.
+- All metrics synced in one snapshot at 2026-10-08 01:23:04 UTC.
+- 34 reels, 17 photos, 1 album, 1 text; 3 without a caption. None filtered
+  by SH1.
+
+**Not returned by Zernio:**
+
+- media width / height and alt text;
+- the reaction breakdown (`likes` = all reactions);
+- `saves` (always 0);
+- `views` on non-video posts (0, not applicable). Open decision: store NULL.
+
+**Fixed with tests:**
+
+- `platformUserId` arrives as `<user>:page:<page>` (`pageIdOf`).
+- The bare `lastUpdated` timestamp is read as UTC.
+
+The full report and the 20-post table were delivered in the session, not
+committed: they hold client copy.
+
 ## Purpose and boundaries
 
 Social History is a read-only intelligence layer. It learns how a client
