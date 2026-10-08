@@ -79,7 +79,17 @@ export function readProfile(p: unknown) {
   };
 }
 
-export type TraitView = { key: string; label: string; confidence: Confidence; n: number | null; lines: string[]; basis: string };
+export type TraitView = { key: string; label: string; confidence: Confidence; n: number | null; lines: string[]; basis: string; descriptive: boolean };
+
+// Style, never strategy (docs/social-history.md, "Influence rule"). These
+// traits describe the client's history; no consumer may use them to choose,
+// rank, schedule or weight what gets created. They never override Authority
+// topic selection, search-intent coverage, service priorities, E-E-A-T /
+// evidence needs or Content Planner strategy.
+export const DESCRIPTIVE_TRAITS: readonly string[] = ["content_mix", "cadence", "media_mix", "engagement", "locations"];
+// What an approved profile may shape in a draft.
+export const STYLE_INFLUENCE = ["voice and tone", "hooks and openings", "sentence rhythm", "CTA phrasing",
+  "emoji and hashtag tendencies", "presentation (length, line breaks, layout)"] as const;
 const TRAIT_LABELS: [string, string][] = [
   ["caption_length", "Caption length"], ["structure", "Structure"], ["openings", "Openings / hooks"],
   ["sentences", "Sentences and rhythm"], ["tone", "Conversational vs promotional"], ["emoji", "Emoji"],
@@ -157,7 +167,8 @@ export function traitViews(profile: unknown): TraitView[] {
   const traits = readProfile(profile).traits;
   return TRAIT_LABELS.filter(([k]) => traits[k]).map(([key, label]) => {
     const t = obj(traits[key]);
-    return { key, label, confidence: isConfidence(t.confidence) ? t.confidence : "low", n: num(t.n), lines: traitLines(key, t), basis: str(t.basis) ?? "" };
+    return { key, label, confidence: isConfidence(t.confidence) ? t.confidence : "low", n: num(t.n), lines: traitLines(key, t), basis: str(t.basis) ?? "",
+      descriptive: DESCRIPTIVE_TRAITS.includes(key) };
   });
 }
 

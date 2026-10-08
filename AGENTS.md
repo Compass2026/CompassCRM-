@@ -1466,7 +1466,7 @@ Show Me Electrical only because its id sits inside that client's folder).
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
 
-## Social History (SH1 live Oct 8 2026, Lucas's 53 Facebook posts imported; SH2 live Oct 8 2026: migration `20261008024508` applied, `social-history` v2 deployed, Lucas profile v1 **proposed**, not approved)
+## Social History (SH1 live Oct 8 2026, Lucas's 53 Facebook posts imported; SH2 live Oct 8 2026: migration `20261008024508` applied, `social-history` v2 deployed, merged as #106, Lucas profile v1 **proposed**, not approved)
 
 A client's real published social posts, imported read-only, are evidence of
 how the client writes and what performs. They are never grounding. Design,
@@ -1508,8 +1508,19 @@ approved decisions and the steps to the first import:
   Performance confidence is capped at medium on one snapshot. Example posts
   are masked with the drafter's detectors, plus unapproved places, urgency
   and the words to avoid.
+- **Style, never strategy** (decided Oct 8 2026; `docs/social-history.md`,
+  "Influence rule").
+  - Descriptive signals only: content mix, cadence and posting frequency,
+    media mix, performance by category or format, and top-performer
+    categories.
+  - They never override Authority topic selection, search-intent coverage,
+    service priorities, E-E-A-T / evidence needs or Content Planner strategy.
+  - A profile may influence only voice and tone, hooks, sentence rhythm, CTA
+    phrasing, emoji and hashtag tendencies and presentation, and it serves as
+    masked phrasing examples.
 - **Not built:** drafter use and the 90-day duplicate-copy guard (SH3), and
-  Creative Engine use (SH4). Nothing reads a profile yet.
+  Creative Engine use (SH4). Nothing reads a profile yet. **SH3 does not start
+  until Lucas's profile is approved by a teammate.**
 
 ## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 
