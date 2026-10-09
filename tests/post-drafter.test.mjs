@@ -286,3 +286,13 @@ test("the model request says to invite consideration, never diagnose", () => {
   assert.match(text, /Never diagnose the reader's home/);
   assert.match(text, /Learn more about whether roof replacement may fit your home/);
 });
+
+// Masks are UTF-16 spans: emoji (astral characters) before a masked span must
+// not shift the mask onto the wrong characters, either way.
+test("emoji before the phone or a claim do not shift the masks", () => {
+  const pad = " Roof replacement in Wentzville starts with the right contractor and a clear plan for your home.";
+  const ok = lint(`🏠🏠🏠 Lucas Construction is an Owens Corning Preferred Contractor.${pad} 📞 Call (636) 459-9328 to talk it through.${pad}${pad}`, [OC]);
+  assert.ok(!ok.problems.some((p) => p.code === "unsupported_number"), JSON.stringify(ok.problems));
+  const bad = lint(`🏠🏠🏠🏠🏠🏠🏠🏠 Lucas Construction is an Owens Corning Preferred Contractor 7 days a week.${pad}${pad}${pad}`, [OC]);
+  assert.ok(bad.problems.some((p) => p.code === "unsupported_response" || p.code === "unsupported_number"), JSON.stringify(bad.problems));
+});

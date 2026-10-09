@@ -1,0 +1,484 @@
+{
+ "title": "Lucas Creative Sprint 01",
+ "kit": "lucas",
+ "facts": "../../tests/fixtures/creative-lucas-facts.json",
+ "intelligence": "../../tests/fixtures/drafter-authority-lucas.json",
+ "style_profile": {
+  "id": "a8c7cb68-1ba5-4b0b-a658-208efa3dcf26",
+  "status": "proposed",
+  "use": "soft style signal only (Preview Mode)",
+  "applied": [
+   "emoji-led first line (86% of Lucas's posts)",
+   "✔️ checklist lines (81%)",
+   "📞 phone / 🌐 website signature (86%)",
+   "a short closing hashtag block from Lucas's own approved tags (fewer than the 9 typical; none naming unapproved places, no #freeroofquote)",
+   "'At Lucas Construction we' voice, made warmer and less promotional than the history (top performers were the human posts)"
+  ],
+  "not_applied": [
+   "topics, services, keywords, intent, claims, places and cadence: Authority, the Drafter brief and Client Intelligence decide those"
+  ]
+ },
+ "market_signals": "market-signals-2026-10-08.md",
+ "concepts": [
+  {
+   "id": "c1",
+   "title": "Read past the total",
+   "strategy": {
+    "authority": {
+     "key": "gbp_post:4288b96c-…:transactional",
+     "section": "Ready · accepted",
+     "note": "The one Ready, accepted Business Profile opportunity."
+    },
+    "service": "Roof Replacement",
+    "intent": "transactional",
+    "keyword": "get a roofing quote wentzville",
+    "target_page": "/services/roof-replacement",
+    "eeat": "Owens Corning Preferred Contractor + Installs Owens Corning Duration shingles (both sourced: Owens Corning contractor profile). This is the Authority analysis's own evidence for this opportunity.",
+    "market_signal": "Objection: cost shock and quotes that are hard to compare. NRCA: price is only one criterion; compare the written scope.",
+    "market_sources": [
+     "https://www.nrca.net/roofing-guidelines/selecting-a-contractor",
+     "https://www.servicetitan.com/toolbox/state-of-the-trades/trends/residential-roof-replacement-cost"
+    ]
+   },
+   "why": "A quote request that gives before it asks: one useful buying tip, then the two credentials that matter for a replacement.",
+   "facebook": {
+    "claim_ids": [
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21",
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "🏠 Comparing roofing quotes? Read past the total.\n\nTwo quotes can look miles apart until you read what's actually in them. Before you decide, check each one for:\n✔️ what's coming off your roof\n✔️ what's going back on, by product name\n✔️ who your point of contact is when questions come up\n\nThat's the conversation we like to have. Lucas Construction installs Owens Corning Duration shingles, and we're an Owens Corning Preferred Contractor here in Wentzville.\n\nRequest a quote for your roof replacement:\n📞 (636) 459-9328\n🌐 lucasconstructionmo.com/services/roof-replacement\n\n#lucasconstruction #wentzvilleroofing #roofreplacement #wentzvillemo",
+    "creative": {
+     "template": "lab-field-photo-facebook",
+     "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "our_work"
+      },
+      "headline": {
+       "role": "service_name",
+       "source_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21"
+      }
+     },
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "Photo-first: Lucas's best finished roof (the one hero-grade photo) carries it; only a slim signature underneath. On Facebook a real house reads as a neighbour's post, not an ad."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21",
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Getting a roofing quote in Wentzville? One tip before you compare numbers: read what each quote actually includes, not just the total. Look for what's coming off the roof, what's going back on by product name, and who you'll talk to when questions come up.\n\nLucas Construction installs Owens Corning Duration shingles and is an Owens Corning Preferred Contractor.\n\nRequest a quote for your roof replacement below, or call (636) 459-9328.",
+    "creative": {
+     "template": "lucas-service-spotlight-gbp",
+     "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+     "bindings": {
+      "eyebrow": {
+       "role": "service_segment",
+       "source_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21"
+      },
+      "headline": {
+       "role": "service_name",
+       "source_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21"
+      },
+      "subline": {
+       "role": "claim",
+       "source_id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+      },
+      "points": [
+       {
+        "role": "claim",
+        "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+       }
+      ]
+     },
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "The one designed graphic in this concept, on purpose: a transactional Business Profile post benefits from a clear service name, the product and a 'Request a quote' button-shaped cue next to the real roof."
+    }
+   }
+  },
+  {
+   "id": "c2",
+   "title": "The view from the curb",
+   "strategy": {
+    "authority": {
+     "key": "gbp_post:4288b96c-…:commercial",
+     "section": "Ready (eligible Oct 16)",
+     "note": "Commercial Roof Replacement post; due on its cadence from Oct 16, previewed now."
+    },
+    "service": "Roof Replacement",
+    "intent": "commercial",
+    "keyword": "roof replacement wentzville",
+    "target_page": "/services/roof-replacement",
+    "eeat": "Experience: finished roof replacements, the client's own approved photos. Expertise: Owens Corning Duration shingles + Preferred Contractor (sourced).",
+    "market_signal": "Before/after and finished-project formats gaining attention; homeowners vetting contractors want to see finished work.",
+    "market_sources": [
+     "https://www.jobnimbus.com/blog/social-media-marketing-for-roofers",
+     "https://hookagency.com/blog/roofing-social-media-post-ideas/"
+    ]
+   },
+   "why": "Proof, not promises: real finished work plus the two facts a comparer should ask any roofer for.",
+   "facebook": {
+    "claim_ids": [
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21",
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "🏠 Our favorite part of every job: the view from the curb when it's done.\n\nThis is one of our roof replacements, photographed from the street. If you're comparing contractors for a roof replacement, ask every one of them to show you finished work like this, and ask which products they install.\n\nHere's our answer: Lucas Construction installs Owens Corning Duration shingles, and we're an Owens Corning Preferred Contractor.\n\n📞 (636) 459-9328\n🌐 lucasconstructionmo.com/services/roof-replacement\n\n#lucasconstruction #wentzvilleroofing #roofreplacement #roofingdoneright",
+    "creative": {
+     "template": "lab-field-photo-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "our_work"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      }
+     },
+     "photos": {
+      "photos": [
+       "db6eec44-9c4d-4313-82d7-d27e5dfd9bda"
+      ]
+     },
+     "why": "Photo-first: a finished house, framed, with the credential as a quiet caption. The photo is the proof; the caption says who did it."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21",
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Roof replacement in Wentzville, seen from the curb. These are two finished roof replacements by Lucas Construction, photographed from the street.\n\nWhen you're comparing contractors for a roof replacement, ask each one to show you finished work and to name the products they install. Our answer: Lucas Construction installs Owens Corning Duration shingles and is an Owens Corning Preferred Contractor.\n\nLearn more about roof replacement and request a quote below.",
+    "creative": {
+     "template": "lab-pair-gbp",
+     "photos": {
+      "photos": [
+       "db6eec44-9c4d-4313-82d7-d27e5dfd9bda",
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "No text on the image: two real finished homes side by side. Business Profile photos with heavy text read as ads; this reads as a portfolio."
+    }
+   }
+  },
+  {
+   "id": "c3",
+   "title": "What's in your gutters?",
+   "strategy": {
+    "authority": {
+     "key": "topic:signs_replacement / topic:repair_vs_replacement",
+     "section": "Research",
+     "note": "Educational research topics on Roof Replacement. Roof Repair has no live approved page (Authority Fix Now A: create /services/roof-repair), so the Drafter refuses a Roof Repair target; this points at Roof Replacement."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Expertise shown as useful, non-diagnostic guidance; the scope claim (sourced, website). Never tells the reader what their roof needs.",
+    "market_signal": "Seasonal: NRCA's fall checkup from the ground, granules in gutters, leaves straining gutters/fascia. Format: quick-tip checklist.",
+    "market_sources": [
+     "https://www.nrca.net/RoofingNews/check-out-nrca-website-for-consumers.2-26-2019.7488/Details/Story",
+     "https://www.timberhomeliving.com/fall-and-spring-roofing-maintenance-tips"
+    ]
+   },
+   "why": "Pure value for the season people are already on a ladder; it earns the follow and the save before it ever asks.",
+   "facebook": {
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "🍂 Cleaning out the gutters this fall? Take a look at what's in them.\n\nA quick ground-level checklist while you're at it:\n✔️ gritty granules piling up in the gutter or at the downspout\n✔️ roof edges that look curled or lifted\n✔️ dark streaks or patches you don't remember from last year\n✔️ gutters pulling away from the fascia\n\nNone of these tells you on its own what your roof needs. Together, they're worth a conversation with a roofer before winter. Lucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville, so ask us anything, roof to gutters.\n\nStay safe on the ladder 🪜\n\n📞 (636) 459-9328\n🌐 lucasconstructionmo.com\n\n#lucasconstruction #wentzvilleroofing #wentzvillemo #missouriroofing",
+    "creative": {
+     "template": "lab-field-photo-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "fall"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "The close-up of a roof edge meeting the gutter is exactly where the checklist points the eye. A designed card would add nothing the photo doesn't show."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "Fall is a good time to give your roof a once-over from the ground. While you're cleaning out the gutters, notice: gritty granules collecting in the gutter or at the downspout, roof edges that look curled or lifted, dark streaks or patches that weren't there before, and gutters pulling away from the fascia.\n\nNone of these tells you on its own what your roof needs, but they're worth asking a roofer about before winter. Lucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville.\n\nIf you're considering a roof replacement, learn more below.",
+    "creative": {
+     "template": "lab-field-gbp",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "fall"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "Photo plus a quiet caption panel: the detail shot stays large; the panel carries the season and what Lucas does."
+    }
+   }
+  },
+  {
+   "id": "c4",
+   "title": "Roof replacement day",
+   "strategy": {
+    "authority": {
+     "key": "page_improvement:4288b96c-… (E-E-A-T) · topic:process is blocked",
+     "section": "Fix Now A / Blocked",
+     "note": "Authority blocks a general 'our process' post (insufficient evidence), so this describes only what Lucas's own photos show, never a process promise."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Experience: four approved own-work job photos (tear-off with tarps, crane lift, bundles staged on the ridge, finished house). Owens Corning Preferred Contractor (sourced).",
+    "market_signal": "Homeowner question: 'How long does it take? Do I need to be home?' Objection: the hassle (noise, debris). Format: project story / behind the scenes.",
+    "market_sources": [
+     "https://www.thompsoncreek.com/blog/how-long-does-it-take-to-replace-a-roof/",
+     "https://www.jobnimbus.com/blog/social-media-marketing-for-roofers"
+    ]
+   },
+   "why": "Shows the day itself, from the job site, which is the experience signal search and people both reward.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "📸 What roof replacement day actually looks like.\n\nA few photos from our jobs:\n✔️ tarps down over the lawn before the old roof comes off\n✔️ a crane lifting new bundles straight up to the roof\n✔️ bundles staged along the ridge, ready to go down\n✔️ and the finished house when the crew packs up\n\nIt's loud for a while, and then it's done. If you're thinking about a roof replacement and want to know what that day would look like at your house, give us a call. Lucas Construction is an Owens Corning Preferred Contractor.\n\n📞 (636) 459-9328\n🌐 lucasconstructionmo.com/services/roof-replacement\n\n#lucasconstruction #wentzvilleroofing #roofreplacement #roofingdoneright",
+    "creative": {
+     "template": "lucas-real-work-facebook",
+     "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "our_work"
+      },
+      "headline": {
+       "role": "service_name",
+       "source_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21"
+      }
+     },
+     "photos": {
+      "photos": [
+       "1979f6aa-accb-46b0-919a-7af48d7d6f87",
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5",
+       "db8e7148-8f13-47c4-9ecf-47053df220e6",
+       "db6eec44-9c4d-4313-82d7-d27e5dfd9bda"
+      ]
+     },
+     "why": "Real Work Showcase: four job-site photos in the order the copy tells them. The grid is the story; type is kept to a label and the service."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "What does roof replacement day look like? These two photos are from our own jobs: tarps laid over the lawn before the old roof comes off, and a crane lifting new bundles straight up to the roof.\n\nIt's loud for a while, and then it's done. If you're considering a roof replacement and want to know what that day would look like at your house, learn more below or call (636) 459-9328. Lucas Construction is an Owens Corning Preferred Contractor.",
+    "creative": {
+     "template": "lab-pair-gbp",
+     "photos": {
+      "photos": [
+       "1979f6aa-accb-46b0-919a-7af48d7d6f87",
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "Two raw job-site photos, no text: the most credible thing a Business Profile can show is the work happening."
+    }
+   }
+  },
+  {
+   "id": "c5",
+   "title": "Two Missouri storm-claim myths",
+   "strategy": {
+    "authority": {
+     "key": "topic:storm_hail",
+     "section": "Research",
+     "note": "Storm Damage & Insurance Claims is an approved service but has no page (Authority Fix Now B: create /services/storm-damage); the Drafter refuses it as a target, so this links to Roof Replacement."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Trust: correct, sourced public law (RSMo 407.725), not a claim about Lucas. Owens Corning Preferred Contractor (sourced). Does not use the storm-specialist claim (its only source is a directory listing).",
+    "market_signal": "Timely: MO Attorney General charges against a contractor who took upfront payments from St. Louis tornado victims (May 2026); Missouri bars contractors from paying/rebating deductibles or negotiating claims. Format: myth vs fact.",
+    "market_sources": [
+     "https://revisor.mo.gov/main/OneSection.aspx?section=407.725",
+     "https://ago.mo.gov/attorney-general-hanaway-announces-charges-against-contractor-targeting-st-louis-tornado-victims/"
+    ]
+   },
+   "why": "Protective and local: it makes Lucas the roofer who tells you the rules, at the moment people are being warned about the opposite.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "⚠️ Two things Missouri homeowners should know before signing with any roofer after a storm.\n\nMyth: \"We'll take care of your deductible.\"\nFact: Missouri law doesn't allow a roofing contractor to promise to pay or rebate any part of your insurance deductible.\n\nMyth: \"Let us handle your insurance company for you.\"\nFact: A contractor can't negotiate your insurance claim on your behalf in Missouri. That conversation is between you and your insurer.\n\nIf someone at your door offers either one, slow down and ask questions. And if you're considering a roof replacement after storm damage, we're a local call away. Lucas Construction is an Owens Corning Preferred Contractor in Wentzville.\n\n📞 (636) 459-9328\n🌐 lucasconstructionmo.com/services/roof-replacement\n\n#lucasconstruction #wentzvilleroofing #stormdamagerepair #wentzvillemo",
+    "creative": {
+     "template": "lab-field-photo-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "storm_season"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      }
+     },
+     "photos": {
+      "photos": [
+       "db8e7148-8f13-47c4-9ecf-47053df220e6"
+      ]
+     },
+     "why": "A real job photo with a 'Storm season' label. A Myth / Fact card would say this better, but the engine never puts unapproved words on an image; approve the two myth lines as template labels and the lab can render that card."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Considering a roof replacement after storm damage? Two things Missouri homeowners should know before signing with any roofer. Missouri law doesn't allow a roofing contractor to promise to pay or rebate any part of your insurance deductible. And a contractor can't negotiate your insurance claim on your behalf; that conversation is between you and your insurer.\n\nIf someone at your door offers either one, slow down and ask questions. Lucas Construction is an Owens Corning Preferred Contractor in Wentzville. Learn more about roof replacement below.",
+    "creative": {
+     "template": "lab-field-gbp",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "storm_season"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      }
+     },
+     "photos": {
+      "photos": [
+       "db8e7148-8f13-47c4-9ecf-47053df220e6"
+      ]
+     },
+     "why": "Photo plus caption panel: calm, not alarmist; the season label and the credential do the work."
+    }
+   }
+  },
+  {
+   "id": "c6",
+   "title": "\"How do I know a roofer is legit?\"",
+   "strategy": {
+    "authority": {
+     "key": "topic:choosing_contractor",
+     "section": "Fix Now B (consolidate)",
+     "note": "Authority wants one strong 'choosing a contractor' answer; this is its social / Business Profile version."
+    },
+    "service": "Roof Replacement",
+    "intent": "commercial",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Trust: a vetting checklist anyone can use (NRCA guidance), then Lucas's own verifiable credentials: Owens Corning Preferred Contractor, Installs Owens Corning Duration shingles. BBB accreditation is left out (the Drafter excludes its date until confirmed).",
+    "market_signal": "Recurring question: 'How do I know the roofer who knocked on my door is legit?' NRCA: written contract, insurance, don't pay everything up front. Format: FAQ answer.",
+    "market_sources": [
+     "https://www.nrca.net/roofing-guidelines/selecting-a-contractor",
+     "https://www.ky3.com/2026/04/29/your-side-better-business-bureau-warns-roofing-scammers-after-this-weeks-storms/"
+    ]
+   },
+   "why": "Answers the question homeowners are actually asking, in their words, and lets Lucas's credentials be the example rather than the pitch.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "💬 \"How do I know a roofer is legit?\"\n\nIt's a smart question to ask before anyone touches your roof. A few things to check with any contractor:\n✔️ a written contract that spells out the scope of work\n✔️ a certificate of insurance you can see before work starts\n✔️ a payment schedule that doesn't ask for everything up front\n✔️ a manufacturer program you can look up yourself\n\nHere's ours: Lucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles.\n\nQuestions before you hire anyone? Call us at (636) 459-9328.\n🌐 lucasconstructionmo.com\n\n#lucasconstruction #wentzvilleroofing #localroofers #wentzvillemo",
+    "creative": {
+     "template": "lucas-trust-know-how-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "business_name"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      },
+      "points": [
+       {
+        "role": "claim",
+        "source_id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+       },
+       {
+        "role": "claim",
+        "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+       }
+      ]
+     },
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "The designed graphic earns its place here: it's a checklist post, and the credentials card turns 'look them up' into something you can screenshot."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "How do you know a roofing contractor is legit? Whoever you hire for a roof replacement, ask for a written contract that spells out the scope of work, a certificate of insurance before work starts, a payment schedule that doesn't ask for everything up front, and a manufacturer program you can look up yourself.\n\nLucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles. Have questions before you hire anyone? Learn more about roof replacement below.",
+    "creative": {
+     "template": "lucas-trust-know-how-gbp",
+     "bindings": {
+      "eyebrow": {
+       "role": "business_name"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      },
+      "points": [
+       {
+        "role": "claim",
+        "source_id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+       },
+       {
+        "role": "claim",
+        "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+       }
+      ]
+     },
+     "photos": {
+      "photos": [
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "Credentials card beside the crane photo: the job site keeps the card from feeling like a generic badge graphic."
+    }
+   }
+  }
+ ]
+}

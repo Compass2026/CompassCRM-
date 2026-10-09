@@ -18,9 +18,80 @@
     matches the repository.
   - Lucas has one profile, version 1, **proposed**. No teammate has approved
     it, and nothing reads it. See "SH2 production" below.
+  - The code is merged: SH1 as Compass2026/CompassCRM-#105, SH2 as
+    Compass2026/CompassCRM-#106.
 - SH3 (drafter use, the 90-day duplicate guard) and SH4 (Creative Engine use)
-  do not exist.
+  do not exist. **SH3 does not start until Lucas's profile is approved by a
+  teammate.**
 - Pilot client: Lucas Construction (`102d3b20-2795-44ae-bd64-d1e43916291c`).
+
+## Influence rule: style, never strategy (decided Oct 8 2026)
+
+A Social Style Profile describes how a client has written and what has
+performed on its own Page. It is **not a content strategy**, and it is never
+factual grounding (decisions 2 and 8).
+
+**Descriptive signals only.** These traits are shown to teammates as
+context. No consumer may use them to choose, rank, schedule or weight what
+gets created:
+
+- historical content mix (`traits.content_mix`);
+- posting cadence and frequency (`traits.cadence`);
+- media mix (`traits.media_mix`);
+- performance by category, format, opening, length or structure
+  (`traits.engagement.lift_by_*`);
+- which categories the top performers or outliers belong to.
+
+**They never override:**
+
+- Authority Engine topic and opportunity selection;
+- search-intent coverage;
+- service priorities;
+- E-E-A-T and evidence needs (Client Intelligence claims under their own
+  rules);
+- Content Planner strategy (what to create, when, and how often).
+
+If Lucas's history is 32% service promos and 0% educational, a drafter still
+writes the educational post Authority asked for. If promotional posts
+out-performed, that still never moves a promotional post up the plan.
+
+**What Social Style may influence**, and only once the profile is approved:
+
+- **Voice and tone register:** conversational vs promotional,
+  `traits.tone`.
+- **Hooks and openings:** opening types and their masked example lines,
+  `traits.openings`.
+- **Sentence rhythm:** sentence length, short-sentence share, questions,
+  exclamations, we / you balance, `traits.sentences`.
+- **CTA phrasing:** how a call to action is worded and laid out,
+  `traits.cta`. Which CTA a post carries still comes from the brief: the
+  Authority / Drafter button, intent and offer rules.
+- **Emoji and hashtag tendencies:** how many and where, excluding
+  do-not-learn tags, `traits.emoji`, `traits.hashtags`.
+- **Presentation:** caption length, line breaks, checklist and signature
+  layout, `traits.caption_length`, `traits.structure`.
+- **Phrasing examples:** the representative and top-performing posts, as
+  masked examples of how the client sounds. Top performers inform phrasing,
+  never topic choice.
+- **Recurring phrases:** only those not marked do-not-learn,
+  `traits.recurring_language`.
+
+Locations in a profile are descriptive too. Which places a post may name
+comes only from approved locations (Client Intelligence), never from history.
+
+**For SH3 and SH4:** a consumer reads only `social_history_style_approved()`,
+and passes only the style fields above into a brief or a creative spec. The
+descriptive signals are never inputs to topic, intent, service, cadence or
+plan decisions. The SH3 / SH4 tests must prove that two profiles differing
+only in descriptive signals produce the same topic, target, intent and
+schedule.
+
+
+**Preview Mode exception (Oct 8 2026, `docs/creative-lab.md`).** The Creative
+Lab may use the latest *proposed* profile as a soft style signal while
+exploring. That use is limited to the influences above and never to strategy.
+Nothing produced this way is approved, scheduled or published. Production
+consumers (SH3 / SH4) still read only `social_history_style_approved()`.
 
 ## SH2 as built (Oct 8 2026)
 
