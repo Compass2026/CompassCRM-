@@ -136,7 +136,44 @@ function strip(kit, channel) {
   ]);
 }
 
+// The credentials / checklist card (the 6H direction) without the phone,
+// website and CTA button the registered family bakes in: a photo, the
+// business name, one governed headline, checked governed points and a small
+// logo. For information that genuinely benefits from design.
+const cardHeadline = (w, size, lines) => ({
+  type: "text", slot: "headline", roles: ["claim"], required: true,
+  style: { font: "montserrat-800", size, line_height: Math.round(size * 1.08), color: "text", tracking: 0.5, transform: "uppercase" },
+  max_lines: lines, max_words: 6, w, background: "charcoal",
+});
+const cardPoints = (w, gbp) => ({
+  type: "list", slot: "points", roles: ["claim"], required: true, min_items: 1, max_items: 3,
+  max_words_each: 8, max_lines_each: 2,
+  style: { font: "poppins-500", size: gbp ? 21 : 28, line_height: gbp ? 29 : 38, color: "text" },
+  icon: { size: gbp ? 26 : 32, color: "sky", gap: gbp ? 14 : 18 }, item_gap: gbp ? 12 : 16, w, background: "charcoal",
+});
+const cardEyebrow = (w, size) => ({ ...eyebrow(w, size), roles: ["business_name", "service_segment"] });
+function cardFacebook(kit, channel) {
+  return spec(kit, "trust_know_how", channel, 1080, 1350, [{ slot: "photos", min: 1, max: 1, require_service_match: false }], [
+    { type: "photo", slot: "photos", index: 0, role: "feature", x: 0, y: 0, w: 1080, h: 620 },
+    { type: "rect", x: 0, y: 620, w: 1080, h: 6, fill: "blue" },
+    { type: "stack", x: 72, y: 676, w: 936, max_bottom: 1180, gap: 24, anchor: "center",
+      items: [cardEyebrow(936, 24), cardHeadline(936, 62, 2), cardPoints(936, false)] },
+    logo(72, 1214, 140, 96),
+  ]);
+}
+function cardGbp(kit) {
+  return spec(kit, "trust_know_how", "google_business", 1200, 900, [{ slot: "photos", min: 1, max: 1, require_service_match: false }], [
+    { type: "photo", slot: "photos", index: 0, role: "feature", x: 0, y: 0, w: 560, h: 900 },
+    { type: "rect", x: 560, y: 0, w: 4, h: 900, fill: "blue" },
+    { type: "stack", x: 612, y: 72, w: 438, max_bottom: 760, gap: 22, anchor: "center",
+      items: [cardEyebrow(438, 20), cardHeadline(438, 42, 4), cardPoints(438, true)] },
+    logo(612, 784, 120, 84),
+  ]);
+}
+
 const LAB = {
+  "card-facebook": (k) => cardFacebook(k, "facebook"),
+  "card-gbp": cardGbp,
   "plain-portrait-facebook": (k) => plain(k, "facebook", 944, 1180),
   "plain-landscape-gbp": (k) => plain(k, "google_business", 944, 708),
   "pill-portrait-facebook": (k) => pillPhoto(k, "facebook", 944, 1180),

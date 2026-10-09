@@ -1486,6 +1486,10 @@ publication gate is unchanged.
   - `scripts/creative-lab.mjs` and `scripts/lib/creative-lab-layouts.mjs`
     (render a sprint locally; writes nothing anywhere);
   - `lab/<client>/` (sprint files and the market packet).
+- **Lucas visual direction (Oct 9 2026; `docs/creative-lab.md`):** real
+  photography by default; designed cards only for credentials, checklists,
+  comparisons and myths / facts; restrained branding; no phone, URL or CTA
+  baked into every graphic; multi-photo stories as real albums.
 - **Lucas Sprint 01:** six concepts, all passing. It surfaced a `mask()`
   UTF-16 bug in `post-drafter/rules.ts`, now fixed. The deployed
   `post-drafter` still carries the old `mask()` until it is redeployed.

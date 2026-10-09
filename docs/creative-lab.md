@@ -68,3 +68,42 @@ A chosen piece is promoted into the governed workflow; nothing else changes:
   while spans are UTF-16 indices, so emoji shifted the masks. It is fixed in
   `post-drafter/rules.ts`. The deployed `post-drafter` still has the old
   `mask()` until it is redeployed.
+
+## Lucas visual direction (decided Oct 9 2026)
+
+Baselines come from Sprint 02:
+- **4H** for project and jobsite posts: one large real photo, minimal design,
+  and a small contextual label only when it helps.
+- **6H** for information that genuinely benefits from design: credentials,
+  warranties, myth / fact, comparisons and checklists. These are the
+  exception.
+- **3H / 3N** for educational and photo-detail posts: the image does the work.
+  A very small hook such as "Look closer" is fine.
+
+Principles for every Lucas creative:
+1. Real Lucas photography is the default creative.
+2. A designed graphic needs a reason to exist.
+3. Do not turn every post into a branded advertisement.
+4. Keep logos and branding restrained.
+5. Do not bake phone numbers, URLs or CTA buttons into every graphic. The
+   lab's card layouts (`lab-card-facebook`, `lab-card-gbp`) are the
+   credentials card without them.
+6. Tell multi-photo stories with real albums / carousels, one render per
+   photo, rather than squeezing several photos into one graphic.
+7. Credentials, checklists, comparisons, myths / facts and similar
+   information may use designed cards.
+8. Educational and project content usually stays photo-first.
+
+Copy direction, from Sprint 03:
+- Facebook reads like a knowledgeable Lucas team member talking to a
+  homeowner. Some posts simply teach, show the work, tell a story or answer
+  a question.
+- Do not force a claim or credential into the prose because it is
+  available. A post must still never state anything that is not grounded.
+- Avoid repeated patterns: formula transitions ("Here's our answer"),
+  identical CTA blocks, a checklist in every post, emoji openings.
+- Business Profile copy stays tighter, service- and search-oriented.
+
+Before a lab layout or label is used for publishing, it becomes a
+registered template version (with its labels) and is approved for the
+client, as any template is.
