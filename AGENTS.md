@@ -12,6 +12,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Native Agreements (October 7, 2026)
 
+`docs/durable-payment-links.md` describes the 30-day client payment capability
+added October 10. Only the dedicated billing project redeems it; no new Stripe
+secrets in CRM or Supabase Edge Functions. Issuing/replacing/revoking links is
+admin-only. Issued/signed contracts and agreed operational prices stay immutable.
+
 `docs/native-agreements.md` describes the Compass-only contract workflow,
 private agreement runtime, signing verification and immutable PDF records.
 Migration `20261007180518_native_agreements.sql` is additive. It does not switch

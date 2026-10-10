@@ -898,6 +898,12 @@ export type Database = {
           },
         ]
       }
+      billing_payment_links: {
+        Row: { id: string; client_id: string; token_hash: string; livemode: boolean; customer_id: string; agreement: Json; issued_by: string; created_at: string; expires_at: string; revoked_at: string | null; request_id: string; latest_session_id: string | null; lease_id: string | null; lease_until: string | null }
+        Insert: { id?: string; client_id: string; token_hash: string; livemode: boolean; customer_id: string; agreement: Json; issued_by: string; created_at?: string; expires_at?: string; revoked_at?: string | null; request_id?: string; latest_session_id?: string | null; lease_id?: string | null; lease_until?: string | null }
+        Update: { revoked_at?: string | null; expires_at?: string; latest_session_id?: string | null; request_id?: string; lease_id?: string | null; lease_until?: string | null }
+        Relationships: []
+      }
       billing_audit_events: {
         Row: {
           action: string

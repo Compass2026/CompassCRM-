@@ -174,7 +174,7 @@ function setup({ key = "sk_test_unit", live = false, achAvailable = true, search
     }));
     return { status: r.status, body: await r.json() };
   };
-  return { s, store, call };
+  return { s, store, call, checkoutForPaymentLink: billing.checkoutForPaymentLink };
 }
 
 // A catalog with a standard package on a Stripe product with a monthly price,
@@ -190,6 +190,42 @@ async function withCatalog(t) {
     stripe_price_id: "price_GrowthM", client_id: null, active: true });
 }
 const createCustomer = (t, client = A) => t.call("admin", { action: "create_customer", client_id: client, email: "owner@alpha.example.test" });
+
+async function paymentScope(t) {
+  await withCatalog(t); await createCustomer(t);
+  return { id: rid(80), client_id: A, customer_id: (await t.store.activeLink(A, false)).stripe_customer_id,
+    issued_by: ADMIN, livemode: false, agreement: { ...t.store.db.plans.get(A) }, request_id: rid(81) };
+}
+test("durable link reuses a matching open Checkout and refreshes an expired one with the same price", async () => {
+  const t = setup(); const scope = await paymentScope(t);
+  const original = await t.call("admin", { action: "create_checkout", client_id: A, request_id: rid(82) });
+  const reuse = await t.checkoutForPaymentLink(scope);
+  assert.equal(reuse.checkout.session_id, original.body.checkout.session_id);
+  assert.equal(t.s.calls.filter(x => x === "POST /v1/checkout/sessions").length, 1);
+  await t.call("admin", { action: "expire_checkout", client_id: A, session_id: reuse.checkout.session_id });
+  const fresh = await t.checkoutForPaymentLink({ ...scope, request_id: rid(83) });
+  assert.notEqual(fresh.checkout.session_id, reuse.checkout.session_id);
+  const cs = t.s.get(fresh.checkout.session_id);
+  assert.equal(cs.customer, scope.customer_id);
+  assert.deepEqual(cs.line_items_requested, [{ price: "price_GrowthM", quantity: 1 }]);
+  assert.equal(cs.metadata.compass_payment_link_id, scope.id);
+});
+test("durable Checkout refuses changed terms, changed customer, wrong mode and processing subscriptions", async () => {
+  const t = setup(); const scope = await paymentScope(t);
+  await assert.rejects(t.checkoutForPaymentLink({ ...scope, livemode: true }), /unavailable/);
+  t.store.db.plans.get(A).agreed_amount_cents += 1;
+  await assert.rejects(t.checkoutForPaymentLink(scope), /agreement changed/);
+  t.store.db.plans.get(A).agreed_amount_cents -= 1;
+  await assert.rejects(t.checkoutForPaymentLink({ ...scope, customer_id: "cus_elsewhere" }), /customer changed/);
+  t.store.db.subs.set("sub_processing", { client_id: A, stripe_subscription_id: "sub_processing", livemode: false, status: "incomplete" });
+  await assert.rejects(t.checkoutForPaymentLink(scope), /already has a subscription/);
+  assert.equal(t.s.calls.filter(x => x === "POST /v1/checkout/sessions").length, 0);
+});
+test("public capability fields never authorize the authenticated billing action endpoint", async () => {
+  const t = setup(); const scope = await paymentScope(t);
+  assert.equal((await t.call("none", { action: "create_checkout", ...scope })).status, 401);
+  assert.equal((await t.call("member", { action: "create_checkout", ...scope })).status, 403);
+});
 
 // ── Pure rules ──────────────────────────────────────────────────────────────
 test("form encoding nests objects and arrays the way Stripe reads them", () => {

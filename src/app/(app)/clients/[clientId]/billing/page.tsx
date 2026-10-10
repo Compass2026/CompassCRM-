@@ -26,6 +26,7 @@ import {
 } from "@/app/billing-actions";
 import { reconcileClientAction } from "@/app/billing-reconcile-actions";
 import { CopyLinkButton } from "@/components/billing/copy-link-button";
+import { DurablePaymentLink } from "@/components/billing/durable-payment-link";
 import { StripeSyncCard } from "@/components/billing/stripe-sync-card";
 import { CustomerLinkSearch } from "@/components/billing/customer-link-search";
 import { AgreedPriceSummary, agreedPriceOf, type AgreementPriceRow } from "@/components/billing/agreed-price";
@@ -173,6 +174,8 @@ export default async function BillingPage({
   const reasons = status?.attention_reasons ?? [];
   const outstanding = Object.entries((status?.outstanding_cents_by_currency ?? {}) as Record<string, number>);
   const open = (checkouts ?? []).find((c) => linkIsOpen(c));
+  const { data: durableLink } = await supabase.from("billing_payment_links")
+    .select("id, expires_at").eq("client_id", clientId).eq("livemode", livemode).is("revoked_at", null).maybeSingle();
   const subscribed = !!status?.subscription_status && BLOCKING.has(status.subscription_status);
   const entitlements = (entitlementRows ?? []) as Entitlement[];
   const portalReady = !!((portalSetting?.value ?? {}) as Record<string, { configuration_id?: string }>)[livemode ? "live" : "test"]?.configuration_id;
@@ -390,6 +393,7 @@ export default async function BillingPage({
               <AgreedPriceSummary row={agreementPrice} packageName={pkg.name} isAdmin={isAdmin} />
             </div>
           )}
+          {isAdmin && <DurablePaymentLink clientId={clientId} activeExpires={durableLink?.expires_at ?? null} disabled={!!blockedCheckout || offboarded} />}
           {open ? (
             <>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
@@ -399,7 +403,7 @@ export default async function BillingPage({
                 <dd>{open.billing_packages?.name ?? "—"}</dd>
                 <dt className="text-muted-foreground">Price</dt>
                 <dd>{priceText(priceOf((open.line_items as { price?: string }[])?.[0]?.price))}</dd>
-                <dt className="text-muted-foreground">Expires</dt>
+                <dt className="text-muted-foreground">Stripe checkout expires</dt>
                 <dd>{fmtDateTime(open.expires_at)}</dd>
                 <dt className="text-muted-foreground">Mode</dt>
                 <dd>{modeLabel(livemode)}</dd>
@@ -408,7 +412,7 @@ export default async function BillingPage({
               </dl>
               <p className="break-all rounded border bg-muted/40 px-2 py-1 font-mono text-xs" data-payment-link>{open.url}</p>
               <div className="flex flex-wrap gap-2">
-                <CopyLinkButton url={open.url!} />
+                <CopyLinkButton url={open.url!} label="Copy 24-hour Stripe Checkout" />
                 <a href={open.url!} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
                   Open Payment Link
                 </a>
