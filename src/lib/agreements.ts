@@ -55,6 +55,21 @@ export type Contract = {
 };
 export const CONSENT_TEXT =
   "I have read this agreement, consent to electronic records and signatures, and am authorized to sign for the customer. Typing my name is my signature. I can download and retain a copy. Signing does not authorize a bank debit or card charge.";
+const termHeadings = new Set([
+  "Service terms", "Billing and separate payment authorization",
+  "Additional charges and changes", "Text messaging email and CRM usage",
+  "Authority and payment responsibility", "Cancellation and notices",
+  "Compass mailing address for notices", "Transfer of files and records",
+  "Billing questions", "Signatures and electronic records",
+]);
+
+// Presentation only: the approved snapshot and content hash remain untouched.
+export function agreementTermBlocks(terms: string) {
+  return terms.replace(/\r\n/g, "\n").split(/\n\s*\n/).map((text) => ({
+    text,
+    heading: termHeadings.has(text.trim()),
+  }));
+}
 export function agreementPrice(scope: AgreementScope): string {
   const p = scope.plan;
   if (p.amount_cents == null || !p.currency || !p.interval)

@@ -12,6 +12,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Native Agreements (October 7, 2026)
 
+`docs/durable-payment-links.md` describes the 30-day client payment capability
+added October 10. Only the dedicated billing project redeems it; no new Stripe
+secrets in CRM or Supabase Edge Functions. Issuing/replacing/revoking links is
+admin-only. Issued/signed contracts and agreed operational prices stay immutable.
+
 `docs/native-agreements.md` describes the Compass-only contract workflow,
 private agreement runtime, signing verification and immutable PDF records.
 Migration `20261007180518_native_agreements.sql` is additive. It does not switch
@@ -1473,6 +1478,51 @@ Show Me Electrical only because its id sits inside that client's folder).
   as are posts, creative / drafter / publisher / Authority counts and the
   publisher switch (off). `database.types.ts` regenerated from production is
   identical to the reviewed file.
+
+## Social History (SH1 live Oct 8 2026, Lucas's 53 Facebook posts imported; SH2 live Oct 8 2026: migration `20261008024508` applied, `social-history` v2 deployed, Lucas profile v1 **proposed**, not approved)
+
+A client's real published social posts, imported read-only, are evidence of
+how the client writes and what performs. They are never grounding. Design,
+approved decisions and the steps to the first import:
+`docs/social-history.md`. Pilot: Lucas, Facebook, through Zernio.
+
+- **Never grounding.** Historical posts never become claims, sources or
+  evidence. No function, view or trigger outside the `social_history_*`
+  family may read the history tables: the migration's verify block and the
+  sandbox's `social_history.test.sql` enforce it. Do not add history to
+  `client_intelligence_input` / `authority_input`.
+- **Compass posts never feed style learning.** The database decides the
+  `origin` (a match on platform id, URL or copy against `social_posts`).
+  `social_history_learnable_posts` is the only input an analyzer may read.
+- **Read-only Zernio.** `supabase/functions/social-history/zernio.ts` is the
+  only Zernio client: GET only, four allowlisted paths. The key is
+  `ZERNIO_READ_API_KEY` (a read-only, profile-scoped Zernio key). Never add
+  a Zernio write, a publishing path or a write-capable key.
+- **Writes.** Only the function's session writes history (`begin` /
+  `record` / `finish`). A teammate only includes / excludes posts from
+  learning. The function's modes are `version`, `plan` (the dry run, writes
+  nothing) and `import` (an admin, or the operator door `x-cron-secret`;
+  bound to the plan's account and Page). Re-running `import` is the metrics
+  refresh: unchanged posts are no-ops, and new numbers append a snapshot.
+- **Style profiles (SH2).** `analyze.ts` is a pure, deterministic analyzer
+  over the learnable posts and the client's governed rules
+  (`client_intelligence_input`, read only to mask). The function's `analyze`
+  mode (any teammate or the operator door; `dry_run` writes nothing) records
+  a **proposed** row in `social_history_style_profiles` through
+  `social_history_style_record` (service session only; idempotent on the
+  fingerprint; examples must be the client's own learnable posts).
+- **A profile is active only once a teammate approves it** on Social ›
+  Style: `social_history_style_review`, PostgREST teammate only, bound to the
+  profile hash, refused with `SH409` when an example has left the learnable
+  view. `social_history_style_approved()` is the only read for later use.
+  Profile content is immutable; re-analysis makes a new version.
+- **Performance is relative to the client's own history.** It is never
+  computed without reach and never compared with generic benchmarks.
+  Performance confidence is capped at medium on one snapshot. Example posts
+  are masked with the drafter's detectors, plus unapproved places, urgency
+  and the words to avoid.
+- **Not built:** drafter use and the 90-day duplicate-copy guard (SH3), and
+  Creative Engine use (SH4). Nothing reads a profile yet.
 
 ## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 

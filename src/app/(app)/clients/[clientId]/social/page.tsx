@@ -95,6 +95,9 @@ export default async function SocialPage({
         <Link href={`/clients/${clientId}/social?view=new`} className={chip(view === "new")}>
           New post
         </Link>
+        <Link href={`/clients/${clientId}/social/style`} className={chip(false)} data-social-style>
+          Style
+        </Link>
         <span className="ml-auto text-sm text-muted-foreground" data-published-month={monthStr}>
           Published in {monthStr}: <span className="font-medium text-foreground">{publishedIn(false)}</span> social
           {" · "}<span className="font-medium text-foreground">{publishedIn(true)}</span> Business Profile

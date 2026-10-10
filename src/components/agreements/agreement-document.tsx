@@ -1,13 +1,19 @@
-import { agreementPrice, serviceLine, type Contract } from "@/lib/agreements";
+import Image from "next/image";
+import { agreementPrice, agreementTermBlocks, serviceLine, type Contract } from "@/lib/agreements";
 
 export function AgreementDocument({ contract: c }: { contract: Contract }) {
   const s = c.snapshot;
   return (
-    <article className="rounded-xl border bg-white p-6 text-slate-900 shadow-sm sm:p-9">
-      <p className="text-sm font-semibold uppercase tracking-wide text-blue-800">
+    <article className="rounded-xl border border-t-4 border-t-orange-500 bg-white p-6 text-slate-900 shadow-sm sm:p-9">
+      <header className="mb-7 border-b border-slate-200 pb-6 text-center">
+      {s.issuer_name === "Compass Marketing Advisors LLC" ? (
+        <Image src="/compass-agreement-logo.png" alt="Compass Marketing" width={1045} height={1037} sizes="112px" className="mx-auto mb-4 h-auto w-28 rounded-lg" />
+      ) : null}
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
         {s.issuer_name}
       </p>
-      <h2 className="mt-2 text-2xl font-semibold">{c.title}</h2>
+      <h2 className="mt-3 font-serif text-3xl font-semibold leading-tight">{c.title}</h2>
+      </header>
       <p className="mt-4 font-medium">{s.scope.client_name}</p>
       {c.recipient_name && (
         <p className="text-sm text-slate-600">
@@ -46,9 +52,12 @@ export function AgreementDocument({ contract: c }: { contract: Contract }) {
         </p>
       )}
       <h3 className="mt-7 font-semibold">Agreement terms</h3>
-      <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-7">
-        {s.terms ||
-          "Add your existing contract terms before issuing this agreement."}
+      <div className="mt-4 space-y-4 break-words text-sm leading-7">
+        {s.terms ? agreementTermBlocks(s.terms).map((block, index) => (
+          block.heading
+            ? <h4 key={index} className="pt-3 font-serif text-lg font-semibold leading-snug">{block.text}</h4>
+            : <p key={index} className="whitespace-pre-wrap">{block.text}</p>
+        )) : "Add your existing contract terms before issuing this agreement."}
       </div>
       {c.provider_name && (
         <p className="mt-7 text-sm">

@@ -47,7 +47,7 @@ do $$
 declare v text; n int;
 begin
   select count(*) into n from sd_fns;
-  perform sd.ok('S1 the inventory holds the billing security-definer functions (18 + portal_client_id + is_team)', n = 20, n::text);
+  perform sd.ok('S1 the inventory holds the billing security-definer functions (20 + portal_client_id + is_team)', n = 22, n::text);
   select string_agg(proname, ', ') into v from sd_fns
    where proconfig is null or not exists (select 1 from unnest(proconfig) c where c = 'search_path=public, pg_temp');
   perform sd.ok('S2 every one pins search_path = public, pg_temp', v is null, v);
@@ -72,6 +72,12 @@ begin
   select string_agg(pg_get_userbyid(p.proowner) || ':' || p.proname, ', ') into v
   from pg_proc p join sd_fns f on f.oid = p.oid where pg_get_userbyid(p.proowner) <> 'postgres';
   perform sd.ok('S7 every one is owned by postgres (the migration owner; not a superuser)', v is null, v);
+  perform sd.ok('S8 durable payment capabilities are callable only by the dedicated runtime',
+    has_function_privilege('billing_sync', 'billing_payment_link_read(text)', 'execute')
+    and has_function_privilege('billing_sync', 'billing_payment_link_write(jsonb)', 'execute')
+    and not has_function_privilege('service_role', 'billing_payment_link_read(text)', 'execute')
+    and not has_function_privilege('service_role', 'billing_payment_link_write(jsonb)', 'execute')
+    and not has_function_privilege('authenticated', 'billing_payment_link_write(jsonb)', 'execute'));
 end $$;
 
 -- ── T. Temporary objects cannot shadow the real tables ───────────────────────

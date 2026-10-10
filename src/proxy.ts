@@ -4,6 +4,13 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function proxy(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
+  if (/^\/pay\/[A-Za-z0-9_-]{43}(?:\/open)?$/.test(pathname)) {
+    const response = NextResponse.next();
+    response.headers.set("Cache-Control", "no-store");
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return response;
+  }
   // Public capability route only. The private agreement runtime checks the
   // high-entropy link and email verification; all other CRM routes keep auth.
   if (/^\/sign\/[A-Za-z0-9_-]{43}(?:\/(?:action|pdf))?$/.test(pathname)) {

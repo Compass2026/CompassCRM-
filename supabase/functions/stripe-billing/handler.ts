@@ -30,11 +30,17 @@ import type { StripeApi, StripeObject } from "../_shared/stripe/api.ts";
 import { StripeApiError } from "../_shared/stripe/api.ts";
 import { checkoutSessionRow } from "../_shared/stripe/map.ts";
 import { createStripeSync } from "../_shared/stripe/sync.ts";
-import { BillingDbError, type BillingStore, type Caller } from "./store.ts";
+import { BillingDbError, type AgreementPlan, type BillingStore, type Caller } from "./store.ts";
 
 export const STRIPE_BILLING_VERSION = 2;
 
 export type BillingConfig = { secretKey: string; appUrl: string };
+// Internal delegation, never accepted by handle() or from an action body.
+// The dedicated runtime validates the persisted, expiring capability first.
+export type PaymentCheckoutScope = {
+  id: string; client_id: string; customer_id: string; livemode: boolean;
+  issued_by: string; agreement: AgreementPlan; request_id: string;
+};
 
 export const ADMIN_ACTIONS = [
   "search_customers", "link_customer", "create_customer", "import_product", "create_custom_price",
@@ -563,7 +569,7 @@ export function createStripeBilling(deps: {
   }
 
   // ── 5. Checkout ─────────────────────────────────────────────────────────
-  async function createCheckout({ api, livemode, caller, cfg, sync }: Ctx, body: Record<string, unknown>) {
+  async function createCheckout({ api, livemode, caller, cfg, sync }: Ctx, body: Record<string, unknown>, capability?: PaymentCheckoutScope) {
     const clientId = uuidOf(body, "client_id");
     // The price is the agreement's, never the caller's. A package_price_id in
     // the request (an older form) is accepted only when it names that price.
@@ -573,6 +579,10 @@ export function createStripeBilling(deps: {
     const client = await liveClient(clientId);
 
     const plan = await store.plan(clientId);
+    if (capability && (!plan || Object.keys(capability.agreement).some((key) =>
+      plan[key as keyof AgreementPlan] !== capability.agreement[key as keyof AgreementPlan]))) {
+      refuse(409, "payment_link_changed", "The agreement changed. Ask Compass for a new payment link.");
+    }
     const bound = plan?.collection === "stripe" ? plan.billing_package_price_id : null;
     const mapping = bound ? await store.packagePrice(bound) : null;
     // Read the price from Stripe now: an archive in the dashboard is honoured.
@@ -583,6 +593,9 @@ export function createStripeBilling(deps: {
 
     const link = await store.activeLink(clientId, livemode);
     if (!link) refuse(409, "no_customer", "Link or create the client's Stripe customer first.");
+    if (capability && link!.stripe_customer_id !== capability.customer_id) {
+      refuse(409, "payment_link_changed", "The billing customer changed. Ask Compass for a new link.");
+    }
 
     // Duplicate subscription protection: Stripe's current state for the
     // customer (read now and synced), and the mirror for the client.
@@ -608,6 +621,16 @@ export function createStripeBilling(deps: {
     const stillOpen = (await store.openCheckouts(clientId, livemode)).filter((o) => new Date(o.expires_at) > now());
     if (stillOpen.length > 0) {
       const o = stillOpen[0];
+      if (capability) {
+        const cs = await api.get(`/v1/checkout/sessions/${o.stripe_checkout_session_id}`, { expand: ["line_items"] });
+        const items = cs.line_items?.data ?? [];
+        if (cs.status !== "open" || !!cs.livemode !== livemode || cs.customer !== capability.customer_id
+          || cs.client_reference_id !== clientId || cs.mode !== "subscription" || items.length !== 1
+          || items[0].quantity !== 1 || (items[0].price?.id ?? items[0].price) !== mapping!.stripe_price_id) {
+          refuse(409, "payment_link_changed", "Payment setup needs review. Please contact Compass.");
+        }
+        return { created: false, checkout: await describeCheckout(o.stripe_checkout_session_id) };
+      }
       if (o.request_id === requestId) return { created: false, checkout: await describeCheckout(o.stripe_checkout_session_id) };
       refuse(409, "checkout_open", "A payment link for this client is still open; expire it before creating another.",
         { checkout: await describeCheckout(o.stripe_checkout_session_id) });
@@ -619,6 +642,7 @@ export function createStripeBilling(deps: {
       compass_package_price_id: mapping!.id,
       compass_agreed_amount_cents: String(plan!.agreed_amount_cents),
       compass_request_id: requestId,
+      ...(capability ? { compass_payment_link_id: capability.id } : {}),
     };
     const params = (methods: string[]) => ({
       mode: "subscription",
@@ -650,7 +674,8 @@ export function createStripeBilling(deps: {
       ...row,
       client_id: clientId,
       package_id: mapping!.package_id,
-      line_items: [{ price: mapping!.stripe_price_id, quantity: 1, package_price_id: mapping!.id, request_id: requestId }],
+      line_items: [{ price: mapping!.stripe_price_id, quantity: 1, package_price_id: mapping!.id, request_id: requestId,
+        ...(capability ? { payment_link_id: capability.id } : {}) }],
       created_by: memberOf(caller),
     });
     return { created: recorded.created, ach_offered: achOffered, checkout: await describeCheckout(cs.id) };
@@ -752,7 +777,20 @@ export function createStripeBilling(deps: {
     return { payment_id: paymentId, voided: true };
   }
 
-  return { handle };
+  async function checkoutForPaymentLink(scope: PaymentCheckoutScope) {
+    const cfg = await deps.config();
+    if (!cfg) refuse(503, "stripe_not_configured", "Payment setup is temporarily unavailable.");
+    const api = deps.makeApi(cfg!.secretKey);
+    const livemode = api.mode === "live";
+    if (livemode !== scope.livemode || livemode !== await store.billingLivemode()) {
+      refuse(409, "mode_mismatch", "This payment link is unavailable.");
+    }
+    // The issuing admin delegated only this client's unchanged Checkout.
+    // It is logged against that authorization, with the link id in metadata.
+    return createCheckout({ api, livemode, cfg: cfg!, caller: { kind: "team", role: "admin", memberId: scope.issued_by },
+      sync: createStripeSync({ api, store, now }) }, { client_id: scope.client_id, request_id: scope.request_id }, scope);
+  }
+  return { handle, checkoutForPaymentLink };
 }
 
 function actor(c: Caller) {

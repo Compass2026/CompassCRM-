@@ -112,6 +112,9 @@ export function fakeStripe({ mode = "test", achAvailable = true, searchLag = fal
       const id = path.split("/").pop();
       if (!objects.has(id)) throw new StripeApiError(404, { error: { code: "resource_missing", message: `No such object: ${id}` } }, path);
       const o = clone(objects.get(id));
+      if (o.object === "checkout.session" && (params.expand ?? []).includes("line_items")) {
+        o.line_items = { object: "list", data: (o.line_items_requested ?? []).map((li) => ({ quantity: li.quantity, price: clone(objects.get(li.price)) })) };
+      }
       if (o.object === "customer" && (params.expand ?? []).includes("subscriptions")) o.subscriptions = subscriptionsOf(o.id);
       for (const e of params.expand ?? []) expandInto(o, e.split("."));
       return o;

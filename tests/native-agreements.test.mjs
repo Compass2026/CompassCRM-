@@ -6,6 +6,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import {
   agreementPrice,
+  agreementTermBlocks,
   agreementStatus,
   safePaymentUrl,
 } from "../src/lib/agreements.ts";
@@ -380,6 +381,10 @@ test("native agreement lifecycle, isolation, verification limits, immutability a
 });
 
 test("agreement display and payment links preserve approved terms", () => {
+  const approved = "Intro paragraph.\n\nTransfer of files and records\n\nTransfer is provided without a transfer fee.\n\nA custom clause remains plain text.";
+  const blocks = agreementTermBlocks(approved);
+  assert.equal(blocks.map((b) => b.text).join("\n\n"), approved);
+  assert.deepEqual(blocks.map((b) => b.heading), [false, true, false, false]);
   assert.equal(
     agreementPrice({
       plan: {

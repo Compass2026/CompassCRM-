@@ -85,6 +85,16 @@ export default async function SettingsPage({
         go through Claude Code.
       </p>
 
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Your account</CardTitle>
+          <p className="text-xs text-muted-foreground">Manage your password for signing in to Compass CRM.</p>
+        </CardHeader>
+        <CardContent>
+          <Link href="/settings/password" className="text-sm underline">Change password</Link>
+        </CardContent>
+      </Card>
+
       <Card id="billing">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Billing catalog</CardTitle>

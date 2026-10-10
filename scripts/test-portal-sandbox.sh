@@ -192,3 +192,15 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications_secr
 # needs, cannot reach Vault or switch the mode; the Edge Function path closes
 # when the owner flips billing_runtime, and service_role cannot reopen it).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/billing_runtime.test.sql"
+# Social History SH1 (20261008015642): only the social-history function writes
+# imported posts, snapshots and imports; the natural key, Compass-origin
+# detection and snapshots-on-change; Compass posts never reach the learnable
+# view; and history is never grounding (no evidence function reads it, an
+# import changes no Client Intelligence / Authority input, claim or post).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history.test.sql"
+# Social History SH2 (20261008024508): style profiles are recorded only by the
+# social-history function, approved or rejected only by a signed-in teammate
+# against the hash they saw, one proposed and one approved at a time, never
+# edited; examples come only from the client's learnable posts; nothing
+# outside the family reads them and recording one changes no grounding.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history_style.test.sql"

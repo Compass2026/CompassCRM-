@@ -9,11 +9,13 @@
 // database refuses them again).
 
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireTeamMember } from "@/lib/team";
 import { callStripeBilling } from "@/lib/stripe-billing-call";
 import { billingAnswerText, isOk, isUuid, readCustomPrice, readExternalPayment } from "@/lib/billing-ops";
+import { paymentLinkCall, type PaymentLinkAnswer } from "@/lib/payment-links";
 
 function field(form: FormData, key: string): string | null {
   const v = form.get(key);
@@ -21,6 +23,17 @@ function field(form: FormData, key: string): string | null {
 }
 
 const tab = (clientId: string) => `/clients/${clientId}/billing`;
+
+export async function durablePaymentLinkAction(clientId: string, action: "issue" | "revoke"): Promise<PaymentLinkAnswer> {
+  if (action !== "issue" && action !== "revoke") return { error: "invalid_request" };
+  const supabase = await teamClient(clientId);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { error: "not_signed_in" };
+  const answer = await paymentLinkCall({ action, client_id: clientId,
+    ...(action === "issue" ? { token: randomBytes(32).toString("base64url") } : {}) }, session.access_token);
+  if (!answer.error) revalidatePath(tab(clientId));
+  return answer;
+}
 
 function back(clientId: string, kind: "notice" | "error", message: string): never {
   revalidatePath(tab(clientId));

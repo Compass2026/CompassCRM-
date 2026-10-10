@@ -147,6 +147,8 @@ export const auditActionLabels: Record<string, string> = {
   import_product: "Imported a Stripe product",
   create_custom_price: "Created a custom retainer price",
   create_checkout: "Created a payment link",
+  issue_payment_link: "Issued a 30-day payment link",
+  revoke_payment_link: "Revoked a 30-day payment link",
   expire_checkout: "Expired a payment link",
   configure_portal: "Configured the Customer Portal",
   portal_session: "Opened the Customer Portal",
