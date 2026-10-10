@@ -11,6 +11,7 @@ const OUT = ".vercel/output";
 // path → entry, max duration (seconds)
 const FUNCTIONS = [
   ["api/billing", "src/entries/billing.ts", 60],
+  ["api/payment-links", "src/entries/payment-links.ts", 60],
   ["api/stripe/webhook", "src/entries/webhook.ts", 60],
   ["api/reconcile", "src/entries/reconcile.ts", 60],
 ];

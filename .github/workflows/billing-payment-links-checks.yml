@@ -1,0 +1,37 @@
+name: Billing payment link checks
+on:
+  pull_request:
+    paths:
+      - 'billing/**'
+      - 'supabase/migrations/**'
+      - 'supabase/functions/stripe-billing/**'
+      - 'src/app/pay/**'
+      - 'src/components/billing/**'
+      - 'tests/*payment-links*'
+      - '.github/workflows/billing-payment-links-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund && npm ci --prefix billing --no-audit --no-fund
+      - name: Billing runtime and capability checks
+        run: |
+          npm run build --prefix billing
+          npm run check --prefix billing
+          npm test --prefix billing
+          node --no-warnings --test tests/durable-payment-links-db.test.mjs tests/stripe-billing-handler.test.mjs
+          npx tsc --noEmit
+      - name: Full migration and portal access sandbox
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql
+          scripts/test-portal-sandbox.sh
