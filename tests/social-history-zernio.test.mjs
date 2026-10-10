@@ -105,9 +105,22 @@ test("social-history's sources name no HTTP method but GET, and only zernio.ts m
   }
 });
 
+// Two Zernio clients exist: this read-only one (SH1), and since Zernio Social
+// Publisher v1 the post publisher's (supabase/functions/post-publisher; its
+// own allowlist and key, tests/post-publisher-zernio.test.mjs). Nothing else
+// talks to Zernio, and the read key is named only here and in the
+// publisher's check that its publish key is a different key.
 test("no other Edge Function or app code reads the Zernio key or talks to Zernio", () => {
+  const PUB_DIR = join(ROOT, "supabase/functions/post-publisher");
   const all = [...files(join(ROOT, "supabase/functions")), ...files(join(ROOT, "src")), ...files(join(ROOT, "billing"))];
-  const offenders = all.filter((f) => !f.startsWith(FN_DIR) && /ZERNIO|zernio\.com|getlate\.dev|LATE_API_KEY/i.test(readFileSync(f, "utf8")));
-  assert.deepEqual(offenders, []);
+  const text = (f) => readFileSync(f, "utf8");
+  const outside = (f) => !f.startsWith(FN_DIR) && !f.startsWith(PUB_DIR);
+  assert.deepEqual(all.filter((f) => outside(f) && /zernio\.com|getlate\.dev|LATE_API_KEY/i.test(text(f))), [], "only the two clients talk to Zernio");
+  assert.deepEqual(all.filter((f) => outside(f) && /ZERNIO_READ_API_KEY/.test(text(f))), [], "the read key is named nowhere else");
+  // The app names the publish key only to ask whether it is in Vault (secret_present), never to read it.
+  for (const f of all.filter((f) => outside(f) && /ZERNIO_PUBLISH_API_KEY/.test(text(f)))) {
+    assert.ok(!/get_secret|vault\./.test(text(f)), `${f} must not read the publish key`);
+  }
+  assert.ok(!/ZERNIO_PUBLISH_API_KEY/.test(readFileSync(join(FN_DIR, "zernio.ts"), "utf8")), "Social History never uses the publish key");
   assert.equal(ZERNIO_KEY_SECRET, "ZERNIO_READ_API_KEY");
 });

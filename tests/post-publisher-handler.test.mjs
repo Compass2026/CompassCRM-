@@ -88,6 +88,13 @@ function fakeStore({ posts = [], settings = { enabled: true, clients: [CA] }, se
       return hit.map((t) => t.id);
     },
     signPhoto: async (path) => { s.signed.push(path); return `https://storage.example/signed/${path}?token=t`; },
+    // Zernio Social Publisher v1: no Facebook account is bound here, so
+    // every Facebook post stays on the hand-posting path.
+    account: async () => null,
+    dueFacebookPosts: async () => [],
+    publishingFacebookPosts: async () => [],
+    failedFacebookPosts: async () => [],
+    zernioRuns: async () => [],
   };
   return { store, s };
 }

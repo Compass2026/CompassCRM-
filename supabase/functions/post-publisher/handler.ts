@@ -18,10 +18,17 @@
 // approved_snapshot.
 //
 // Also, every tick: a non-Business-Profile post whose scheduled time has come
-// gets a TOM "post this by hand" task (the publisher never posts those), and
-// the task closes itself once the post is marked published, unscheduled or
-// moved later. Reminders are cycles: the same post scheduled again gets a
-// new one.
+// gets a TOM "post this by hand" task, and the task closes itself once the
+// post is marked published, unscheduled or moved later. Reminders are cycles:
+// the same post scheduled again gets a new one.
+//
+// Facebook through Zernio (Zernio Social Publisher v1, facebook-path.ts): a
+// Facebook post whose client is piloted and whose Page has an enabled,
+// verified Zernio binding is published by this function instead of getting a
+// reminder, under the same switch, pilot list and 0045 claim. Read-only modes
+// for people and the operator: preflight (no writes anywhere),
+// zernio_accounts (what the publish key sees) and zernio_bind (the explicit
+// binding, re-verified; never enables publishing).
 
 import {
   buildLocalPost,
@@ -37,6 +44,7 @@ import {
   STUCK_AFTER_MINUTES,
   type Snapshot,
 } from "./channel.ts";
+import { createFacebookPath } from "./facebook-path.ts";
 import { googleClient, googleMessage, refreshToken, type Location } from "./google.ts";
 import type { PostRow, RunRow, Store } from "./store.ts";
 
@@ -71,14 +79,21 @@ export function createPostPublisher(deps: Deps) {
       note(r.post_id, r.outcome, r.detail ?? null);
     };
     // A block the post is already sitting on is not logged again every tick.
-    const blockOnce = async (p: PostRow, mode: RunRow["mode"], detail: string, task_id: string | null = null) => {
+    const blockOnce = async (p: PostRow, mode: RunRow["mode"], detail: string, task_id: string | null = null, transport: RunRow["transport"] = "google") => {
       const last = await store.latestRun(p.id);
       if (last?.outcome === "blocked" && last.detail === detail) { note(p.id, "blocked", detail); return; }
-      await run({ post_id: p.id, client_id: p.client_id, mode, outcome: "blocked", detail, task_id });
+      await run({ post_id: p.id, client_id: p.client_id, mode, outcome: "blocked", detail, task_id, transport });
     };
     const postLink = (p: PostRow) => `/clients/${p.client_id}/social/${p.id}`;
 
-    // ── Hand-publishing reminders (non-Business-Profile posts) ──
+    const settings = await store.settings();
+    const fb = createFacebookPath({
+      store, fetch: deps.fetch, at, settings, note,
+      run: (r) => run(r),
+      resolve: (f, why) => resolve(f, why),
+    });
+
+    // ── Hand-publishing reminders (non-Business-Profile posts not sent through Zernio) ──
     if (opts.mode === "tick") {
       for (const r of await store.openReminders()) {
         const p = await store.post(r.post_id);
@@ -89,10 +104,11 @@ export function createPostPublisher(deps: Deps) {
           : null;
         if (!why) continue;
         if (r.task_id) await store.closeTask(r.task_id, `${why}.`);
-        await run({ post_id: r.post_id, client_id: r.client_id, mode: "reminder", outcome: "reminder_closed", detail: why, task_id: r.task_id });
+        await run({ post_id: r.post_id, client_id: r.client_id, mode: "reminder", outcome: "reminder_closed", detail: why, task_id: r.task_id, transport: "manual" });
       }
       for (const p of await store.dueHandPosts(at.toISOString())) {
         if (await store.reminderOpen(p.id)) continue;
+        if (await fb.routable(p)) continue; // the publisher sends it through Zernio
         const label = PLATFORM_LABEL[p.platform] ?? p.platform;
         const task_id = await store.openTask({
           client_id: p.client_id, key: "post_by_hand", post_id: p.id,
@@ -100,17 +116,16 @@ export function createPostPublisher(deps: Deps) {
           notes: `Scheduled for ${p.scheduled_at}. Publish it on ${label} yourself, then use Mark published on ${postLink(p)}. post_id=${p.id}`,
         });
         await run({ post_id: p.id, client_id: p.client_id, mode: "reminder", outcome: "reminder_opened",
-          detail: `${label} post due ${p.scheduled_at}`, task_id });
+          detail: `${label} post due ${p.scheduled_at}`, task_id, transport: "manual" });
       }
     }
 
     // ── Switch and pilot list ──
-    const settings = await store.settings();
     report.enabled = settings.enabled;
     if (!settings.enabled) {
       if (opts.postId) {
         const p = await store.post(opts.postId);
-        if (p) await blockOnce(p, "now", "The publisher is switched off (Settings → Publisher).");
+        if (p) await blockOnce(p, "now", "The publisher is switched off (Settings → Publisher).", null, p.platform === "facebook" ? "zernio" : "google");
       }
       return report;
     }
@@ -295,6 +310,9 @@ export function createPostPublisher(deps: Deps) {
             detail: `Attempt ${p.publish_attempts + 1} of ${MAX_ATTEMPTS}` });
         }
       }
+
+      // ── Facebook through Zernio: read back in-flight posts, retries ──
+      await fb.sweep();
     }
 
     // ── Due posts (or the one post a person asked to publish now) ──
@@ -311,6 +329,10 @@ export function createPostPublisher(deps: Deps) {
     for (const p of queue) {
       if (claimed >= MAX_POSTS_PER_TICK) break;
       const mode: RunRow["mode"] = opts.mode === "now" ? "now" : "tick";
+      if (p.platform === "facebook") {
+        if (await fb.publish(p, mode)) claimed++;
+        continue;
+      }
       const loc = await preflight(p, mode);
       if (!loc) continue;
       const locKey = `${loc.account}/${loc.location}`;
@@ -382,7 +404,39 @@ export function createPostPublisher(deps: Deps) {
         await finishFailure(row, mode, row.publish_attempts, answer.status, googleMessage(answer));
       }
     }
+
+    // ── Due Facebook posts routed through Zernio (one per Page per run) ──
+    if (opts.mode === "tick") {
+      const usedPages = new Set<string>();
+      for (const p of await store.dueFacebookPosts(at.toISOString(), MAX_POSTS_PER_TICK * 4)) {
+        if (claimed >= MAX_POSTS_PER_TICK) break;
+        if (!(await fb.routable(p))) continue; // a hand-posting reminder covers it
+        const page = p.social_account_id ?? "";
+        if (usedPages.has(page)) continue;
+        if (await fb.publish(p, "tick")) { claimed++; usedPages.add(page); }
+      }
+    }
     return report;
+  }
+
+  // Read-only and binding modes. None of them publishes anything.
+  async function facebookMode(body: Record<string, unknown>, who: { cron: boolean; admin: boolean }): Promise<Response> {
+    const fb = createFacebookPath({
+      store, fetch: deps.fetch, at: now(), settings: await store.settings(),
+      note: () => {}, run: () => Promise.reject(new Error("This mode records nothing.")), resolve: () => Promise.resolve(),
+    });
+    if (body.mode === "preflight") {
+      const fixture = body.fixture as Parameters<typeof fb.preflight>[0]["fixture"];
+      return Response.json(await fb.preflight({ post_id: typeof body.post_id === "string" ? body.post_id : undefined, fixture }));
+    }
+    if (body.mode === "zernio_accounts") return Response.json(await fb.accountsReport());
+    // zernio_bind: a team admin or the operator door.
+    if (!who.cron && !who.admin) return Response.json({ error: "Only a team admin binds a Zernio account." }, { status: 403 });
+    if (typeof body.social_account_id !== "string" || typeof body.zernio_account_id !== "string") {
+      return Response.json({ error: "Give social_account_id and zernio_account_id." }, { status: 400 });
+    }
+    const r = await fb.bind(body.social_account_id, body.zernio_account_id);
+    return Response.json(r, { status: r.status });
   }
 
   async function handle(req: Request): Promise<Response> {
@@ -392,11 +446,16 @@ export function createPostPublisher(deps: Deps) {
     if (isCron && (body?.mode ?? "tick") === "tick") {
       return Response.json(await tick({ mode: "tick" }));
     }
+    const FB_MODES = ["preflight", "zernio_accounts", "zernio_bind"];
+    if (isCron && FB_MODES.includes(body?.mode)) return facebookMode(body, { cron: true, admin: false });
     const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer /, "");
     const member = await store.teamMemberForJwt(jwt);
     if (!member) return Response.json({ error: "forbidden" }, { status: isCron || jwt ? 403 : 401 });
+    if (FB_MODES.includes(body?.mode)) {
+      return facebookMode(body, { cron: false, admin: body.mode === "zernio_bind" ? await store.memberIsAdmin(member) : false });
+    }
     if (body?.mode !== "now" || typeof body?.post_id !== "string") {
-      return Response.json({ error: "A team member may only ask to publish one post now: { mode: \"now\", post_id }" }, { status: 400 });
+      return Response.json({ error: "A team member may ask to publish one post now ({ mode: \"now\", post_id }), or use preflight / zernio_accounts / zernio_bind" }, { status: 400 });
     }
     return Response.json(await tick({ mode: "now", postId: body.post_id }));
   }

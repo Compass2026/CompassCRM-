@@ -1516,7 +1516,45 @@ approved decisions and the steps to the first import:
 - **Not built:** drafter use and the 90-day duplicate-copy guard (SH3), and
   Creative Engine use (SH4). Nothing reads a profile yet.
 
-## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
+## Zernio Social Publisher v1 (Oct 10 2026; migration `20261010224407` applied; `post-publisher` v2 deployed; Lucas bound, publishing off)
+
+Approved Facebook posts are published by the existing `post-publisher`
+through Zernio. Compass is the system of record; Zernio is transport only.
+Design, gates, endpoints and Lucas state: `docs/zernio-publisher.md`.
+
+- **Routing:** `google_business` takes the Google path, unchanged. A
+  `facebook` post goes through Zernio only when all of these hold: the
+  publisher is on, the client is piloted, and the Page has a verified,
+  enabled binding of the same client. Everything else gets the hand reminder
+  as before.
+- **Binding** lives on `social_accounts.publish_*`. It is explicit and never
+  inferred.
+  - Only the publisher's `zernio_bind` binds, through
+    `publisher_bind_account`, after re-reading the account, its selected Page
+    and its health with the publish key. Binding never enables.
+  - Only a signed-in team admin enables, disables or unbinds.
+  - The worker's SQL cannot write any of it.
+- **Keys:** `ZERNIO_PUBLISH_API_KEY` is read only by `post-publisher`. Never
+  reuse `ZERNIO_READ_API_KEY` for writes; the publisher refuses to run when
+  the two keys are the same.
+- **Only the approved snapshot is sent:** the exact copy and the Page id
+  pinned. The image's stored bytes are re-hashed against the approved hash.
+  0045's claim still re-checks the approval and grounding.
+- **Never a second post:**
+  - an `Idempotency-Key` of `compass-<publish_key>-g<n>`;
+  - a write-ahead `uncertain` run;
+  - a GET before any re-send;
+  - a 409 duplicate is reconciled only when it is the exact copy on the same
+    account.
+- **Recorded published** only from Zernio's Facebook entry with an https
+  `platformPostUrl`.
+- **`publisher_runs`** records the transport and Zernio's post id, status,
+  target and key, never a secret.
+- **No-write preflight:** `{mode: "preflight", post_id | fixture}`.
+- **Do not publish** a real Facebook post outside Tom's final steps in the
+  doc.
+
+0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 
 Twilio SMS per client, piloted with BHG Safety Partners. Full design, flows
 and the remaining manual Twilio steps: `docs/communications.md`.

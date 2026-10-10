@@ -24,7 +24,7 @@ export function PublisherSettingsForm({
     <form action={action} className="space-y-3 text-sm">
       <label className="flex items-center gap-2 font-medium">
         <input type="checkbox" name="enabled" defaultChecked={enabled} className="size-4" />
-        Publish approved, scheduled Business Profile posts
+        Publish approved, scheduled posts (Business Profile; Facebook through Zernio)
       </label>
       {!googleConnected && (
         <p className="text-xs text-amber-900">
@@ -45,7 +45,9 @@ export function PublisherSettingsForm({
       </fieldset>
       <p className="text-xs text-muted-foreground">
         Runs every 5 minutes, at most 5 posts a run and one per Business Profile; 429, 5xx and network errors are retried
-        up to 3 attempts. Other platforms are never published: their scheduled time opens a “post this by hand” task.
+        up to 3 attempts. Facebook posts go through Zernio only for a Page bound and switched on under Facebook through Zernio
+        below; every other platform (and any other Facebook Page) is never published: its scheduled time opens a “post this by
+        hand” task.
       </p>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={pending}>Save</Button>

@@ -150,3 +150,80 @@ export async function saveWorkerGoogleOpsAction(_prev: ActionState, form: FormDa
       : "Worker Google operations off: the worker cannot write to Google. Read-only checks still run.",
   };
 }
+
+// Facebook through Zernio (Zernio Social Publisher v1). The post-publisher
+// function reads Zernio with the publish key (never handed to the app) and
+// binds an account only after re-reading it; the switch and the unbind are
+// database functions that check the caller is a signed-in team admin.
+async function callPublisher(body: Record<string, unknown>): Promise<{ status: number; payload: Record<string, unknown> | null }> {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { status: 401, payload: { error: "Not signed in." } };
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/post-publisher`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, payload: (await res.json().catch(() => null)) as Record<string, unknown> | null };
+  } catch (e) {
+    return { status: 0, payload: { error: e instanceof Error ? e.message : "Could not reach the publisher." } };
+  }
+}
+
+export async function verifyZernioAccountsAction(_prev: ActionState): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const { status, payload } = await callPublisher({ mode: "zernio_accounts" });
+  const key = (payload?.key ?? null) as { ok?: boolean; detail?: string } | null;
+  if (status !== 200 || !key?.ok) return { ok: false, message: key?.detail ?? (payload?.error as string) ?? `The publisher answered ${status}.` };
+  const accounts = (payload?.zernio_accounts ?? []) as { zernio_account_id: string; name: string | null; selected_page_id: string | null; health: { status: string } }[];
+  return {
+    ok: true,
+    message: accounts.length
+      ? `Publish key works. Zernio sees: ${accounts.map((a) => `${a.name ?? "?"} (${a.zernio_account_id}, Page ${a.selected_page_id ?? "none"}, ${a.health.status})`).join("; ")}.`
+      : "Publish key works, but it sees no Facebook account.",
+  };
+}
+
+export async function bindZernioAccountAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const socialAccountId = form.get("social_account_id");
+  const zernioAccountId = String(form.get("zernio_account_id") ?? "").trim();
+  if (!isUuid(socialAccountId) || !/^[0-9a-f]{24}$/.test(zernioAccountId)) return { ok: false, message: "Give the Zernio account id (24 hex characters)." };
+  const { status, payload } = await callPublisher({ mode: "zernio_bind", social_account_id: socialAccountId, zernio_account_id: zernioAccountId });
+  revalidatePath("/settings");
+  if (status !== 200) return { ok: false, message: (payload?.error as string) ?? `The publisher answered ${status}.` };
+  return { ok: true, message: "Bound after verification. Publishing to this Page is still off until an admin switches it on." };
+}
+
+export async function setZernioPublishingAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const id = form.get("social_account_id");
+  const expected = String(form.get("expected_account_id") ?? "");
+  const enabled = form.get("enabled") === "true";
+  if (!isUuid(id)) return { ok: false, message: "Unknown account." };
+  const { error } = await supabase.rpc("publisher_set_account_enabled", { p_social_account_id: id, p_enabled: enabled, p_expected_account_id: expected });
+  revalidatePath("/settings");
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, message: enabled ? "Publishing to this Page is on (the publisher switch and pilot list still apply)." : "Publishing to this Page is off." };
+}
+
+export async function unbindZernioAccountAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const id = form.get("social_account_id");
+  if (!isUuid(id)) return { ok: false, message: "Unknown account." };
+  const { error } = await supabase.rpc("publisher_unbind_account", { p_social_account_id: id });
+  revalidatePath("/settings");
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, message: "Binding removed." };
+}

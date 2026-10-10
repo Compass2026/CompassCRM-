@@ -4,6 +4,7 @@
 // copied, so the post page and the publisher never disagree).
 import type { Json } from "@/lib/database.types";
 import { channelProblems, type Snapshot } from "../../supabase/functions/post-publisher/channel.ts";
+import { bindingProblems, type Binding } from "../../supabase/functions/post-publisher/facebook.ts";
 
 export { MAX_ATTEMPTS, STUCK_AFTER_MINUTES } from "../../supabase/functions/post-publisher/channel.ts";
 
@@ -33,7 +34,31 @@ export const outcomeLabels: Record<string, { label: string; className: string }>
   retry_scheduled: { label: "Retry scheduled", className: "bg-blue-100 text-blue-800" },
   reminder_opened: { label: "Hand-post task opened", className: "bg-blue-100 text-blue-800" },
   reminder_closed: { label: "Hand-post task closed", className: "bg-muted text-muted-foreground" },
+  submitted: { label: "Sent to Zernio", className: "bg-blue-100 text-blue-800" },
 };
+
+// How a run went out (Zernio Social Publisher v1).
+export const transportLabels: Record<string, string> = { google: "Google", zernio: "Zernio", manual: "by hand" };
+
+// A Facebook Page's Zernio binding as the app reads it from social_accounts.
+export type FacebookBinding = Binding;
+
+// Whether a Facebook post goes out through Zernio: the publisher's switch and
+// pilot list, and the Page's own verified, enabled binding of the same
+// client. The same rules the publisher applies (facebook.ts), so the post
+// page never offers Publish now where the publisher would refuse.
+export function zernioRoute(
+  post: { platform: string; client_id: string; social_account_id: string | null },
+  binding: FacebookBinding | null,
+  settings: PublisherSettings,
+): { ready: boolean; reasons: string[] } {
+  if (post.platform !== "facebook") return { ready: false, reasons: [] };
+  const reasons: string[] = [];
+  if (!settings.enabled) reasons.push("The publisher is switched off (Settings → Publisher).");
+  else if (!settings.clients.includes(post.client_id)) reasons.push("This client is not on the publisher's pilot list (Settings → Publisher).");
+  reasons.push(...bindingProblems(post, binding));
+  return { ready: reasons.length === 0, reasons };
+}
 
 export const modeLabels: Record<string, string> = {
   tick: "scheduled run",

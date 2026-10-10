@@ -31,14 +31,24 @@ async function start(): Promise<Supabase> {
   return supabase;
 }
 
+// A Facebook draft names the client's Facebook Page when the client has
+// exactly one, so the approval binds the Page the publisher may send it to
+// (Zernio Social Publisher v1). Never guessed between several Pages.
+async function facebookPageFor(supabase: Supabase, clientId: string, platform: string | null | undefined): Promise<{ social_account_id?: string | null }> {
+  if (platform !== "facebook") return {};
+  const { data } = await supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", "facebook").limit(2);
+  return data?.length === 1 ? { social_account_id: data[0].id } : {};
+}
+
 export async function createPostAction(clientId: string, _prev: PostFormState, form: FormData): Promise<PostFormState> {
   if (!isUuid(clientId)) return { error: "Unknown client." };
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
+  const page = await facebookPageFor(supabase, clientId, parsed.value.platform);
   const { data, error } = await supabase
     .from("social_posts")
-    .insert({ client_id: clientId, ...parsed.value })
+    .insert({ client_id: clientId, ...parsed.value, ...page })
     .select("id")
     .single();
   if (error) return { error: postErrorMessage(error.message) };
@@ -56,9 +66,10 @@ export async function updatePostAction(
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
+  const page = await facebookPageFor(supabase, clientId, parsed.value.platform);
   const { data, error } = await supabase
     .from("social_posts")
-    .update(parsed.value)
+    .update({ ...parsed.value, ...page })
     .eq("id", postId)
     .eq("client_id", clientId)
     .eq("review_status", "draft")
@@ -239,7 +250,11 @@ export async function publishNowAction(clientId: string, postId: string): Promis
     .eq("client_id", clientId)
     .maybeSingle();
   if (!post) return { error: "Unknown post." };
-  if (post.platform !== "google_business") return { error: "Only Business Profile posts go through the publisher." };
+  // Business Profile posts, and Facebook posts the publisher sends through
+  // Zernio; the function applies the Zernio gates itself and records a block.
+  if (post.platform !== "google_business" && post.platform !== "facebook") {
+    return { error: "Only Business Profile and Facebook posts go through the publisher." };
+  }
   if (post.review_status !== "approved") return { error: "Only an approved post can be published." };
   let queuedHere = false;
   if (post.publish_status === "not_scheduled" || post.publish_status === "failed") {
@@ -266,6 +281,9 @@ export async function publishNowAction(clientId: string, postId: string): Promis
     .filter((r) => r.post_id === postId)
     .at(-1);
   if (result?.outcome === "published" || result?.outcome === "reconciled") return { ok: true };
+  // Facebook: Zernio accepted it and Facebook's result follows; not an error,
+  // and the post stays publishing until the publisher reads the result.
+  if (result?.outcome === "submitted") return { ok: true };
   // A block leaves nothing queued behind a person's back: a post this click
   // scheduled goes back to not scheduled (the run and any task stay on record).
   if (result?.outcome === "blocked" && queuedHere) {
@@ -277,7 +295,7 @@ export async function publishNowAction(clientId: string, postId: string): Promis
       .eq("publish_status", "scheduled");
     revalidatePost(clientId, postId);
   }
-  return { error: publishNowMessage(result?.outcome, result?.detail) };
+  return { error: publishNowMessage(result?.outcome, result?.detail, post.platform) };
 }
 
 // The function checks this person's JWT against team_members itself; the
@@ -304,8 +322,18 @@ async function callPublisher(supabase: Supabase, postId: string): Promise<unknow
   }
 }
 
-function publishNowMessage(outcome: string | undefined, detail: string | null | undefined): string {
+function publishNowMessage(outcome: string | undefined, detail: string | null | undefined, platform: string): string {
   const why = detail ? ` ${detail}` : "";
+  if (platform === "facebook") {
+    switch (outcome) {
+      case "failed":
+        return `Zernio or Facebook refused it, or did not answer.${why}`;
+      case "uncertain":
+        return "Sent to Zernio without a definite answer yet. Nothing is recorded: the publisher asks again with the same request key within about 10 minutes, so it cannot post twice.";
+      case "ambiguous":
+        return `Not sent again and not recorded: the Facebook Page needs a person's check (see the task).${why}`;
+    }
+  }
   switch (outcome) {
     case "blocked":
       return `Not published.${why}`;

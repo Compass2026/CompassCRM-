@@ -204,3 +204,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history.test
 # edited; examples come only from the client's learnable posts; nothing
 # outside the family reads them and recording one changes no grounding.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history_style.test.sql"
+# Zernio Social Publisher v1 (20261010224407): only the publisher's service
+# session binds a Facebook account to a Zernio account, against the row's own
+# Page, and binding never enables; only a signed-in team admin enables,
+# disables or unbinds; the worker's SQL can do none of it; the history is
+# append-only; publisher_runs takes the Zernio fields; a brand image carries
+# its hash onto a post.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/zernio_publisher.test.sql"

@@ -62,9 +62,34 @@ const gatewayUrl = `http://127.0.0.1:${gateway.address().port}`;
 
 // A fake Google Business Profile API.
 const google = { creates: [], responses: [], existing: [], tokenOk: true, access: true };
+// A fake Zernio (Zernio Social Publisher v1): one Facebook account on Page
+// 123456789012; creates honour the Idempotency-Key.
+const ZACC = "aaaaaaaaaaaaaaaaaaaaaaa1";
+const FB_PAGE = "123456789012";
+const zernio = { creates: [], keys: new Map(), auth: new Set() };
+const fakeZernio = async (u, init, json) => {
+  const path = new URL(u).pathname.replace(/^\/api/, "");
+  const method = init.method ?? "GET";
+  zernio.auth.add(init.headers?.Authorization);
+  if (method === "GET" && path === "/v1/accounts") return json(200, { accounts: [{ _id: ZACC, platform: "facebook", displayName: "Sandbox Client A", isActive: true }] });
+  if (method === "GET" && path.endsWith("/facebook-page")) return json(200, { pages: [{ id: FB_PAGE, name: "Sandbox Client A" }], selectedPageId: FB_PAGE });
+  if (method === "GET" && path.endsWith("/health")) return json(200, { status: "healthy", tokenStatus: { valid: true }, permissions: { posting: [{ scope: "pages_manage_posts", granted: true, required: true }] } });
+  if (method === "POST" && path === "/v1/posts") {
+    const key = init.headers["Idempotency-Key"];
+    const body = JSON.parse(init.body);
+    zernio.creates.push({ key, body });
+    const n = zernio.keys.get(key) ?? zernio.creates.length;
+    zernio.keys.set(key, n);
+    return json(201, { post: { _id: `zp${n}`, content: body.content, status: "published", platforms: [{ platform: "facebook", accountId: { _id: ZACC }, status: "published",
+      platformPostId: `${FB_PAGE}_${n}`, platformPostUrl: `https://www.facebook.com/${FB_PAGE}/posts/${n}`, publishedAt: new Date().toISOString() }] } });
+  }
+  return json(404, { error: `unexpected ${method} ${path}` });
+};
+
 const fakeFetch = async (url, init = {}) => {
   const u = String(url);
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  if (u.startsWith("https://zernio.com/api/")) return fakeZernio(u, init, json);
   if (u.startsWith("https://oauth2.googleapis.com/token")) return google.tokenOk ? json(200, { access_token: "at" }) : json(400, { error: "invalid_grant" });
   if (u.includes("mybusinessbusinessinformation") && u.includes("/v1/locations/")) {
     return google.access ? json(200, { name: "locations/222", metadata: { mapsUri: "https://maps.example/harbor" } }) : json(403, { error: { message: "The caller does not have permission" } });
@@ -311,6 +336,54 @@ try {
   // 8. The worker's SQL login still cannot publish anything itself.
   assert.match(sqlFails(`update social_posts set publish_status = 'publishing' where id = '${p2}'`) ?? "", /Only the publisher|cannot go from published/);
   ok("The worker's SQL login cannot act as the publisher");
+
+  // 9. Facebook through Zernio (Zernio Social Publisher v1).
+  sql(`select vault.create_secret('sk_publish_sandbox', 'ZERNIO_PUBLISH_API_KEY'); select vault.create_secret('sk_read_sandbox', 'ZERNIO_READ_API_KEY')`);
+  sql(`update app_settings set value = '{"enabled": true, "clients": ["${CA}"]}' where key = 'publisher'`);
+  const fbAcc = sql(`insert into social_accounts (client_id, platform, external_account_id, display_name) values ('${CA}', 'facebook', '${FB_PAGE}', 'Sandbox Client A') returning id`).split("\n")[0];
+  assert.match(sqlFails(`update social_accounts set publish_provider = 'zernio', publish_account_id = '${ZACC}', publish_page_id = '${FB_PAGE}', publish_verified_at = now() where id = '${fbAcc}'`) ?? "", /publishing binding/);
+  const cron = (body) => publisher.handle(new Request("http://x", { method: "POST", headers: { "x-cron-secret": "cron" }, body: JSON.stringify(body) }));
+  const bound = await cron({ mode: "zernio_bind", social_account_id: fbAcc, zernio_account_id: ZACC });
+  assert.equal(bound.status, 200, JSON.stringify(await bound.clone().json()));
+  assert.equal(sql(`select publish_account_id || '|' || publish_page_id || '|' || publish_enabled from social_accounts where id = '${fbAcc}'`), `${ZACC}|${FB_PAGE}|false`);
+  ok("Zernio binding: the worker's SQL cannot write it; the publisher binds the exact account after reading it; binding does not enable");
+
+  const fbBase = { client_id: CA, platform: "facebook", search_intent: "navigational", crm_facts_only: true, social_account_id: fbAcc };
+  const f1 = await approvedPost({ ...fbBase, copy: "Sandbox Client A: drains cleared the same week in Springfield." });
+  await schedule(f1);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(f1, "publish_status"), "scheduled");
+  assert.equal(zernio.creates.length, 0, "not enabled: nothing sent");
+  assert.equal(sql(`select count(*) from tasks where key = 'post_by_hand' and notes like '%post_id=${f1}%' and status <> 'done'`), "1", "not routed: a hand reminder");
+  const runsBefore = sql(`select count(*) from publisher_runs`);
+  const pre = await (await cron({ mode: "preflight", post_id: f1 })).json();
+  assert.equal(pre.writes, false);
+  assert.ok(pre.checks.find((c) => c.gate === "snapshot hash still valid").ok, "the gate read sees a valid approval");
+  assert.ok(pre.checks.find((c) => c.gate === "grounding still valid").ok);
+  assert.deepEqual(pre.blocking, ["account publishing enabled", "binding gates"]);
+  assert.equal(sql(`select count(*) from publisher_runs`), runsBefore, "preflight records nothing");
+  assert.equal(zernio.creates.length, 0);
+
+  const { error: enableError } = await asTeam.rpc("publisher_set_account_enabled", { p_social_account_id: fbAcc, p_enabled: true, p_expected_account_id: ZACC });
+  assert.equal(enableError, null, enableError?.message);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(f1, "publish_status"), "published");
+  assert.equal(row(f1, "published_url"), `https://www.facebook.com/${FB_PAGE}/posts/1`);
+  assert.equal(row(f1, "external_post_id"), `${FB_PAGE}_1`);
+  assert.equal(zernio.creates.length, 1);
+  assert.equal(zernio.creates[0].body.content, "Sandbox Client A: drains cleared the same week in Springfield.");
+  assert.deepEqual(zernio.creates[0].body.platforms, [{ platform: "facebook", accountId: ZACC, platformSpecificData: { pageId: FB_PAGE } }]);
+  assert.equal(zernio.creates[0].key, `compass-${row(f1, "publish_key")}-g1`);
+  assert.deepEqual([...zernio.auth], ["Bearer sk_publish_sandbox"], "only the publish key is ever sent");
+  assert.equal(sql(`select string_agg(outcome || ':' || transport, ',' order by id) from publisher_runs where post_id = '${f1}' and transport <> 'manual'`), "uncertain:zernio,published:zernio");
+  assert.equal(sql(`select actor_kind from post_events where post_id = '${f1}' and kind = 'published'`), "publisher");
+  await publisher.tick({ mode: "tick" });
+  assert.equal(sql(`select count(*) from tasks where key = 'post_by_hand' and notes like '%post_id=${f1}%' and status <> 'done'`), "0", "the reminder closed once published");
+  assert.equal(zernio.creates.length, 1, "never sent twice");
+  assert.equal(sql(`select count(*) from publisher_runs where provider_media_url is not null or request_key like '%sk_%'`), "0");
+  ok("Facebook through Zernio: preflight writes nothing; once a teammate enables the Page the approved copy is published as the publisher, with the live URL");
+  assert.equal(sql(`select string_agg(kind, ',' order by id) from social_account_publish_events where social_account_id = '${fbAcc}'`), "bound,enabled");
+  ok("Binding history: bound by the publisher, enabled by the teammate");
 
   console.log(`Publisher integration checks passed (${checks.length}).`);
 } finally {

@@ -38,7 +38,7 @@ import {
   publishLabels,
   reviewLabels,
 } from "@/lib/social-posts";
-import { approvedChannelProblems, MAX_ATTEMPTS, modeLabels, outcomeLabels, parsePublisherSettings } from "@/lib/publisher";
+import { approvedChannelProblems, MAX_ATTEMPTS, modeLabels, outcomeLabels, parsePublisherSettings, transportLabels, zernioRoute, type FacebookBinding } from "@/lib/publisher";
 import { drafterSummary } from "@/lib/drafter-run";
 import { canRenderCreative, canRequestNewCreative, creativeStatusLabels, isCreativePolicy } from "@/lib/creative-post";
 import { CreativePolicyForm, GenerateCreativeForm, RequestNewCreativeForm } from "@/components/creative/post-creative-forms";
@@ -80,13 +80,31 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       supabase.from("post_assets").select("brand_asset_id, sort_order, brand_assets(label, kind, storage_path, url)").eq("post_id", postId).not("brand_asset_id", "is", null).order("sort_order"),
     ]);
   const isGbp = post.platform === "google_business";
-  const [{ data: runs }, { data: publisherRow }] = isGbp || post.publish_status !== "not_scheduled"
+  const isFacebook = post.platform === "facebook";
+  const [{ data: runs }, { data: publisherRow }] = isGbp || isFacebook || post.publish_status !== "not_scheduled"
     ? await Promise.all([
-        supabase.from("publisher_runs").select("id, mode, outcome, transient, http_status, detail, task_id, created_at").eq("post_id", postId).order("id", { ascending: false }).limit(20),
+        supabase.from("publisher_runs")
+          .select("id, mode, outcome, transient, http_status, detail, task_id, created_at, transport, provider_post_id, provider_status")
+          .eq("post_id", postId).order("id", { ascending: false }).limit(20),
         supabase.from("app_settings").select("value").eq("key", "publisher").maybeSingle(),
       ])
     : [{ data: null }, { data: null }];
   const publisher = parsePublisherSettings(publisherRow?.value);
+  // Facebook through Zernio (Zernio Social Publisher v1): the approved Page,
+  // its binding, and whether the publisher would send this post.
+  const fbAccountId = (post.review_status === "approved"
+    ? ((post.approved_snapshot as { social_account_id?: string | null } | null)?.social_account_id ?? null)
+    : post.social_account_id) ?? null;
+  const { data: fbBinding } = isFacebook && fbAccountId
+    ? await supabase.from("social_accounts")
+        .select("id, client_id, platform, external_account_id, display_name, publish_provider, publish_account_id, publish_page_id, publish_account_name, publish_enabled, publish_verified_at, publish_health")
+        .eq("id", fbAccountId).maybeSingle()
+    : { data: null };
+  const zernio = zernioRoute(
+    { platform: post.platform, client_id: clientId, social_account_id: fbAccountId },
+    (fbBinding as FacebookBinding | null) ?? null,
+    publisher,
+  );
   // An AI-drafted post (0047): its run, and what changed since the linter passed it.
   const { data: drafterRun } = post.drafter_run_id
     ? await supabase
@@ -136,7 +154,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
 
   const names = new Map(members.map((m) => [m.id, m.name]));
   const problems = readiness.data ?? [];
-  const actions = availableActions(post);
+  const actions = availableActions({ ...post, zernio_ready: zernio.ready });
   const topic = topicProblem(post);
   // Brand-asset links; a rendered graphic is shown in its own section.
   const brandLinks = (assets ?? []).flatMap((a) => (a.brand_asset_id ? [{ ...a, brand_asset_id: a.brand_asset_id }] : []));
@@ -428,7 +446,9 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
             <PostStepButton
               action={publishNowAction.bind(null, clientId, postId)}
               label="Publish now"
-              confirm="Publish this approved post to the client's Business Profile now?"
+              confirm={isFacebook
+                ? `Publish this approved post to ${fbBinding?.display_name ?? "the client's Facebook Page"} on Facebook now, through Zernio?`
+                : "Publish this approved post to the client's Business Profile now?"}
             />
           )}
           {actions.includes("unschedule") && (
@@ -463,6 +483,20 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
                 : null}
           </p>
         )}
+        {isFacebook && (
+          <div className="space-y-1 rounded-md border p-3 text-xs text-muted-foreground">
+            <p>
+              <span className="font-medium text-foreground">Destination:</span>{" "}
+              {fbBinding
+                ? <>Facebook Page {fbBinding.display_name ?? fbBinding.external_account_id} ({fbBinding.external_account_id})
+                    {fbBinding.publish_account_id ? <> · Zernio account <span className="font-mono">{fbBinding.publish_account_id}</span></> : null}</>
+                : "no Facebook Page on this post"}
+            </p>
+            {zernio.ready
+              ? <p>Published by the publisher through Zernio, scheduled or with Publish now; the exact approved copy and image.</p>
+              : <p>Not sent through Zernio: {zernio.reasons.join(" ")} {post.review_status === "approved" ? "Post it by hand and use Mark published." : null}</p>}
+          </div>
+        )}
         {channel.length > 0 && (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <p className="font-medium">Google would refuse the approved content:</p>
@@ -472,7 +506,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
             <p className="mt-1 text-xs">Reopen the post, fix it and approve it again.</p>
           </div>
         )}
-        {isGbp && post.publish_attempts > 0 && post.publish_status !== "published" && (
+        {(isGbp || isFacebook) && post.publish_attempts > 0 && post.publish_status !== "published" && (
           <p className="text-xs text-muted-foreground">
             Attempt {post.publish_attempts} of {MAX_ATTEMPTS}
             {post.last_attempt_at && `, last ${formatStamp(post.last_attempt_at)}`}. Only 429, 5xx and network errors are retried
@@ -481,6 +515,9 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
         )}
         {post.publish_status === "scheduled" && post.scheduled_at && (
           <p className="text-sm">Scheduled for {formatStamp(post.scheduled_at)} (Central).</p>
+        )}
+        {post.publish_status === "publishing" && isFacebook && (
+          <p className="text-sm">Sent to Zernio; waiting for Facebook&apos;s result. The publisher reads it back every 5 minutes and records the live link.</p>
         )}
         {post.publish_status === "failed" && post.error && (
           <p className="text-sm text-red-700">Last attempt failed: {post.error}</p>
@@ -511,7 +548,11 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
                     {r.detail}
                     {r.http_status ? <span className="text-xs text-muted-foreground"> (HTTP {r.http_status}{r.transient ? ", transient" : ""})</span> : null}
                     <span className="block text-xs text-muted-foreground">
-                      {modeLabels[r.mode] ?? r.mode} · <time dateTime={r.created_at}>{formatStamp(r.created_at)}</time>
+                      {modeLabels[r.mode] ?? r.mode}
+                      {r.transport && r.transport !== "google" ? <> · {transportLabels[r.transport] ?? r.transport}</> : null}
+                      {r.provider_post_id ? <> · Zernio post <span className="font-mono">{r.provider_post_id}</span></> : null}
+                      {r.provider_status ? <> ({r.provider_status})</> : null}
+                      {" · "}<time dateTime={r.created_at}>{formatStamp(r.created_at)}</time>
                       {r.task_id && (<> · <Link href={`/tasks/${r.task_id}`} className="underline">task</Link></>)}
                     </span>
                   </span>
