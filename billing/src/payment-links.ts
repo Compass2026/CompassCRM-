@@ -50,7 +50,10 @@ export function createPaymentLinks(deps: {
       const hash = tokenHash(body.token);
       const link = await deps.links.read(hash);
       if (!link) return unavailable();
-      if (body.action === "read") return json(200, { client_name: link.client_name, agreement: link.agreement,
+      if (body.action === "read") return json(200, { client_name: link.client_name, agreement: {
+        agreed_amount_cents: link.agreement.agreed_amount_cents, agreed_currency: link.agreement.agreed_currency,
+        agreed_billing_interval: link.agreement.agreed_billing_interval, agreed_billing_interval_count: link.agreement.agreed_billing_interval_count,
+      },
         expires_at: link.expires_at, state: link.state, livemode: link.livemode });
       if (link.state === "complete") return json(409, { error: "complete", detail: "Payment setup was submitted. Contact Compass if you need help." });
       const lease = randomUUID();

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createPaymentLinks, tokenHash } from "../src/payment-links.ts";
 const token = "a".repeat(43);
-const link = { id: "link", state: "ready", client_id: "client", request_id: "request", client_name: "Fictional Client", customer_id: "cus_private", issued_by: "issuer", agreement: {}, livemode: false };
+const link = { id: "link", state: "ready", client_id: "client", request_id: "request", client_name: "Fictional Client", customer_id: "cus_private", issued_by: "issuer", agreement: { package_id: "internal_package", billing_package_price_id: "internal_mapping", agreed_amount_cents: 50000, agreed_currency: "usd", agreed_billing_interval: "month", agreed_billing_interval_count: 1 }, livemode: false };
 function harness({ state = link, busy = false, error } = {}) {
   const writes = []; let calls = 0; let lease = false;
   const handler = createPaymentLinks({ appUrl: "https://crm.test", store: { caller: async () => "none" },
@@ -21,6 +21,8 @@ test("reading a link creates no Checkout and exposes no internal identifiers", a
   const h = harness(); const r = await h.call({ action: "read", token });
   assert.equal(r.status, 200); assert.equal(r.body.client_name, "Fictional Client");
   for (const field of ["customer_id", "issued_by", "id", "request_id"]) assert.equal(field in r.body, false);
+  assert.doesNotMatch(JSON.stringify(r.body), /internal_package|internal_mapping/);
+  assert.equal(r.body.agreement.agreed_amount_cents, 50000);
   assert.equal(h.count(), 0); assert.equal(h.writes.length, 0);
 });
 test("parallel clicks claim once and release the lease with the session id", async () => {
