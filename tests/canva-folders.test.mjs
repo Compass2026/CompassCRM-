@@ -88,11 +88,15 @@ test("the read model's row: enabled only with a primary folder on a live client"
   assert.equal(toClientCanvaFolders(row({ client_status: "offboarded", canva_enabled: false })).enabled, false);
 });
 
-test("Client Intelligence and Authority inputs are not extended (no stale Authority runs, same Drafter briefs)", () => {
-  const later = fs.readdirSync(new URL("../supabase/migrations/", import.meta.url)).filter((f) => f >= "0056");
-  for (const f of later) {
-    const sql = read(`../supabase/migrations/${f}`);
-    assert.doesNotMatch(sql, /create (or replace )?function (client_intelligence_input|authority_input|authority_fingerprint)\b/, f);
-  }
+test("Canva folders do not extend Client Intelligence or Authority inputs", () => {
+  // This pins the Canva feature itself, not every future domain migration.
+  // Keyword-first campaigns intentionally extend Authority input later with
+  // keyword competition, without adding Canva fields or changing Drafter
+  // Client Intelligence.
+  assert.doesNotMatch(migration, /create (or replace )?function (client_intelligence_input|authority_input|authority_fingerprint)\b/);
   assert.doesNotMatch(read("../src/lib/client-intelligence.ts"), /canva/i);
+  const keywordFirst = read("../supabase/migrations/20261011233500_keyword_first_lucas_pilot.sql");
+  assert.match(keywordFirst, /create or replace function authority_input/);
+  assert.match(keywordFirst, /'competition', k\.competition/);
+  assert.doesNotMatch(keywordFirst, /canva/i);
 });

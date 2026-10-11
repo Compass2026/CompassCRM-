@@ -46,7 +46,7 @@ export const lucas = () => ({
   ],
   keywords: [
     { id: KW, keyword: "roof replacement wentzville", intent: "commercial", intent_note: null, is_active: true, is_tracked: true, is_money: true, service_id: ROOF, target_url: PAGE, priority: "p1" },
-    { id: "kw-info", keyword: "how long does a roof last", intent: "informational", intent_note: null, is_active: true, is_tracked: true, is_money: false, service_id: ROOF, target_url: PAGE, priority: "p3" },
+    { id: "11111111-1111-4111-8111-111111111111", keyword: "how long does a roof last", intent: "informational", intent_note: null, is_active: true, is_tracked: true, is_money: false, service_id: ROOF, target_url: PAGE, priority: "p3" },
   ],
   claims: [
     { id: OC, claim: "Owens Corning Preferred Contractor", status: "sourced", source: "https://www.owenscorning.com/en-us/roofing/contractors/contractor-profile/234319" },

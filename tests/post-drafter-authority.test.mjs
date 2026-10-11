@@ -64,10 +64,10 @@ async function hashOf(d) {
   return r.body.brief_hash;
 }
 
-test("version: v3 with Authority mode, the duplicate rule and Facebook drafts", async () => {
+test("version: v4 with keyword-first campaigns, Authority mode, duplicate rule and Facebook drafts", async () => {
   const v = await call(drafter(fakeStore().store), { mode: "version" });
-  assert.equal(v.body.version, 3);
-  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts"]);
+  assert.equal(v.body.version, 4);
+  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns"]);
   assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version"]);
 });
 
@@ -179,7 +179,7 @@ test("Authority and the Drafter disagreeing on the target refuses; the Drafter n
   const key = await call(drafter(fakeStore(state({ opportunity: { key: `gbp_post:${ROOF}:transactional` } })).store), A("brief"));
   assert.equal(key.body.code, "target_mismatch");
   // The Drafter's own refusals stay authoritative (422, as in v1).
-  const kw = await call(drafter(fakeStore(state({ opportunity: { keyword_id: "kw-info" } })).store), A("brief"));
+  const kw = await call(drafter(fakeStore(state({ opportunity: { keyword_id: "11111111-1111-4111-8111-111111111111" } })).store), A("brief"));
   assert.equal(kw.status, 422);
   assert.ok(kw.body.refusals.some((r) => r.code === "keyword_intent_mismatch"), JSON.stringify(kw.body));
   assert.equal(kw.body.authority_opportunity_id, OPP);

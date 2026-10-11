@@ -16,7 +16,7 @@
 // migration 0045's grounding plus a person's approval stay mandatory.
 import type { IntelligenceInput, OfferRow, SearchIntent } from "../../../src/lib/client-intelligence.ts";
 
-export const DRAFTER_VERSION = "drafter-v1";
+export const DRAFTER_VERSION = "drafter-v2";
 
 // Channels the drafter writes for: Business Profile (v1) and Facebook
 // (Oct 11 2026; standard posts on an explicitly named Page, no button).
@@ -81,6 +81,10 @@ export type DraftTarget = {
   channel: string;
   postType: "standard" | "offer";
   intent: string;
+  // Keyword-first is the default. non_search is an explicit exception for
+  // brand/community/team/review/event content that is not intended to support
+  // search demand. It must never be inferred from a missing keyword.
+  campaignMode?: "keyword" | "non_search";
   serviceId: string | null;
   keywordId?: string | null;
   ctaType: string | null;
@@ -114,6 +118,7 @@ export type Brief = {
   target: {
     channel: DraftChannel;
     post_type: "standard" | "offer";
+    campaign_mode: "keyword" | "non_search";
     search_intent: SearchIntent;
     service: { id: string; name: string; page_url: string; page_group_id: string } | null;
     keyword: { id: string; text: string; tracked: boolean; money: boolean; max_exact_uses: number } | null;
