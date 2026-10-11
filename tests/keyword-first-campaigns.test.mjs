@@ -52,11 +52,11 @@ test("Lucas pilot migration reconciles the cluster and preserves the exact graph
   const sql = readFileSync(new URL("../supabase/migrations/20261011233500_keyword_first_lucas_pilot.sql", import.meta.url), "utf8");
   assert.match(sql, /Holiday Lighting Installation/);
   assert.match(sql, /https:\/\/lucasconstructionmo\.com\/christmas-lights/);
-  assert.match(sql, /8296bfc1-d8e4-4065-be8f-1fc566117f1f/);
+  assert.match(sql, /holiday lighting installation wentzville/);
   assert.match(sql, /service\/provider discovery query; commercial/);
-  assert.match(sql, /drafter_run_id = null/);
-  assert.match(sql, /set review_status = 'draft'/);
-  assert.match(sql, /set review_status = 'in_review'/);
+  assert.match(sql, /drafter_run_id\s*=\s*null/);
+  assert.match(sql, /set review_status\s*=\s*'draft'/);
+  assert.match(sql, /set review_status\s*=\s*'in_review'/);
   assert.doesNotMatch(sql, /delete\s+from\s+post_assets/i);
   assert.doesNotMatch(sql, /update\s+post_assets/i);
   for (const label of [
