@@ -179,11 +179,8 @@ declare
   ];
 begin
   -- Empty schema/sandbox runs have no Lucas row and should remain a no-op.
-  if not exists (select 1 from clients where id = v_client) then
-    return;
-  end if;
-
-  perform set_config('compass.post_system', 'on', true);
+  if exists (select 1 from clients where id = v_client) then
+    perform set_config('compass.post_system', 'on', true);
 
   -- Abort instead of touching an unexpected lifecycle state.
   if (select count(*) from social_posts
@@ -259,7 +256,8 @@ begin
   set review_status = 'in_review'
   where client_id = v_client and id = any(v_posts);
 
-  perform set_config('compass.post_system', coalesce(v_prev, ''), true);
+    perform set_config('compass.post_system', coalesce(v_prev, ''), true);
+  end if;
 exception when others then
   perform set_config('compass.post_system', coalesce(v_prev, ''), true);
   raise;
