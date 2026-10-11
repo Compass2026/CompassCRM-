@@ -211,3 +211,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history_styl
 # append-only; publisher_runs takes the Zernio fields; a brand image carries
 # its hash onto a post.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/zernio_publisher.test.sql"
+# Business Profile through Zernio (20261011040000): only the publisher's
+# service session records and binds a client's one Business Profile location
+# (locations/<id>); binding never enables; a team admin enables; the approval
+# binds the destination; publisher_runs records the pinned location.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/zernio_gbp.test.sql"

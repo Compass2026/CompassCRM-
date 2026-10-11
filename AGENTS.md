@@ -1554,6 +1554,33 @@ Design, gates, endpoints and Lucas state: `docs/zernio-publisher.md`.
 - **Do not publish** a real Facebook post outside Tom's final steps in the
   doc.
 
+## Business Profile through Zernio (Oct 11 2026; migration `20261011040000` not yet applied)
+
+Business Profile posts can go through Zernio instead of directly to Google.
+Design, gates and the steps for Lucas are in `docs/zernio-publisher.md`
+("Business Profile through Zernio").
+
+- **Exactly one publisher per post** (`gbp.ts gbpRoute`):
+  - the approved snapshot names a location, or the client has a bound Zernio
+    location → Zernio only, refused there when anything is missing, **never**
+    sent directly to Google;
+  - otherwise → the direct Google path, unchanged.
+- **Binding:** one `locations/<id>` per client, on the client's
+  `google_business` `social_accounts` row.
+  - Recorded and bound only by the publisher (`zernio_gbp_bind` →
+    `publisher_bind_gbp_location`) after re-reading the account, its locations
+    and its health.
+  - Binding never enables; a team admin switches it on.
+- **The approval binds the destination.** A post approved without a location
+  is reopened, saved and approved again; nothing rewrites an approval.
+- **Shared Zernio machinery** (`zernio-path.ts`): idempotency, write-ahead
+  runs, upload, reconciliation and tasks for Facebook and Business Profile
+  alike. Runs record the pinned `target_location_id`; a binding that changes
+  in flight goes to a person.
+- **Scope:** standard posts — text, one JPEG/PNG photo (≤ 5 MB, ≥ 400 × 300)
+  and a linked button. Offer and event posts and Call buttons are refused
+  explicitly.
+
 ## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 
 Twilio SMS per client, piloted with BHG Safety Partners. Full design, flows

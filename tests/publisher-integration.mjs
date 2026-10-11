@@ -19,6 +19,7 @@ assert.ok(PGRST_URL && JWT_SECRET && PSQL && PSQL_ADMIN, "run through npm run te
 
 const TEAM = { id: "00000000-0000-4000-a000-000000000001", email: "sandbox-team@compassmarketing.ai" };
 const CA = "00000000-0000-4000-b000-00000000000a";
+const CB = "00000000-0000-4000-b000-00000000000b";
 const LOC = "accounts/111/locations/222";
 
 const b64 = (v) => Buffer.from(typeof v === "string" ? v : JSON.stringify(v)).toString("base64url");
@@ -66,11 +67,22 @@ const google = { creates: [], responses: [], existing: [], tokenOk: true, access
 // 123456789012; creates honour the Idempotency-Key.
 const ZACC = "aaaaaaaaaaaaaaaaaaaaaaa1";
 const FB_PAGE = "123456789012";
+// Business Profile through Zernio: one googlebusiness account managing
+// location 5550001 (Client B) and another business's location.
+const ZGBP = "bbbbbbbbbbbbbbbbbbbbbbb2";
+const GBP_LOC = "locations/5550001";
 const zernio = { creates: [], keys: new Map(), auth: new Set() };
 const fakeZernio = async (u, init, json) => {
-  const path = new URL(u).pathname.replace(/^\/api/, "");
+  const url = new URL(u);
+  const path = url.pathname.replace(/^\/api/, "");
   const method = init.method ?? "GET";
   zernio.auth.add(init.headers?.Authorization);
+  if (method === "GET" && path === "/v1/accounts" && url.searchParams.get("platform") === "googlebusiness") {
+    return json(200, { accounts: [{ _id: ZGBP, platform: "googlebusiness", displayName: "Summit Electric", isActive: true }] });
+  }
+  if (method === "GET" && path.endsWith("/gmb-locations")) {
+    return json(200, { locations: [{ id: "5550001", name: "Summit Electric", websiteUrl: "https://b.example.test" }, { id: "5550002", name: "Someone Else" }], selectedLocationId: "5550001", hasMore: false });
+  }
   if (method === "GET" && path === "/v1/accounts") return json(200, { accounts: [{ _id: ZACC, platform: "facebook", displayName: "Sandbox Client A", isActive: true }] });
   if (method === "GET" && path.endsWith("/facebook-page")) return json(200, { pages: [{ id: FB_PAGE, name: "Sandbox Client A" }], selectedPageId: FB_PAGE });
   if (method === "GET" && path.endsWith("/health")) return json(200, { status: "healthy", tokenStatus: { valid: true }, permissions: { posting: [{ scope: "pages_manage_posts", granted: true, required: true }] } });
@@ -80,6 +92,11 @@ const fakeZernio = async (u, init, json) => {
     zernio.creates.push({ key, body });
     const n = zernio.keys.get(key) ?? zernio.creates.length;
     zernio.keys.set(key, n);
+    const t = body.platforms[0];
+    if (t.platform === "googlebusiness") {
+      return json(201, { post: { _id: `zp${n}`, content: body.content, status: "published", platforms: [{ platform: "googlebusiness", accountId: { _id: t.accountId }, platformSpecificData: t.platformSpecificData,
+        status: "published", platformPostId: `90000${n}`, platformPostUrl: `https://business.google.com/posts/${n}`, publishedAt: new Date().toISOString() }] } });
+    }
     return json(201, { post: { _id: `zp${n}`, content: body.content, status: "published", platforms: [{ platform: "facebook", accountId: { _id: ZACC }, status: "published",
       platformPostId: `${FB_PAGE}_${n}`, platformPostUrl: `https://www.facebook.com/${FB_PAGE}/posts/${n}`, publishedAt: new Date().toISOString() }] } });
   }
@@ -384,6 +401,53 @@ try {
   ok("Facebook through Zernio: preflight writes nothing; once a teammate enables the Page the approved copy is published as the publisher, with the live URL");
   assert.equal(sql(`select string_agg(kind, ',' order by id) from social_account_publish_events where social_account_id = '${fbAcc}'`), "bound,enabled");
   ok("Binding history: bound by the publisher, enabled by the teammate");
+
+  // 10. Business Profile through Zernio (Client B).
+  sql(`update app_settings set value = '{"enabled": true, "clients": ["${CA}", "${CB}"]}' where key = 'publisher'`);
+  assert.match(sqlFails(`select publisher_bind_gbp_location('${CB}', '${ZGBP}', '${GBP_LOC}', 'x', 'x', '{}')`) ?? "", /Only the publisher/);
+  const gbpReport = await (await cron({ mode: "zernio_gbp_accounts" })).json();
+  assert.deepEqual(gbpReport.compass_clients.find((c) => c.client_id === CB).website_matches.map((m) => m.location_id), [GBP_LOC]);
+  const gbpBound = await cron({ mode: "zernio_gbp_bind", client_id: CB, zernio_account_id: ZGBP, location_id: "5550001" });
+  assert.equal(gbpBound.status, 200, JSON.stringify(await gbpBound.clone().json()));
+  const gbpAcc = sql(`select id from social_accounts where client_id = '${CB}' and platform = 'google_business'`);
+  assert.equal(sql(`select external_account_id || '|' || publish_account_id || '|' || publish_page_id || '|' || publish_enabled from social_accounts where id = '${gbpAcc}'`), `${GBP_LOC}|${ZGBP}|${GBP_LOC}|false`);
+  ok("Business Profile through Zernio: the worker cannot bind; the publisher records Client B's exact location after reading it; binding does not enable");
+
+  const gbpBase = { client_id: CB, platform: "google_business", search_intent: "navigational", crm_facts_only: true };
+  const zg1 = await approvedPost({ ...gbpBase, social_account_id: gbpAcc, copy: "Summit Electric: panel upgrades in Columbia." });
+  const zg0 = await approvedPost({ ...gbpBase, copy: "Summit Electric: approved before the location was named." });
+  const googleBefore = google.creates.length;
+  const zBefore = zernio.creates.length;
+  await schedule(zg1);
+  await schedule(zg0);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(zg1, "publish_status"), "scheduled", "not enabled: stays scheduled");
+  assert.equal(row(zg0, "publish_status"), "not_scheduled", "no location named: unscheduled to fix, never sent to Google");
+  assert.equal(google.creates.length, googleBefore, "nothing went to Google directly");
+  assert.equal(zernio.creates.length, zBefore);
+  const gpre = await (await cron({ mode: "preflight", post_id: zg1 })).json();
+  assert.equal(gpre.writes, false);
+  assert.ok(gpre.checks.find((c) => c.gate === "snapshot hash still valid").ok);
+  assert.deepEqual(gpre.blocking, ["account publishing enabled", "binding gates"]);
+  assert.deepEqual(gpre.request.body.platforms, [{ platform: "googlebusiness", accountId: ZGBP, platformSpecificData: { locationId: GBP_LOC, topicType: "STANDARD" } }]);
+
+  const { error: gbpEnableError } = await asTeam.rpc("publisher_set_account_enabled", { p_social_account_id: gbpAcc, p_enabled: true, p_expected_account_id: ZGBP });
+  assert.equal(gbpEnableError, null, gbpEnableError?.message);
+  await publisher.tick({ mode: "tick" });
+  assert.equal(row(zg1, "publish_status"), "published");
+  assert.equal(row(zg1, "external_post_id"), `90000${zernio.creates.length}`);
+  assert.equal(row(zg1, "published_url"), `https://business.google.com/posts/${zernio.creates.length}`);
+  const gc = zernio.creates.at(-1);
+  assert.equal(gc.body.content, "Summit Electric: panel upgrades in Columbia.");
+  assert.deepEqual(gc.body.platforms, [{ platform: "googlebusiness", accountId: ZGBP, platformSpecificData: { locationId: GBP_LOC, topicType: "STANDARD" } }]);
+  assert.equal(gc.key, `compass-${row(zg1, "publish_key")}-g1`);
+  assert.equal(google.creates.length, googleBefore, "never Google directly");
+  assert.equal(sql(`select string_agg(outcome || ':' || transport || ':' || coalesce(target_location_id, '-'), ',' order by id) from publisher_runs where post_id = '${zg1}' and outcome <> 'blocked'`),
+    `uncertain:zernio:${GBP_LOC},published:zernio:${GBP_LOC}`);
+  assert.equal(sql(`select actor_kind from post_events where post_id = '${zg1}' and kind = 'published'`), "publisher");
+  await publisher.tick({ mode: "tick" });
+  assert.equal(zernio.creates.at(-1), gc, "never sent twice");
+  ok("Business Profile through Zernio: preflight writes nothing; once enabled the approved copy goes to the exact location as the publisher; a post approved without the location is refused, never sent to Google");
 
   console.log(`Publisher integration checks passed (${checks.length}).`);
 } finally {

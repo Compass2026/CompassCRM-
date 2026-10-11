@@ -29,6 +29,14 @@
 // for people and the operator: preflight (no writes anywhere),
 // zernio_accounts (what the publish key sees) and zernio_bind (the explicit
 // binding, re-verified; never enables publishing).
+//
+// Business Profile through Zernio (gbp-path.ts): a Business Profile post goes
+// to exactly one publisher. When its approved snapshot names a location, or
+// its client has a Zernio location, it is published through Zernio under the
+// same switch, pilot list and claim — and refused there, never sent directly
+// to Google, when anything is missing. Every other Business Profile post takes
+// the direct Google path below, unchanged. Modes zernio_gbp_accounts (read
+// only) and zernio_gbp_bind (the explicit location binding; never enables).
 
 import {
   buildLocalPost,
@@ -45,6 +53,7 @@ import {
   type Snapshot,
 } from "./channel.ts";
 import { createFacebookPath } from "./facebook-path.ts";
+import { createGbpPath } from "./gbp-path.ts";
 import { googleClient, googleMessage, refreshToken, type Location } from "./google.ts";
 import type { PostRow, RunRow, Store } from "./store.ts";
 
@@ -87,11 +96,15 @@ export function createPostPublisher(deps: Deps) {
     const postLink = (p: PostRow) => `/clients/${p.client_id}/social/${p.id}`;
 
     const settings = await store.settings();
-    const fb = createFacebookPath({
+    const zctx = {
       store, fetch: deps.fetch, at, settings, note,
-      run: (r) => run(r),
-      resolve: (f, why) => resolve(f, why),
-    });
+      run: (r: RunRow) => run(r),
+      resolve: (f: { keys: string[]; client_id?: string; post_id?: string }, why: string) => resolve(f, why),
+    };
+    const fb = createFacebookPath(zctx);
+    const gbp = createGbpPath(zctx);
+    // Business Profile posts on the direct Google path (not Zernio's).
+    const direct = async (p: PostRow) => p.platform === "google_business" && (await gbp.route(p)) === "google";
 
     // ── Hand-publishing reminders (non-Business-Profile posts not sent through Zernio) ──
     if (opts.mode === "tick") {
@@ -125,7 +138,7 @@ export function createPostPublisher(deps: Deps) {
     if (!settings.enabled) {
       if (opts.postId) {
         const p = await store.post(opts.postId);
-        if (p) await blockOnce(p, "now", "The publisher is switched off (Settings → Publisher).", null, p.platform === "facebook" ? "zernio" : "google");
+        if (p) await blockOnce(p, "now", "The publisher is switched off (Settings → Publisher).", null, p.platform === "facebook" || (p.platform === "google_business" && !(await direct(p))) ? "zernio" : "google");
       }
       return report;
     }
@@ -281,7 +294,12 @@ export function createPostPublisher(deps: Deps) {
     if (opts.mode === "tick") {
       const before = new Date(at.getTime() - STUCK_AFTER_MINUTES * 60_000).toISOString();
       for (const p of await store.stuckGbpPosts(before)) {
-        if (!piloted(p.client_id)) continue;
+        // A post whose approval names a Zernio location is read back by
+        // gbp.sweep. One the direct path claimed is still reconciled here
+        // (reading Google, never sending), even if its client has since
+        // switched to Zernio: an earlier attempt is settled before the route
+        // changes.
+        if (!piloted(p.client_id) || (await gbp.namesLocation(p))) continue;
         await ensureGoogle();
         if (googleBlock) continue;
         const l = await locationFor(p.client_id);
@@ -300,7 +318,7 @@ export function createPostPublisher(deps: Deps) {
 
       // ── Automatic retries: transient failures, under the cap, after backoff ──
       for (const p of await store.failedGbpPosts()) {
-        if (!piloted(p.client_id) || !p.last_attempt_at) continue;
+        if (!piloted(p.client_id) || !p.last_attempt_at || !(await direct(p))) continue;
         const last = await store.latestRun(p.id);
         if (!last || last.outcome !== "failed" || !last.transient) continue;
         const due = nextRetryAt(p.last_attempt_at, p.publish_attempts);
@@ -311,8 +329,9 @@ export function createPostPublisher(deps: Deps) {
         }
       }
 
-      // ── Facebook through Zernio: read back in-flight posts, retries ──
+      // ── Through Zernio: read back in-flight posts, retries ──
       await fb.sweep();
+      await gbp.sweep();
     }
 
     // ── Due posts (or the one post a person asked to publish now) ──
@@ -325,12 +344,20 @@ export function createPostPublisher(deps: Deps) {
       queue = await store.dueGbpPosts(at.toISOString(), MAX_POSTS_PER_TICK * 4);
     }
     const usedLocations = new Set<string>();
+    const usedZernioLocations = new Set<string>();
     let claimed = 0;
     for (const p of queue) {
       if (claimed >= MAX_POSTS_PER_TICK) break;
       const mode: RunRow["mode"] = opts.mode === "now" ? "now" : "tick";
       if (p.platform === "facebook") {
         if (await fb.publish(p, mode)) claimed++;
+        continue;
+      }
+      if (!(await direct(p))) {
+        // Business Profile through Zernio: one post per location per run.
+        const where = ((p.approved_snapshot ?? {}) as { social_account_id?: string | null }).social_account_id ?? `client:${p.client_id}`;
+        if (usedZernioLocations.has(where)) continue;
+        if (await gbp.publish(p, mode)) { claimed++; usedZernioLocations.add(where); }
         continue;
       }
       const loc = await preflight(p, mode);
@@ -421,15 +448,29 @@ export function createPostPublisher(deps: Deps) {
 
   // Read-only and binding modes. None of them publishes anything.
   async function facebookMode(body: Record<string, unknown>, who: { cron: boolean; admin: boolean }): Promise<Response> {
-    const fb = createFacebookPath({
+    const zctx = {
       store, fetch: deps.fetch, at: now(), settings: await store.settings(),
       note: () => {}, run: () => Promise.reject(new Error("This mode records nothing.")), resolve: () => Promise.resolve(),
-    });
+    };
+    const fb = createFacebookPath(zctx);
+    const gbp = createGbpPath(zctx);
     if (body.mode === "preflight") {
       const fixture = body.fixture as Parameters<typeof fb.preflight>[0]["fixture"];
-      return Response.json(await fb.preflight({ post_id: typeof body.post_id === "string" ? body.post_id : undefined, fixture }));
+      const postId = typeof body.post_id === "string" ? body.post_id : undefined;
+      const platform = postId ? (await store.post(postId))?.platform : fixture?.platform;
+      const path = platform === "google_business" ? gbp : fb;
+      return Response.json(await path.preflight({ post_id: postId, fixture }));
     }
     if (body.mode === "zernio_accounts") return Response.json(await fb.accountsReport());
+    if (body.mode === "zernio_gbp_accounts") return Response.json(await gbp.accountsReport());
+    if (body.mode === "zernio_gbp_bind") {
+      if (!who.cron && !who.admin) return Response.json({ error: "Only a team admin binds a Business Profile location." }, { status: 403 });
+      if (typeof body.client_id !== "string" || typeof body.zernio_account_id !== "string" || typeof body.location_id !== "string") {
+        return Response.json({ error: "Give client_id, zernio_account_id and location_id." }, { status: 400 });
+      }
+      const r = await gbp.bind(body.client_id, body.zernio_account_id, body.location_id);
+      return Response.json(r, { status: r.status });
+    }
     // zernio_bind: a team admin or the operator door.
     if (!who.cron && !who.admin) return Response.json({ error: "Only a team admin binds a Zernio account." }, { status: 403 });
     if (typeof body.social_account_id !== "string" || typeof body.zernio_account_id !== "string") {
@@ -446,16 +487,16 @@ export function createPostPublisher(deps: Deps) {
     if (isCron && (body?.mode ?? "tick") === "tick") {
       return Response.json(await tick({ mode: "tick" }));
     }
-    const FB_MODES = ["preflight", "zernio_accounts", "zernio_bind"];
+    const FB_MODES = ["preflight", "zernio_accounts", "zernio_bind", "zernio_gbp_accounts", "zernio_gbp_bind"];
     if (isCron && FB_MODES.includes(body?.mode)) return facebookMode(body, { cron: true, admin: false });
     const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer /, "");
     const member = await store.teamMemberForJwt(jwt);
     if (!member) return Response.json({ error: "forbidden" }, { status: isCron || jwt ? 403 : 401 });
     if (FB_MODES.includes(body?.mode)) {
-      return facebookMode(body, { cron: false, admin: body.mode === "zernio_bind" ? await store.memberIsAdmin(member) : false });
+      return facebookMode(body, { cron: false, admin: body.mode === "zernio_bind" || body.mode === "zernio_gbp_bind" ? await store.memberIsAdmin(member) : false });
     }
     if (body?.mode !== "now" || typeof body?.post_id !== "string") {
-      return Response.json({ error: "A team member may ask to publish one post now ({ mode: \"now\", post_id }), or use preflight / zernio_accounts / zernio_bind" }, { status: 400 });
+      return Response.json({ error: "A team member may ask to publish one post now ({ mode: \"now\", post_id }), or use preflight / zernio_accounts / zernio_bind / zernio_gbp_accounts / zernio_gbp_bind" }, { status: 400 });
     }
     return Response.json(await tick({ mode: "now", postId: body.post_id }));
   }

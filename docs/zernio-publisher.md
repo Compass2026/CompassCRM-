@@ -1,20 +1,24 @@
-# Zernio Social Publisher v1 (Facebook)
+# Zernio Social Publisher (Facebook v1, Business Profile)
 
-Approved Facebook posts are published by the existing `post-publisher`
-through Zernio, Lucas Construction first. Compass decides what is posted,
-where and when. Zernio is transport only.
+Approved Facebook and Google Business Profile posts are published by the
+existing `post-publisher` through Zernio, Lucas Construction first. Compass
+decides what is posted, where and when. Zernio is transport only.
 
-- **Status (Oct 10 2026):** built, migration applied, function deployed, and
-  Lucas bound.
-- **Nothing is published:** the publisher switch is off, the pilot list is
-  empty, and Lucas's Page has publishing off.
-- **The first live post is Tom's step:** see [Final steps](#toms-final-steps).
+- **Facebook (Oct 10 2026):** built, migration applied, function deployed and
+  Lucas bound. The publisher, the Lucas pilot and Lucas's Page are switched
+  on, and the first Lucas Facebook post has been published.
+- **Business Profile through Zernio (Oct 11 2026):** built and tested on a
+  branch. Not yet applied, deployed or bound; see
+  [Business Profile through Zernio](#business-profile-through-zernio). It
+  replaces the direct Google path for a client only once that client has a
+  bound location.
 
 ## Routing
 
 | Post | Path |
 | --- | --- |
-| `google_business` | The Google path, unchanged (0046). |
+| `google_business`, when its approved snapshot names a location or its client has a Zernio location | Zernio only (`gbp-path.ts`); refused there when anything is missing, never sent to Google. See [Business Profile through Zernio](#business-profile-through-zernio). |
+| Any other `google_business` | The direct Google path, unchanged (0046). |
 | `facebook`, with all of the following holding: the publisher is on, the client is on the pilot list, and the post's Page has a verified Zernio binding of the same client that is switched on | Zernio (`supabase/functions/post-publisher/facebook-path.ts`). |
 | Any other `facebook` post, and Instagram / LinkedIn / X / TikTok | The "post this by hand" reminder, unchanged. |
 
@@ -321,3 +325,226 @@ and no Zernio write.
 
 **Nothing has been published.** The first live Facebook post happens only when
 Tom does steps 2–4.
+
+## Business Profile through Zernio
+
+Tom authorized the switch on Oct 10 2026 ("use Zernio for GBP"), while the
+direct Google path's quota follow-up continues separately (My Business Account
+Management requests/minute = 0 in project 308261457231; Google case
+9-0457000041837). Nothing here needs that quota or Google OAuth.
+
+### Route: exactly one publisher per post
+
+`gbp.ts gbpRoute`, applied by the handler and shown on the post page:
+
+| Business Profile post | Publisher |
+| --- | --- |
+| The approved snapshot names a location (`social_account_id`) | Zernio only |
+| The client has a bound Zernio location (even if this post names none) | Zernio only; a post approved without the location is refused with a fix task |
+| Otherwise | The direct Google path, unchanged |
+
+- A Zernio-routed post is **never** handed to the direct Google path: not when
+  the publisher, the pilot list or the location's switch is off, not when the
+  location is unhealthy or unbound, and not after an ambiguous result.
+- The direct path's stuck and retry sweeps skip Zernio-routed posts, and the
+  Zernio sweep skips direct ones.
+- **An earlier direct-Google attempt without a settled answer** (`uncertain` or
+  `ambiguous` Google run) blocks the Zernio send until a person checks the
+  profile, so a post that may already be on Google is not posted twice.
+- **The destination is part of the approval.** `social_post_snapshot`
+  includes `social_account_id`, so naming the location on an already approved
+  post means Reopen → Save draft (Compass names the client's bound location)
+  → Submit → Approve. Nothing rewrites an approval.
+- **The destination is stable in flight.** Every Zernio run records the
+  account and location it was pinned to (`target_account_id`,
+  `target_location_id`). A binding changed under an in-flight post goes to a
+  person (`targetDrift`); it is never re-targeted.
+
+### The binding
+
+The client's `social_accounts` row for `google_business`:
+- `external_account_id` = `publish_page_id` = the Google location resource
+  `locations/<id>`;
+- `publish_account_id` = the Zernio `googlebusiness` account id.
+
+Rules:
+- **One bound location per client** (unique index): no multi-location fan-out,
+  and a client's transport is unambiguous.
+- **Recorded and bound only by the publisher** (`zernio_gbp_bind` →
+  `publisher_bind_gbp_location`, service session only). It names one client,
+  one Zernio account and one location, after re-reading with the publish key:
+  - the account is listed as `googlebusiness`, active, not needing
+    reconnection;
+  - the location is in the account's `GET /v1/accounts/{id}/gmb-locations`;
+  - health is not `error`, the token is valid, posting is not refused.
+- **No name-only binding.** The accounts report shows each location's name,
+  address and website and a same-website hint per client; the binding is the
+  admin's explicit choice of ids.
+- **Binding never enables.** A team admin switches it on
+  (`publisher_set_account_enabled`) or removes it, as for Facebook. The
+  history is the same append-only `social_account_publish_events`.
+- Lucas's Facebook-only Zernio account (`6ac6efe9621dc76465184742`) can never
+  be a Business Profile target: one Zernio account serves one Compass row,
+  only a `googlebusiness` account binds a location, and a post's location must
+  be a `google_business` row of the same client.
+
+### The publish gate (Business Profile)
+
+**Before the claim:**
+- The client is piloted, and the publisher is on.
+- The approved snapshot can go as approved (`gbpProblems`):
+  - copy of at most 1,500 characters, exactly as approved;
+  - a standard post. Offer and event posts are refused explicitly (not sent
+    without their fields);
+  - a button only if Zernio can carry it as approved: `LEARN_MORE`, `BOOK`,
+    `ORDER`, `SHOP`, `SIGN_UP` with an https link. A Call button is refused,
+    because Zernio's button needs a link;
+  - a named location;
+  - at most one photo, stored and hashed.
+- The location passes `gbpBindingProblems`:
+  - the same client and `google_business`;
+  - bound to a Zernio account;
+  - the binding's location equals the row's;
+  - switched on and not `error` health.
+- No unsettled direct-Google attempt.
+- The publish key is in Vault and is not the read key.
+- The photo's stored bytes re-hash to the approved sha256, then:
+  - the type is sniffed (JPEG or PNG only);
+  - it is at most 5 MB;
+  - it is at least 400 × 300, read from the bytes.
+  Nothing is converted or compressed.
+
+**At the claim (0045, unchanged):** approval, snapshot hash and grounding are
+re-checked; a refusal sends the post back to review.
+
+**What is sent:**
+```
+POST https://zernio.com/api/v1/posts
+Idempotency-Key: compass-<publish_key>-g<n>
+{ "content": <approved copy, unchanged>,
+  "platforms": [{ "platform": "googlebusiness", "accountId": <bound account>,
+                  "platformSpecificData": { "locationId": "locations/<id>", "topicType": "STANDARD",
+                                            "callToAction": { "type", "url" } (only when approved) } }],
+  "mediaItems": [{ "type": "image", "url": <Zernio upload of the approved bytes> }] (only with a photo),
+  "publishNow": true }
+```
+
+Publish now and Compass-held schedules take the same path.
+
+**Never a second post:** the same machinery as Facebook (`zernio-path.ts`,
+shared):
+- the Idempotency-Key (24-hour window, confirmed in Zernio's OpenAPI spec:
+  a same-key retry returns the original post with HTTP 200, whatever the
+  body);
+- the write-ahead `uncertain` run;
+- `GET /v1/posts/{id}` before any re-send;
+- a 409 duplicate is reconciled only when it is the exact copy on the same
+  account **and the same echoed location**;
+- on a 207, the `googlebusiness` entry for exactly this account and location
+  decides (`platformSpecificData` is echoed back per the spec).
+
+**Recorded published** only from that entry with an https `platformPostUrl`:
+- `external_post_id` = the Google post id (`platformPostId`);
+- `published_url` = `platformPostUrl`;
+- `published_at` = its time.
+
+### Endpoints added to the allowlist
+
+| Call | Use |
+| --- | --- |
+| `GET /v1/accounts?platform=googlebusiness` | Verify / bind / preflight |
+| `GET /v1/accounts/{id}/gmb-locations` (`limit`) | The account's locations and its default |
+
+Nothing else was added: no location switching (`PUT …/gmb-locations`), no
+connect, edit, delete or webhook call.
+
+### Function modes added
+
+| Mode | Caller | Writes |
+| --- | --- | --- |
+| `zernio_gbp_accounts` | teammate or cron | none |
+| `zernio_gbp_bind` `{client_id, zernio_account_id, location_id}` | admin or cron | the binding only (never enables) |
+| `preflight` `{post_id}` on a Business Profile post | teammate or cron | none |
+
+### Schema
+
+Migration `20261011040000_zernio_gbp_publisher.sql` (additive):
+- the binding check also allows `google_business` with `locations/<id>`;
+- `social_accounts_one_gbp_binding`, a unique index (one bound location per
+  client);
+- `publisher_bind_account` accepts `google_business` rows (Facebook unchanged);
+- `publisher_bind_gbp_location` (service role only);
+- `publisher_runs.target_location_id` (Zernio runs only).
+
+### UI
+
+- **Post page (Business Profile):**
+  - the route: Zernio with the exact location and account and its switch, or
+    "directly to Google";
+  - why a post is not sent yet;
+  - **Check without sending** (the no-write preflight through the function);
+  - the pinned location on each run.
+- **Settings › Business Profile through Zernio:**
+  - **Verify Business Profile locations** (read only);
+  - one row per piloted client;
+  - for admins: **Verify and bind**, **Switch publishing on / off** and
+    **Remove binding**.
+- The draft form names the client's bound location when the draft is saved.
+
+### Tests
+
+- `tests/post-publisher-gbp.test.mjs` (27 cases): payload and exact target,
+  photo limits, unsupported fields, approval and media mismatch, cross-client
+  and Facebook-account refusal, switch gates with no direct fallback, the
+  route, an unsettled Google attempt, sweep separation, timeout / 409 / 207
+  reconciliation, in-flight drift, retries, verification, binding, preflight
+  and secrets.
+- `supabase/tests/sandbox/zernio_gbp.test.sql` (27 checks).
+- `npm run test:publisher`: 17, including Business Profile end to end through
+  PostgREST.
+- `npm run test:posts-ui`: 25, including the draft destination, the post page
+  route and preflight through the real function, and Settings.
+- The Facebook suites pass unchanged.
+
+### Deployment order
+
+1. Merge the PR after review. It deploys the app to Vercel; Business Profile
+   routing stays inert until a location is bound.
+2. Apply `20261011040000_zernio_gbp_publisher.sql` to production
+   (`iokcopiyzajigvhwexhe`).
+3. Deploy `post-publisher` from this branch: `handler.ts`, `zernio-path.ts`,
+   `facebook-path.ts`, `facebook.ts`, `gbp-path.ts`, `gbp.ts`, `zernio.ts`,
+   `store.ts`, `channel.ts`, `google.ts`, `index.ts`.
+   - Until a location is bound, every Business Profile post keeps the direct
+     path.
+   - Facebook behaviour is unchanged.
+
+### Lucas readiness and the steps to the first Business Profile post
+
+Not verified live yet: this session holds no credential that may call the
+publisher's read modes. A teammate's click or the operator door does that
+after step 3.
+- Lucas has no `google_business` row in Compass today.
+- GBP post `aca2b919-3993-445d-b520-cc529cd3da6f` is approved with no location
+  named (approved before locations existed).
+- Its photo `8dfb59dd-…` is a stored 950 × 1200 JPEG of 145,092 bytes; the
+  link hash equals the approved hash (`efad04c0…2074e`). It meets the
+  Business Profile limits.
+- The static rule check on its snapshot finds only "names no location".
+
+Steps:
+1. **Settings › Business Profile through Zernio › Verify Business Profile
+   locations.**
+   - If no `googlebusiness` account is listed, connect Lucas's Google Business
+     Profile in Zernio, in the same Zernio profile the publish key is scoped
+     to, then verify again.
+   - Check the listed location: name, address, website lucasconstructionmo.com.
+2. **An admin: Verify and bind** Lucas with that Zernio account id and
+   location id. Then **Switch publishing on**.
+3. **On `aca2b919`:**
+   - Reopen (clears approval) → Save draft. The Account line shows the
+     location.
+   - Submit → Tom approves. The copy and photo are unchanged.
+4. **Check without sending** on the post. Every gate should pass.
+5. **STOP.** The live Business Profile post is Tom's: Publish now, or a
+   schedule. Do not publish the other approved posts in bulk.

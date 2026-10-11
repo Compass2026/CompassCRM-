@@ -6739,6 +6739,7 @@ export type Database = {
           provider_status: string | null
           request_key: string | null
           target_account_id: string | null
+          target_location_id: string | null
           task_id: string | null
           transient: boolean
           transport: string
@@ -6757,6 +6758,7 @@ export type Database = {
           provider_status?: string | null
           request_key?: string | null
           target_account_id?: string | null
+          target_location_id?: string | null
           task_id?: string | null
           transient?: boolean
           transport?: string
@@ -6775,6 +6777,7 @@ export type Database = {
           provider_status?: string | null
           request_key?: string | null
           target_account_id?: string | null
+          target_location_id?: string | null
           task_id?: string | null
           transient?: boolean
           transport?: string
@@ -10797,6 +10800,17 @@ export type Database = {
           p_health: Json
           p_page_id: string
           p_social_account_id: string
+        }
+        Returns: Json
+      }
+      publisher_bind_gbp_location: {
+        Args: {
+          p_account_id: string
+          p_account_name: string
+          p_client_id: string
+          p_health: Json
+          p_location_id: string
+          p_location_name: string
         }
         Returns: Json
       }

@@ -19,6 +19,7 @@ import { WorkerGoogleOpsForm } from "@/components/worker-google-ops-form";
 import { parseWorkerGoogleSetting } from "../../../../supabase/functions/_shared/worker-google.ts";
 import { parsePublisherSettings } from "@/lib/publisher";
 import { ZernioPublishingCard, type ZernioPageRow } from "@/components/zernio-publishing-card";
+import { ZernioGbpCard, type ZernioGbpRow } from "@/components/zernio-gbp-card";
 import { getCurrentTeamRole } from "@/lib/team";
 
 export default async function SettingsPage({
@@ -66,11 +67,16 @@ export default async function SettingsPage({
     ]);
   const publisher = parsePublisherSettings(publisherRow?.value);
   // Facebook through Zernio: each client's Page and its binding.
-  const [{ data: fbPages }, { data: zernioKey }, me] = await Promise.all([
+  const [{ data: fbPages }, { data: gbpLocations }, { data: zernioKey }, me] = await Promise.all([
     supabase
       .from("social_accounts")
       .select("id, external_account_id, display_name, publish_account_id, publish_account_name, publish_enabled, publish_verified_at, publish_health, clients(name)")
       .eq("platform", "facebook"),
+    supabase
+      .from("social_accounts")
+      .select("id, client_id, external_account_id, display_name, publish_account_id, publish_account_name, publish_enabled, publish_verified_at, publish_health")
+      .eq("platform", "google_business")
+      .not("publish_provider", "is", null),
     supabase.rpc("secret_present", { secret_name: "ZERNIO_PUBLISH_API_KEY" }),
     getCurrentTeamRole(supabase),
   ]);
@@ -81,6 +87,19 @@ export default async function SettingsPage({
       verified_at: a.publish_verified_at, health: (a.publish_health as { status?: string } | null)?.status ?? null,
     }))
     .sort((x, y) => x.client.localeCompare(y.client));
+
+  // Business Profile through Zernio: piloted clients and any client with a
+  // bound location.
+  const gbpRows: ZernioGbpRow[] = (clients ?? [])
+    .filter((c) => publisher.clients.includes(c.id) || (gbpLocations ?? []).some((l) => l.client_id === c.id))
+    .map((c) => {
+      const l = (gbpLocations ?? []).find((x) => x.client_id === c.id) ?? null;
+      return {
+        client_id: c.id, client: c.name, social_account_id: l?.id ?? null, location_id: l?.external_account_id ?? null, location_name: l?.display_name ?? null,
+        account_id: l?.publish_account_id ?? null, account_name: l?.publish_account_name ?? null, enabled: l?.publish_enabled ?? false,
+        verified_at: l?.publish_verified_at ?? null, health: (l?.publish_health as { status?: string } | null)?.status ?? null,
+      };
+    });
 
   const settingValue = (key: string) =>
     (googleSettings ?? []).find((s) => s.key === key)?.value ?? null;
@@ -194,6 +213,19 @@ export default async function SettingsPage({
         </CardHeader>
         <CardContent>
           <ZernioPublishingCard rows={zernioRows} admin={me?.role === "admin"} keyPresent={zernioKey === true} />
+        </CardContent>
+      </Card>
+
+      <Card id="zernio-gbp">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Business Profile through Zernio</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Approved Business Profile posts can be sent by the same publisher through Zernio to one explicitly
+            bound location per client, instead of directly to Google. Pilot: Lucas Construction.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <ZernioGbpCard rows={gbpRows} admin={me?.role === "admin"} keyPresent={zernioKey === true} />
         </CardContent>
       </Card>
 

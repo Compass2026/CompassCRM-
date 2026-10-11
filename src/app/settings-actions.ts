@@ -210,11 +210,12 @@ export async function setZernioPublishingAction(_prev: ActionState, form: FormDa
   const id = form.get("social_account_id");
   const expected = String(form.get("expected_account_id") ?? "");
   const enabled = form.get("enabled") === "true";
+  const what = form.get("kind") === "gbp" ? "Business Profile location" : "Page";
   if (!isUuid(id)) return { ok: false, message: "Unknown account." };
   const { error } = await supabase.rpc("publisher_set_account_enabled", { p_social_account_id: id, p_enabled: enabled, p_expected_account_id: expected });
   revalidatePath("/settings");
   if (error) return { ok: false, message: error.message };
-  return { ok: true, message: enabled ? "Publishing to this Page is on (the publisher switch and pilot list still apply)." : "Publishing to this Page is off." };
+  return { ok: true, message: enabled ? `Publishing to this ${what} is on (the publisher switch and pilot list still apply).` : `Publishing to this ${what} is off.` };
 }
 
 export async function unbindZernioAccountAction(_prev: ActionState, form: FormData): Promise<ActionState> {
@@ -226,4 +227,45 @@ export async function unbindZernioAccountAction(_prev: ActionState, form: FormDa
   revalidatePath("/settings");
   if (error) return { ok: false, message: error.message };
   return { ok: true, message: "Binding removed." };
+}
+
+// Business Profile through Zernio. The publisher reads the googlebusiness
+// accounts and their locations with the publish key; a binding names one
+// client and one location and is made only after the function re-reads them.
+export type GbpLocationView = { location_id: string | null; name: string | null; address: string | null; website: string | null };
+export type GbpAccountsState = {
+  ok: boolean;
+  message?: string;
+  accounts?: { zernio_account_id: string; name: string | null; active: boolean; health: { status: string }; selected_location_id: string | null; has_more: boolean | null; read: string; locations: GbpLocationView[] }[];
+  matches?: { client_id: string; name: string; website_matches: { zernio_account_id: string; location_id: string | null; name: string | null }[] }[];
+} | null;
+
+export async function verifyZernioGbpAction(_prev: GbpAccountsState): Promise<GbpAccountsState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const { status, payload } = await callPublisher({ mode: "zernio_gbp_accounts" });
+  const key = (payload?.key ?? null) as { ok?: boolean; detail?: string } | null;
+  if (status !== 200 || !key?.ok) return { ok: false, message: key?.detail ?? (payload?.error as string) ?? `The publisher answered ${status}.` };
+  const accounts = (payload?.zernio_accounts ?? []) as NonNullable<GbpAccountsState>["accounts"];
+  const clients = (payload?.compass_clients ?? []) as NonNullable<GbpAccountsState>["matches"];
+  return {
+    ok: true,
+    message: accounts?.length ? `Publish key works. It sees ${accounts.length} Google Business Profile account(s).` : "Publish key works, but it sees no Google Business Profile account. Connect the profile in Zernio first.",
+    accounts, matches: clients,
+  };
+}
+
+export async function bindZernioGbpAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const clientId = form.get("client_id");
+  const zernioAccountId = String(form.get("zernio_account_id") ?? "").trim();
+  const locationId = String(form.get("location_id") ?? "").trim();
+  if (!isUuid(clientId) || !/^[0-9a-f]{24}$/.test(zernioAccountId) || !/^(locations\/)?[0-9]{1,30}$/.test(locationId)) {
+    return { ok: false, message: "Give the Zernio account id (24 hex characters) and the location id (digits or locations/<id>)." };
+  }
+  const { status, payload } = await callPublisher({ mode: "zernio_gbp_bind", client_id: clientId, zernio_account_id: zernioAccountId, location_id: locationId });
+  revalidatePath("/settings");
+  if (status !== 200) return { ok: false, message: (payload?.error as string) ?? `The publisher answered ${status}.` };
+  return { ok: true, message: "Bound after verification. Publishing to this location is still off until an admin switches it on." };
 }

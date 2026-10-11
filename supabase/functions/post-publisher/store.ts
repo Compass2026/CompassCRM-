@@ -38,6 +38,8 @@ export type RunRow = {
   provider_post_id?: string | null;
   provider_status?: string | null;
   target_account_id?: string | null;
+  // Business Profile through Zernio: the location the request was pinned to.
+  target_location_id?: string | null;
   request_key?: string | null;
   provider_media_url?: string | null;
 };
@@ -46,6 +48,7 @@ export type RunRow = {
 export type ZernioRun = {
   id: number; outcome: string; transient: boolean; detail: string | null; created_at: string; http_status: number | null;
   provider_post_id: string | null; provider_status: string | null; request_key: string | null; provider_media_url: string | null;
+  target_account_id: string | null; target_location_id: string | null;
 };
 
 const BINDING_COLS =
@@ -290,7 +293,7 @@ export function createStore(supabase: Client) {
     async zernioRuns(postId: string): Promise<ZernioRun[]> {
       return (await one<ZernioRun[]>(
         supabase.from("publisher_runs")
-          .select("id, outcome, transient, detail, created_at, http_status, provider_post_id, provider_status, request_key, provider_media_url")
+          .select("id, outcome, transient, detail, created_at, http_status, provider_post_id, provider_status, request_key, provider_media_url, target_account_id, target_location_id")
           .eq("post_id", postId).eq("transport", "zernio").order("id", { ascending: true })
       )) ?? [];
     },
@@ -320,6 +323,52 @@ export function createStore(supabase: Client) {
       const { data, error } = await supabase.rpc("publisher_bind_account", {
         p_social_account_id: v.social_account_id, p_account_id: v.account_id, p_page_id: v.page_id,
         p_account_name: v.account_name, p_health: v.health,
+      });
+      if (error) throw new Error(error.message);
+      return data as Record<string, unknown>;
+    },
+
+    // ── Business Profile through Zernio ──
+    // The client's bound Business Profile location (at most one; 20261011040000).
+    async gbpLocationForClient(clientId: string): Promise<import("./facebook.ts").Binding | null> {
+      const rows = (await one<import("./facebook.ts").Binding[]>(
+        supabase.from("social_accounts").select(BINDING_COLS)
+          .eq("client_id", clientId).eq("platform", "google_business").not("publish_provider", "is", null).limit(1)
+      )) ?? [];
+      return rows[0] ?? null;
+    },
+
+    async publishingGbpPosts(): Promise<PostRow[]> {
+      return (await one<PostRow[]>(
+        supabase.from("social_posts").select(POST_COLS).eq("platform", "google_business").eq("publish_status", "publishing")
+      )) ?? [];
+    },
+
+    // Every run of a post, oldest first (which transport tried what).
+    async postRuns(postId: string): Promise<{ id: number; transport: string; outcome: string; created_at: string }[]> {
+      return (await one<{ id: number; transport: string; outcome: string; created_at: string }[]>(
+        supabase.from("publisher_runs").select("id, transport, outcome, created_at").eq("post_id", postId).order("id", { ascending: true })
+      )) ?? [];
+    },
+
+    // The piloted clients and every client with a Business Profile location
+    // row, for the read-only accounts report.
+    async clientsForGbp(piloted: string[]): Promise<{ id: string; name: string; website_url: string | null; location: import("./facebook.ts").Binding | null }[]> {
+      const rows = (await one<import("./facebook.ts").Binding[]>(
+        supabase.from("social_accounts").select(BINDING_COLS).eq("platform", "google_business")
+      )) ?? [];
+      const ids = [...new Set([...piloted, ...rows.map((r) => r.client_id)])];
+      if (!ids.length) return [];
+      const clients = (await one<{ id: string; name: string; website_url: string | null }[]>(
+        supabase.from("clients").select("id, name, website_url").in("id", ids).order("name")
+      )) ?? [];
+      return clients.map((c) => ({ ...c, location: rows.find((r) => r.client_id === c.id && r.publish_provider) ?? null }));
+    },
+
+    async bindGbpLocation(v: { client_id: string; account_id: string; location_id: string; location_name: string | null; account_name: string | null; health: unknown }): Promise<Record<string, unknown>> {
+      const { data, error } = await supabase.rpc("publisher_bind_gbp_location", {
+        p_client_id: v.client_id, p_account_id: v.account_id, p_location_id: v.location_id,
+        p_location_name: v.location_name, p_account_name: v.account_name, p_health: v.health,
       });
       if (error) throw new Error(error.message);
       return data as Record<string, unknown>;
