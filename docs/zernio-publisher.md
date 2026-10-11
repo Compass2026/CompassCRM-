@@ -261,7 +261,11 @@ exercised by the real claim (tests below).
 **Nothing written:** `publisher_runs` 0, publisher tasks 0, no post changed,
 and no Zernio write.
 
-## Facebook drafts (Oct 11 2026; migration `20261011040000`, `post-drafter` v3)
+## Facebook drafts (Oct 11 2026; migration `20261011040705` applied, `post-drafter` v3)
+
+Applied Oct 11 2026 as `20261011040705`: the recorded SQL and the
+`drafter_write` body match the file by md5; grants unchanged (service_role
+only).
 
 The AI Drafter now writes Facebook drafts through the same governed path as
 Business Profile drafts, so a Facebook post no longer has to be typed in by

@@ -1,4 +1,4 @@
--- Tests for 20261011040000_drafter_facebook.sql (AI Drafter: Facebook drafts),
+-- Tests for 20261011040705_drafter_facebook.sql (AI Drafter: Facebook drafts),
 -- run by scripts/test-portal-sandbox.sh on the same replay as drafter.test.sql.
 -- Own harness schema (fd).
 --
