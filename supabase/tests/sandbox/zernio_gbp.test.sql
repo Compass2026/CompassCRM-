@@ -55,6 +55,20 @@ begin
     select 1 from information_schema.columns where table_name = 'publisher_runs' and column_name = 'target_location_id'));
   perform zg.ok('S4 no Business Profile location starts enabled',
     not exists (select 1 from social_accounts where platform = 'google_business' and publish_enabled));
+  perform zg.ok('S5 the transport tables have RLS, only an is_team() read, and no API writes',
+    (select relrowsecurity from pg_class where oid = 'public.publisher_client_transports'::regclass)
+    and (select relrowsecurity from pg_class where oid = 'public.publisher_client_transport_events'::regclass)
+    and (select count(*) from pg_policies where tablename in ('publisher_client_transports', 'publisher_client_transport_events')
+         and cmd = 'SELECT' and qual like '%is_team()%') = 2
+    and (select count(*) from pg_policies where tablename in ('publisher_client_transports', 'publisher_client_transport_events')) = 2
+    and not has_table_privilege('authenticated', 'public.publisher_client_transports', 'insert,update,delete')
+    and not has_table_privilege('service_role', 'public.publisher_client_transports', 'insert,update,delete')
+    and not has_table_privilege('anon', 'public.publisher_client_transports', 'select'));
+  perform zg.ok('S6 the transport recorder is nobody''s over the API; only an admin path sets it',
+    not has_function_privilege('authenticated', 'public.publisher_record_gbp_transport(uuid, text, text, text)', 'execute')
+    and not has_function_privilege('service_role', 'public.publisher_record_gbp_transport(uuid, text, text, text)', 'execute')
+    and has_function_privilege('authenticated', 'public.publisher_set_gbp_transport(uuid, text)', 'execute')
+    and not has_function_privilege('anon', 'public.publisher_set_gbp_transport(uuid, text)', 'execute'));
 end $$;
 
 -- ── W. The worker's SQL (postgres) cannot record or bind a location ─────────
@@ -66,6 +80,14 @@ begin
   e := zg.try($q$insert into social_accounts (client_id, platform, external_account_id, publish_provider, publish_account_id, publish_page_id, publish_verified_at)
                 values ('00000000-0000-4000-b000-00000000000a', 'google_business', 'locations/1234567890', 'zernio', 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/1234567890', now())$q$);
   perform zg.ok('W2 a bound location is never inserted directly', e like '42501:%', e);
+  perform set_config('compass.publish_transport', 'bind', true);
+  e := zg.try($q$insert into publisher_client_transports (client_id, gbp_transport, changed_by_kind) values ('00000000-0000-4000-b000-00000000000a', 'zernio', 'publisher')$q$);
+  perform zg.ok('W4 the worker cannot set a client''s transport, even with the flag', e like '42501:%', e);
+  e := zg.try($q$insert into publisher_client_transport_events (client_id, to_transport, actor_kind) values ('00000000-0000-4000-b000-00000000000a', 'google', 'team')$q$);
+  perform zg.ok('W5 ... nor write its history', e like '42501:%', e);
+  perform set_config('compass.publish_transport', '', true);
+  e := zg.try($q$select publisher_record_gbp_transport('00000000-0000-4000-b000-00000000000a', 'google', 'team', 'admin')$q$);
+  perform zg.ok('W6 ... nor through the recorder (its guard checks the session)', e like '42501:%', e);
 end $$;
 set role service_role;
 select zg.as_user('service_role', null);
@@ -100,6 +122,11 @@ begin
               and publish_account_id = 'eeeeeeeeeeeeeeeeeeeeeee1' and not publish_enabled and display_name = 'Sandbox Client A - Springfield'
          from social_accounts where id = zg.id('ga')), r::text);
 
+  perform zg.ok('B4b binding a location selects zernio for the client, recorded as the publisher',
+    (select gbp_transport = 'zernio' and changed_by_kind = 'publisher' from publisher_client_transports where client_id = '00000000-0000-4000-b000-00000000000a')
+    and (select count(*) from publisher_client_transport_events where client_id = '00000000-0000-4000-b000-00000000000a' and to_transport = 'zernio' and actor_kind = 'publisher') = 1);
+  e := zg.try($q$update publisher_client_transports set gbp_transport = 'google' where client_id = '00000000-0000-4000-b000-00000000000a'$q$);
+  perform zg.ok('B4c the service session cannot write the transport directly', e like '42501:%', e);
   r := publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000a', 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/1234567890', 'renamed', 'Sandbox GBP', '{"status": "healthy"}');
   perform zg.ok('B5 binding the same location again re-verifies the same row',
     r ->> 'kind' = 'verified' and (r ->> 'social_account_id')::uuid = zg.id('ga')
@@ -171,6 +198,41 @@ begin
   -- 0045's one later change is an account deleted under the post (FK SET
   -- NULL); the approval then no longer holds, so the claim refuses it.
   update social_posts set social_account_id = null where id = zg.id('gpost');
+end $$;
+reset role;
+
+-- ── T. The transport outlives the binding; only an admin returns to Google ──
+\c - authenticator
+set role authenticated;
+select zg.as_user('authenticated', :'member');
+do $$
+declare e text;
+begin
+  e := zg.try($q$select publisher_set_gbp_transport('00000000-0000-4000-b000-00000000000a', 'google')$q$);
+  perform zg.ok('T1 a member (not an admin) cannot change the transport', e like '42501:%', e);
+end $$;
+select zg.as_user('authenticated', :'team');
+do $$
+declare e text; r jsonb;
+begin
+  e := zg.try($q$select publisher_set_gbp_transport('00000000-0000-4000-b000-00000000000a', 'google')$q$);
+  perform zg.ok('T2 returning to Google is refused while a location is bound', e like '23514:%binding%', e);
+  r := publisher_unbind_account(zg.id('ga'));
+  perform zg.ok('T3 removing the binding keeps the client on zernio (no silent return to Google)',
+    (r ->> 'changed')::boolean
+    and (select gbp_transport from publisher_client_transports where client_id = '00000000-0000-4000-b000-00000000000a') = 'zernio', r::text);
+  e := zg.try($q$update publisher_client_transports set gbp_transport = 'google' where client_id = '00000000-0000-4000-b000-00000000000a'$q$);
+  perform zg.ok('T4 a teammate cannot write the transport directly', e is not null, e);
+  e := zg.try($q$select publisher_set_gbp_transport('00000000-0000-4000-b000-00000000000a', 'carrier-pigeon')$q$);
+  perform zg.ok('T5 only google or zernio', e like '23514:%', e);
+  r := publisher_set_gbp_transport('00000000-0000-4000-b000-00000000000a', 'google');
+  perform zg.ok('T6 once unbound, an admin returns the client to Google explicitly; recorded with who',
+    (r ->> 'changed')::boolean
+    and (select gbp_transport = 'google' and changed_by_kind = 'team' and changed_by is not null from publisher_client_transports where client_id = '00000000-0000-4000-b000-00000000000a')
+    and (select array_agg(from_transport || '>' || to_transport || ':' || actor_kind order by id) from publisher_client_transport_events
+         where client_id = '00000000-0000-4000-b000-00000000000a') = array['google>zernio:publisher', 'zernio>google:team'], r::text);
+  e := zg.try('delete from publisher_client_transport_events');
+  perform zg.ok('T7 the transport history cannot be deleted through the API', e like '42501:%', e);
 end $$;
 reset role;
 

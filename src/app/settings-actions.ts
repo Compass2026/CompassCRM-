@@ -269,3 +269,20 @@ export async function bindZernioGbpAction(_prev: ActionState, form: FormData): P
   if (status !== 200) return { ok: false, message: (payload?.error as string) ?? `The publisher answered ${status}.` };
   return { ok: true, message: "Bound after verification. Publishing to this location is still off until an admin switches it on." };
 }
+
+// A team admin returns a client's Business Profile posts to the direct Google
+// path (or selects Zernio) explicitly. The database refuses google while a
+// location is still bound, and anyone but a signed-in team admin.
+export async function setGbpTransportAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  await requireTeamMember(supabase);
+  const clientId = form.get("client_id");
+  const transport = String(form.get("transport") ?? "");
+  if (!isUuid(clientId) || (transport !== "google" && transport !== "zernio")) return { ok: false, message: "Unknown client or transport." };
+  const { error } = await supabase.rpc("publisher_set_gbp_transport", { p_client_id: clientId, p_transport: transport });
+  revalidatePath("/settings");
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, message: transport === "google"
+    ? "This client's Business Profile posts now take the direct Google path."
+    : "This client's Business Profile posts now go through Zernio only." };
+}

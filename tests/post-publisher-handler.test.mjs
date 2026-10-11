@@ -51,6 +51,7 @@ function fakeStore({ posts = [], settings = { enabled: true, clients: [CA] }, se
     // Business Profile through Zernio: these clients have no Zernio location,
     // so every Business Profile post takes the direct Google path.
     gbpLocationForClient: async () => null,
+    gbpTransportForClient: async () => "google",
     publishingGbpPosts: async () => list((p) => p.platform === "google_business" && p.publish_status === "publishing"),
     postRuns: async (id) => s.runs.filter((r) => r.post_id === id),
     dueHandPosts: async (nowIso) => list((p) => p.platform !== "google_business" && p.publish_status === "scheduled" && p.review_status === "approved" && p.scheduled_at <= nowIso),

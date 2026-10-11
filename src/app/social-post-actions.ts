@@ -300,13 +300,13 @@ export async function publishNowAction(clientId: string, postId: string): Promis
     revalidatePost(clientId, postId);
   }
   // A Business Profile post goes through Zernio when its approval names a
-  // location or its client has one (the publisher's own rule, gbp.ts).
+  // location or its client's transport is zernio (the publisher's rule, gbp.ts).
   let via = post.platform === "facebook" ? "zernio" : "google";
   if (post.platform === "google_business") {
     const named = (post.approved_snapshot as { social_account_id?: string | null } | null)?.social_account_id;
-    const { data: location } = named ? { data: null } : await supabase.from("social_accounts").select("id")
-      .eq("client_id", clientId).eq("platform", "google_business").not("publish_provider", "is", null).limit(1).maybeSingle();
-    if (named || location) via = "zernio";
+    const { data: transport } = named ? { data: null } : await supabase.from("publisher_client_transports").select("gbp_transport")
+      .eq("client_id", clientId).maybeSingle();
+    if (named || transport?.gbp_transport === "zernio") via = "zernio";
   }
   return { error: publishNowMessage(result?.outcome, result?.detail, post.platform, via) };
 }

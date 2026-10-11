@@ -27,7 +27,7 @@
 
 import { MAX_ATTEMPTS, nextRetryAt, STUCK_AFTER_MINUTES } from "./channel.ts";
 import {
-  chicago, idempotencyKey, interpretCreate, interpretPost, mediaOf, PENDING_TOO_LONG_HOURS, planSend, sameContent, sha256Hex, sniffImage,
+  chicago, generationOf, idempotencyKey, interpretCreate, interpretPost, mediaOf, PENDING_TOO_LONG_HOURS, planSend, sameContent, sha256Hex, sniffImage,
   targetDrift, ZERNIO_PUBLISH_KEY_SECRET, ZERNIO_READ_KEY_SECRET,
   type Binding, type EntryMatch, type FacebookSnapshot, type MediaRef, type PostState, type ZPost,
 } from "./facebook.ts";
@@ -70,7 +70,9 @@ export type ZernioChannel = {
   problems: (s: Snap) => { message: string }[];
   bindingProblems: (post: { client_id: string; platform: string; social_account_id: string | null }, b: Binding | null) => string[];
   target: (b: Binding) => { accountId: string; locationId: string | null };
-  match: (b: Binding) => EntryMatch;
+  // Which entry of a Zernio post is ours, for a destination (the binding's,
+  // or the one an in-flight request recorded).
+  match: (t: { accountId: string; locationId: string | null }) => EntryMatch;
   body: (s: Snap, b: Binding, mediaUrl: string | null) => { content: string };
   imageProblem: (bytes: Uint8Array, type: string | null) => string | null;
   // Posts of this channel the sweep reads back / retries, and whether a post
@@ -124,10 +126,9 @@ export function createZernioPath(ctx: ZernioCtx, ch: ZernioChannel) {
 
   const zrun = (p: { id: string; client_id: string }, mode: Mode, r: Omit<RunRow, "post_id" | "client_id" | "mode">) =>
     ctx.run({ post_id: p.id, client_id: p.client_id, mode, transport: Z, ...r });
-  const targetFields = (b: Binding) => {
-    const t = ch.target(b);
-    return { target_account_id: t.accountId, ...(t.locationId ? { target_location_id: t.locationId } : {}) };
-  };
+  type Dest = { accountId: string; locationId: string | null };
+  const fieldsOf = (t: Dest) => ({ target_account_id: t.accountId, ...(t.locationId ? { target_location_id: t.locationId } : {}) });
+  const targetFields = (b: Binding) => fieldsOf(ch.target(b));
 
   // A block the post already sits on is not logged again every tick.
   const blockOnce = async (p: PostRow, mode: Mode, detail: string, task_id: string | null = null) => {
@@ -272,7 +273,7 @@ export function createZernioPath(ctx: ZernioCtx, ch: ZernioChannel) {
   async function send(p: PostRow, mode: Mode, g: { snap: Snap; binding: Binding; z: ZernioPublisher }, generation: number, mediaUrl: string | null) {
     const target = targetFields(g.binding);
     const account = target.target_account_id;
-    const m = ch.match(g.binding);
+    const m = ch.match(ch.target(g.binding));
     const key = idempotencyKey(p.publish_key!, generation);
     const body = ch.body(g.snap, g.binding, mediaUrl);
     await zrun(p, mode, { outcome: "uncertain", detail: "Sent to Zernio; waiting for its answer.", request_key: key, provider_media_url: mediaUrl, ...target });
@@ -343,7 +344,7 @@ export function createZernioPath(ctx: ZernioCtx, ch: ZernioChannel) {
     const row = c.row;
     const target = targetFields(g.binding);
     const account = target.target_account_id;
-    const m = ch.match(g.binding);
+    const m = ch.match(ch.target(g.binding));
     const runs = await store.zernioRuns(row.id);
     const drift = targetDrift(runs, row.publish_key!, ch.target(g.binding));
     if (drift) { await needsPerson(row, mode, drift); return true; }
@@ -375,6 +376,23 @@ export function createZernioPath(ctx: ZernioCtx, ch: ZernioChannel) {
     return true;
   }
 
+  // The write gates a re-send must pass: the binding (same client, platform,
+  // bound, switched on, healthy), the approved content, no unsettled attempt
+  // by another transport, and the approval and grounding as the claim would
+  // check them now. Null = all open.
+  async function resendProblem(p: PostRow, snap: Snap, binding: Binding | null): Promise<string | null> {
+    const bp = ch.bindingProblems({ client_id: p.client_id, platform: p.platform, social_account_id: snap.social_account_id ?? null }, binding);
+    if (bp.length) return bp.join(" ");
+    const problems = ch.problems(snap);
+    if (problems.length) return `Not publishable as approved: ${problems.map((x) => x.message).join(" ")}`;
+    const prior = ch.priorExecution ? await ch.priorExecution(p) : null;
+    if (prior) return prior;
+    const gate = await store.postGate(p.id);
+    if (!gate || gate.review_status !== "approved" || !gate.hash_ok) return "The approval no longer holds (reopened, or the approved content changed).";
+    if (gate.grounding_problems.length) return `Grounding no longer holds: ${gate.grounding_problems.join(" ")}`;
+    return null;
+  }
+
   // Every tick: in-flight posts are read back from Zernio; requests without
   // an answer are sent again with the same key; transient failures are
   // rescheduled on the shared backoff.
@@ -383,18 +401,27 @@ export function createZernioPath(ctx: ZernioCtx, ch: ZernioChannel) {
       if (!piloted(p.client_id) || !p.publish_key || !(await ch.owns(p))) continue;
       const snap = (p.approved_snapshot ?? {}) as Snap;
       const binding = await accountOf(snap.social_account_id);
-      if (!binding?.publish_account_id) continue;
-      const target = targetFields(binding);
-      const account = target.target_account_id;
-      const m = ch.match(binding);
       const runs = await store.zernioRuns(p.id);
+      // Where this approval's requests went. A bound destination must match
+      // it (drift goes to a person); with the binding gone, an accepted post
+      // is still read back at the destination its request recorded.
+      const recorded = [...runs].reverse().find((r) => generationOf(r.request_key, p.publish_key!) !== null && r.target_account_id);
+      const bound = binding?.publish_account_id ? ch.target(binding) : null;
+      const dest: Dest | null = bound ?? (recorded ? { accountId: recorded.target_account_id!, locationId: recorded.target_location_id ?? null } : null);
+      if (!dest) continue;
+      const target = fieldsOf(dest);
+      const account = dest.accountId;
+      const m = ch.match(dest);
       const stale = !p.last_attempt_at || Date.parse(p.last_attempt_at) <= at.getTime() - STUCK_AFTER_MINUTES * 60_000;
-      const drift = targetDrift(runs, p.publish_key, ch.target(binding));
-      if (drift) { await needsPerson(p, "sweep", drift); continue; }
+      if (bound) {
+        const drift = targetDrift(runs, p.publish_key, bound);
+        if (drift) { await needsPerson(p, "sweep", drift); continue; }
+      }
       const plan = planSend(runs, p.publish_key, at);
       const z = await ensureZernio();
       if (!z) continue;
       if (plan.kind === "check") {
+        // Reading back a post Zernio already accepted is always allowed.
         const r = await z.getPost(plan.postId);
         if (r.status === 404) { await needsPerson(p, "sweep", `Zernio no longer finds post ${plan.postId}.`); continue; }
         if (!r.ok) continue; // read again next tick
@@ -416,9 +443,15 @@ export function createZernioPath(ctx: ZernioCtx, ch: ZernioChannel) {
         await failure(p, "sweep", { detail: "The last attempt stopped before anything was sent to Zernio. Safe to retry.", transient: true, target });
         continue;
       }
+      // A re-send may be the first create that succeeds, so every write gate
+      // is checked again first. A closed gate sends nothing; the post stays
+      // publishing with its key, body and image link on record, and goes out
+      // with the same key once the gate opens (inside Zernio's window).
+      const closed = await resendProblem(p, snap, binding);
+      if (closed) { await blockOnce(p, "sweep", `Not sent again: ${closed} The earlier request stays on record and is re-sent with the same key once this is fixed.`); continue; }
       const hasImage = mediaOf(snap).length > 0;
       if (hasImage && !plan.mediaUrl) { await needsPerson(p, "sweep", "An earlier request has no answer and its image link was not recorded; a re-send could differ."); continue; }
-      await send(p, "sweep", { snap, binding, z }, plan.generation, plan.mediaUrl);
+      await send(p, "sweep", { snap, binding: binding!, z }, plan.generation, plan.mediaUrl);
     }
 
     for (const p of await ch.failed()) {

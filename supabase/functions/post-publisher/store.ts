@@ -338,6 +338,15 @@ export function createStore(supabase: Client) {
       return rows[0] ?? null;
     },
 
+    // The client's explicit Business Profile transport (20261011040000): no
+    // row = google. Binding a location selects zernio; unbinding keeps it.
+    async gbpTransportForClient(clientId: string): Promise<"google" | "zernio"> {
+      const row = await one<{ gbp_transport: string }>(
+        supabase.from("publisher_client_transports").select("gbp_transport").eq("client_id", clientId).maybeSingle()
+      );
+      return row?.gbp_transport === "zernio" ? "zernio" : "google";
+    },
+
     async publishingGbpPosts(): Promise<PostRow[]> {
       return (await one<PostRow[]>(
         supabase.from("social_posts").select(POST_COLS).eq("platform", "google_business").eq("publish_status", "publishing")

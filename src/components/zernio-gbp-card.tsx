@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import {
   bindZernioGbpAction,
+  setGbpTransportAction,
   setZernioPublishingAction,
   unbindZernioAccountAction,
   verifyZernioGbpAction,
@@ -30,6 +31,8 @@ export type ZernioGbpRow = {
   enabled: boolean;
   verified_at: string | null;
   health: string | null;
+  // The client's explicit Business Profile transport.
+  transport: "google" | "zernio";
 };
 
 function Status({ state }: { state: ActionState }) {
@@ -41,13 +44,15 @@ function Row({ row, admin }: { row: ZernioGbpRow; admin: boolean }) {
   const [bindState, bind, binding] = useActionState<ActionState, FormData>(bindZernioGbpAction, null);
   const [switchState, setSwitch, switching] = useActionState<ActionState, FormData>(setZernioPublishingAction, null);
   const [unbindState, unbind, unbinding] = useActionState<ActionState, FormData>(unbindZernioAccountAction, null);
+  const [transportState, setTransport, settingTransport] = useActionState<ActionState, FormData>(setGbpTransportAction, null);
   return (
     <li className="space-y-2 rounded-md border p-3" data-gbp-row={row.client_id}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{row.client}</span>
         {row.location_id
           ? <span className="text-xs text-muted-foreground">Location {row.location_name ?? "?"} (<span className="font-mono">{row.location_id}</span>)</span>
-          : <span className="text-xs text-muted-foreground">No Business Profile location bound: its posts go directly to Google.</span>}
+          : <span className="text-xs text-muted-foreground">No Business Profile location bound.</span>}
+        <Badge variant="outline" data-gbp-transport>{row.transport === "zernio" ? "Through Zernio only" : "Direct to Google"}</Badge>
         {row.account_id
           ? <Badge variant="outline" className={row.enabled ? "bg-green-100 text-green-800" : ""}>{row.enabled ? "Publishing on" : "Bound, publishing off"}</Badge>
           : <Badge variant="outline">Not bound</Badge>}
@@ -84,8 +89,20 @@ function Row({ row, admin }: { row: ZernioGbpRow; admin: boolean }) {
               </Button>
             </form>
           )}
+          {!row.account_id && row.transport === "zernio" && (
+            <form
+              action={setTransport}
+              onSubmit={(e) => {
+                if (!window.confirm(`Return ${row.client}'s Business Profile posts to the direct Google path? Posts approved naming a Zernio location still never go to Google.`)) e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="client_id" value={row.client_id} />
+              <input type="hidden" name="transport" value="google" />
+              <Button type="submit" size="sm" variant="ghost" disabled={settingTransport}>Return to direct Google</Button>
+            </form>
+          )}
           {row.account_id && row.social_account_id && (
-            <form action={unbind} onSubmit={(e) => { if (!window.confirm("Remove this location's Zernio binding? Its posts then stop until it is bound again (they are not sent directly to Google while an approval names this location).")) e.preventDefault(); }}>
+            <form action={unbind} onSubmit={(e) => { if (!window.confirm("Remove this location's Zernio binding? The client stays on Zernio: its Business Profile posts stop until a location is bound again, and only an admin can return it to the direct Google path.")) e.preventDefault(); }}>
               <input type="hidden" name="social_account_id" value={row.social_account_id} />
               <Button type="submit" size="sm" variant="ghost" disabled={unbinding}>Remove binding</Button>
             </form>
@@ -96,6 +113,7 @@ function Row({ row, admin }: { row: ZernioGbpRow; admin: boolean }) {
         <Status state={bindState} />
         <Status state={switchState} />
         <Status state={unbindState} />
+        <Status state={transportState} />
       </div>
     </li>
   );
@@ -151,10 +169,11 @@ export function ZernioGbpCard({ rows, admin, keyPresent }: { rows: ZernioGbpRow[
         ? <p className="text-xs text-muted-foreground">No client is on the pilot list or has a Business Profile location bound.</p>
         : <ul className="space-y-2">{rows.map((r) => <Row key={r.client_id} row={r} admin={admin} />)}</ul>}
       <p className="text-xs text-muted-foreground">
-        A client with a bound location publishes its Business Profile posts through Zernio only, pinned to that location:
-        never directly to Google, and only when the publisher is on, the client is piloted and the location is switched on here.
-        Posts approved before the location was bound must be reopened, saved and approved again so the approval names it.
-        Clients without a bound location keep the direct Google path.
+        Binding a location moves the client to Zernio: its Business Profile posts go through Zernio only, pinned to that
+        location, never directly to Google, and only when the publisher is on, the client is piloted and the location is
+        switched on here. Removing the binding keeps the client on Zernio (posts stop); only an admin returns it to the
+        direct Google path. Posts approved before the location was bound must be reopened, saved and approved again so the
+        approval names it. Clients never moved keep the direct Google path.
       </p>
     </div>
   );

@@ -529,6 +529,7 @@ try {
   const gbpRow = page.locator(`[data-gbp-row="${CLIENT_A}"]`);
   assert.match(await gbpRow.textContent(), /locations\/7770001/);
   assert.match(await gbpRow.textContent(), /Bound, publishing off/);
+  assert.equal(await gbpRow.locator("[data-gbp-transport]").textContent(), "Through Zernio only", "binding moved the client to Zernio");
   await shot("settings-gbp-zernio");
   ok("Settings shows the bound Business Profile location, publishing off, without the key");
 

@@ -15,7 +15,7 @@
 // a link), are refused explicitly rather than sent without a field.
 
 import { channelProblems, GBP_CTA_TYPES, type Snapshot } from "./channel.ts";
-import { mediaOf, ZERNIO_ACCOUNT_RE, type Binding, type EntryMatch, type FacebookSnapshot } from "./facebook.ts";
+import { mediaOf, ZERNIO_ACCOUNT_RE, type Binding, type FacebookSnapshot } from "./facebook.ts";
 
 export const GBP_ZERNIO_PLATFORM = "googlebusiness" as const;
 export const GBP_LOCATION_RE = /^locations\/[0-9]{1,30}$/;
@@ -110,8 +110,6 @@ export function buildGbpCreateBody(s: GbpSnapshot, b: Binding, imageUrl: string 
   return body;
 }
 
-export const gbpMatch = (b: Binding): EntryMatch => ({ platform: GBP_ZERNIO_PLATFORM, locationId: b.publish_page_id, label: "Business Profile" });
-
 // Width and height from the bytes (PNG IHDR, JPEG SOFn), or null.
 export function imageSize(b: Uint8Array): { width: number; height: number } | null {
   if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
@@ -151,12 +149,14 @@ export function gbpImageProblem(bytes: Uint8Array, type: string | null): string 
 // Which publisher a Business Profile post goes to — exactly one:
 // - the approved snapshot names a location: Zernio (refused there if that
 //   location is not bound, enabled and healthy; never sent to Google);
-// - the client has a Zernio location: Zernio (refused there until the post is
-//   approved naming it); a client switched to Zernio never posts directly;
+// - the client's transport is zernio (chosen when a location was bound, kept
+//   after an unbind until a team admin returns it to google): Zernio, refused
+//   there until the post is approved naming a bound location; a client
+//   switched to Zernio never posts directly;
 // - otherwise: the direct Google path (0046), unchanged.
 export type GbpRoute = "zernio" | "google";
-export function gbpRoute(snapshotAccountId: string | null | undefined, clientHasZernioLocation: boolean): GbpRoute {
-  return snapshotAccountId || clientHasZernioLocation ? "zernio" : "google";
+export function gbpRoute(snapshotAccountId: string | null | undefined, clientOnZernio: boolean): GbpRoute {
+  return snapshotAccountId || clientOnZernio ? "zernio" : "google";
 }
 
 // The ids Compass keeps for a Business Profile location as Zernio lists it.

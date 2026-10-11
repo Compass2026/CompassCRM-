@@ -1561,9 +1561,11 @@ Design, gates and the steps for Lucas are in `docs/zernio-publisher.md`
 ("Business Profile through Zernio").
 
 - **Exactly one publisher per post** (`gbp.ts gbpRoute`):
-  - the approved snapshot names a location, or the client has a bound Zernio
-    location → Zernio only, refused there when anything is missing, **never**
-    sent directly to Google;
+  - the approved snapshot names a location, or the client's transport
+    (`publisher_client_transports`) is `zernio` → Zernio only, refused there
+    when anything is missing, **never** sent directly to Google. Binding
+    selects `zernio`; unbinding keeps it; only a team admin returns a client
+    to `google` (`publisher_set_gbp_transport`), once unbound;
   - otherwise → the direct Google path, unchanged.
 - **Binding:** one `locations/<id>` per client, on the client's
   `google_business` `social_accounts` row.
@@ -1576,7 +1578,8 @@ Design, gates and the steps for Lucas are in `docs/zernio-publisher.md`
 - **Shared Zernio machinery** (`zernio-path.ts`): idempotency, write-ahead
   runs, upload, reconciliation and tasks for Facebook and Business Profile
   alike. Runs record the pinned `target_location_id`; a binding that changes
-  in flight goes to a person.
+  in flight goes to a person. A same-key re-send re-checks every write gate
+  (binding on and healthy, content, approval and grounding) first.
 - **Scope:** standard posts — text, one JPEG/PNG photo (≤ 5 MB, ≥ 400 × 300)
   and a linked button. Offer and event posts and Call buttons are refused
   explicitly.

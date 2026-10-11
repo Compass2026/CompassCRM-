@@ -19,7 +19,7 @@
 
 import { summarizeHealth, ZERNIO_ACCOUNT_RE, ZERNIO_PUBLISH_KEY_SECRET, type Binding } from "./facebook.ts";
 import {
-  buildGbpCreateBody, gbpBindingProblems, gbpImageProblem, gbpMatch, gbpProblems, gbpRoute, locationResource, GBP_ZERNIO_PLATFORM,
+  buildGbpCreateBody, gbpBindingProblems, gbpImageProblem, gbpProblems, gbpRoute, locationResource, GBP_ZERNIO_PLATFORM,
   type GbpRoute, type GbpSnapshot, type ZernioLocation,
 } from "./gbp.ts";
 import type { PostRow } from "./store.ts";
@@ -47,8 +47,16 @@ export function createGbpPath(ctx: ZernioCtx) {
     const a = await path.accountOf(id);
     return !a || a.platform === "google_business";
   }
+  // The client's explicit transport: zernio once a location was bound, kept
+  // after the binding is removed, back to google only by a team admin.
+  const transports = new Map<string, "google" | "zernio">();
+  const transportOf = async (clientId: string) => {
+    if (!transports.has(clientId)) transports.set(clientId, await store.gbpTransportForClient(clientId));
+    return transports.get(clientId)!;
+  };
   async function route(p: PostRow): Promise<GbpRoute> {
-    return gbpRoute((await namesLocation(p)) ? "named" : null, !!(await zernioLocationOf(p.client_id)));
+    if (await namesLocation(p)) return "zernio";
+    return gbpRoute(null, (await transportOf(p.client_id)) === "zernio" || !!(await zernioLocationOf(p.client_id)));
   }
 
   // An earlier direct-Google attempt still without a settled answer.
@@ -108,7 +116,7 @@ export function createGbpPath(ctx: ZernioCtx) {
     problems: (s) => gbpProblems(s as GbpSnapshot),
     bindingProblems: gbpBindingProblems,
     target: (b) => ({ accountId: b.publish_account_id!, locationId: b.publish_page_id }),
-    match: (b) => gbpMatch(b),
+    match: (t) => ({ platform: GBP_ZERNIO_PLATFORM, locationId: t.locationId, label: "Business Profile" }),
     body: (s, b, url) => buildGbpCreateBody(s as GbpSnapshot, b, url),
     imageProblem: (bytes, type) => gbpImageProblem(bytes, type),
     publishing: () => store.publishingGbpPosts(),

@@ -65,13 +65,16 @@ const fbBinding = () => ({
   publish_enabled: true, publish_verified_at: "2026-10-10T12:00:00.000Z", publish_health: { status: "healthy" },
 });
 
-function fakeStore({ posts = [], accounts = [location(), fbBinding()], settings = { enabled: true, clients: [LUCAS] }, secrets = {}, claimErrors = {}, files = {}, runs = [] } = {}) {
+function fakeStore({ posts = [], accounts = [location(), fbBinding()], settings = { enabled: true, clients: [LUCAS] }, secrets = {}, claimErrors = {}, files = {}, runs = [], transports = null } = {}) {
   let clock = 0;
   const s = {
     posts: new Map(posts.map((p) => [p.id, { ...p }])),
     accounts: new Map(accounts.map((a) => [a.id, { ...a }])),
     runs: runs.map((r) => ({ id: ++clock, transient: false, http_status: null, provider_post_id: null, provider_status: null, request_key: null, provider_media_url: null, target_account_id: null, target_location_id: null, created_at: NOW.toISOString(), ...r })),
     tasks: [], settings, claimErrors, rechecked: [], binds: [],
+    // The client's explicit transport (publisher_client_transports): a bound
+    // location means the client chose zernio, as the bind function records.
+    transports: new Map(Object.entries(transports ?? (accounts.some((a) => a.platform === "google_business" && a.publish_provider) ? { [LUCAS]: "zernio" } : {}))),
     files: { [`brand-assets/${IMG_PATH}`]: PHOTO, ...files },
     secrets: { SYNC_CRON_SECRET: "cron", ZERNIO_PUBLISH_API_KEY: PUBLISH_KEY_VALUE, ZERNIO_READ_API_KEY: READ_KEY_VALUE, ...secrets },
     now: NOW,
@@ -89,6 +92,7 @@ function fakeStore({ posts = [], accounts = [location(), fbBinding()], settings 
     publishingGbpPosts: async () => list((p) => p.platform === "google_business" && p.publish_status === "publishing"),
     gbpLocationForClient: async (clientId) => [...s.accounts.values()].find((a) => a.client_id === clientId && a.platform === "google_business" && a.publish_provider) ?? null,
     postRuns: async (id) => s.runs.filter((r) => r.post_id === id),
+    gbpTransportForClient: async (clientId) => s.transports.get(clientId) ?? "google",
     dueHandPosts: async () => [],
     openReminders: async () => [],
     reminderOpen: async () => false,
@@ -151,6 +155,7 @@ function fakeStore({ posts = [], accounts = [location(), fbBinding()], settings 
       Object.assign(row, { publish_provider: "zernio", publish_account_id: v.account_id, publish_page_id: v.location_id, publish_account_name: v.account_name,
         publish_verified_at: NOW.toISOString(), publish_health: v.health, publish_enabled: same ? row.publish_enabled : false });
       s.accounts.set(row.id, row);
+      s.transports.set(v.client_id, "zernio");
       return { social_account_id: row.id, kind: same ? "verified" : "bound", enabled: row.publish_enabled, location_id: v.location_id };
     },
   };
@@ -578,4 +583,106 @@ test("location ids: Zernio's bare digits become locations/<id>; anything else is
   assert.equal(locationResource(LOC), LOC);
   assert.equal(locationResource("accounts/1/locations/2"), null);
   assert.equal(locationResource("Lucas Construction"), null);
+});
+
+// ── Review fixes (PR #112) ───────────────────────────────────────────────────
+test("REVIEW: a location switched off after a timeout suppresses the same-key re-send; switched on again, the same key goes out once", async () => {
+  const { pub, s, z } = setup({ posts: [gbpPost("g1", { snapshot: { assets: [photo()] } })] }, { script: [{ throw: "The operation was aborted due to timeout" }] });
+  await pub.tick({ mode: "tick" });
+  assert.equal(z.creates.length, 1);
+  assert.equal(s.posts.get("g1").publish_status, "publishing");
+  s.accounts.get(GBP_ACC).publish_enabled = false;
+  s.now = new Date(NOW.getTime() + 11 * 60_000);
+  await pub.tick({ mode: "tick" });
+  assert.equal(z.creates.length, 1, "location off: no second POST");
+  assert.equal(s.posts.get("g1").publish_status, "publishing", "still in flight, ledger intact");
+  assert.match(s.runs.at(-1).detail, /Not sent again: .*switched off/);
+  await pub.tick({ mode: "tick" });
+  assert.equal(s.runs.filter((r) => r.outcome === "blocked").length, 1, "the block is recorded once");
+  s.accounts.get(GBP_ACC).publish_enabled = true;
+  await pub.tick({ mode: "tick" });
+  assert.equal(z.creates.length, 2);
+  assert.equal(z.creates[1].key, z.creates[0].key, "the same key");
+  assert.deepEqual(z.creates[1].body, z.creates[0].body, "the same body and uploaded photo");
+  assert.equal(z.posts.size, 1);
+  assert.equal(s.posts.get("g1").publish_status, "published");
+});
+
+test("REVIEW: every write gate is re-checked before a re-send: unhealthy, unbound, lapsed approval or grounding, publisher off", async () => {
+  for (const [name, change, expect] of [
+    ["unhealthy", (s) => { s.accounts.get(GBP_ACC).publish_health = { status: "error" }; }, /unhealthy/],
+    ["unbound", (s) => { Object.assign(s.accounts.get(GBP_ACC), { publish_provider: null, publish_account_id: null, publish_page_id: null, publish_enabled: false }); }, /no verified Zernio binding/],
+    ["approval lapsed", (s) => { s.claimErrors.g1 = "changed"; }, /approval no longer holds/],
+    ["other client", (s) => { s.accounts.get(GBP_ACC).client_id = OTHER; }, /another client/],
+  ]) {
+    const { pub, s, z } = setup({ posts: [gbpPost("g1")] }, { script: [{ throw: "The operation was aborted due to timeout" }] });
+    await pub.tick({ mode: "tick" });
+    change(s);
+    s.now = new Date(NOW.getTime() + 11 * 60_000);
+    await pub.tick({ mode: "tick" });
+    assert.equal(z.creates.length, 1, `${name}: no second POST`);
+    assert.match(s.runs.at(-1).detail, expect, name);
+  }
+  const off = setup({ posts: [gbpPost("g1")] }, { script: [{ throw: "The operation was aborted due to timeout" }] });
+  await off.pub.tick({ mode: "tick" });
+  off.s.settings = { enabled: false, clients: [LUCAS] };
+  off.s.now = new Date(NOW.getTime() + 11 * 60_000);
+  await off.pub.tick({ mode: "tick" });
+  assert.equal(off.z.creates.length, 1, "publisher off: the sweep does not run at all");
+});
+
+test("REVIEW: with publishing off, a post Zernio already accepted is still read back and recorded (GET only)", async () => {
+  const { pub, s, z } = setup({ posts: [gbpPost("g1")] }, { script: [{ status: 207, body: (z, body) => {
+    const post = { _id: "zg000000000000000000p207", content: body.content, status: "scheduled", platforms: [{ platform: "googlebusiness", accountId: ZG, platformSpecificData: { locationId: LOC }, status: "pending" }] };
+    z.posts.set(post._id, post);
+    return { post };
+  } }] });
+  await pub.tick({ mode: "tick" });
+  s.accounts.get(GBP_ACC).publish_enabled = false;
+  Object.assign(z.posts.get("zg000000000000000000p207").platforms[0], { status: "published", platformPostId: "77", platformPostUrl: "https://business.google.com/posts/77" });
+  s.now = new Date(NOW.getTime() + 5 * 60_000);
+  await pub.tick({ mode: "tick" });
+  assert.equal(s.posts.get("g1").publish_status, "published");
+  assert.equal(z.creates.length, 1);
+});
+
+test("REVIEW: removing the binding keeps the client on Zernio; a legacy approval without a location is never sent to Google", async () => {
+  const legacy = gbpPost("review2", { snapshot: { social_account_id: null } });
+  const { pub, s, z } = setup({ posts: [legacy], secrets: { GSC_CLIENT_ID: "cid", GSC_CLIENT_SECRET: "cs", GOOGLE_OPS_REFRESH_TOKEN: "rt" } });
+  // Unbind exactly as publisher_unbind_account does; the transport row stays.
+  Object.assign(s.accounts.get(GBP_ACC), { publish_provider: null, publish_account_id: null, publish_page_id: null, publish_verified_at: null, publish_enabled: false });
+  assert.equal(s.transports.get(LUCAS), "zernio");
+  await pub.tick({ mode: "tick" });
+  assert.equal(googleCalls(z).length, 0, "no Google token, list or create");
+  assert.equal(zernioWrites(z).length, 0);
+  assert.match(s.runs.at(-1).detail, /names no Business Profile location/);
+  assert.equal(s.runs.at(-1).transport, "zernio");
+  await pub.tick({ mode: "now", postId: "review2" });
+  assert.equal(googleCalls(z).length, 0, "Publish now does not reach Google either");
+});
+
+test("REVIEW: only an explicit return to google (an admin, after the unbind) restores the direct path", async () => {
+  const legacy = gbpPost("review3", { snapshot: { social_account_id: null } });
+  const { store, s } = fakeStore({ posts: [legacy], accounts: [fbBinding()], transports: { [LUCAS]: "google" }, secrets: { GSC_CLIENT_ID: "cid", GSC_CLIENT_SECRET: "cs", GOOGLE_OPS_REFRESH_TOKEN: "rt" } });
+  const seen = [];
+  const pub = createPostPublisher({ store, fetch: async (url) => { seen.push(String(url)); return new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }); }, now: () => NOW, googleTimeoutMs: 100 });
+  await pub.tick({ mode: "tick" });
+  assert.ok(seen.some((u) => u.startsWith("https://oauth2.googleapis.com")));
+  assert.equal(s.runs.at(-1).transport, "google");
+});
+
+test("REVIEW: an in-flight Zernio post whose binding was removed is still reconciled at the destination its request recorded, never re-sent", async () => {
+  const { pub, s, z } = setup({ posts: [gbpPost("g1")] }, { script: [{ status: 207, body: (z, body) => {
+    const post = { _id: "zg000000000000000000p208", content: body.content, status: "scheduled", platforms: [{ platform: "googlebusiness", accountId: ZG, platformSpecificData: { locationId: LOC }, status: "pending" }] };
+    z.posts.set(post._id, post);
+    return { post };
+  } }] });
+  await pub.tick({ mode: "tick" });
+  Object.assign(s.accounts.get(GBP_ACC), { publish_provider: null, publish_account_id: null, publish_page_id: null, publish_verified_at: null, publish_enabled: false });
+  Object.assign(z.posts.get("zg000000000000000000p208").platforms[0], { status: "published", platformPostId: "78", platformPostUrl: "https://business.google.com/posts/78" });
+  s.now = new Date(NOW.getTime() + 5 * 60_000);
+  await pub.tick({ mode: "tick" });
+  assert.equal(s.posts.get("g1").publish_status, "published");
+  assert.equal(s.runs.at(-1).target_location_id, LOC);
+  assert.equal(z.creates.length, 1);
 });

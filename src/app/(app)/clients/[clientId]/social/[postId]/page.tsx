@@ -111,14 +111,17 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   // Business Profile: the client's Zernio location (at most one) decides the
   // route with the approval's named location — Zernio or the direct path,
   // never both (gbp.ts gbpRoute).
-  const { data: clientGbpLocation } = isGbp
-    ? await supabase.from("social_accounts").select(BINDING).eq("client_id", clientId).eq("platform", "google_business")
-        .not("publish_provider", "is", null).limit(1).maybeSingle()
-    : { data: null };
+  const [{ data: clientGbpLocation }, { data: clientTransport }] = isGbp
+    ? await Promise.all([
+        supabase.from("social_accounts").select(BINDING).eq("client_id", clientId).eq("platform", "google_business")
+          .not("publish_provider", "is", null).limit(1).maybeSingle(),
+        supabase.from("publisher_client_transports").select("gbp_transport").eq("client_id", clientId).maybeSingle(),
+      ])
+    : [{ data: null }, { data: null }];
   const gbpVia = gbpPublishRoute(
     { platform: post.platform, client_id: clientId, review_status: post.review_status, social_account_id: post.social_account_id, approved_snapshot: post.approved_snapshot },
     (fbBinding as FacebookBinding | null) ?? null,
-    (clientGbpLocation as FacebookBinding | null) ?? null,
+    clientTransport?.gbp_transport === "zernio" || !!clientGbpLocation,
     publisher,
   );
   const viaZernio = (isFacebook && zernio.ready) || gbpVia.via === "zernio";
@@ -591,7 +594,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
                   : <p>Not sent yet: {gbpVia.reasons.join(" ")} It is never sent directly to Google instead.</p>}
               </>
             ) : (
-              <p><span className="font-medium text-foreground">Route:</span> directly to Google (this client has no Business Profile location bound in Zernio).</p>
+              <p><span className="font-medium text-foreground">Route:</span> directly to Google (this client&apos;s Business Profile transport is the direct path).</p>
             )}
           </div>
         )}

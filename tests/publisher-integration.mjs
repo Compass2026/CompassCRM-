@@ -449,6 +449,27 @@ try {
   assert.equal(zernio.creates.at(-1), gc, "never sent twice");
   ok("Business Profile through Zernio: preflight writes nothing; once enabled the approved copy goes to the exact location as the publisher; a post approved without the location is refused, never sent to Google");
 
+  // Removing the binding keeps Client B on Zernio; only an admin returns it.
+  assert.equal(sql(`select gbp_transport from publisher_client_transports where client_id = '${CB}'`), "zernio");
+  const { error: earlyGoogle } = await asTeam.rpc("publisher_set_gbp_transport", { p_client_id: CB, p_transport: "google" });
+  assert.match(earlyGoogle?.message ?? "", /Remove the client's Zernio location binding/);
+  const { error: unbindError } = await asTeam.rpc("publisher_unbind_account", { p_social_account_id: gbpAcc });
+  assert.equal(unbindError, null, unbindError?.message);
+  assert.equal(sql(`select gbp_transport from publisher_client_transports where client_id = '${CB}'`), "zernio", "unbinding does not change the transport");
+  const zg2 = await approvedPost({ ...gbpBase, copy: "Summit Electric: approved without a location, after the unbind." });
+  await schedule(zg2);
+  const googleBeforeUnbind = google.creates.length;
+  await publisher.tick({ mode: "tick" });
+  assert.equal(google.creates.length, googleBeforeUnbind, "never sent to Google after the unbind");
+  assert.equal(row(zg2, "publish_status"), "not_scheduled");
+  assert.match(sql(`select detail from publisher_runs where post_id = '${zg2}' order by id desc limit 1`), /names no Business Profile location/);
+  assert.match(sqlFails(`update publisher_client_transports set gbp_transport = 'google' where client_id = '${CB}'`) ?? "", /transport changes only/);
+  const { error: backError } = await asTeam.rpc("publisher_set_gbp_transport", { p_client_id: CB, p_transport: "google" });
+  assert.equal(backError, null, backError?.message);
+  assert.equal(sql(`select string_agg(from_transport || '>' || to_transport || ':' || actor_kind, ',' order by id) from publisher_client_transport_events where client_id = '${CB}'`),
+    "google>zernio:publisher,zernio>google:team");
+  ok("Unbinding keeps the client on Zernio (a legacy approval is never sent to Google); only an admin returns it to Google, on record");
+
   console.log(`Publisher integration checks passed (${checks.length}).`);
 } finally {
   gateway.closeAllConnections();

@@ -17,7 +17,7 @@ decides what is posted, where and when. Zernio is transport only.
 
 | Post | Path |
 | --- | --- |
-| `google_business`, when its approved snapshot names a location or its client has a Zernio location | Zernio only (`gbp-path.ts`); refused there when anything is missing, never sent to Google. See [Business Profile through Zernio](#business-profile-through-zernio). |
+| `google_business`, when its approved snapshot names a location or its client's Business Profile transport is `zernio` | Zernio only (`gbp-path.ts`); refused there when anything is missing, never sent to Google. See [Business Profile through Zernio](#business-profile-through-zernio). |
 | Any other `google_business` | The direct Google path, unchanged (0046). |
 | `facebook`, with all of the following holding: the publisher is on, the client is on the pilot list, and the post's Page has a verified Zernio binding of the same client that is switched on | Zernio (`supabase/functions/post-publisher/facebook-path.ts`). |
 | Any other `facebook` post, and Instagram / LinkedIn / X / TikTok | The "post this by hand" reminder, unchanged. |
@@ -339,9 +339,20 @@ Management requests/minute = 0 in project 308261457231; Google case
 
 | Business Profile post | Publisher |
 | --- | --- |
-| The approved snapshot names a location (`social_account_id`) | Zernio only |
-| The client has a bound Zernio location (even if this post names none) | Zernio only; a post approved without the location is refused with a fix task |
+| The approved snapshot names a location (`social_account_id` of a `google_business` row) | Zernio only |
+| The client's transport is `zernio` (even if this post names none) | Zernio only; a post approved without a bound location is refused with a fix task |
 | Otherwise | The direct Google path, unchanged |
+
+**The client's transport is an explicit, durable choice**
+(`publisher_client_transports`, history in `publisher_client_transport_events`):
+- binding a location selects `zernio`, recorded as the publisher;
+- **removing the binding does not change it**. The client's Business
+  Profile posts stop (refused with a reason) instead of silently going back
+  to Google;
+- only a signed-in team admin returns a client to `google`
+  (`publisher_set_gbp_transport`, Settings › **Return to direct Google**), and
+  only once no location is bound;
+- the worker's SQL cannot write either table, flag or not.
 
 - A Zernio-routed post is **never** handed to the direct Google path: not when
   the publisher, the pilot list or the location's switch is off, not when the
@@ -358,7 +369,21 @@ Management requests/minute = 0 in project 308261457231; Google case
 - **The destination is stable in flight.** Every Zernio run records the
   account and location it was pinned to (`target_account_id`,
   `target_location_id`). A binding changed under an in-flight post goes to a
-  person (`targetDrift`); it is never re-targeted.
+  person (`targetDrift`); it is never re-targeted. With the binding removed,
+  a post Zernio already accepted is still read back at the recorded
+  destination (GET only).
+- **A re-send passes every write gate again** (Facebook and Business Profile
+  alike). A request without a definite answer is re-sent with the same key
+  only after the sweep re-checks:
+  - the binding: same client and platform, bound, switched on, healthy;
+  - the approved content;
+  - no unsettled attempt by another transport;
+  - the approval hash and grounding (`publisher_post_gate`).
+
+  A closed gate sends nothing and records the block once. The post stays
+  `publishing` with its key, body and image link on record, and goes out
+  with the same key once the gate opens (inside Zernio's window). Reading
+  back an accepted post is always allowed.
 
 ### The binding
 
@@ -475,6 +500,9 @@ Migration `20261011040000_zernio_gbp_publisher.sql` (additive):
 - `publisher_bind_account` accepts `google_business` rows (Facebook unchanged);
 - `publisher_bind_gbp_location` (service role only);
 - `publisher_runs.target_location_id` (Zernio runs only).
+- `publisher_client_transports` and `publisher_client_transport_events`
+  (team read; written only through `publisher_bind_gbp_location` and
+  `publisher_set_gbp_transport`, both guarded by session).
 
 ### UI
 
@@ -493,15 +521,16 @@ Migration `20261011040000_zernio_gbp_publisher.sql` (additive):
 
 ### Tests
 
-- `tests/post-publisher-gbp.test.mjs` (29 cases): payload and exact target,
+- `tests/post-publisher-gbp.test.mjs` (35 cases, including the review's
+  `REVIEW:` regressions): payload and exact target,
   photo limits, unsupported fields, approval and media mismatch, cross-client
   and Facebook-account refusal, switch gates with no direct fallback, the
   route, an unsettled Google attempt, sweep separation, timeout / 409 / 207
   reconciliation, in-flight drift, retries, verification, binding, preflight
   and secrets.
-- `supabase/tests/sandbox/zernio_gbp.test.sql` (27 checks).
-- `npm run test:publisher`: 17, including Business Profile end to end through
-  PostgREST.
+- `supabase/tests/sandbox/zernio_gbp.test.sql` (41 checks).
+- `npm run test:publisher`: 18, including Business Profile end to end through
+  PostgREST and the unbind case.
 - `npm run test:posts-ui`: 25, including the draft destination, the post page
   route and preflight through the real function, and Settings.
 - The Facebook suites pass unchanged.

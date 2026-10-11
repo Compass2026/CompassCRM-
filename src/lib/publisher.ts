@@ -67,7 +67,9 @@ export function zernioRoute(
 export function gbpPublishRoute(
   post: { platform: string; client_id: string; review_status: string; social_account_id: string | null; approved_snapshot: unknown },
   destination: Binding | null,
-  clientLocation: Binding | null,
+  // The client's explicit transport is zernio (publisher_client_transports),
+  // or it has a bound location.
+  clientOnZernio: boolean,
   settings: PublisherSettings,
 ): { via: "zernio" | "google" | null; ready: boolean; reasons: string[] } {
   if (post.platform !== "google_business") return { via: null, ready: false, reasons: [] };
@@ -76,7 +78,7 @@ export function gbpPublishRoute(
   // Only a Business Profile account names a location (a draft switched from
   // Facebook may still carry its Page).
   const names = !!accountId && (!destination || destination.platform === "google_business");
-  const via = gbpRoute(names ? accountId : null, !!clientLocation);
+  const via = gbpRoute(names ? accountId : null, clientOnZernio);
   if (via === "google") return { via, ready: false, reasons: [] };
   const reasons: string[] = [];
   if (!settings.enabled) reasons.push("The publisher is switched off (Settings → Publisher).");
