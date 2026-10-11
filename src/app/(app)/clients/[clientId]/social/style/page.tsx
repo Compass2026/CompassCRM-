@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { AnalyzeButton, LearningToggle, ReviewPanel } from "@/components/social-style/controls";
 import {
-  confidenceTone, readProfile, shortDate, statusLabels, STYLE_PROFILE_COLUMNS, traitViews,
+  confidenceTone, readProfile, shortDate, statusLabels, STYLE_INFLUENCE, STYLE_PROFILE_COLUMNS, traitViews,
   type ExamplePost, type StyleProfileRow,
 } from "@/lib/social-style";
 import { cn } from "@/lib/utils";
@@ -108,6 +108,12 @@ export default async function SocialStylePage({ params, searchParams }: {
             </div>
             {shown.review_note && <p className="text-xs">Review note: {shown.review_note}</p>}
             <p className="text-xs text-muted-foreground">{prof.boundary}</p>
+            <p className="text-xs" data-influence-rule>
+              <span className="font-medium">Style, never strategy.</span> Once approved, this profile may shape only{" "}
+              {STYLE_INFLUENCE.join(", ")}. Content mix, cadence, media mix and performance by category are descriptive
+              only: they never override Authority topic selection, search-intent coverage, service priorities,
+              E-E-A-T and evidence needs, or Content Planner strategy.
+            </p>
             {shown.status === "proposed" && <ReviewPanel clientId={clientId} profileId={shown.id} profileHash={shown.profile_hash} />}
             <p className="break-all text-[11px] text-muted-foreground">Profile hash {shown.profile_hash}</p>
           </section>
@@ -120,6 +126,7 @@ export default async function SocialStylePage({ params, searchParams }: {
                   <div className="flex items-start gap-2 text-sm font-medium">
                     {t.label}
                     <Badge variant="outline" className={confidenceTone[t.confidence]}>{t.confidence}</Badge>
+                    {t.descriptive && <Badge variant="outline" data-descriptive>descriptive only</Badge>}
                   </div>
                   <div className="space-y-0.5 text-sm">
                     {t.lines.map((l) => <p key={l}>{l}</p>)}

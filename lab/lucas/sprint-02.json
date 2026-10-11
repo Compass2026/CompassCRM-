@@ -1,0 +1,673 @@
+{
+ "kit": "lucas",
+ "facts": "../../tests/fixtures/creative-lucas-facts.json",
+ "intelligence": "../../tests/fixtures/drafter-authority-lucas.json",
+ "market_signals": "market-signals-2026-10-08.md",
+ "title": "Lucas Creative Sprint 02",
+ "versions": {
+  "natural": "Natural, photo-first",
+  "editorial": "Polished, still human",
+  "hook": "Strongest hook"
+ },
+ "style_profile": {
+  "id": "a8c7cb68-1ba5-4b0b-a658-208efa3dcf26",
+  "status": "proposed",
+  "use": "soft style signal only (Preview Mode), used more lightly at your request",
+  "applied": [
+   "first person, local and plain-spoken",
+   "a closing credential line instead of a 📞 / 🌐 signature block",
+   "emoji and checklists only where they help (one hook version keeps ✔️ lines)",
+   "no hashtags"
+  ],
+  "not_applied": [
+   "topics, services, keywords, intent, claims, places and cadence"
+  ]
+ },
+ "concepts": [
+  {
+   "id": "4n",
+   "group": "c4",
+   "version": "natural",
+   "title": "Roof replacement days look a lot like this",
+   "strategy": {
+    "authority": {
+     "key": "page_improvement:4288b96c-… (E-E-A-T) · topic:process is blocked",
+     "section": "Fix Now A / Blocked",
+     "note": "Authority blocks a general 'our process' post (insufficient evidence), so this describes only what Lucas's own photos show, never a process promise."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Experience: four approved own-work job photos (tear-off with tarps, crane lift, bundles staged on the ridge, finished house). Owens Corning Preferred Contractor (sourced).",
+    "market_signal": "Homeowner question: 'How long does it take? Do I need to be home?' Objection: the hassle (noise, debris). Format: project story / behind the scenes.",
+    "market_sources": [
+     "https://www.thompsoncreek.com/blog/how-long-does-it-take-to-replace-a-roof/",
+     "https://www.jobnimbus.com/blog/social-media-marketing-for-roofers"
+    ]
+   },
+   "why": "Three raw job-site photos as a Facebook album, captioned the way the owner would talk. No logo, no graphic, no hashtags.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Roof replacement days look a lot like this.\n\nOn this house, tarps went down over the lawn before the old roof came off. On this one, the crane lifted the new bundles straight up to the roof. And here, the bundles are staged along the ridge, ready to go down.\n\nIf you've got a roof replacement coming up and you're wondering what it'll look like at your place, just ask us. Happy to talk you through it.\n\nLucas Construction, Owens Corning Preferred Contractor",
+    "why": "An album of three untouched job photos, in the order the caption tells them. Nothing on the images.",
+    "creative": [
+     {
+      "template": "lab-plain-portrait-facebook",
+      "photos": {
+       "photos": [
+        "1979f6aa-accb-46b0-919a-7af48d7d6f87"
+       ]
+      }
+     },
+     {
+      "template": "lab-plain-portrait-facebook",
+      "photos": {
+       "photos": [
+        "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+       ]
+      }
+     },
+     {
+      "template": "lab-plain-portrait-facebook",
+      "photos": {
+       "photos": [
+        "db8e7148-8f13-47c4-9ecf-47053df220e6"
+       ]
+      }
+     }
+    ]
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Here's what a roof replacement job site looks like. These photos are from our own jobs: tarps laid over the lawn before the old roof came off, and a crane lifting the new bundles straight up to the roof.\n\nLucas Construction is an Owens Corning Preferred Contractor. If you're planning a roof replacement and want to know what to expect at your home, learn more below or call (636) 459-9328.",
+    "creative": {
+     "template": "lab-plain-pair-gbp",
+     "photos": {
+      "photos": [
+       "1979f6aa-accb-46b0-919a-7af48d7d6f87",
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "Two job photos side by side, unbranded: the tarped lawn and the crane."
+    }
+   }
+  },
+  {
+   "id": "4e",
+   "group": "c4",
+   "version": "editorial",
+   "title": "What a roof replacement looks like from the driveway",
+   "strategy": {
+    "authority": {
+     "key": "page_improvement:4288b96c-… (E-E-A-T) · topic:process is blocked",
+     "section": "Fix Now A / Blocked",
+     "note": "Authority blocks a general 'our process' post (insufficient evidence), so this describes only what Lucas's own photos show, never a process promise."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Experience: four approved own-work job photos (tear-off with tarps, crane lift, bundles staged on the ridge, finished house). Owens Corning Preferred Contractor (sourced).",
+    "market_signal": "Homeowner question: 'How long does it take? Do I need to be home?' Objection: the hassle (noise, debris). Format: project story / behind the scenes.",
+    "market_sources": [
+     "https://www.thompsoncreek.com/blog/how-long-does-it-take-to-replace-a-roof/",
+     "https://www.jobnimbus.com/blog/social-media-marketing-for-roofers"
+    ]
+   },
+   "why": "A short story from the homeowner's side of the job, with the three photos laid out as a sequence.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "What a roof replacement looks like from the driveway\n\nMost homeowners only see the before and the after. These two photos from our jobs show some of the in-between: the lawn tarped before the old roof comes off, and a crane lifting the new bundles straight up to the roof.\n\nIt's a big job with a lot of moving parts, and how long it takes depends on the roof. If you're planning one, ask us what to expect at your house. We're glad to talk it through.\n\nLucas Construction is an Owens Corning Preferred Contractor in Wentzville.",
+    "creative": {
+     "template": "lab-diptych-facebook",
+     "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "our_work"
+      },
+      "headline": {
+       "role": "service_name",
+       "source_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21"
+      }
+     },
+     "photos": {
+      "photos": [
+       "1979f6aa-accb-46b0-919a-7af48d7d6f87",
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "Two job photos side by side at full height, with a slim signature: designed, but the photos do the talking."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "What does a roof replacement look like while it's happening? This photo from one of our own jobs shows the in-between: the lawn tarped before the old roof comes off.\n\nHow long a replacement takes depends on the roof, so ask what to expect for yours. Lucas Construction is an Owens Corning Preferred Contractor serving Wentzville. Learn more about roof replacement below.",
+    "creative": {
+     "template": "lab-field-gbp",
+     "service_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "our_work"
+      },
+      "headline": {
+       "role": "service_name",
+       "source_id": "4288b96c-db9f-436e-b492-78f5fa7f1f21"
+      }
+     },
+     "photos": {
+      "photos": [
+       "1979f6aa-accb-46b0-919a-7af48d7d6f87"
+      ]
+     },
+     "why": "The tear-off photo at full height beside a calm caption panel."
+    }
+   }
+  },
+  {
+   "id": "4h",
+   "group": "c4",
+   "version": "hook",
+   "title": "Why is there a crane in the driveway?",
+   "strategy": {
+    "authority": {
+     "key": "page_improvement:4288b96c-… (E-E-A-T) · topic:process is blocked",
+     "section": "Fix Now A / Blocked",
+     "note": "Authority blocks a general 'our process' post (insufficient evidence), so this describes only what Lucas's own photos show, never a process promise."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Experience: four approved own-work job photos (tear-off with tarps, crane lift, bundles staged on the ridge, finished house). Owens Corning Preferred Contractor (sourced).",
+    "market_signal": "Homeowner question: 'How long does it take? Do I need to be home?' Objection: the hassle (noise, debris). Format: project story / behind the scenes.",
+    "market_sources": [
+     "https://www.thompsoncreek.com/blog/how-long-does-it-take-to-replace-a-roof/",
+     "https://www.jobnimbus.com/blog/social-media-marketing-for-roofers"
+    ]
+   },
+   "why": "Leads with the thing neighbours actually notice. It's curious rather than salesy, and it still lands on roof replacement.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Why is there a crane in the driveway?\n\nBecause carrying every bundle of a new roof up a ladder is slow, heavy work. On this job, the crane lifted the new bundles straight up and set them on the roof where the crew needed them.\n\nSo if you see one of these on your street, there's a good chance a roof is going on. And if you're the one planning a roof replacement, ask us what that day would look like at your house.\n\nLucas Construction, Owens Corning Preferred Contractor",
+    "creative": {
+     "template": "lab-pill-portrait-facebook",
+     "bindings": {
+      "label": {
+       "role": "template_label",
+       "source_id": "on_the_job"
+      }
+     },
+     "photos": {
+      "photos": [
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "The crane photo, full frame, with one small 'On the job' tag. The photo is the hook."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Seen a crane in a driveway near you? There's a good chance a roof is going on. On this Lucas Construction job, the crane lifted the new bundles straight up to the roof so the crew wasn't carrying them up a ladder.\n\nPlanning a roof replacement? Learn what to expect below, or call (636) 459-9328. Lucas Construction is an Owens Corning Preferred Contractor.",
+    "creative": {
+     "template": "lab-pill-landscape-gbp",
+     "bindings": {
+      "label": {
+       "role": "template_label",
+       "source_id": "on_the_job"
+      }
+     },
+     "photos": {
+      "photos": [
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "The same crane photo in 4:3 with the small tag."
+    }
+   }
+  },
+  {
+   "id": "6n",
+   "group": "c6",
+   "version": "natural",
+   "title": "Before you let anyone on your roof",
+   "strategy": {
+    "authority": {
+     "key": "topic:choosing_contractor",
+     "section": "Fix Now B (consolidate)",
+     "note": "Authority wants one strong 'choosing a contractor' answer; this is its social / Business Profile version."
+    },
+    "service": "Roof Replacement",
+    "intent": "commercial",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Trust: a vetting checklist anyone can use (NRCA guidance), then Lucas's own verifiable credentials: Owens Corning Preferred Contractor, Installs Owens Corning Duration shingles. BBB accreditation is left out (the Drafter excludes its date until confirmed).",
+    "market_signal": "Recurring question: 'How do I know the roofer who knocked on my door is legit?' NRCA: written contract, insurance, don't pay everything up front. Format: FAQ answer.",
+    "market_sources": [
+     "https://www.nrca.net/roofing-guidelines/selecting-a-contractor",
+     "https://www.ky3.com/2026/04/29/your-side-better-business-bureau-warns-roofing-scammers-after-this-weeks-storms/"
+    ]
+   },
+   "why": "Plain talk and a plain job photo. The checklist carries it, and the credentials come last as the answer.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "How do you know a roofer is legit?\n\nBefore you let anyone on your roof, ask for these. Any contractor worth hiring will hand them over without a fuss:\n\n• A written contract that spells out the scope of work\n• A certificate of insurance before work starts\n• A payment schedule that doesn't ask for everything up front\n• A manufacturer program you can look up yourself\n\nLucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles. Look us up.",
+    "creative": {
+     "template": "lab-plain-portrait-facebook",
+     "photos": {
+      "photos": [
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "A real job site, untouched. It says 'working contractor' without a badge graphic."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "Hiring a roofer for a roof replacement? Ask every contractor for a written contract with the scope of work, a certificate of insurance before work starts, a payment schedule that doesn't ask for everything up front, and a manufacturer program you can look up yourself.\n\nLucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles. Learn more about roof replacement below.",
+    "creative": {
+     "template": "lab-plain-landscape-gbp",
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "A finished roof, no text: the work as the proof."
+    }
+   }
+  },
+  {
+   "id": "6e",
+   "group": "c6",
+   "version": "editorial",
+   "title": "Four questions to ask before you hire a roofer",
+   "strategy": {
+    "authority": {
+     "key": "topic:choosing_contractor",
+     "section": "Fix Now B (consolidate)",
+     "note": "Authority wants one strong 'choosing a contractor' answer; this is its social / Business Profile version."
+    },
+    "service": "Roof Replacement",
+    "intent": "commercial",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Trust: a vetting checklist anyone can use (NRCA guidance), then Lucas's own verifiable credentials: Owens Corning Preferred Contractor, Installs Owens Corning Duration shingles. BBB accreditation is left out (the Drafter excludes its date until confirmed).",
+    "market_signal": "Recurring question: 'How do I know the roofer who knocked on my door is legit?' NRCA: written contract, insurance, don't pay everything up front. Format: FAQ answer.",
+    "market_sources": [
+     "https://www.nrca.net/roofing-guidelines/selecting-a-contractor",
+     "https://www.ky3.com/2026/04/29/your-side-better-business-bureau-warns-roofing-scammers-after-this-weeks-storms/"
+    ]
+   },
+   "why": "Reframes the checklist as questions a homeowner can read aloud. It's warm and confident, and it invites checking.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "Four questions to ask before you hire a roofer\n\nA good roofer won't mind being checked. Before you sign with anyone, ask:\n\n• Can I see a written contract that spells out the scope of work?\n• Can I see your certificate of insurance before work starts?\n• What's the payment schedule? Be wary of anyone who wants everything up front.\n• Which manufacturer program are you part of, and where can I look that up?\n\nOur answers start here: Lucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles. Ask us the rest anytime.",
+    "creative": {
+     "template": "lab-field-photo-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "our_work"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      }
+     },
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "Framed photo of a finished roof with the credential as a quiet caption."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "Four questions to ask before you hire a roofer for a roof replacement: Can I see a written contract with the scope of work? Can I see your certificate of insurance before work starts? What's the payment schedule? Which manufacturer program are you part of, and where can I look that up?\n\nLucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles. Learn more below.",
+    "creative": {
+     "template": "lab-field-gbp",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "our_work"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      }
+     },
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "Photo plus a calm caption panel."
+    }
+   }
+  },
+  {
+   "id": "6h",
+   "group": "c6",
+   "version": "hook",
+   "title": "If a roofer won't put it in writing, keep looking",
+   "strategy": {
+    "authority": {
+     "key": "topic:choosing_contractor",
+     "section": "Fix Now B (consolidate)",
+     "note": "Authority wants one strong 'choosing a contractor' answer; this is its social / Business Profile version."
+    },
+    "service": "Roof Replacement",
+    "intent": "commercial",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Trust: a vetting checklist anyone can use (NRCA guidance), then Lucas's own verifiable credentials: Owens Corning Preferred Contractor, Installs Owens Corning Duration shingles. BBB accreditation is left out (the Drafter excludes its date until confirmed).",
+    "market_signal": "Recurring question: 'How do I know the roofer who knocked on my door is legit?' NRCA: written contract, insurance, don't pay everything up front. Format: FAQ answer.",
+    "market_sources": [
+     "https://www.nrca.net/roofing-guidelines/selecting-a-contractor",
+     "https://www.ky3.com/2026/04/29/your-side-better-business-bureau-warns-roofing-scammers-after-this-weeks-storms/"
+    ]
+   },
+   "why": "The sharpest line first, then the full checklist. It's the most shareable of the three.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "If a roofer won't put it in writing, keep looking.\n\nThat's the first thing to check before you hire anyone for your roof. The rest of the list:\n\n✔️ a written contract with the full scope of work\n✔️ a certificate of insurance before work starts\n✔️ no paying everything up front\n✔️ a manufacturer program you can verify yourself\n\nWe're happy to be checked. Lucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles.",
+    "creative": {
+     "template": "lucas-trust-know-how-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "business_name"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      },
+      "points": [
+       {
+        "role": "claim",
+        "source_id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+       },
+       {
+        "role": "claim",
+        "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+       }
+      ]
+     },
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     },
+     "why": "The credentials card: the one place a designed graphic earns its keep, because it turns 'look them up' into something you can screenshot."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "If a roofer won't put it in writing, keep looking. Before a roof replacement, ask any contractor for a written contract with the full scope of work, a certificate of insurance before work starts, a payment schedule that doesn't ask for everything up front, and a manufacturer program you can verify yourself.\n\nLucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles. Learn more below.",
+    "creative": {
+     "template": "lucas-trust-know-how-gbp",
+     "bindings": {
+      "eyebrow": {
+       "role": "business_name"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      },
+      "points": [
+       {
+        "role": "claim",
+        "source_id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+       },
+       {
+        "role": "claim",
+        "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+       }
+      ]
+     },
+     "photos": {
+      "photos": [
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "Credentials card beside the crane photo."
+    }
+   }
+  },
+  {
+   "id": "3n",
+   "group": "c3",
+   "version": "natural",
+   "title": "Take a look before you dump it",
+   "strategy": {
+    "authority": {
+     "key": "topic:signs_replacement / topic:repair_vs_replacement",
+     "section": "Research",
+     "note": "Educational research topics on Roof Replacement. Roof Repair has no live approved page (Authority Fix Now A: create /services/roof-repair), so the Drafter refuses a Roof Repair target; this points at Roof Replacement."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Expertise shown as useful, non-diagnostic guidance; the scope claim (sourced, website). Never tells the reader what their roof needs.",
+    "market_signal": "Seasonal: NRCA's fall checkup from the ground, granules in gutters, leaves straining gutters/fascia. Format: quick-tip checklist.",
+    "market_sources": [
+     "https://www.nrca.net/RoofingNews/check-out-nrca-website-for-consumers.2-26-2019.7488/Details/Story",
+     "https://www.timberhomeliving.com/fall-and-spring-roofing-maintenance-tips"
+    ]
+   },
+   "why": "One useful thing to notice while doing a chore people are already doing. No sell.",
+   "facebook": {
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "Cleaning gutters this weekend? Before you dump what you scoop out, take a look at it.\n\nLeaves and twigs are normal. What's worth noticing is a gritty, sand-like layer in the bottom of the gutter or piled up at the downspout. Those are granules from the surface of your roof. A little is common. A lot of it is worth having a roofer look at before winter.\n\nAnd be careful on that ladder.\n\nLucas Construction, roofing, siding, guttering, fascia and soffit contractor in Wentzville",
+    "creative": {
+     "template": "lab-plain-portrait-facebook",
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "The close-up of a roof edge meeting the gutter, untouched: exactly where the post points your eye."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "Cleaning gutters this fall? Look at what comes out. Leaves and twigs are normal, but a gritty, sand-like layer in the gutter or at the downspout is granules from your roof's surface, and a lot of it is worth having a roofer look at before winter.\n\nLucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville. If you're considering a roof replacement, learn more below.",
+    "creative": {
+     "template": "lab-plain-landscape-gbp",
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "The same close-up in 4:3, no text."
+    }
+   }
+  },
+  {
+   "id": "3e",
+   "group": "c3",
+   "version": "editorial",
+   "title": "Your gutters can tell you a lot about your roof",
+   "strategy": {
+    "authority": {
+     "key": "topic:signs_replacement / topic:repair_vs_replacement",
+     "section": "Research",
+     "note": "Educational research topics on Roof Replacement. Roof Repair has no live approved page (Authority Fix Now A: create /services/roof-repair), so the Drafter refuses a Roof Repair target; this points at Roof Replacement."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Expertise shown as useful, non-diagnostic guidance; the scope claim (sourced, website). Never tells the reader what their roof needs.",
+    "market_signal": "Seasonal: NRCA's fall checkup from the ground, granules in gutters, leaves straining gutters/fascia. Format: quick-tip checklist.",
+    "market_sources": [
+     "https://www.nrca.net/RoofingNews/check-out-nrca-website-for-consumers.2-26-2019.7488/Details/Story",
+     "https://www.timberhomeliving.com/fall-and-spring-roofing-maintenance-tips"
+    ]
+   },
+   "why": "A short seasonal checklist, written as advice from a neighbour who does this for a living.",
+   "facebook": {
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "Your gutters can tell you a lot about your roof\n\nFall is when most of us are up the ladder clearing leaves anyway, so it's a good time to look at a few other things while you're there:\n\n• Gritty granules collecting in the gutter or at the downspout\n• Roof edges that look curled or lifted\n• Gutters that have started pulling away from the fascia\n• Water stains or dark streaks below the gutter line\n\nNone of these tells you on its own what your roof needs. If you're seeing more than one, it's worth a conversation with a roofer before winter.\n\nLucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville.",
+    "creative": {
+     "template": "lab-field-photo-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "fall"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "Framed close-up with a 'Fall' label and what Lucas does as the caption."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "Your gutters can tell you a lot about your roof. While you're clearing leaves this fall, look for gritty granules in the gutter or at the downspout, roof edges that look curled or lifted, gutters pulling away from the fascia, and water stains below the gutter line.\n\nNone of these tells you on its own what your roof needs, but more than one is worth a conversation with a roofer before winter. Lucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville.",
+    "creative": {
+     "template": "lab-field-gbp",
+     "bindings": {
+      "eyebrow": {
+       "role": "template_label",
+       "source_id": "fall"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "Photo plus caption panel."
+    }
+   }
+  },
+  {
+   "id": "3h",
+   "group": "c3",
+   "version": "hook",
+   "title": "That sand in your gutters probably isn't sand",
+   "strategy": {
+    "authority": {
+     "key": "topic:signs_replacement / topic:repair_vs_replacement",
+     "section": "Research",
+     "note": "Educational research topics on Roof Replacement. Roof Repair has no live approved page (Authority Fix Now A: create /services/roof-repair), so the Drafter refuses a Roof Repair target; this points at Roof Replacement."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Expertise shown as useful, non-diagnostic guidance; the scope claim (sourced, website). Never tells the reader what their roof needs.",
+    "market_signal": "Seasonal: NRCA's fall checkup from the ground, granules in gutters, leaves straining gutters/fascia. Format: quick-tip checklist.",
+    "market_sources": [
+     "https://www.nrca.net/RoofingNews/check-out-nrca-website-for-consumers.2-26-2019.7488/Details/Story",
+     "https://www.timberhomeliving.com/fall-and-spring-roofing-maintenance-tips"
+    ]
+   },
+   "why": "A curiosity hook that teaches one thing. The reader learns something before Lucas is mentioned at all.",
+   "facebook": {
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "That \"sand\" in your gutters probably isn't sand.\n\nIf you're scooping out leaves this fall and find a gritty layer underneath, those are most likely granules off the surface of your roof. They're part of the roof's protective top layer, and every roof sheds some over time.\n\nFinding a lot of them is a good reason to have a roofer take a look before winter, especially after a hailstorm. It doesn't automatically mean anything is wrong. It just means it's worth checking.\n\nLucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville. Questions? Call (636) 459-9328.",
+    "creative": {
+     "template": "lab-pill-portrait-facebook",
+     "bindings": {
+      "label": {
+       "role": "template_label",
+       "source_id": "look_closer"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "The close-up, full frame, with a small 'Look closer' tag that sets up the hook."
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "Finding a gritty, sand-like layer in your gutters this fall? It's most likely granules off your roof's surface. Every roof sheds some, but a lot of it, especially after a hailstorm, is a good reason to have a roofer take a look before winter.\n\nLucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville. If you're considering a roof replacement, learn more below.",
+    "creative": {
+     "template": "lab-pill-landscape-gbp",
+     "bindings": {
+      "label": {
+       "role": "template_label",
+       "source_id": "look_closer"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "The close-up in 4:3 with the 'Look closer' tag."
+    }
+   }
+  }
+ ]
+}

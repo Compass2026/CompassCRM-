@@ -1,0 +1,271 @@
+{
+ "kit": "lucas",
+ "facts": "../../tests/fixtures/creative-lucas-facts.json",
+ "intelligence": "../../tests/fixtures/drafter-authority-lucas.json",
+ "market_signals": "market-signals-2026-10-08.md",
+ "title": "Lucas Creative Sprint 03",
+ "direction": "docs/creative-lab.md#lucas-visual-direction",
+ "style_profile": {
+  "id": "a8c7cb68-1ba5-4b0b-a658-208efa3dcf26",
+  "status": "proposed",
+  "use": "soft style signal only; used lightly",
+  "applied": [
+   "plain first person, a team member talking to a homeowner",
+   "no hashtags, no signature blocks, no emoji openings"
+  ],
+  "not_applied": [
+   "topics, services, keywords, intent, claims, places and cadence"
+  ]
+ },
+ "concepts": [
+  {
+   "id": "4r",
+   "group": "c4",
+   "version": "refined",
+   "title": "Roof replacement day",
+   "direction": "4H · jobsite: large real photo, small label only when useful, multi-photo as an album",
+   "strategy": {
+    "authority": {
+     "key": "page_improvement:4288b96c-… (E-E-A-T) · topic:process is blocked",
+     "section": "Fix Now A / Blocked",
+     "note": "Authority blocks a general 'our process' post (insufficient evidence), so this describes only what Lucas's own photos show, never a process promise."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Experience: four approved own-work job photos (tear-off with tarps, crane lift, bundles staged on the ridge, finished house). Owens Corning Preferred Contractor (sourced).",
+    "market_signal": "Homeowner question: 'How long does it take? Do I need to be home?' Objection: the hassle (noise, debris). Format: project story / behind the scenes.",
+    "market_sources": [
+     "https://www.thompsoncreek.com/blog/how-long-does-it-take-to-replace-a-roof/",
+     "https://www.jobnimbus.com/blog/social-media-marketing-for-roofers"
+    ]
+   },
+   "why": "Shows the work and answers the question neighbours actually have, in the voice of someone who was on the job.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "why": "A real Facebook album: the crane shot leads with a small 'On the job' tag; the other two photos are untouched.",
+    "copy": "If you've ever driven past a house with a crane in the driveway and a pallet hanging over the roof, that's usually a roof replacement in progress.\n\nThat lift is a load of new bundles going straight up to the roof, so nobody has to carry them up a ladder one at a time.\n\nThe other two photos are from other jobs of ours: tarps down over the grass before the old roof came off, and new bundles lined up along the ridge, waiting their turn.\n\nHow long a replacement takes depends on the roof and the weather. If yours is coming up and you want to know what that day will look like at your house, just ask. We'd rather you know before we show up.",
+    "creative": [
+     {
+      "template": "lab-pill-portrait-facebook",
+      "bindings": {
+       "label": {
+        "role": "template_label",
+        "source_id": "on_the_job"
+       }
+      },
+      "photos": {
+       "photos": [
+        "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+       ]
+      }
+     },
+     {
+      "template": "lab-plain-portrait-facebook",
+      "photos": {
+       "photos": [
+        "1979f6aa-accb-46b0-919a-7af48d7d6f87"
+       ]
+      }
+     },
+     {
+      "template": "lab-plain-portrait-facebook",
+      "photos": {
+       "photos": [
+        "db8e7148-8f13-47c4-9ecf-47053df220e6"
+       ]
+      }
+     }
+    ]
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "copy": "Roof replacement day, from one of our jobs: a crane lifting new bundles straight up to the roof so the crew isn't carrying them up a ladder. On another job, tarps went down over the lawn before the old roof came off.\n\nHow long a roof replacement takes depends on the roof and the weather. Lucas Construction is an Owens Corning Preferred Contractor serving Wentzville. Learn what to expect from a roof replacement below.",
+    "creative": {
+     "template": "lab-pill-landscape-gbp",
+     "bindings": {
+      "label": {
+       "role": "template_label",
+       "source_id": "on_the_job"
+      }
+     },
+     "photos": {
+      "photos": [
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "The crane photo, large, with the small tag. No logo, phone or button on the image."
+    }
+   }
+  },
+  {
+   "id": "6r",
+   "group": "c6",
+   "version": "refined",
+   "title": "How do you know a roofer is legit?",
+   "direction": "6H · information that benefits from design: a restrained credentials card (no phone, URL or button)",
+   "strategy": {
+    "authority": {
+     "key": "topic:choosing_contractor",
+     "section": "Fix Now B (consolidate)",
+     "note": "Authority wants one strong 'choosing a contractor' answer; this is its social / Business Profile version."
+    },
+    "service": "Roof Replacement",
+    "intent": "commercial",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Trust: a vetting checklist anyone can use (NRCA guidance), then Lucas's own verifiable credentials: Owens Corning Preferred Contractor, Installs Owens Corning Duration shingles. BBB accreditation is left out (the Drafter excludes its date until confirmed).",
+    "market_signal": "Recurring question: 'How do I know the roofer who knocked on my door is legit?' NRCA: written contract, insurance, don't pay everything up front. Format: FAQ answer.",
+    "market_sources": [
+     "https://www.nrca.net/roofing-guidelines/selecting-a-contractor",
+     "https://www.ky3.com/2026/04/29/your-side-better-business-bureau-warns-roofing-scammers-after-this-weeks-storms/"
+    ]
+   },
+   "why": "Answers the question straight, keeps the checklist strong, and lets the one credential appear once, as something you can check.",
+   "facebook": {
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803"
+    ],
+    "why": "The credentials card, now without the phone, website and 'Request a quote' button: photo, name, credential, two checked facts, a small logo.",
+    "copy": "How do you know a roofer is legit? It's a fair question, and it has a pretty practical answer.\n\nStart with the paperwork. A real contractor will put the scope of work in a written contract, show you a certificate of insurance before anyone climbs a ladder, and set up payments so you're not paying for the whole job before it starts.\n\nThen check the manufacturer. Manufacturers keep their own lists of the contractors in their programs, so you can look a roofer up yourself instead of taking their word for it. We're an Owens Corning Preferred Contractor, and you're welcome to check.\n\nIf something feels rushed, or someone won't put it in writing, it's fine to slow down. A good roofer won't mind waiting while you check.",
+    "creative": {
+     "template": "lab-card-facebook",
+     "bindings": {
+      "eyebrow": {
+       "role": "business_name"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      },
+      "points": [
+       {
+        "role": "claim",
+        "source_id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+       },
+       {
+        "role": "claim",
+        "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+       }
+      ]
+     },
+     "photos": {
+      "photos": [
+       "3a5e930a-1841-4cc3-860e-f6abbdf3e5a1"
+      ]
+     }
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "818761df-41bb-41ab-afab-6ecbe4779803",
+     "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+    ],
+    "copy": "How do you know a roofer is legit? Before a roof replacement, ask for a written contract with the full scope of work, a certificate of insurance before work starts, and a payment schedule that doesn't ask for everything up front. Then check the manufacturer's own contractor list rather than taking anyone's word for it.\n\nLucas Construction is an Owens Corning Preferred Contractor and installs Owens Corning Duration shingles. Learn more about roof replacement below.",
+    "creative": {
+     "template": "lab-card-gbp",
+     "bindings": {
+      "eyebrow": {
+       "role": "business_name"
+      },
+      "headline": {
+       "role": "claim",
+       "source_id": "818761df-41bb-41ab-afab-6ecbe4779803"
+      },
+      "points": [
+       {
+        "role": "claim",
+        "source_id": "fa1d2070-c56c-4a75-a7ce-43effb6f0d21"
+       },
+       {
+        "role": "claim",
+        "source_id": "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+       }
+      ]
+     },
+     "photos": {
+      "photos": [
+       "c7db9166-f6ed-4581-8aaf-fbe6aeee43d5"
+      ]
+     },
+     "why": "The same restrained card in 4:3 beside the crane photo."
+    }
+   }
+  },
+  {
+   "id": "3r",
+   "group": "c3",
+   "version": "refined",
+   "title": "What's in your gutters?",
+   "direction": "3H / 3N · educational photo detail: the image does the work, a small 'Look closer' hook",
+   "strategy": {
+    "authority": {
+     "key": "topic:signs_replacement / topic:repair_vs_replacement",
+     "section": "Research",
+     "note": "Educational research topics on Roof Replacement. Roof Repair has no live approved page (Authority Fix Now A: create /services/roof-repair), so the Drafter refuses a Roof Repair target; this points at Roof Replacement."
+    },
+    "service": "Roof Replacement",
+    "intent": "informational",
+    "keyword": null,
+    "target_page": "/services/roof-replacement",
+    "eeat": "Expertise shown as useful, non-diagnostic guidance; the scope claim (sourced, website). Never tells the reader what their roof needs.",
+    "market_signal": "Seasonal: NRCA's fall checkup from the ground, granules in gutters, leaves straining gutters/fascia. Format: quick-tip checklist.",
+    "market_sources": [
+     "https://www.nrca.net/RoofingNews/check-out-nrca-website-for-consumers.2-26-2019.7488/Details/Story",
+     "https://www.timberhomeliving.com/fall-and-spring-roofing-maintenance-tips"
+    ]
+   },
+   "why": "Teaches one useful thing during a chore people are already doing. Lucas isn't selling anything in it.",
+   "facebook": {
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "why": "The roof-edge close-up, full frame, with a small 'Look closer' tag.",
+    "copy": "Quick one for anyone cleaning out gutters this fall.\n\nUnder the leaves you'll sometimes find a layer of gritty stuff that looks like coarse sand. It's usually granules that have come off the roof. They're part of the roof's top surface, and every roof loses a few over time, so a little isn't a reason to worry.\n\nA lot of it is different, especially after a hailstorm. That's worth having a roofer take a look at before winter, mostly so you know where you stand.\n\nBe careful on the ladder.",
+    "creative": {
+     "template": "lab-pill-portrait-facebook",
+     "bindings": {
+      "label": {
+       "role": "template_label",
+       "source_id": "look_closer"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     }
+    }
+   },
+   "gbp": {
+    "cta": "LEARN_MORE",
+    "claim_ids": [
+     "fc6e22d0-f704-43f8-b39b-24f8750ada61"
+    ],
+    "copy": "Finding gritty, sand-like bits in your gutters this fall? They're usually granules from your roof's top surface. Every roof sheds some over time, but a lot of them, especially after a hailstorm, is worth having a roofer look at before winter.\n\nLucas Construction is a roofing, siding, guttering, fascia and soffit contractor in Wentzville. If you're weighing a roof replacement, learn more below.",
+    "creative": {
+     "template": "lab-pill-landscape-gbp",
+     "bindings": {
+      "label": {
+       "role": "template_label",
+       "source_id": "look_closer"
+      }
+     },
+     "photos": {
+      "photos": [
+       "8dfb59dd-1aab-4f2f-9200-1aff067b5396"
+      ]
+     },
+     "why": "The same close-up in 4:3 with the small tag."
+    }
+   }
+  }
+ ]
+}

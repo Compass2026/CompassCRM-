@@ -27,6 +27,7 @@ on:
           - communications
           - twilio-webhook
           - social-history
+          - creative-lab
       expected_sha:
         description: "Exact main commit SHA approved for deployment"
         required: true

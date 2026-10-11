@@ -281,3 +281,14 @@ test("the page reads every trait of a real analysis with its confidence; reviews
   assert.equal(analyzeMessage(409, { message: "Import the client's history first" }).ok, false);
   assert.equal(analyzeMessage(null, null).ok, false);
 });
+
+test("style, never strategy: content mix, cadence, media mix, engagement and locations are marked descriptive only", async () => {
+  const { traitViews, DESCRIPTIVE_TRAITS, STYLE_INFLUENCE } = await import("../src/lib/social-style.ts");
+  const views = traitViews(analyze(input()));
+  assert.deepEqual(views.filter((t) => t.descriptive).map((t) => t.key).sort(), ["cadence", "content_mix", "engagement", "locations", "media_mix"]);
+  for (const k of ["openings", "sentences", "tone", "emoji", "hashtags", "cta", "structure", "caption_length", "recurring_language"]) {
+    assert.equal(views.find((t) => t.key === k).descriptive, false, k);
+  }
+  assert.equal(DESCRIPTIVE_TRAITS.length, 5);
+  assert.ok(STYLE_INFLUENCE.includes("CTA phrasing") && STYLE_INFLUENCE.includes("hooks and openings"));
+});
