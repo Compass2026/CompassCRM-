@@ -20,21 +20,39 @@ export type PostRow = {
   approved_snapshot: Record<string, unknown> | null;
   reviewed_at: string | null;
   external_post_id: string | null;
+  social_account_id: string | null;
+  publish_key: string | null;
 };
 
 export type RunRow = {
   post_id: string;
   client_id: string;
   mode: "tick" | "now" | "sweep" | "retry" | "reminder";
-  outcome: "published" | "reconciled" | "uncertain" | "ambiguous" | "failed" | "blocked" | "lapsed" | "retry_scheduled" | "reminder_opened" | "reminder_closed";
+  outcome: "published" | "reconciled" | "uncertain" | "ambiguous" | "failed" | "blocked" | "lapsed" | "retry_scheduled" | "reminder_opened" | "reminder_closed" | "submitted";
   transient?: boolean;
   http_status?: number | null;
   detail?: string | null;
   task_id?: string | null;
+  // Zernio Social Publisher v1: how it went out, and Zernio's side of it.
+  transport?: "google" | "zernio" | "manual";
+  provider_post_id?: string | null;
+  provider_status?: string | null;
+  target_account_id?: string | null;
+  request_key?: string | null;
+  provider_media_url?: string | null;
 };
 
+// A Zernio run as the Facebook path reads it back.
+export type ZernioRun = {
+  id: number; outcome: string; transient: boolean; detail: string | null; created_at: string; http_status: number | null;
+  provider_post_id: string | null; provider_status: string | null; request_key: string | null; provider_media_url: string | null;
+};
+
+const BINDING_COLS =
+  "id, client_id, platform, external_account_id, display_name, publish_provider, publish_account_id, publish_page_id, publish_account_name, publish_enabled, publish_verified_at, publish_health";
+
 const POST_COLS =
-  "id, client_id, platform, copy, review_status, publish_status, scheduled_at, publish_attempts, last_attempt_at, approved_snapshot, reviewed_at, external_post_id";
+  "id, client_id, platform, copy, review_status, publish_status, scheduled_at, publish_attempts, last_attempt_at, approved_snapshot, reviewed_at, external_post_id, social_account_id, publish_key";
 
 export function createStore(supabase: Client) {
   const one = async <T>(q: Promise<{ data: T | null; error: { message: string } | null }>): Promise<T | null> => {
@@ -162,7 +180,7 @@ export function createStore(supabase: Client) {
       return { ok: true, row: data[0] };
     },
 
-    async markPublished(id: string, v: { external_post_id: string; published_url: string; published_at: string }): Promise<void> {
+    async markPublished(id: string, v: { external_post_id: string | null; published_url: string; published_at: string }): Promise<void> {
       const { error } = await supabase.from("social_posts")
         .update({ publish_status: "published", ...v }).eq("id", id).eq("publish_status", "publishing");
       if (error) throw new Error(error.message);
@@ -229,6 +247,82 @@ export function createStore(supabase: Client) {
       const rows = (await one<{ id: string }[]>(q)) ?? [];
       for (const r of rows) await closeTask(r.id, outcome);
       return rows.map((r) => r.id);
+    },
+
+    // ── Facebook through Zernio ──
+    async memberIsAdmin(memberId: string): Promise<boolean> {
+      const m = await one<{ role: string | null }>(supabase.from("team_members").select("role").eq("id", memberId).maybeSingle());
+      return m?.role === "admin";
+    },
+
+    async account(id: string): Promise<import("./facebook.ts").Binding | null> {
+      return one(supabase.from("social_accounts").select(BINDING_COLS).eq("id", id).maybeSingle());
+    },
+
+    async facebookAccounts(): Promise<import("./facebook.ts").Binding[]> {
+      return (await one<import("./facebook.ts").Binding[]>(
+        supabase.from("social_accounts").select(BINDING_COLS).eq("platform", "facebook").order("client_id")
+      )) ?? [];
+    },
+
+    async dueFacebookPosts(nowIso: string, limit: number): Promise<PostRow[]> {
+      return (await one<PostRow[]>(
+        supabase.from("social_posts").select(POST_COLS)
+          .eq("platform", "facebook").eq("publish_status", "scheduled").eq("review_status", "approved")
+          .lte("scheduled_at", nowIso).order("scheduled_at", { ascending: true }).limit(limit)
+      )) ?? [];
+    },
+
+    async publishingFacebookPosts(): Promise<PostRow[]> {
+      return (await one<PostRow[]>(
+        supabase.from("social_posts").select(POST_COLS).eq("platform", "facebook").eq("publish_status", "publishing")
+      )) ?? [];
+    },
+
+    async failedFacebookPosts(): Promise<PostRow[]> {
+      return (await one<PostRow[]>(
+        supabase.from("social_posts").select(POST_COLS)
+          .eq("platform", "facebook").eq("publish_status", "failed").eq("review_status", "approved")
+      )) ?? [];
+    },
+
+    // This post's Zernio runs, oldest first.
+    async zernioRuns(postId: string): Promise<ZernioRun[]> {
+      return (await one<ZernioRun[]>(
+        supabase.from("publisher_runs")
+          .select("id, outcome, transient, detail, created_at, http_status, provider_post_id, provider_status, request_key, provider_media_url")
+          .eq("post_id", postId).eq("transport", "zernio").order("id", { ascending: true })
+      )) ?? [];
+    },
+
+    // What the claim would re-check, read without claiming (preflight).
+    async postGate(postId: string): Promise<{ review_status: string; publish_status: string; hash_ok: boolean; grounding_problems: string[] } | null> {
+      const { data, error } = await supabase.rpc("publisher_post_gate", { p_post_id: postId });
+      if (error) throw new Error(error.message);
+      return data ?? null;
+    },
+
+    async brandAsset(id: string): Promise<{ id: string; client_id: string; storage_path: string | null; content_hash: string | null; mime_type: string | null } | null> {
+      return one(supabase.from("brand_assets").select("id, client_id, storage_path, content_hash, mime_type").eq("id", id).maybeSingle());
+    },
+
+    async creativeAsset(id: string): Promise<{ id: string; client_id: string; storage_path: string | null; content_hash: string | null; mime_type: string | null } | null> {
+      return one(supabase.from("creative_assets").select("id, client_id, storage_path, content_hash, mime_type").eq("id", id).maybeSingle());
+    },
+
+    async download(bucket: "brand-assets" | "creative-assets", path: string): Promise<{ bytes: Uint8Array; type: string } | null> {
+      const { data, error } = await supabase.storage.from(bucket).download(path);
+      if (error || !data) return null;
+      return { bytes: new Uint8Array(await data.arrayBuffer()), type: data.type ?? "" };
+    },
+
+    async bindAccount(v: { social_account_id: string; account_id: string; page_id: string; account_name: string | null; health: unknown }): Promise<Record<string, unknown>> {
+      const { data, error } = await supabase.rpc("publisher_bind_account", {
+        p_social_account_id: v.social_account_id, p_account_id: v.account_id, p_page_id: v.page_id,
+        p_account_name: v.account_name, p_health: v.health,
+      });
+      if (error) throw new Error(error.message);
+      return data as Record<string, unknown>;
     },
 
     async signPhoto(path: string, seconds: number): Promise<string | null> {

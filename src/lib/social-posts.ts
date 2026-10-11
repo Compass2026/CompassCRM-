@@ -157,6 +157,8 @@ export type PostState = {
   review_status: string;
   publish_status: string;
   platform?: string;
+  // Facebook through Zernio: the publisher would send it (zernioRoute).
+  zernio_ready?: boolean;
 };
 
 export type PostAction =
@@ -185,9 +187,13 @@ export function availableActions(post: PostState): PostAction[] {
   if (r === "approved" && (p === "not_scheduled" || p === "failed")) out.push("schedule");
   if (r === "approved" && p === "scheduled") out.push("unschedule");
   if (r === "approved" && (p === "not_scheduled" || p === "scheduled" || p === "failed")) {
-    if (post.platform && canPublishByHand(post.platform)) out.push("mark_published");
-    // Business Profile: the same governed publisher path as a scheduled post (0046).
-    if (post.platform === "google_business") out.push("publish_now");
+    // A Facebook post the publisher sends through Zernio is not also posted by
+    // hand, except to record one a person found on the Page after a failure.
+    const viaZernio = post.platform === "facebook" && post.zernio_ready === true;
+    if (post.platform && canPublishByHand(post.platform) && (!viaZernio || p === "failed")) out.push("mark_published");
+    // Business Profile, and Facebook through Zernio: the same governed
+    // publisher path as a scheduled post (0046; Zernio Social Publisher v1).
+    if (post.platform === "google_business" || viaZernio) out.push("publish_now");
     out.push("reopen");
   }
   if ((r === "draft" || r === "rejected") && p === "not_scheduled") out.push("delete");

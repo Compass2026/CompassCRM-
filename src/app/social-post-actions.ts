@@ -250,7 +250,11 @@ export async function publishNowAction(clientId: string, postId: string): Promis
     .eq("client_id", clientId)
     .maybeSingle();
   if (!post) return { error: "Unknown post." };
-  if (post.platform !== "google_business") return { error: "Only Business Profile posts go through the publisher." };
+  // Business Profile posts, and Facebook posts the publisher sends through
+  // Zernio; the function applies the Zernio gates itself and records a block.
+  if (post.platform !== "google_business" && post.platform !== "facebook") {
+    return { error: "Only Business Profile and Facebook posts go through the publisher." };
+  }
   if (post.review_status !== "approved") return { error: "Only an approved post can be published." };
   let queuedHere = false;
   if (post.publish_status === "not_scheduled" || post.publish_status === "failed") {
@@ -277,6 +281,9 @@ export async function publishNowAction(clientId: string, postId: string): Promis
     .filter((r) => r.post_id === postId)
     .at(-1);
   if (result?.outcome === "published" || result?.outcome === "reconciled") return { ok: true };
+  // Facebook: Zernio accepted it and Facebook's result follows; not an error,
+  // and the post stays publishing until the publisher reads the result.
+  if (result?.outcome === "submitted") return { ok: true };
   // A block leaves nothing queued behind a person's back: a post this click
   // scheduled goes back to not scheduled (the run and any task stay on record).
   if (result?.outcome === "blocked" && queuedHere) {
@@ -288,7 +295,7 @@ export async function publishNowAction(clientId: string, postId: string): Promis
       .eq("publish_status", "scheduled");
     revalidatePost(clientId, postId);
   }
-  return { error: publishNowMessage(result?.outcome, result?.detail) };
+  return { error: publishNowMessage(result?.outcome, result?.detail, post.platform) };
 }
 
 // The function checks this person's JWT against team_members itself; the
@@ -315,8 +322,18 @@ async function callPublisher(supabase: Supabase, postId: string): Promise<unknow
   }
 }
 
-function publishNowMessage(outcome: string | undefined, detail: string | null | undefined): string {
+function publishNowMessage(outcome: string | undefined, detail: string | null | undefined, platform: string): string {
   const why = detail ? ` ${detail}` : "";
+  if (platform === "facebook") {
+    switch (outcome) {
+      case "failed":
+        return `Zernio or Facebook refused it, or did not answer.${why}`;
+      case "uncertain":
+        return "Sent to Zernio without a definite answer yet. Nothing is recorded: the publisher asks again with the same request key within about 10 minutes, so it cannot post twice.";
+      case "ambiguous":
+        return `Not sent again and not recorded: the Facebook Page needs a person's check (see the task).${why}`;
+    }
+  }
   switch (outcome) {
     case "blocked":
       return `Not published.${why}`;

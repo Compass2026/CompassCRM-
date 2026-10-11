@@ -6734,8 +6734,14 @@ export type Database = {
           mode: string
           outcome: string
           post_id: string
+          provider_media_url: string | null
+          provider_post_id: string | null
+          provider_status: string | null
+          request_key: string | null
+          target_account_id: string | null
           task_id: string | null
           transient: boolean
+          transport: string
         }
         Insert: {
           client_id: string
@@ -6746,8 +6752,14 @@ export type Database = {
           mode: string
           outcome: string
           post_id: string
+          provider_media_url?: string | null
+          provider_post_id?: string | null
+          provider_status?: string | null
+          request_key?: string | null
+          target_account_id?: string | null
           task_id?: string | null
           transient?: boolean
+          transport?: string
         }
         Update: {
           client_id?: string
@@ -6758,8 +6770,14 @@ export type Database = {
           mode?: string
           outcome?: string
           post_id?: string
+          provider_media_url?: string | null
+          provider_post_id?: string | null
+          provider_status?: string | null
+          request_key?: string | null
+          target_account_id?: string | null
           task_id?: string | null
           transient?: boolean
+          transport?: string
         }
         Relationships: [
           {
@@ -7270,6 +7288,54 @@ export type Database = {
           },
         ]
       }
+      social_account_publish_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          created_at: string
+          detail: Json
+          id: number
+          kind: string
+          social_account_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          created_at?: string
+          detail?: Json
+          id?: never
+          kind: string
+          social_account_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          created_at?: string
+          detail?: Json
+          id?: never
+          kind?: string
+          social_account_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_account_publish_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_account_publish_events_social_account_id_client_id_fkey"
+            columns: ["social_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
       social_accounts: {
         Row: {
           access_token: string | null
@@ -7279,6 +7345,15 @@ export type Database = {
           external_account_id: string | null
           id: string
           platform: Database["public"]["Enums"]["social_platform"]
+          publish_account_id: string | null
+          publish_account_name: string | null
+          publish_enabled: boolean
+          publish_enabled_at: string | null
+          publish_enabled_by: string | null
+          publish_health: Json | null
+          publish_page_id: string | null
+          publish_provider: string | null
+          publish_verified_at: string | null
           status: Database["public"]["Enums"]["social_account_status"]
           token_expires_at: string | null
         }
@@ -7290,6 +7365,15 @@ export type Database = {
           external_account_id?: string | null
           id?: string
           platform: Database["public"]["Enums"]["social_platform"]
+          publish_account_id?: string | null
+          publish_account_name?: string | null
+          publish_enabled?: boolean
+          publish_enabled_at?: string | null
+          publish_enabled_by?: string | null
+          publish_health?: Json | null
+          publish_page_id?: string | null
+          publish_provider?: string | null
+          publish_verified_at?: string | null
           status?: Database["public"]["Enums"]["social_account_status"]
           token_expires_at?: string | null
         }
@@ -7301,6 +7385,15 @@ export type Database = {
           external_account_id?: string | null
           id?: string
           platform?: Database["public"]["Enums"]["social_platform"]
+          publish_account_id?: string | null
+          publish_account_name?: string | null
+          publish_enabled?: boolean
+          publish_enabled_at?: string | null
+          publish_enabled_by?: string | null
+          publish_health?: Json | null
+          publish_page_id?: string | null
+          publish_provider?: string | null
+          publish_verified_at?: string | null
           status?: Database["public"]["Enums"]["social_account_status"]
           token_expires_at?: string | null
         }
@@ -7338,6 +7431,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_accounts_publish_enabled_by_fkey"
+            columns: ["publish_enabled_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -10690,6 +10790,17 @@ export type Database = {
       portal_seen: { Args: never; Returns: undefined }
       post_caller_is_human: { Args: never; Returns: boolean }
       post_caller_kind: { Args: never; Returns: string }
+      publisher_bind_account: {
+        Args: {
+          p_account_id: string
+          p_account_name: string
+          p_health: Json
+          p_page_id: string
+          p_social_account_id: string
+        }
+        Returns: Json
+      }
+      publisher_post_gate: { Args: { p_post_id: string }; Returns: Json }
       publisher_reminder_state: {
         Args: { p_post_ids?: string[] }
         Returns: {
@@ -10699,6 +10810,18 @@ export type Database = {
           post_id: string
           task_id: string
         }[]
+      }
+      publisher_set_account_enabled: {
+        Args: {
+          p_enabled: boolean
+          p_expected_account_id: string
+          p_social_account_id: string
+        }
+        Returns: Json
+      }
+      publisher_unbind_account: {
+        Args: { p_social_account_id: string }
+        Returns: Json
       }
       recheck_social_posts: { Args: { p_post_ids?: string[] }; Returns: number }
       recompute_location_indexes: {

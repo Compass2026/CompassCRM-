@@ -18,6 +18,8 @@ import { PublisherSettingsForm } from "@/components/publisher-settings-form";
 import { WorkerGoogleOpsForm } from "@/components/worker-google-ops-form";
 import { parseWorkerGoogleSetting } from "../../../../supabase/functions/_shared/worker-google.ts";
 import { parsePublisherSettings } from "@/lib/publisher";
+import { ZernioPublishingCard, type ZernioPageRow } from "@/components/zernio-publishing-card";
+import { getCurrentTeamRole } from "@/lib/team";
 
 export default async function SettingsPage({
   searchParams,
@@ -63,6 +65,22 @@ export default async function SettingsPage({
         .order("name"),
     ]);
   const publisher = parsePublisherSettings(publisherRow?.value);
+  // Facebook through Zernio: each client's Page and its binding.
+  const [{ data: fbPages }, { data: zernioKey }, me] = await Promise.all([
+    supabase
+      .from("social_accounts")
+      .select("id, external_account_id, display_name, publish_account_id, publish_account_name, publish_enabled, publish_verified_at, publish_health, clients(name)")
+      .eq("platform", "facebook"),
+    supabase.rpc("secret_present", { secret_name: "ZERNIO_PUBLISH_API_KEY" }),
+    getCurrentTeamRole(supabase),
+  ]);
+  const zernioRows: ZernioPageRow[] = (fbPages ?? [])
+    .map((a) => ({
+      id: a.id, client: a.clients?.name ?? "?", page_id: a.external_account_id, page_name: a.display_name,
+      account_id: a.publish_account_id, account_name: a.publish_account_name, enabled: a.publish_enabled,
+      verified_at: a.publish_verified_at, health: (a.publish_health as { status?: string } | null)?.status ?? null,
+    }))
+    .sort((x, y) => x.client.localeCompare(y.client));
 
   const settingValue = (key: string) =>
     (googleSettings ?? []).find((s) => s.key === key)?.value ?? null;
@@ -152,7 +170,7 @@ export default async function SettingsPage({
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Publisher</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Sends approved Business Profile posts at their scheduled time, and
+            Sends approved Business Profile posts (and Facebook posts through Zernio) at their scheduled time, and
             when someone presses Publish now. Off until switched on here.
           </p>
         </CardHeader>
@@ -163,6 +181,19 @@ export default async function SettingsPage({
             clients={(clients ?? []).map((c) => ({ id: c.id, name: c.name, hasLocation: !!c.gbp_location }))}
             googleConnected={tokenPresent === true}
           />
+        </CardContent>
+      </Card>
+
+      <Card id="zernio">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Facebook through Zernio</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Approved Facebook posts can be sent by the same publisher through Zernio, one explicitly
+            bound Page per client. Pilot: Lucas Construction.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <ZernioPublishingCard rows={zernioRows} admin={me?.role === "admin"} keyPresent={zernioKey === true} />
         </CardContent>
       </Card>
 
