@@ -74,3 +74,13 @@ test("Lucas pilot migration reconciles the cluster and preserves the exact graph
   assert.match(sql, /where website_url in/);
   assert.doesNotMatch(sql, /102d3b20-2795-44ae-bd64-d1e43916291c/);
 });
+
+
+test("post review exposes the keyword-first campaign foundation", () => {
+  const page = readFileSync(new URL("../src/app/(app)/clients/[clientId]/social/[postId]/page.tsx", import.meta.url), "utf8");
+  for (const label of ["Campaign foundation", "Primary keyword", "Post keyword", "Search intent", "Service", "Target page", "Authority reason"]) {
+    assert.match(page, new RegExp(label));
+  }
+  assert.match(page, /primary_keyword_id/);
+  assert.match(page, /authority_opportunity_id/);
+});
