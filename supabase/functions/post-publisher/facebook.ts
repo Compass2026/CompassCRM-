@@ -119,7 +119,7 @@ export function buildCreateBody(s: FacebookSnapshot, b: Binding, imageUrl: strin
 
 // ── Reading Zernio's answers ─────────────────────────────────────────────────
 export type ZPlatform = {
-  platform?: string; accountId?: string | { _id?: string }; status?: string;
+  platform?: string; accountId?: string | { _id?: string }; status?: string; platformSpecificData?: { locationId?: string; pageId?: string } | null;
   platformPostId?: string | null; platformPostUrl?: string | null; publishedAt?: string | null;
   errorMessage?: string | null; errorCategory?: string | null; errorSource?: string | null;
 };
@@ -136,10 +136,26 @@ export type PostState =
 
 const accountOf = (p: ZPlatform) => (typeof p.accountId === "string" ? p.accountId : p.accountId?._id ?? null);
 
-// Our Facebook entry in a Zernio post: the platform result is the truth, not
-// the HTTP status (a 207 is 2xx and may be a failure).
-export function interpretPost(post: ZPost | null | undefined, accountId: string): PostState {
-  const entry = (post?.platforms ?? []).find((p) => p.platform === "facebook" && accountOf(p) === accountId);
+// Which entry of a Zernio post is ours: the platform, the bound account and,
+// for a Business Profile, the location the request was pinned to (Zernio
+// echoes platformSpecificData back). `strict` also requires that echo — used
+// for a post Compass did not create itself (a 409 duplicate).
+export type EntryMatch = { platform: "facebook" | "googlebusiness"; locationId?: string | null; strict?: boolean; label?: string };
+const FACEBOOK_MATCH: EntryMatch = { platform: "facebook", label: "Facebook" };
+
+export function entryFor(post: ZPost | null | undefined, accountId: string, m: EntryMatch = FACEBOOK_MATCH): ZPlatform | null {
+  return (post?.platforms ?? []).find((p) => {
+    if (p.platform !== m.platform || accountOf(p) !== accountId) return false;
+    if (!m.locationId) return true;
+    const echoed = p.platformSpecificData?.locationId ?? null;
+    return echoed === m.locationId || (!m.strict && echoed === null);
+  }) ?? null;
+}
+
+// Our entry in a Zernio post: the platform result is the truth, not the HTTP
+// status (a 207 is 2xx and may be a failure).
+export function interpretPost(post: ZPost | null | undefined, accountId: string, m: EntryMatch = FACEBOOK_MATCH): PostState {
+  const entry = entryFor(post, accountId, m);
   if (!post || !entry) return { state: "missing" };
   const status = entry.status ?? "pending";
   const zernioStatus = `${post.status ?? "?"}/${status}`;
@@ -154,7 +170,7 @@ export function interpretPost(post: ZPost | null | undefined, accountId: string)
     const category = entry.errorCategory ?? "unknown";
     return {
       state: "failed", zernioStatus,
-      message: `Facebook (via Zernio) ${status}: ${(entry.errorMessage ?? "no message").slice(0, 300)}${category !== "unknown" ? ` [${category}]` : ""}`,
+      message: `${m.label ?? "Facebook"} (via Zernio) ${status}: ${(entry.errorMessage ?? "no message").slice(0, 300)}${category !== "unknown" ? ` [${category}]` : ""}`,
       transient: status === "failed" && TRANSIENT_CATEGORIES.has(category),
       needs: RECONNECT_CATEGORIES.has(category) ? "reconnect" : status === "failed" && !TRANSIENT_CATEGORIES.has(category) ? "fix" : null,
     };
@@ -173,18 +189,19 @@ export type CreateOutcome =
   | { kind: "rejected"; message: string }
   | { kind: "transient"; message: string };
 
-export function interpretCreate(a: Answer, accountId: string): CreateOutcome {
-  const body = (a.json ?? {}) as { post?: ZPost; details?: { existingPostId?: string; accountId?: string }; code?: string; error?: string };
+export function interpretCreate(a: Answer, accountId: string, m: EntryMatch = FACEBOOK_MATCH): CreateOutcome {
+  const body = (a.json ?? {}) as { post?: ZPost; details?: { existingPostId?: string; accountId?: string }; existingPostId?: string; code?: string; error?: string };
   if (a.status === 200 || a.status === 201 || a.status === 207) {
     const post = body.post;
-    if (post?._id) return { kind: "result", postId: post._id, post, state: interpretPost(post, accountId) };
+    if (post?._id) return { kind: "result", postId: post._id, post, state: interpretPost(post, accountId, m) };
     return { kind: "transient", message: `Zernio answered ${a.status} without a post id.` };
   }
   if (a.status === 409) {
     if (body.code === "idempotency_conflict" || a.code === "idempotency_conflict") {
       return { kind: "in_progress", message: "Zernio is still processing the first request with this key." };
     }
-    const existing = body.details?.existingPostId;
+    // The spec puts it in details; some answers carry it at the top level.
+    const existing = body.details?.existingPostId ?? body.existingPostId;
     if (existing) return { kind: "duplicate", existingPostId: existing };
     return { kind: "rejected", message: `Zernio refused it as a duplicate: ${a.message}` };
   }
@@ -197,10 +214,11 @@ export function interpretCreate(a: Answer, accountId: string): CreateOutcome {
 }
 
 // A 409 duplicate points at an existing post. It is ours only when it is on
-// the same account with exactly the same content.
-export function sameContent(post: ZPost | null | undefined, content: string, accountId: string): boolean {
+// the same account (and, for a Business Profile, the same echoed location)
+// with exactly the same content.
+export function sameContent(post: ZPost | null | undefined, content: string, accountId: string, m: EntryMatch = FACEBOOK_MATCH): boolean {
   if (!post) return false;
-  return (post.content ?? "") === content && (post.platforms ?? []).some((p) => p.platform === "facebook" && accountOf(p) === accountId);
+  return (post.content ?? "") === content && !!entryFor(post, accountId, { ...m, strict: true });
 }
 
 export type HealthSummary = { status: string; tokenValid: boolean | null; postingGranted: boolean | null; checked_at: string };
@@ -242,7 +260,23 @@ export const IDEMPOTENCY_WINDOW_HOURS = 23;
 export type RunLike = {
   outcome: string; created_at: string; http_status?: number | null; provider_post_id: string | null;
   request_key: string | null; provider_media_url: string | null;
+  target_account_id?: string | null; target_location_id?: string | null;
 };
+
+// The destination an approval's earlier Zernio requests went to, when it is
+// not the one the binding names now. A request in flight keeps its account
+// and location: a binding changed under it is a person's to look at, never a
+// quiet re-target.
+export function targetDrift(runs: RunLike[], publishKey: string, target: { accountId: string; locationId: string | null }): string | null {
+  for (const r of runs) {
+    if (generationOf(r.request_key, publishKey) === null || !r.target_account_id) continue;
+    const loc = r.target_location_id ?? null;
+    if (r.target_account_id !== target.accountId || (target.locationId !== null && loc !== null && loc !== target.locationId)) {
+      return `An earlier request for this approval went to Zernio account ${r.target_account_id}${loc ? ` (${loc})` : ""}; the binding now names ${target.accountId}${target.locationId ? ` (${target.locationId})` : ""}.`;
+    }
+  }
+  return null;
+}
 export type SendPlan =
   | { kind: "send"; generation: number; mediaUrl: string | null; sameKey: boolean }
   | { kind: "check"; generation: number; postId: string }

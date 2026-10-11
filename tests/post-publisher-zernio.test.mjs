@@ -74,6 +74,10 @@ function fakeStore({ posts = [], accounts = [binding()], settings = { enabled: t
     dueGbpPosts: async () => [],
     stuckGbpPosts: async () => [],
     failedGbpPosts: async () => [],
+    gbpLocationForClient: async () => null,
+    gbpTransportForClient: async () => "google",
+    publishingGbpPosts: async () => [],
+    postRuns: async (id) => s.runs.filter((r) => r.post_id === id),
     dueHandPosts: async (nowIso) => list((p) => p.platform !== "google_business" && p.publish_status === "scheduled" && p.review_status === "approved" && p.scheduled_at <= nowIso),
     openReminders: async () => reminderState().filter((r) => r.outcome === "reminder_opened").map(({ post_id, client_id, task_id }) => ({ post_id, client_id, task_id })),
     reminderOpen: async (id) => reminderState().some((r) => r.post_id === id && r.outcome === "reminder_opened"),
@@ -638,4 +642,22 @@ test("preflight on a Lucas fixture writes nothing anywhere and shows the exact r
   assert.equal(s.runs.length, 0);
   assert.equal(s.tasks.length, 0);
   assert.equal(zernioWrites(z).length, 0, "no presign, upload or create");
+});
+
+test("REVIEW: a Page switched off after a timeout suppresses the same-key re-send; switched on again, the same key goes out once", async () => {
+  const { pub, s, z } = setup({ posts: [fbPost("p1")] }, { script: [{ throw: "The operation was aborted due to timeout" }] });
+  await pub.tick({ mode: "tick" });
+  assert.equal(creates(z).length, 1);
+  s.accounts.get(FB_ACC).publish_enabled = false;
+  s.now = new Date(NOW.getTime() + 11 * 60_000);
+  await pub.tick({ mode: "tick" });
+  assert.equal(creates(z).length, 1, "Page off: no second POST");
+  assert.equal(s.posts.get("p1").publish_status, "publishing");
+  assert.match(s.runs.at(-1).detail, /Not sent again: .*switched off/);
+  s.accounts.get(FB_ACC).publish_enabled = true;
+  await pub.tick({ mode: "tick" });
+  assert.equal(z.creates.length, 2);
+  assert.equal(z.creates[1].key, z.creates[0].key);
+  assert.equal(z.posts.size, 1);
+  assert.equal(s.posts.get("p1").publish_status, "published");
 });

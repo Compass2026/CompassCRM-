@@ -12,6 +12,9 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { crc32, deflateSync } from "node:zlib";
 import { chromium } from "playwright-core";
+import { createClient } from "@supabase/supabase-js";
+import { createPostPublisher } from "../supabase/functions/post-publisher/handler.ts";
+import { createStore } from "../supabase/functions/post-publisher/store.ts";
 
 const { PGRST_URL, JWT_SECRET, PSQL } = process.env;
 assert.ok(PGRST_URL && JWT_SECRET && PSQL, "run through scripts/test-tasks-ui.sh");
@@ -93,6 +96,17 @@ const gateway = http.createServer(async (req, res) => {
     res.writeHead(upstream.status, h);
     return res.end(out);
   }
+  // The post-publisher function: the real handler and store over this
+  // gateway (service role), with a fake Zernio. Only read-only modes are used.
+  if (req.method === "POST" && url.pathname === "/functions/v1/post-publisher") {
+    const body = [];
+    for await (const c of req) body.push(c);
+    const answer = await publisherFn().handle(new Request("http://fn/post-publisher", {
+      method: "POST", headers: { authorization: req.headers.authorization ?? "", "content-type": "application/json" }, body: Buffer.concat(body),
+    }));
+    res.writeHead(answer.status, { "content-type": "application/json" });
+    return res.end(Buffer.from(await answer.arrayBuffer()));
+  }
   // Supabase Storage, reduced to signing brand-asset files and serving a signed
   // file (a 1×1 PNG). MISSING_FILES stand in for an object that is gone.
   if (req.method === "POST" && url.pathname === "/storage/v1/object/sign/brand-assets") {
@@ -118,6 +132,24 @@ const gateway = http.createServer(async (req, res) => {
 });
 await new Promise((r) => gateway.listen(0, "127.0.0.1", r));
 const gatewayUrl = `http://127.0.0.1:${gateway.address().port}`;
+// The publisher as the function runs it, with a fake Zernio that sees one
+// Google Business Profile account managing Harbor Lane's location 7770001.
+const ZGBP = "cccccccccccccccccccccccc";
+const GBP_LOC = "locations/7770001";
+const zernioFetch = async (u) => {
+  const url = new URL(String(u));
+  const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const path = url.pathname.replace(/^\/api/, "");
+  if (path === "/v1/accounts") return json(200, { accounts: url.searchParams.get("platform") === "googlebusiness" ? [{ _id: ZGBP, platform: "googlebusiness", displayName: "Harbor Lane", isActive: true }] : [] });
+  if (path.endsWith("/gmb-locations")) return json(200, { locations: [{ id: "7770001", name: "Harbor Lane Plumbing", websiteUrl: "https://a.example.test" }], selectedLocationId: "7770001", hasMore: false });
+  if (path.endsWith("/health")) return json(200, { status: "healthy", tokenStatus: { valid: true }, permissions: { posting: [{ scope: "business.manage", granted: true, required: true }] } });
+  return json(404, { error: `unexpected ${path}` });
+};
+let publisherInstance = null;
+const publisherFn = () => publisherInstance ??= createPostPublisher({
+  store: createStore(createClient(gatewayUrl, sign({ role: "service_role", exp: exp() }), { auth: { persistSession: false, autoRefreshToken: false } })),
+  fetch: zernioFetch,
+});
 
 const port = Number(process.env.POSTS_UI_PORT ?? 3419);
 const base = `http://127.0.0.1:${port}`;
@@ -446,6 +478,60 @@ try {
   assert.equal(sql(`select social_account_id from social_posts where id = '${brokenDraft}'`), fbPage, "an earlier draft keeps its Page");
   ok("With two Facebook Pages a new draft names none (never guessed); earlier drafts keep theirs");
   assert.ok(storageSigned.every((p) => p.startsWith(`${CLIENT_A}/`)), "only this client's files are signed");
+
+  // Business Profile through Zernio: Harbor Lane's location is bound by the
+  // publisher's service session (what zernio_gbp_bind does after reading
+  // Zernio); a new Business Profile draft names it, the approved post shows
+  // the Zernio route and the exact location, and the no-write preflight runs
+  // through the real function from the post page.
+  sql(`select vault.create_secret('sk_publish_ui', 'ZERNIO_PUBLISH_API_KEY'); select vault.create_secret('sk_read_ui', 'ZERNIO_READ_API_KEY')`);
+  const svc = sign({ role: "service_role", exp: exp() });
+  const bound = await fetch(`${gatewayUrl}/rest/v1/rpc/publisher_bind_gbp_location`, {
+    method: "POST", headers: { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" },
+    body: JSON.stringify({ p_client_id: CLIENT_A, p_account_id: ZGBP, p_location_id: GBP_LOC, p_location_name: "Harbor Lane Plumbing", p_account_name: "Harbor Lane", p_health: { status: "healthy" } }),
+  });
+  assert.equal(bound.status, 200, await bound.clone().text());
+  const gbpAcc = (await bound.json()).social_account_id;
+  await page.goto(`${base}/clients/${CLIENT_A}/social?view=new`, { waitUntil: "networkidle" });
+  await page.getByLabel("Platform").selectOption("google_business");
+  await page.getByLabel("Search intent").selectOption("navigational");
+  await page.getByLabel("Copy").fill("Harbor Lane Plumbing, on your Business Profile. Call (417) 555-0100.");
+  await page.getByLabel(/CRM facts only/).check();
+  await page.getByRole("button", { name: "Create draft" }).click();
+  await page.waitForURL(/\/social\/[0-9a-f-]{36}$/);
+  const gbpDraft = page.url().split("/").at(-1);
+  assert.equal(sql(`select social_account_id from social_posts where id = '${gbpDraft}'`), gbpAcc);
+  assert.ok(await page.getByText("Account: Harbor Lane Plumbing (google_business)").isVisible());
+  ok("A Business Profile draft names the client's bound location when saved, and shows it");
+
+  await page.getByText("Grounding checks pass.").waitFor();
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await page.getByRole("button", { name: "Approve" }).click();
+  await page.getByText(/Approved by Sam Team/).waitFor();
+  assert.equal(sql(`select approved_snapshot ->> 'social_account_id' from social_posts where id = '${gbpDraft}'`), gbpAcc);
+  const dest = page.locator("[data-gbp-destination]");
+  assert.match(await dest.textContent(), /Business Profile location Harbor Lane Plumbing \(locations\/7770001\) · Zernio account cccccccccccccccccccccccc · publishing off/);
+  assert.match(await dest.textContent(), /never sent directly to Google/i);
+  const runsBefore = sql(`select count(*) from publisher_runs`);
+  await page.getByRole("button", { name: "Check without sending" }).click();
+  const verdict = page.locator("[data-preflight-verdict]");
+  await verdict.waitFor();
+  assert.match(await verdict.textContent(), /Would not publish yet: .*account publishing enabled.*Nothing was sent/);
+  await page.getByText("The exact request").click();
+  const req = await page.locator("[data-preflight] pre").textContent();
+  assert.deepEqual(JSON.parse(req).platforms, [{ platform: "googlebusiness", accountId: ZGBP, platformSpecificData: { locationId: GBP_LOC, topicType: "STANDARD" } }]);
+  assert.ok(await page.getByText("✓ the bound location is one the account manages").isVisible());
+  assert.equal(sql(`select count(*) from publisher_runs`), runsBefore, "the preflight recorded nothing");
+  await shot("post-gbp-zernio-preflight");
+  ok("Approved Business Profile post: Zernio route, exact location and the no-write preflight (real function) from the post page");
+
+  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  const gbpRow = page.locator(`[data-gbp-row="${CLIENT_A}"]`);
+  assert.match(await gbpRow.textContent(), /locations\/7770001/);
+  assert.match(await gbpRow.textContent(), /Bound, publishing off/);
+  assert.equal(await gbpRow.locator("[data-gbp-transport]").textContent(), "Through Zernio only", "binding moved the client to Zernio");
+  await shot("settings-gbp-zernio");
+  ok("Settings shows the bound Business Profile location, publishing off, without the key");
 
   // Mobile.
   await page.setViewportSize({ width: 390, height: 844 });

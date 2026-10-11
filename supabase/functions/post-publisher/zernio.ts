@@ -3,8 +3,9 @@
 // where and when; this sends the exact request the handler built.
 //
 // Every request is one of an allowlist of method + path pairs; anything else
-// is refused before fetch is called. Reads: the Facebook accounts the key
-// sees, an account's selected Page and its health, one post. Writes: a media
+// is refused before fetch is called. Reads: the Facebook and Business Profile
+// accounts the key sees, an account's selected Page or its Business Profile
+// locations, its health, one post. Writes: a media
 // upload link (POST /v1/media/presign), the upload itself (a PUT of the bytes
 // to the presigned https URL, which never carries the key), and creating a
 // post (POST /v1/posts, always with an Idempotency-Key). There is no delete,
@@ -30,6 +31,7 @@ const POST_ID = "[0-9A-Za-z_-]{1,64}";
 export const ZERNIO_PUBLISH_ALLOWLIST: readonly { method: "GET" | "POST"; path: RegExp; query: readonly string[] }[] = [
   { method: "GET", path: /^\/v1\/accounts$/, query: ["platform", "page", "limit"] },
   { method: "GET", path: new RegExp(`^/v1/accounts/${ID}/facebook-page$`), query: [] },
+  { method: "GET", path: new RegExp(`^/v1/accounts/${ID}/gmb-locations$`), query: ["limit"] },
   { method: "GET", path: new RegExp(`^/v1/accounts/${ID}/health$`), query: [] },
   { method: "GET", path: new RegExp(`^/v1/posts/${POST_ID}$`), query: [] },
   { method: "POST", path: /^\/v1\/media\/presign$/, query: [] },
@@ -57,6 +59,7 @@ export type ZernioAccount = {
   _id: string; platform?: string; username?: string; displayName?: string; platformUserId?: string;
   isActive?: boolean; enabled?: boolean; needsReconnection?: boolean; profileId?: string | { _id?: string; name?: string } | null;
 };
+export type ZernioGbpLocations = { locations?: import("./gbp.ts").ZernioLocation[]; selectedLocationId?: string | null; hasMore?: boolean; cached?: boolean };
 export type ZernioFacebookPage = { pages?: { id: string; name?: string; username?: string }[]; selectedPageId?: string | null };
 export type Presign = { uploadUrl: string; publicUrl: string; expiresIn?: number };
 
@@ -99,21 +102,26 @@ export function createZernioPublisher(deps: { apiKey: string; fetch: typeof fetc
     };
   }
 
+  // Every account of one platform the key can see (paged).
+  async function accountsOf(platform: "facebook" | "googlebusiness"): Promise<{ answer: Answer; accounts: ZernioAccount[] }> {
+    const accounts: ZernioAccount[] = [];
+    let answer: Answer = local("not_run", "");
+    for (let page = 1; page <= 10; page++) {
+      answer = await call("GET", "/v1/accounts", { query: { platform, page, limit: 100 } });
+      if (!answer.ok) return { answer, accounts: [] };
+      const j = answer.json as { accounts?: ZernioAccount[]; pagination?: { pages?: number } } | null;
+      accounts.push(...(j?.accounts ?? []));
+      if (!j?.pagination?.pages || page >= j.pagination.pages) break;
+    }
+    return { answer, accounts: accounts.filter((a) => a.platform === platform) };
+  }
+
   return {
-    // Every Facebook account the key can see (paged).
-    async facebookAccounts(): Promise<{ answer: Answer; accounts: ZernioAccount[] }> {
-      const accounts: ZernioAccount[] = [];
-      let answer: Answer = local("not_run", "");
-      for (let page = 1; page <= 10; page++) {
-        answer = await call("GET", "/v1/accounts", { query: { platform: "facebook", page, limit: 100 } });
-        if (!answer.ok) return { answer, accounts: [] };
-        const j = answer.json as { accounts?: ZernioAccount[]; pagination?: { pages?: number } } | null;
-        accounts.push(...(j?.accounts ?? []));
-        if (!j?.pagination?.pages || page >= j.pagination.pages) break;
-      }
-      return { answer, accounts: accounts.filter((a) => a.platform === "facebook") };
-    },
+    facebookAccounts: () => accountsOf("facebook"),
+    gbpAccounts: () => accountsOf("googlebusiness"),
     facebookPage: (accountId: string) => call("GET", `/v1/accounts/${accountId}/facebook-page`),
+    // The Business Profile locations the account manages, and its selected one.
+    gbpLocations: (accountId: string) => call("GET", `/v1/accounts/${accountId}/gmb-locations`, { query: { limit: 500 } }),
     health: (accountId: string) => call("GET", `/v1/accounts/${accountId}/health`),
     getPost: (postId: string) => call("GET", `/v1/posts/${postId}`),
     presign: (o: { filename: string; contentType: string; size: number }) => call("POST", "/v1/media/presign", { body: o }),

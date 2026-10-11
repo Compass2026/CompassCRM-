@@ -48,6 +48,12 @@ function fakeStore({ posts = [], settings = { enabled: true, clients: [CA] }, se
     dueGbpPosts: async (nowIso, limit) => list((p) => p.platform === "google_business" && p.publish_status === "scheduled" && p.review_status === "approved" && p.scheduled_at <= nowIso).sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)).slice(0, limit),
     stuckGbpPosts: async (before) => list((p) => p.platform === "google_business" && p.publish_status === "publishing" && p.last_attempt_at <= before),
     failedGbpPosts: async () => list((p) => p.platform === "google_business" && p.publish_status === "failed"),
+    // Business Profile through Zernio: these clients have no Zernio location,
+    // so every Business Profile post takes the direct Google path.
+    gbpLocationForClient: async () => null,
+    gbpTransportForClient: async () => "google",
+    publishingGbpPosts: async () => list((p) => p.platform === "google_business" && p.publish_status === "publishing"),
+    postRuns: async (id) => s.runs.filter((r) => r.post_id === id),
     dueHandPosts: async (nowIso) => list((p) => p.platform !== "google_business" && p.publish_status === "scheduled" && p.review_status === "approved" && p.scheduled_at <= nowIso),
     // Same rule as publisher_reminder_state(): the latest reminder event per post.
     openReminders: async () => reminderState().filter((r) => r.outcome === "reminder_opened").map(({ post_id, client_id, task_id }) => ({ post_id, client_id, task_id })),
