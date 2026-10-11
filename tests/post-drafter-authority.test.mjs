@@ -64,10 +64,10 @@ async function hashOf(d) {
   return r.body.brief_hash;
 }
 
-test("version: v3 with Authority mode, the duplicate rule and Facebook drafts", async () => {
+test("version: v4 with keyword-first campaigns, Authority mode, duplicate rule and Facebook drafts", async () => {
   const v = await call(drafter(fakeStore().store), { mode: "version" });
-  assert.equal(v.body.version, 3);
-  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts"]);
+  assert.equal(v.body.version, 4);
+  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns"]);
   assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version"]);
 });
 
