@@ -59,16 +59,18 @@ test("Lucas pilot migration reconciles the cluster and preserves the exact graph
   assert.match(sql, /set review_status = 'in_review'/);
   assert.doesNotMatch(sql, /delete\s+from\s+post_assets/i);
   assert.doesNotMatch(sql, /update\s+post_assets/i);
-  for (const id of [
-    "a643d847-f6e3-41ba-84bf-7bdf3a277fa0",
-    "b5d2cddd-60da-47b7-865a-395fb604ff3c",
-    "7ce0b892-1708-4232-8310-f2285106632d",
-    "eba50553-753b-4f91-93a1-b019ca82951d",
-    "15dd7594-fe7e-45e0-9653-951adbf8ad68",
-    "cedc3fe2-ea78-48ae-a113-d426895a3167",
-    "e6fb964c-0b6c-4932-832e-62b27ac76254",
-    "812a1fc2-5dc9-4d4f-8ee4-e312ed5e5232",
-    "7a1fcd69-38e0-4b0e-b4f0-714ec61a5c51",
-    "4b0b297f-8982-4ba5-8224-f6957671b583",
-  ]) assert.match(sql, new RegExp(id));
+  for (const label of [
+    "xmas-01-season-is-here-wentzville-ranch",
+    "xmas-02-save-your-weekend-wentzville-two-story",
+    "xmas-03-stay-off-ladder-wentzville-three-car",
+    "xmas-04-clean-professional-holiday-look",
+    "xmas-05-make-home-merry-bright-wentzville-ranch",
+    "xmas-06-brighten-neighborhood-wentzville-two-story",
+    "xmas-07-why-homeowners-hire-it-out",
+    "xmas-08-hosting-for-the-holidays",
+    "xmas-09-schedule-early-for-the-holidays",
+    "xmas-10-enjoy-season-skip-hassle",
+  ]) assert.match(sql, new RegExp(label));
+  assert.match(sql, /where website_url in/);
+  assert.doesNotMatch(sql, /102d3b20-2795-44ae-bd64-d1e43916291c/);
 });
