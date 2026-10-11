@@ -493,7 +493,7 @@ Migration `20261011040000_zernio_gbp_publisher.sql` (additive):
 
 ### Tests
 
-- `tests/post-publisher-gbp.test.mjs` (27 cases): payload and exact target,
+- `tests/post-publisher-gbp.test.mjs` (29 cases): payload and exact target,
   photo limits, unsupported fields, approval and media mismatch, cross-client
   and Facebook-account refusal, switch gates with no direct fallback, the
   route, an unsettled Google attempt, sweep separation, timeout / 409 / 207
