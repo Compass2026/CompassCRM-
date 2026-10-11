@@ -179,7 +179,7 @@ test("Authority and the Drafter disagreeing on the target refuses; the Drafter n
   const key = await call(drafter(fakeStore(state({ opportunity: { key: `gbp_post:${ROOF}:transactional` } })).store), A("brief"));
   assert.equal(key.body.code, "target_mismatch");
   // The Drafter's own refusals stay authoritative (422, as in v1).
-  const kw = await call(drafter(fakeStore(state({ opportunity: { keyword_id: "kw-info" } })).store), A("brief"));
+  const kw = await call(drafter(fakeStore(state({ opportunity: { keyword_id: "11111111-1111-4111-8111-111111111111" } })).store), A("brief"));
   assert.equal(kw.status, 422);
   assert.ok(kw.body.refusals.some((r) => r.code === "keyword_intent_mismatch"), JSON.stringify(kw.body));
   assert.equal(kw.body.authority_opportunity_id, OPP);
