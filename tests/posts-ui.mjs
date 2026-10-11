@@ -10,6 +10,7 @@ import http from "node:http";
 import { createHmac } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { crc32, deflateSync } from "node:zlib";
 import { chromium } from "playwright-core";
 
 const { PGRST_URL, JWT_SECRET, PSQL } = process.env;
@@ -40,6 +41,28 @@ const sql = (q) => execFileSync("/bin/sh", ["-c", `${PSQL} -c "$Q"`], { env: { .
 
 // Supabase's gateway, reduced to what the app calls: /auth/v1/user and /rest/v1.
 const unexpected = [];
+const storageSigned = [];
+const MISSING_FILES = new Set(["00000000-0000-4000-b000-00000000000a/logo.png"]);
+// A photo-sized stand-in (640x400, two-tone) so the preview renders at a real
+// size; served for every signed brand-assets file the stub knows.
+const PHOTO_PNG = (() => {
+  const [w, h] = [640, 400];
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc32(body), body.length + 4);
+    return out;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8);
+  const rows = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) rows.set(y < h * 0.6 ? [96, 140, 190] : [120, 96, 72], y * (w * 3 + 1) + 1 + x * 3);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+})();
 const gateway = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const bearer = (req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -69,6 +92,26 @@ const gateway = http.createServer(async (req, res) => {
     }
     res.writeHead(upstream.status, h);
     return res.end(out);
+  }
+  // Supabase Storage, reduced to signing brand-asset files and serving a signed
+  // file (a 1×1 PNG). MISSING_FILES stand in for an object that is gone.
+  if (req.method === "POST" && url.pathname === "/storage/v1/object/sign/brand-assets") {
+    const body = [];
+    for await (const c of req) body.push(c);
+    const { paths = [] } = JSON.parse(Buffer.concat(body).toString() || "{}");
+    if (!verify(bearer)?.sub) {
+      res.writeHead(400, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ statusCode: "403", error: "Unauthorized", message: "signed-in teammates only" }));
+    }
+    storageSigned.push(...paths);
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(paths.map((path) => MISSING_FILES.has(path)
+      ? { path, signedURL: null, error: "Object not found" }
+      : { path, signedURL: `/object/sign/brand-assets/${path}?token=sandbox`, error: null })));
+  }
+  if (req.method === "GET" && url.pathname.startsWith("/storage/v1/object/sign/brand-assets/") && url.searchParams.get("token") === "sandbox") {
+    res.writeHead(200, { "content-type": "image/png" });
+    return res.end(PHOTO_PNG);
   }
   unexpected.push(`${req.method} ${url.pathname}`);
   res.writeHead(404).end();
@@ -335,6 +378,74 @@ try {
   assert.ok(await page.getByRole("region", { name: "AI Drafter" }).getByText("edited after check: copy").isVisible());
   assert.ok(await page.getByText("AI Drafter: Drafted").isVisible(), "history names the AI Drafter, not the publisher");
   ok("An AI-drafted post shows the AI badge and a compact drafter row (runtime, lint, brief, target page, details collapsed, edits after the check)");
+
+  // A Facebook draft names the client's only Facebook Page; reviewers see the
+  // Page and the actual attached image; nothing is guessed between Pages.
+  const fbPage = sql(`insert into social_accounts (client_id, platform, external_account_id, display_name) values ('${CLIENT_A}', 'facebook', '100000000000001', 'Harbor Lane Plumbing') returning id`).split("\n")[0];
+  const newFacebookDraft = async (copy) => {
+    await page.goto(`${base}/clients/${CLIENT_A}/social?view=new`, { waitUntil: "networkidle" });
+    await page.getByLabel("Platform").selectOption("facebook");
+    await page.getByLabel("Search intent").selectOption("navigational");
+    await page.getByLabel("Copy").fill(copy);
+    await page.getByLabel(/CRM facts only/).check();
+    await page.getByRole("button", { name: "Create draft" }).click();
+    await page.waitForURL(/\/social\/[0-9a-f-]{36}$/);
+    return page.url().split("/").at(-1);
+  };
+  const fbDraft = await newFacebookDraft("Harbor Lane Plumbing, on Facebook. Call (417) 555-0100.");
+  assert.equal(sql(`select social_account_id from social_posts where id = '${fbDraft}'`), fbPage);
+  assert.ok(await page.getByText("Account: Harbor Lane Plumbing (facebook)").isVisible(), "the draft shows the Page it names");
+  ok("A Facebook draft names the client's only Facebook Page when saved, and shows it");
+
+  await page.getByLabel("Add a brand asset").selectOption({ label: "Drain job, Nixa (photo)" });
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const image = page.locator("[data-post-media-image]");
+  await image.waitFor();
+  assert.match(await image.getAttribute("src"), /\/storage\/v1\/object\/sign\/brand-assets\/00000000-0000-4000-b000-00000000000a\/photos\/drain\.jpg\?token=sandbox$/);
+  assert.ok(await image.evaluate((img) => img.complete && img.naturalWidth === 640), "the attached photo actually loads");
+  assert.ok((await image.boundingBox()).width > 300, "the photo is shown at a reviewable size");
+  assert.ok(await page.getByRole("link", { name: /Open full size/ }).isVisible());
+  assert.ok(await page.getByRole("region", { name: "Graphic" }).getByText("No rendered graphic: the post uses the attached photo (see Media).").isVisible());
+  ok("Media shows the attached photo itself (signed from the private bucket) with a full-size link; Graphic says the post uses it");
+
+  await page.getByText("Grounding checks pass.").waitFor();
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await page.getByRole("button", { name: "Withdraw to edit" }).waitFor();
+  assert.ok(await page.getByText("Harbor Lane Plumbing (facebook)").isVisible(), "the review view lists the Page");
+  assert.ok(await page.locator("[data-post-media-image]").isVisible(), "the reviewer sees the image next to the copy");
+  await shot("post-facebook-review");
+  await page.goto(`${base}/clients/${CLIENT_A}/social?review=in_review`, { waitUntil: "networkidle" });
+  const thumb = page.locator(`a[href$="/social/${fbDraft}"] [data-post-list-image]`);
+  assert.ok(await thumb.evaluate((img) => img.complete && img.naturalWidth > 0), "the queue shows the post's image");
+  await shot("posts-review-queue");
+  ok("In review: the Page and the photo are on the review page, and the queue shows a thumbnail");
+
+  await page.goto(postUrl(fbDraft), { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Approve" }).click();
+  await page.getByText(/Approved by Sam Team/).waitFor();
+  assert.equal(sql(`select approved_snapshot ->> 'social_account_id' from social_posts where id = '${fbDraft}'`), fbPage);
+  ok("Approval binds the Page in the approved snapshot");
+
+  // A file that cannot be loaded is an error, not an empty section.
+  const brokenDraft = await newFacebookDraft("Harbor Lane Plumbing. Logo test post, Springfield.");
+  await page.getByLabel("Add a brand asset").selectOption({ label: "Harbor Lane logo (logo_primary)" });
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.locator("[data-post-media-error]").waitFor();
+  assert.match(await page.locator("[data-post-media-error]").textContent(), /could not be found.*Brand → Assets/);
+  assert.equal(await page.locator("[data-post-media-image]").count(), 0, "no substitute image");
+  await shot("post-media-error");
+  ok("A stored file that cannot be signed shows an actionable error instead of an image");
+
+  // Two Pages: nothing is guessed; the existing link is kept.
+  sql(`insert into social_accounts (client_id, platform, external_account_id, display_name) values ('${CLIENT_A}', 'facebook', '100000000000002', 'Harbor Lane Second Page')`);
+  const guessless = await newFacebookDraft("Harbor Lane Plumbing. Two Pages test post.");
+  assert.equal(sql(`select coalesce(social_account_id::text, 'none') from social_posts where id = '${guessless}'`), "none");
+  assert.ok(await page.getByText("Account: saving the draft names the client's Facebook Page when it has exactly one.").isVisible());
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByText("Saved.").waitFor();
+  assert.equal(sql(`select social_account_id from social_posts where id = '${brokenDraft}'`), fbPage, "an earlier draft keeps its Page");
+  ok("With two Facebook Pages a new draft names none (never guessed); earlier drafts keep theirs");
+  assert.ok(storageSigned.every((p) => p.startsWith(`${CLIENT_A}/`)), "only this client's files are signed");
 
   // Mobile.
   await page.setViewportSize({ width: 390, height: 844 });

@@ -17,6 +17,8 @@ import {
   REVIEW_STATUSES,
 } from "@/lib/social-posts";
 import { cn } from "@/lib/utils";
+import { mediaPreview, type MediaPreview } from "@/lib/post-media";
+import { BRAND_BUCKET, SIGNED_URL_TTL } from "@/lib/brand";
 
 // Posts and their review gate (0045). Every post is a draft until a person
 // approves it. Business Profile posts publish only through post-publisher
@@ -55,6 +57,33 @@ export default async function SocialPage({
   const reviewFilter = isReviewStatus(review) ? review : null;
   const shown = reviewFilter ? all.filter((p) => p.review_status === reviewFilter) : all;
   const counts = new Map(REVIEW_STATUSES.map((s) => [s, all.filter((p) => p.review_status === s).length]));
+
+  // Each listed post's first attached image, so the queue shows what a post
+  // carries. Signed with this teammate's session (private bucket, storage RLS).
+  const firstMedia = new Map<string, { label: string; preview: MediaPreview }>();
+  if (view === "list" && shown.length > 0) {
+    const { data: media } = await supabase
+      .from("post_assets")
+      .select("post_id, sort_order, brand_assets(label, storage_path, url)")
+      .in("post_id", shown.map((p) => p.id))
+      .not("brand_asset_id", "is", null)
+      .order("sort_order");
+    const first = new Map<string, { label: string; storage_path: string | null; url: string | null }>();
+    for (const m of media ?? []) {
+      if (!first.has(m.post_id) && m.brand_assets) {
+        first.set(m.post_id, { label: m.brand_assets.label, storage_path: m.brand_assets.storage_path, url: m.brand_assets.url });
+      }
+    }
+    const paths = [...first.values()].map((m) => m.storage_path).filter((x): x is string => !!x);
+    const signed = new Map<string, string>();
+    let signError: string | null = null;
+    if (paths.length > 0) {
+      const { data, error } = await supabase.storage.from(BRAND_BUCKET).createSignedUrls(paths, SIGNED_URL_TTL);
+      if (error) signError = error.message;
+      for (const r of data ?? []) if (r.path && r.signedUrl) signed.set(r.path, r.signedUrl);
+    }
+    for (const [postId, m] of first) firstMedia.set(postId, { label: m.label, preview: mediaPreview(m, signed, signError) });
+  }
 
   const [year, mon] = monthStr.split("-").map(Number);
   // Business Profile posts are their own quota (gbp_posts), not social posts.
@@ -210,6 +239,18 @@ export default async function SocialPage({
                         </Badge>
                         <span className="text-xs text-muted-foreground">{p.search_intent}</span>
                       </div>
+                      {(() => {
+                        const m = firstMedia.get(p.id);
+                        if (!m) return null;
+                        return m.preview.kind === "image" ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={m.preview.src} alt={m.label} className="size-12 shrink-0 rounded border bg-muted object-cover" data-post-list-image />
+                        ) : (
+                          <span className="grid size-12 shrink-0 place-items-center rounded border border-red-200 bg-red-50 text-[10px] text-red-800" title={m.preview.message} data-post-list-image-error>
+                            no image
+                          </span>
+                        );
+                      })()}
                       <span className="min-w-0 flex-1 truncate text-sm">{p.copy ?? "(no copy)"}</span>
                       <span className="shrink-0 text-xs text-muted-foreground">
                         {p.published_at

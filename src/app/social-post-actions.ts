@@ -31,14 +31,24 @@ async function start(): Promise<Supabase> {
   return supabase;
 }
 
+// A Facebook draft names the client's Facebook Page when the client has
+// exactly one, so the approval binds the Page the post is for (the approved
+// snapshot includes social_account_id). Never guessed between several Pages.
+async function facebookPageFor(supabase: Supabase, clientId: string, platform: string | null | undefined): Promise<{ social_account_id?: string | null }> {
+  if (platform !== "facebook") return {};
+  const { data } = await supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", "facebook").limit(2);
+  return data?.length === 1 ? { social_account_id: data[0].id } : {};
+}
+
 export async function createPostAction(clientId: string, _prev: PostFormState, form: FormData): Promise<PostFormState> {
   if (!isUuid(clientId)) return { error: "Unknown client." };
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
+  const page = await facebookPageFor(supabase, clientId, parsed.value.platform);
   const { data, error } = await supabase
     .from("social_posts")
-    .insert({ client_id: clientId, ...parsed.value })
+    .insert({ client_id: clientId, ...parsed.value, ...page })
     .select("id")
     .single();
   if (error) return { error: postErrorMessage(error.message) };
@@ -56,9 +66,10 @@ export async function updatePostAction(
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
+  const page = await facebookPageFor(supabase, clientId, parsed.value.platform);
   const { data, error } = await supabase
     .from("social_posts")
-    .update(parsed.value)
+    .update({ ...parsed.value, ...page })
     .eq("id", postId)
     .eq("client_id", clientId)
     .eq("review_status", "draft")
