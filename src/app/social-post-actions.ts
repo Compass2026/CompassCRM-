@@ -32,8 +32,8 @@ async function start(): Promise<Supabase> {
 }
 
 // A Facebook draft names the client's Facebook Page when the client has
-// exactly one, so the approval binds the Page the publisher may send it to
-// (Zernio Social Publisher v1). Never guessed between several Pages.
+// exactly one, so the approval binds the Page the post is for (the approved
+// snapshot includes social_account_id). Never guessed between several Pages.
 async function facebookPageFor(supabase: Supabase, clientId: string, platform: string | null | undefined): Promise<{ social_account_id?: string | null }> {
   if (platform !== "facebook") return {};
   const { data } = await supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", "facebook").limit(2);

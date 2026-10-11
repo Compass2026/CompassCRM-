@@ -1,7 +1,7 @@
 # Client payment links
 
 Stripe Checkout sessions last at most 24 hours. The Billing tab can now issue
-a client-specific Compass link valid for 30 days, or revoke/replace it. Copy
+a client-specific Compass link valid for 7 days, or revoke/replace it. Copy
 the URL when issued; only its SHA-256 digest is stored, so leaving the page
 requires replacing the link to recover a shareable URL. No email is sent.
 
@@ -27,7 +27,11 @@ the authorizing admin and payment link. Public errors omit internal records.
 Revoking a Compass link stops redemption. A Stripe page already opened remains
 valid until its own expiry; use **Expire link** for that session if necessary.
 
-Deployment: apply `20261010224500_durable_payment_links.sql`, deploy `billing/`
+Existing links are capped at seven days from their original issuance without
+changing their URLs. Earlier expirations and revoked links are preserved.
+
+Deployment: apply `20261010224500_durable_payment_links.sql` followed by
+`20261011005243_seven_day_payment_links.sql`, deploy `billing/`
 and the CRM from the same reviewed commit. No new environment variables or
 Stripe permissions are needed. The legacy 24-hour Checkout actions remain
 available. Issued/signed agreements and operational prices are unchanged.

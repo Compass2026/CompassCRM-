@@ -41,6 +41,8 @@ import {
 import { approvedChannelProblems, MAX_ATTEMPTS, modeLabels, outcomeLabels, parsePublisherSettings, transportLabels, zernioRoute, type FacebookBinding } from "@/lib/publisher";
 import { drafterSummary } from "@/lib/drafter-run";
 import { canRenderCreative, canRequestNewCreative, creativeStatusLabels, isCreativePolicy } from "@/lib/creative-post";
+import { mediaPreview, noGraphicLine } from "@/lib/post-media";
+import { BRAND_BUCKET, SIGNED_URL_TTL } from "@/lib/brand";
 import { CreativePolicyForm, GenerateCreativeForm, RequestNewCreativeForm } from "@/components/creative/post-creative-forms";
 import { CopyTextButton } from "@/components/copy-text-button";
 import { cn } from "@/lib/utils";
@@ -77,7 +79,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       post.review_task_id
         ? supabase.from("tasks").select("id, title, status").eq("id", post.review_task_id).maybeSingle()
         : Promise.resolve({ data: null }),
-      supabase.from("post_assets").select("brand_asset_id, sort_order, brand_assets(label, kind, storage_path, url)").eq("post_id", postId).not("brand_asset_id", "is", null).order("sort_order"),
+      supabase.from("post_assets").select("brand_asset_id, sort_order, content_hash, brand_assets(label, kind, storage_path, url, width, height)").eq("post_id", postId).not("brand_asset_id", "is", null).order("sort_order"),
     ]);
   const isGbp = post.platform === "google_business";
   const isFacebook = post.platform === "facebook";
@@ -159,6 +161,16 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   // Brand-asset links; a rendered graphic is shown in its own section.
   const brandLinks = (assets ?? []).flatMap((a) => (a.brand_asset_id ? [{ ...a, brand_asset_id: a.brand_asset_id }] : []));
   const linkedAssetIds = new Set(brandLinks.map((a) => a.brand_asset_id));
+  // The files themselves, for review: signed with this teammate's session from
+  // the private bucket (storage RLS applies; nothing is made public).
+  const mediaPaths = brandLinks.map((a) => a.brand_assets?.storage_path).filter((p): p is string => !!p);
+  const mediaSigned = new Map<string, string>();
+  let mediaSignError: string | null = null;
+  if (mediaPaths.length > 0) {
+    const { data: signedRows, error: signError } = await supabase.storage.from(BRAND_BUCKET).createSignedUrls(mediaPaths, SIGNED_URL_TTL);
+    if (signError) mediaSignError = signError.message;
+    for (const r of signedRows ?? []) if (r.path && r.signedUrl) mediaSigned.set(r.path, r.signedUrl);
+  }
   const linkedIds = new Set((linked ?? []).map((l) => l.claim_id));
   const usableToLink = (claims ?? []).filter(
     (c) => !linkedIds.has(c.id) && (c.status === "confirmed" || (c.status === "sourced" && (c.source ?? "").trim() !== ""))
@@ -166,6 +178,17 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const service = (services ?? []).find((s) => s.id === post.service_id);
   const offer = (offers ?? []).find((o) => o.id === post.offer_id);
   const keyword = (keywords ?? []).find((k) => k.id === post.keyword_id);
+  // The account the post names: part of the approved snapshot, so the reviewer
+  // sees which Page an approval binds. A Facebook draft gets the client's only
+  // Facebook Page when it is saved (createPostAction / updatePostAction).
+  const { data: account } = post.social_account_id
+    ? await supabase.from("social_accounts").select("platform, display_name, external_account_id").eq("id", post.social_account_id).maybeSingle()
+    : { data: null };
+  const accountLabel = account
+    ? `${account.display_name ?? account.external_account_id} (${account.platform})`
+    : post.platform === "facebook"
+      ? "none: withdraw the post and save the draft to name the client's Facebook Page"
+      : null;
   const review = reviewLabels[post.review_status];
   const publish = publishLabels[post.publish_status];
   const platform = isPlatform(post.platform) ? platformLabels[post.platform].label : post.platform;
@@ -256,6 +279,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       <section className="surface space-y-3 p-4 sm:p-5">
         <h3 className="text-sm font-semibold">Content</h3>
         {actions.includes("edit") ? (
+          <>
           <PostDraftForm
             clientId={clientId}
             postId={postId}
@@ -264,11 +288,18 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
             offers={(offers ?? []).filter((o) => o.status !== "retired" || o.id === post.offer_id).map((o) => ({ id: o.id, label: `${o.title}${o.status === "confirmed" ? "" : ` (${o.status})`}` }))}
             keywords={(keywords ?? []).map((k) => ({ id: k.id, label: k.keyword }))}
           />
+          {(account || post.platform === "facebook") && (
+            <p className="text-xs text-muted-foreground">
+              Account: {account ? accountLabel : "saving the draft names the client's Facebook Page when it has exactly one."}
+            </p>
+          )}
+          </>
         ) : (
           <div className="space-y-2 text-sm">
             <p className="whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-3">{post.copy}</p>
             {post.review_status === "approved" && post.copy && <CopyTextButton text={post.copy} />}
             <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-1 text-xs [&>dd]:[overflow-wrap:anywhere]">
+              {accountLabel && (<><dt className="text-muted-foreground">Account</dt><dd>{accountLabel}</dd></>)}
               {post.cta_type && (<><dt className="text-muted-foreground">Button</dt><dd>{post.cta_type.replace("_", " ").toLowerCase()} → {post.cta_url ?? "—"}</dd></>)}
               {service && (<><dt className="text-muted-foreground">Service</dt><dd>{service.name}{service.status !== "approved" && ` (${service.status})`}</dd></>)}
               {offer && (<><dt className="text-muted-foreground">Offer</dt><dd>{offer.title}: “{offer.terms}” ({offer.status}{offer.ends_on ? `, ends ${offer.ends_on}` : ", no end date"})</dd></>)}
@@ -360,7 +391,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            {creativePolicy === "none" ? "This post goes out without a rendered graphic." : "No graphic is linked yet."}
+            {noGraphicLine(creativePolicy, brandLinks.length)}
           </p>
         )}
         {post.creative_status === "failed" && lastRun?.status === "failed" && lastRun.error && (
@@ -385,21 +416,48 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
         {brandLinks.length === 0 ? (
           <p className="text-sm text-muted-foreground">No brand assets on this post.</p>
         ) : (
-          <ol className="space-y-1 text-sm">
-            {brandLinks.map((a) => (
-              <li key={a.brand_asset_id} className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground tabular-nums">{a.sort_order}.</span>
-                <span className="min-w-0 flex-1">
-                  {a.brand_assets?.label ?? a.brand_asset_id}
-                  {a.brand_assets?.kind && <span className="text-xs text-muted-foreground"> · {a.brand_assets.kind}</span>}
-                </span>
-                {actions.includes("edit") && (
-                  <form action={unlinkAssetAction.bind(null, clientId, postId, a.brand_asset_id)}>
-                    <Button type="submit" variant="ghost" size="sm">Remove</Button>
-                  </form>
-                )}
-              </li>
-            ))}
+          <ol className="space-y-4 text-sm">
+            {brandLinks.map((a) => {
+              const preview = mediaPreview({ storage_path: a.brand_assets?.storage_path ?? null, url: a.brand_assets?.url ?? null }, mediaSigned, mediaSignError);
+              return (
+                <li key={a.brand_asset_id} className="space-y-2" data-post-media>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground tabular-nums">{a.sort_order}.</span>
+                    <span className="min-w-0 flex-1">
+                      {a.brand_assets?.label ?? a.brand_asset_id}
+                      {a.brand_assets?.kind && <span className="text-xs text-muted-foreground"> · {a.brand_assets.kind}</span>}
+                      {a.brand_assets?.width && a.brand_assets?.height
+                        ? <span className="text-xs text-muted-foreground"> · {a.brand_assets.width}×{a.brand_assets.height}</span>
+                        : null}
+                      {a.content_hash && <span className="font-mono text-xs text-muted-foreground" title={a.content_hash}> · {a.content_hash.slice(0, 12)}</span>}
+                    </span>
+                    {actions.includes("edit") && (
+                      <form action={unlinkAssetAction.bind(null, clientId, postId, a.brand_asset_id)}>
+                        <Button type="submit" variant="ghost" size="sm">Remove</Button>
+                      </form>
+                    )}
+                  </div>
+                  {preview.kind === "image" ? (
+                    <a href={preview.src} target="_blank" rel="noreferrer" className="block w-fit" title="Open the full-size image">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={preview.src}
+                        alt={a.brand_assets?.label ?? "Attached image"}
+                        className="max-h-[420px] w-auto max-w-full rounded-md border bg-muted object-contain"
+                        data-post-media-image
+                      />
+                      <span className="mt-1 block text-xs text-muted-foreground underline underline-offset-2">
+                        Open full size{preview.origin === "link" ? " (from the asset's link)" : ""}
+                      </span>
+                    </a>
+                  ) : (
+                    <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800" data-post-media-error>
+                      {preview.message}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         )}
         {actions.includes("edit") && (

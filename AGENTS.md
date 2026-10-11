@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Native Agreements (October 7, 2026)
 
-`docs/durable-payment-links.md` describes the 30-day client payment capability
+`docs/durable-payment-links.md` describes the 7-day client payment capability
 added October 10. Only the dedicated billing project redeems it; no new Stripe
 secrets in CRM or Supabase Edge Functions. Issuing/replacing/revoking links is
 admin-only. Issued/signed contracts and agreed operational prices stay immutable.
@@ -1554,7 +1554,7 @@ Design, gates, endpoints and Lucas state: `docs/zernio-publisher.md`.
 - **Do not publish** a real Facebook post outside Tom's final steps in the
   doc.
 
-0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
+## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 
 Twilio SMS per client, piloted with BHG Safety Partners. Full design, flows
 and the remaining manual Twilio steps: `docs/communications.md`.
