@@ -25,7 +25,7 @@ const withAssets = (x) => ({
     { id: GRAPHIC, kind: "social_post", label: "AI social creative 01: fall gutter cleaning check", storage_path: `${CLIENT}/upload/abc.png` },
     { id: "photo-1", kind: "photo", label: "Roof", storage_path: `${CLIENT}/scan/p.jpg` }],
 });
-const FB = { channel: "facebook", postType: "standard", intent: "informational", serviceId: ROOF, keywordId: null, ctaType: null, offerId: null, assetIds: [GRAPHIC], socialAccountId: PAGE_ACCOUNT };
+const FB = { channel: "facebook", postType: "standard", intent: "informational", campaignMode: "keyword", serviceId: ROOF, keywordId: "kw-info", ctaType: null, offerId: null, assetIds: [GRAPHIC], socialAccountId: PAGE_ACCOUNT };
 const fbBrief = (target = FB, accounts = ACCOUNTS) => buildBrief(withAssets(lucas()), target, { socialAccounts: accounts });
 
 const GUTTER = "Quick one for anyone cleaning out gutters this fall.\n\nUnder the leaves you'll sometimes find a layer of gritty stuff that looks like coarse sand. It's usually granules that have come off the roof. They're part of the roof's top surface, and every roof loses a few over time, so a little isn't a reason to worry.\n\nA lot of it is different, especially after a hailstorm. That's worth having a roofer take a look at before winter, mostly so you know where you stand.\n\nBe careful on the ladder.";
@@ -132,4 +132,26 @@ test("a malformed socialAccountId is refused at the boundary", async () => {
   const d = createPostDrafter({ store: fakeStore().store });
   const r = await call(d, { mode: "brief", client_id: CLIENT, target: { ...FB, socialAccountId: "not-a-uuid" } });
   assert.equal(r.status, 400);
+});
+
+
+test("keyword-first: a missing keyword is refused; non-search mode must be explicit and cannot carry service grounding", () => {
+  const missing = fbBrief({ ...FB, keywordId: null });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.refusals.some((f) => f.code === "keyword_missing"));
+
+  const disguised = fbBrief({ ...FB, campaignMode: "non_search", keywordId: null });
+  assert.equal(disguised.ok, false);
+  assert.ok(disguised.refusals.some((f) => f.code === "service_not_applicable"));
+
+  const brandOnly = fbBrief({
+    ...FB,
+    campaignMode: "non_search",
+    serviceId: null,
+    keywordId: null,
+  });
+  assert.equal(brandOnly.ok, true, JSON.stringify(brandOnly.refusals));
+  assert.equal(brandOnly.brief.target.campaign_mode, "non_search");
+  assert.equal(brandOnly.brief.target.keyword, null);
+  assert.equal(brandOnly.brief.target.service, null);
 });
