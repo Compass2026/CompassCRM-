@@ -6,9 +6,10 @@
 // brief a model may write from or every reason the draft is not eligible.
 //
 // The gate is per draft (approved Sept 25 2026): what THIS draft needs must be
-// ready — approved brand board, business facts, content rules, an approved
-// service with an approved target page, a valid keyword / intent when given,
-// a relevant usable claim for non-navigational content, and a confirmed
+// ready — approved brand board, business facts, content rules, a governed
+// keyword by default, an approved service with an approved target page,
+// matching keyword / intent / service / page mappings, a relevant usable claim,
+// and a confirmed
 // current offer only for an offer post. Unrelated gaps (unlabelled keywords,
 // missing photos, other services) do not block.
 //
@@ -105,6 +106,19 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   const intent = normalizeIntent(target.intent);
   if (!intent) refuse("intent_invalid", `"${target.intent}" is not a search intent.`);
   if (target.postType !== "standard" && target.postType !== "offer") refuse("post_type_invalid", `"${target.postType}" is not a post type.`);
+
+  // ── Campaign foundation ──
+  // Keyword-first is the default. A missing keyword is never interpreted as
+  // "navigational" or brand-only. Non-search work must opt in explicitly.
+  const campaignMode = target.campaignMode ?? "keyword";
+  if (campaignMode === "keyword" && !target.keywordId) {
+    refuse("keyword_missing", "Keyword-first campaigns require a governed keyword. Use campaignMode=non_search only for an intentional non-search brand/community/team/review/event asset.");
+  }
+  if (campaignMode === "non_search") {
+    if (target.keywordId) refuse("keyword_not_applicable", "A non-search campaign must not carry a keyword.");
+    if (target.serviceId) refuse("service_not_applicable", "A non-search campaign must not masquerade as service/search content.");
+    if (target.postType === "offer") refuse("post_type_invalid", "Offers belong to keyword campaigns, not non-search campaign mode.");
+  }
 
   // ── Facebook: a standard post with no button, on a named Page of this client ──
   const facebook = target.channel === "facebook";
@@ -277,6 +291,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     target: {
       channel: target.channel as Brief["target"]["channel"],
       post_type: target.postType,
+      campaign_mode: campaignMode,
       search_intent: intent,
       service: service && pageUrl && pageGroupId ? { id: service.id, name: service.name, page_url: pageUrl, page_group_id: pageGroupId } : null,
       keyword,
