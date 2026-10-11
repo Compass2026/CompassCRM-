@@ -163,7 +163,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   }
 
   // ── Service and target page ──
-  const needsService = target.postType === "standard" && intent !== "navigational";
+  const needsService = campaignMode === "keyword" && target.postType === "standard" && intent !== "navigational";
   let service: DrafterInput["services"][number] | null = null;
   let pageUrl: string | null = null;
   let pageGroupId: string | null = null;
@@ -249,8 +249,8 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     eligible.push({ id: c.id, text: c.claim, status: c.status, source: c.source, relevance: score, why });
   }
   eligible.sort((a, b) => b.relevance - a.relevance || a.text.localeCompare(b.text));
-  const minClaims = intent === "navigational" ? 0 : 1;
-  if (intent && intent !== "navigational" && eligible.length === 0) {
+  const minClaims = campaignMode === "non_search" || intent === "navigational" ? 0 : 1;
+  if (campaignMode === "keyword" && intent && intent !== "navigational" && eligible.length === 0) {
     refuse("no_usable_claim", `A ${intent} post needs at least one relevant confirmed or sourced claim${service ? ` about ${service.name}` : ""}.`);
   }
   gate.usable_claims = String(eligible.length);
