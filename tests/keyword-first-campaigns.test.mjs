@@ -59,6 +59,10 @@ test("Lucas pilot migration reconciles the cluster and preserves the exact graph
   assert.match(sql, /set review_status\s*=\s*'in_review'/);
   assert.doesNotMatch(sql, /delete\s+from\s+post_assets/i);
   assert.doesNotMatch(sql, /update\s+post_assets/i);
+  assert.match(sql, /alter table social_posts disable trigger social_posts_ab_drafter/);
+  assert.match(sql, /alter table post_claims disable trigger post_claims_drafter_guard/);
+  assert.match(sql, /alter table post_claims enable trigger post_claims_drafter_guard/);
+  assert.match(sql, /alter table social_posts enable trigger social_posts_ab_drafter/);
   for (const label of [
     "xmas-01-season-is-here-wentzville-ranch",
     "xmas-02-save-your-weekend-wentzville-two-story",
