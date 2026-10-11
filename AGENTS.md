@@ -1689,6 +1689,11 @@ the agency (Client › **Inquiries**) and the client's own portal sign-in
 Pilot: Ginger Huff Interiors (`supabase/seeds/clients/ginger-huff-crm-lite.sql`,
 not run). Design, gates, setup, rollback: `docs/crm-lite.md`.
 
+- **Website recovery:** Ginger website PR #1 (`94c2fef`) persists validated
+  inquiries in a private Vercel Blob outbox before success, delivers in a
+  background task, and retries via a secret-authenticated five-minute cron.
+  It preserves email receipts to avoid duplicate sends and retains failed work.
+  See `docs/crm-lite.md` for the rollout checkpoint and remaining blockers.
 - **Intake** is `inquiry-intake` (`verify_jwt = false`): a website server
   sends `X-Compass-Source` plus that source's Bearer token (Vault,
   `inquiry_sources.secret_name`, issued once by an admin through `crm-lite`).

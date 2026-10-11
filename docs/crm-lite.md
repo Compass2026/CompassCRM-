@@ -19,15 +19,14 @@ per client and switched on per client. Nothing in code names a client.
 
 ## How an inquiry arrives
 
-```
-browser ──POST /api/contact (submissionId)──▶ website server (Vercel)
-   validation · honeypot · form age · origin · rate limit (unchanged)
-   1. Resend email (Idempotency-Key includes submissionId; "Reference: <id>")
-   2. POST inquiry-intake  X-Compass-Source + Bearer token
-        └▶ crm_ingest_inquiry: unique (source, submission id) → inquiry,
-           contact matched in that client, history, alert jobs
-   3. 200 only if the email was accepted AND Compass saved it
-```
+1. Browser posts the validated form with a stable submission ID.
+2. Website server commits an immutable record to a private Vercel Blob outbox.
+3. Visitor sees success after that durable acknowledgement.
+4. A background worker sends the single Resend email, persists its acceptance
+   receipt, and posts to `inquiry-intake` with the configured source token.
+5. An authenticated Vercel Cron worker retries unfinished work every five minutes,
+   even after the browser closes or the original server process exits.
+
 
 - **Ownership comes from configuration.** The website sends a source key and
   that source's token (Vault, `inquiry_sources.secret_name`). The inquiry's
@@ -36,8 +35,8 @@ browser ──POST /api/contact (submissionId)──▶ website server (Vercel)
   answer the same 401.
 - **Stable submission id.** The browser mints one id per inquiry and keeps it
   while the details are unchanged (edited details get a new id). Pages loaded
-  before the change send none, so the server derives `web-<sha256 of the
-  fields>`.
+  before the change send none, so the server derives an ID from the fields and
+  original form start time (stable on retries, distinct for a new form).
 - **Duplicates are impossible.** `unique (source_id, submission_id)` plus an
   advisory lock. A retry answers the first inquiry's id with `duplicate: true`
   and only moves the email outcome forward (failed → accepted).
@@ -52,25 +51,50 @@ browser ──POST /api/contact (submissionId)──▶ website server (Vercel)
 
 ### Partial failure and retries
 
-The website has no queue of its own, so the durable retry is the visitor's
-retained form plus two idempotency guarantees: Resend's key and Compass's
-unique submission id. A retry can never send a second email or create a second
-inquiry.
+The website PR #1 now contains durable automatic recovery (commit
+`94c2fef396a5f38433dbd21e2bdc4ffecd55c3c1`). Its README is the implementation
+runbook. Do not restore the earlier visitor-clicks-Send-again design.
 
-| Email (Resend) | Compass | Visitor sees | Where the inquiry is | Recovery |
-| --- | --- | --- | --- | --- |
-| accepted | saved | success | inbox + CRM | — |
-| accepted | down / refused | "emailed, but we could not finish saving it — press Send once more" | inbox (with Reference) | the retry saves it; Resend reuses the first send |
-| failed | saved | "could not be sent — try again" | CRM (marked *email failed*) | the retry sends the email and updates the CRM |
-| failed | down | "could not confirm — retry" | the visitor's form | the retry |
+| Failure | Recovery |
+| --- | --- |
+| Compass unavailable | The private outbox retains the inquiry; email may arrive; the cron retries CRM automatically. |
+| Email unavailable | CRM still receives the inquiry with `not_reported`; the worker retries email and updates the same inquiry. |
+| Both unavailable | The outbox retains the full payload and retries without the browser. |
+| Outbox unavailable | The form does not report success or start provider side effects. |
+| Lost acknowledgement | Stable Resend key and CRM submission ID deduplicate retries. |
 
-- The website retries Compass once inside the request (dropped connection or
-  5xx). Compass's intake answers 503 on any database error, never a false 200.
-- `CRM_INTAKE_REQUIRED=false` on the website trades strictness for
-  availability during a long Compass outage: an emailed inquiry is a success
-  and is logged `Inquiry emailed; CRM save pending` with its reference. Off by
-  default.
-- No second email exists anywhere. CRM Lite sends no email of its own.
+Completed email receipts prevent another send during a prolonged CRM outage.
+Resend's deduplication window is 24 hours, so an uncertain email with no receipt
+is held after 23 hours for operator reconciliation, never blindly resent.
+The full inquiry remains stored and CRM recovery continues. Pending entries
+are never expired or discarded. Once both deliveries succeed, a non-PII
+completion receipt is written before deleting the pending private payload.
+
+`CRM_INTAKE_REQUIRED=false` has been retired. Success requires the durable outbox
+acknowledgement. The website still owns the sole email sender; CRM Lite adds no
+second email. Production credentials and the private outbox must not be shared
+with preview environments.
+
+### Current rollout checkpoint (October 11)
+
+- Website recovery tests: 26 pass; TypeScript and production build pass.
+- Vercel preview for website commit `94c2fef` is READY. The connection is not live.
+- Private Blob store `ginger-inquiry-outbox` provisioned for the website project;
+  its environment credential is restricted to production. Production `CRON_SECRET`
+  is configured. No production CRM token has been issued or installed.
+- Supabase connector migration dry runs returned `Invalid or expired requestState`
+  twice. A subsequent read confirmed `inquiries` and `crm_lite_settings` are absent.
+  No migration was applied, no functions deployed and no pilot seed run.
+- Focused CRM Lite tests: 34 pass. The full local CRM test run reports 897 passing
+  and one file failure in `social-post-review-migration.test.mjs`. On isolated
+  retry its 36 individual checks pass, but the file process still exits unsuccessfully.
+  Investigate that environment/test-runner failure before treating the local full suite as green.
+- No real email, text, invitation or password reset was sent.
+
+The remaining activation work is the migration, function/app deployment, Ginger
+seed, admin-issued intake token, website configuration, and an authorized live
+verification of one inquiry and one email. Keep SMS disabled and portal invitations
+closed until their existing prerequisites are met.
 
 ## The workspace
 
@@ -193,13 +217,14 @@ README. BHG's subaccount, sender and credentials are not used.
 
 ## Enable Ginger (in order)
 
-1. Review and merge both PRs.
+1. Review both PRs and current checks. Apply the additive migration before merging
+   the CRM application change so its new routes do not precede their tables.
 2. **Apply** `20261011220000_crm_lite.sql` through the Supabase MCP: a
    rolled-back dry run first, then apply. Rename the file to its recorded
    version, verify (md5, grants, RLS), regenerate `database.types.ts` from
    production, and add a line to `docs/portal-reconciliation.md`. It also
    schedules `crm-lite-dispatch`, which calls nothing while no job is due.
-3. **Deploy** `inquiry-intake`, `crm-lite` and `twilio-webhook` with
+3. Merge the reviewed CRM PR, then **deploy** `inquiry-intake`, `crm-lite` and `twilio-webhook` with
    `deploy-supabase-function.yml` (the workflow gives `inquiry-intake`
    `--no-verify-jwt`). Check `{"mode": "version"}` on `crm-lite`.
 4. Run `supabase/seeds/clients/ginger-huff-crm-lite.sql` (dry run, then
@@ -207,8 +232,12 @@ README. BHG's subaccount, sender and credentials are not used.
    Ginger's mobile as a recipient with consent pending.
 5. CRM › Ginger › Inquiries › **Setup & alerts** (admin): **Issue / rotate
    token**, copy it once, then **Enable** the source.
-6. Website Vercel project → Production env: `CRM_INTAKE_URL`,
-   `CRM_INTAKE_SOURCE`, `CRM_INTAKE_TOKEN` (Sensitive). Redeploy.
+6. Verify the private website Blob store and production `CRON_SECRET`. Website
+   Vercel Production env also needs `CRM_INTAKE_URL`, `CRM_INTAKE_SOURCE`,
+   `CRM_INTAKE_TOKEN` (Sensitive). Merge the reviewed website PR and verify its
+   production deployment plus `/api/inquiry-retry/` five-minute cron. The retry
+   route must refuse requests without its secret. Do not copy production
+   credentials to previews.
 7. Authorized test inquiry on the live form, marked as a test. It lands in
    Ginger's inbox and in Inquiries with **Email accepted**. Close it.
 8. Portal (optional now): invite Ginger from Overview › Client portal when
@@ -246,8 +275,9 @@ README. BHG's subaccount, sender and credentials are not used.
 
 - **Stop intake:** remove the website's `CRM_INTAKE_*` variables and redeploy.
   The form is email-only, as before. Or **Disable** the source: new
-  submissions are refused with 403 and the website asks visitors to retry,
-  so remove the variables as well.
+  submissions remain in the website outbox and automatic CRM delivery is held.
+  Preserve the outbox and its receipts. Removing the website configuration pauses
+  the retry worker too; restore the same source/configuration to resume.
 - **Stop alerts:** *Turn SMS alerts off* (or disable the sender). Queued jobs
   are blocked at their next claim.
 - **Hide from the client:** untick portal access.
