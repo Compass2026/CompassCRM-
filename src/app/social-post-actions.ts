@@ -31,12 +31,16 @@ async function start(): Promise<Supabase> {
   return supabase;
 }
 
-// A Facebook draft names the client's Facebook Page when the client has
-// exactly one, so the approval binds the Page the post is for (the approved
-// snapshot includes social_account_id). Never guessed between several Pages.
-async function facebookPageFor(supabase: Supabase, clientId: string, platform: string | null | undefined): Promise<{ social_account_id?: string | null }> {
-  if (platform !== "facebook") return {};
-  const { data } = await supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", "facebook").limit(2);
+// A draft names its destination so the approval binds it (the approved
+// snapshot includes social_account_id): a Facebook draft the client's Facebook
+// Page when the client has exactly one; a Business Profile draft the client's
+// Business Profile location bound for publishing through Zernio (at most one
+// per client). Never guessed between several.
+async function destinationFor(supabase: Supabase, clientId: string, platform: string | null | undefined): Promise<{ social_account_id?: string | null }> {
+  if (platform !== "facebook" && platform !== "google_business") return {};
+  let q = supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", platform);
+  if (platform === "google_business") q = q.not("publish_provider", "is", null);
+  const { data } = await q.limit(2);
   return data?.length === 1 ? { social_account_id: data[0].id } : {};
 }
 
@@ -45,7 +49,7 @@ export async function createPostAction(clientId: string, _prev: PostFormState, f
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
-  const page = await facebookPageFor(supabase, clientId, parsed.value.platform);
+  const page = await destinationFor(supabase, clientId, parsed.value.platform);
   const { data, error } = await supabase
     .from("social_posts")
     .insert({ client_id: clientId, ...parsed.value, ...page })
@@ -66,7 +70,7 @@ export async function updatePostAction(
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
-  const page = await facebookPageFor(supabase, clientId, parsed.value.platform);
+  const page = await destinationFor(supabase, clientId, parsed.value.platform);
   const { data, error } = await supabase
     .from("social_posts")
     .update({ ...parsed.value, ...page })
@@ -245,7 +249,7 @@ export async function publishNowAction(clientId: string, postId: string): Promis
   const supabase = await start();
   const { data: post } = await supabase
     .from("social_posts")
-    .select("review_status, publish_status, platform")
+    .select("review_status, publish_status, platform, approved_snapshot")
     .eq("id", postId)
     .eq("client_id", clientId)
     .maybeSingle();
@@ -295,7 +299,16 @@ export async function publishNowAction(clientId: string, postId: string): Promis
       .eq("publish_status", "scheduled");
     revalidatePost(clientId, postId);
   }
-  return { error: publishNowMessage(result?.outcome, result?.detail, post.platform) };
+  // A Business Profile post goes through Zernio when its approval names a
+  // location or its client's transport is zernio (the publisher's rule, gbp.ts).
+  let via = post.platform === "facebook" ? "zernio" : "google";
+  if (post.platform === "google_business") {
+    const named = (post.approved_snapshot as { social_account_id?: string | null } | null)?.social_account_id;
+    const { data: transport } = named ? { data: null } : await supabase.from("publisher_client_transports").select("gbp_transport")
+      .eq("client_id", clientId).maybeSingle();
+    if (named || transport?.gbp_transport === "zernio") via = "zernio";
+  }
+  return { error: publishNowMessage(result?.outcome, result?.detail, post.platform, via) };
 }
 
 // The function checks this person's JWT against team_members itself; the
@@ -322,8 +335,18 @@ async function callPublisher(supabase: Supabase, postId: string): Promise<unknow
   }
 }
 
-function publishNowMessage(outcome: string | undefined, detail: string | null | undefined, platform: string): string {
+function publishNowMessage(outcome: string | undefined, detail: string | null | undefined, platform: string, via = "google"): string {
   const why = detail ? ` ${detail}` : "";
+  if (platform === "google_business" && via === "zernio") {
+    switch (outcome) {
+      case "failed":
+        return `Zernio or Google refused it, or did not answer.${why}`;
+      case "uncertain":
+        return "Sent to Zernio without a definite answer yet. Nothing is recorded: the publisher asks again with the same request key within about 10 minutes, so it cannot post twice.";
+      case "ambiguous":
+        return `Not sent again and not recorded: the Business Profile needs a person's check (see the task).${why}`;
+    }
+  }
   if (platform === "facebook") {
     switch (outcome) {
       case "failed":
@@ -407,4 +430,49 @@ function centralToIso(local: string): string | null {
   const asCentral = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
   const offset = asCentral - guess.getTime();
   return new Date(guess.getTime() - offset).toISOString();
+}
+
+// The publisher's no-write preflight for one post (Facebook or Business
+// Profile through Zernio): reads Compass and Zernio, sends and records
+// nothing. The function checks this person's JWT itself.
+export type PreflightState = {
+  ok: boolean;
+  message?: string;
+  wouldPublish?: boolean;
+  blocking?: string[];
+  checks?: { gate: string; ok: boolean | null; detail?: string }[];
+  request?: { url: string; idempotencyKey: string; body: unknown; steps: string[] } | null;
+} | null;
+
+export async function preflightPostAction(clientId: string, postId: string, _prev: PreflightState): Promise<PreflightState> {
+  if (!isUuid(clientId) || !isUuid(postId)) return { ok: false, message: "Unknown post." };
+  const supabase = await start();
+  const { data: post } = await supabase.from("social_posts").select("id").eq("id", postId).eq("client_id", clientId).maybeSingle();
+  if (!post) return { ok: false, message: "Unknown post." };
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { ok: false, message: "Not signed in." };
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/post-publisher`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: "preflight", post_id: postId }),
+    });
+    const r = (await res.json().catch(() => null)) as {
+      ok?: boolean; error?: string; would_publish?: boolean; blocking?: string[]; checks?: { gate: string; ok: boolean | null; detail?: string }[];
+      request?: { url: string; headers: Record<string, string>; body: unknown; steps: string[] } | null;
+    } | null;
+    if (!res.ok || !r?.ok) return { ok: false, message: r?.error ?? `The publisher answered ${res.status}.` };
+    return {
+      ok: true, wouldPublish: r.would_publish, blocking: r.blocking ?? [], checks: r.checks ?? [],
+      request: r.request ? { url: r.request.url, idempotencyKey: r.request.headers["Idempotency-Key"], body: r.request.body, steps: r.request.steps } : null,
+    };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Could not reach the publisher." };
+  }
 }

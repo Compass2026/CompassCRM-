@@ -6724,6 +6724,60 @@ export type Database = {
           },
         ]
       }
+      publisher_client_transport_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          created_at: string
+          from_transport: string | null
+          id: number
+          to_transport: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          created_at?: string
+          from_transport?: string | null
+          id?: never
+          to_transport: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          created_at?: string
+          from_transport?: string | null
+          id?: never
+          to_transport?: string
+        }
+        Relationships: []
+      }
+      publisher_client_transports: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          changed_by_kind: string
+          client_id: string
+          gbp_transport: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          changed_by_kind: string
+          client_id: string
+          gbp_transport: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          changed_by_kind?: string
+          client_id?: string
+          gbp_transport?: string
+        }
+        Relationships: []
+      }
       publisher_runs: {
         Row: {
           client_id: string
@@ -6739,6 +6793,7 @@ export type Database = {
           provider_status: string | null
           request_key: string | null
           target_account_id: string | null
+          target_location_id: string | null
           task_id: string | null
           transient: boolean
           transport: string
@@ -6757,6 +6812,7 @@ export type Database = {
           provider_status?: string | null
           request_key?: string | null
           target_account_id?: string | null
+          target_location_id?: string | null
           task_id?: string | null
           transient?: boolean
           transport?: string
@@ -6775,6 +6831,7 @@ export type Database = {
           provider_status?: string | null
           request_key?: string | null
           target_account_id?: string | null
+          target_location_id?: string | null
           task_id?: string | null
           transient?: boolean
           transport?: string
@@ -10800,7 +10857,22 @@ export type Database = {
         }
         Returns: Json
       }
+      publisher_bind_gbp_location: {
+        Args: {
+          p_account_id: string
+          p_account_name: string
+          p_client_id: string
+          p_health: Json
+          p_location_id: string
+          p_location_name: string
+        }
+        Returns: Json
+      }
       publisher_post_gate: { Args: { p_post_id: string }; Returns: Json }
+      publisher_record_gbp_transport: {
+        Args: { p_client_id: string; p_flag: string; p_kind: string; p_transport: string }
+        Returns: boolean
+      }
       publisher_reminder_state: {
         Args: { p_post_ids?: string[] }
         Returns: {
@@ -10817,6 +10889,10 @@ export type Database = {
           p_expected_account_id: string
           p_social_account_id: string
         }
+        Returns: Json
+      }
+      publisher_set_gbp_transport: {
+        Args: { p_client_id: string; p_transport: string }
         Returns: Json
       }
       publisher_unbind_account: {

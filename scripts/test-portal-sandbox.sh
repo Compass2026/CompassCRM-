@@ -216,3 +216,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/zernio_publisher.te
 # photo or graphic, in review and never approved or scheduled by it; one open
 # draft per concept; Business Profile drafts unchanged.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_facebook.test.sql"
+# Business Profile through Zernio (20261011050000): only the publisher's
+# service session records and binds a client's one Business Profile location
+# (locations/<id>); binding never enables; a team admin enables; the approval
+# binds the destination; publisher_runs records the pinned location.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/zernio_gbp.test.sql"

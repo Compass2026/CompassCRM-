@@ -5,6 +5,7 @@
 import type { Json } from "@/lib/database.types";
 import { channelProblems, type Snapshot } from "../../supabase/functions/post-publisher/channel.ts";
 import { bindingProblems, type Binding } from "../../supabase/functions/post-publisher/facebook.ts";
+import { gbpBindingProblems, gbpProblems, gbpRoute, type GbpSnapshot } from "../../supabase/functions/post-publisher/gbp.ts";
 
 export { MAX_ATTEMPTS, STUCK_AFTER_MINUTES } from "../../supabase/functions/post-publisher/channel.ts";
 
@@ -58,6 +59,33 @@ export function zernioRoute(
   else if (!settings.clients.includes(post.client_id)) reasons.push("This client is not on the publisher's pilot list (Settings → Publisher).");
   reasons.push(...bindingProblems(post, binding));
   return { ready: reasons.length === 0, reasons };
+}
+
+// Business Profile through Zernio: which publisher a Business Profile post
+// goes to (exactly one) and, for Zernio, what would stop it — the rules the
+// publisher applies (gbp.ts), so the post page shows the same answer.
+export function gbpPublishRoute(
+  post: { platform: string; client_id: string; review_status: string; social_account_id: string | null; approved_snapshot: unknown },
+  destination: Binding | null,
+  // The client's explicit transport is zernio (publisher_client_transports),
+  // or it has a bound location.
+  clientOnZernio: boolean,
+  settings: PublisherSettings,
+): { via: "zernio" | "google" | null; ready: boolean; reasons: string[] } {
+  if (post.platform !== "google_business") return { via: null, ready: false, reasons: [] };
+  const snap = (post.review_status === "approved" ? post.approved_snapshot : null) as GbpSnapshot | null;
+  const accountId = snap ? snap.social_account_id ?? null : post.social_account_id;
+  // Only a Business Profile account names a location (a draft switched from
+  // Facebook may still carry its Page).
+  const names = !!accountId && (!destination || destination.platform === "google_business");
+  const via = gbpRoute(names ? accountId : null, clientOnZernio);
+  if (via === "google") return { via, ready: false, reasons: [] };
+  const reasons: string[] = [];
+  if (!settings.enabled) reasons.push("The publisher is switched off (Settings → Publisher).");
+  else if (!settings.clients.includes(post.client_id)) reasons.push("This client is not on the publisher's pilot list (Settings → Publisher).");
+  if (snap) reasons.push(...gbpProblems(snap).map((p) => p.message));
+  reasons.push(...gbpBindingProblems({ ...post, social_account_id: accountId }, destination));
+  return { via, ready: reasons.length === 0, reasons: [...new Set(reasons)] };
 }
 
 export const modeLabels: Record<string, string> = {
