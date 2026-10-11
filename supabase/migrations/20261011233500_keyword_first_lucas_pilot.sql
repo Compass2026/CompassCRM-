@@ -115,8 +115,13 @@ where id = '87f9deb8-7c6b-431e-ac3b-74bfd1b96cf3'
   and client_id = '102d3b20-2795-44ae-bd64-d1e43916291c';
 
 -- ── 3. Current client-owned evidence ───────────────────────────────────────
-insert into claims (id, client_id, claim, status, source)
-values
+-- The full migration sandbox has no production client rows. Skip the
+-- client-specific seed there; production performs it when Lucas exists.
+do $claims$
+begin
+  if exists (select 1 from clients where id = '102d3b20-2795-44ae-bd64-d1e43916291c') then
+    insert into claims (id, client_id, claim, status, source)
+    values
   (
     '6a797f3c-e6f8-4ee0-926f-a1cbb7a5c801',
     '102d3b20-2795-44ae-bd64-d1e43916291c',
@@ -146,9 +151,12 @@ values
     'https://lucasconstructionmo.com/christmas-lights'
   )
 on conflict (id) do update
-set claim = excluded.claim,
-    status = excluded.status,
-    source = excluded.source;
+    set claim = excluded.claim,
+        status = excluded.status,
+        source = excluded.source;
+  end if;
+end
+$claims$;
 
 -- ── 4. Correct the existing ten posts in place ─────────────────────────────
 -- Use the same governed post state machine the app uses: withdraw to draft,
@@ -170,6 +178,11 @@ declare
     '4b0b297f-8982-4ba5-8224-f6957671b583'::uuid
   ];
 begin
+  -- Empty schema/sandbox runs have no Lucas row and should remain a no-op.
+  if not exists (select 1 from clients where id = v_client) then
+    return;
+  end if;
+
   perform set_config('compass.post_system', 'on', true);
 
   -- Abort instead of touching an unexpected lifecycle state.
