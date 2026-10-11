@@ -46,11 +46,32 @@ export function pillarValue(p: Pillar, kws: KeywordAssignment[]): number {
   return 1;
 }
 
+const priorityRank = (p: string | null) => p === "p1" ? 0 : p === "p2" ? 1 : p === "p3" ? 2 : 9;
+
+// Keyword-first campaign priority: explicit business priority first, then the
+// approved owner keyword, money/tracked signals, demand/value and opportunity.
+// Unknown competition is neutral/last; lower known competition breaks a final
+// tie after CPC because it can represent an easier authority opening.
+export function keywordCampaignRank(k: KeywordAssignment): number[] {
+  return [
+    priorityRank(k.priority),
+    k.role === "primary" ? 0 : 1,
+    k.money ? 0 : 1,
+    k.tracked ? 0 : 1,
+    -(k.volume ?? 0),
+    -(k.cpc ?? 0),
+    k.competition ?? 2,
+  ];
+}
+
 function bestKeyword(kws: KeywordAssignment[], serviceId: string, intent: string): KeywordAssignment | null {
-  const rank = (k: KeywordAssignment) => [k.money ? 0 : 1, k.role === "primary" ? 0 : 1, (k.priority ?? "p9").localeCompare("p0"), -(k.volume ?? 0)];
   return kws
     .filter((k) => k.service_id === serviceId && k.intent === intent && (k.role === "primary" || k.role === "supporting") && !k.flags.includes("intent_conflict"))
-    .sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i]; return a.keyword.localeCompare(b.keyword); })[0] ?? null;
+    .sort((a, b) => {
+      const x = keywordCampaignRank(a), y = keywordCampaignRank(b);
+      for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i];
+      return a.keyword.localeCompare(b.keyword);
+    })[0] ?? null;
 }
 
 export function buildOpportunities(ctx: {
