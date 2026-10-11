@@ -83,7 +83,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /d
 # Billing rows for the portal clients while the generic portal checks run
 # (0062's views are portal views too), removed straight after.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_fixtures.sql" -o /dev/null
+# CRM Lite inquiries for the same generic checks (its four portal views).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_access.test.sql"
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_teardown.sql" -o /dev/null
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_teardown.sql" -o /dev/null
 # 0043: task assignment, history, comments (same replay, own harness schema).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/task_assignment.test.sql"
@@ -187,6 +190,13 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test
 # the Edge Functions' identity, case-variant and whitespace handling, who may
 # read what) and Twilio's mixed-case SIDs through the registry and messages.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications_secrets.test.sql"
+# CRM Lite (20261011220000): website inquiries saved once per submission under
+# the source's own client, contact matching within the client only, status
+# and notes by a teammate or the client's own portal contact, the portal
+# views, the SMS gates (sender approval, complete consent, a confirmed
+# delivery test, the admin switch), no old inquiries sent, no blind resend
+# of an unknown outcome, STOP / START / HELP, the worker kept out.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite.test.sql"
 # 0064: the dedicated billing runtime login (billing_sync writes billing only
 # through the billing functions, reads only billing tables and the columns it
 # needs, cannot reach Vault or switch the mode; the Edge Function path closes

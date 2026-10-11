@@ -12,10 +12,15 @@ const tabs = [
   { label: "Reports", segment: "reports" },
 ];
 
-// Billing shows once the client has an agreement with Compass (B5).
-export function PortalNav({ showBilling = false }: { showBilling?: boolean }) {
+// Billing shows once the client has an agreement with Compass (B5);
+// Inquiries once Compass turns on CRM Lite portal access for the client.
+export function PortalNav({ showBilling = false, showInquiries = false }: { showBilling?: boolean; showInquiries?: boolean }) {
   const pathname = usePathname();
-  const visible = showBilling ? [...tabs, { label: "Billing", segment: "billing" }] : tabs;
+  const visible = [
+    ...(showInquiries ? [{ label: "Inquiries", segment: "inquiries" }] : []),
+    ...tabs,
+    ...(showBilling ? [{ label: "Billing", segment: "billing" }] : []),
+  ];
 
   return (
     <nav className="flex gap-1 overflow-x-auto">

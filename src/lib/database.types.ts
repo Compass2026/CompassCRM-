@@ -4638,6 +4638,51 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_lite_settings: {
+        Row: {
+          client_id: string
+          created_at: string
+          display_name: string | null
+          enabled: boolean
+          notes: string | null
+          portal_enabled: boolean
+          sms_alerts_enabled: boolean
+          sms_alerts_enabled_at: string | null
+          sms_alerts_enabled_by: string | null
+          sms_sender_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          display_name?: string | null
+          enabled?: boolean
+          notes?: string | null
+          portal_enabled?: boolean
+          sms_alerts_enabled?: boolean
+          sms_alerts_enabled_at?: string | null
+          sms_alerts_enabled_by?: string | null
+          sms_sender_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          display_name?: string | null
+          enabled?: boolean
+          notes?: string | null
+          portal_enabled?: boolean
+          sms_alerts_enabled?: boolean
+          sms_alerts_enabled_at?: string | null
+          sms_alerts_enabled_by?: string | null
+          sms_sender_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       decisions: {
         Row: {
           client_id: string | null
@@ -5273,6 +5318,216 @@ export type Database = {
         }
         Relationships: []
       }
+      inquiries: {
+        Row: {
+          budget: string | null
+          client_id: string
+          contact_id: string | null
+          created_at: string
+          email: string | null
+          email_provider_id: string | null
+          email_reported_at: string | null
+          email_status: string
+          id: string
+          location: string | null
+          message: string
+          name: string
+          page_url: string | null
+          payload_sha256: string
+          phone: string | null
+          phone_e164: string | null
+          received_at: string
+          service_type: string | null
+          source_id: string
+          status: string
+          status_changed_at: string | null
+          submission_id: string
+          submitted_at: string
+          updated_at: string
+        }
+        Insert: {
+          budget?: string | null
+          client_id: string
+          contact_id?: string | null
+          created_at?: string
+          email?: string | null
+          email_provider_id?: string | null
+          email_reported_at?: string | null
+          email_status?: string
+          id?: string
+          location?: string | null
+          message: string
+          name: string
+          page_url?: string | null
+          payload_sha256: string
+          phone?: string | null
+          phone_e164?: string | null
+          received_at?: string
+          service_type?: string | null
+          source_id: string
+          status?: string
+          status_changed_at?: string | null
+          submission_id: string
+          submitted_at: string
+          updated_at?: string
+        }
+        Update: {
+          budget?: string | null
+          client_id?: string
+          contact_id?: string | null
+          created_at?: string
+          email?: string | null
+          email_provider_id?: string | null
+          email_reported_at?: string | null
+          email_status?: string
+          id?: string
+          location?: string | null
+          message?: string
+          name?: string
+          page_url?: string | null
+          payload_sha256?: string
+          phone?: string | null
+          phone_e164?: string | null
+          received_at?: string
+          service_type?: string | null
+          source_id?: string
+          status?: string
+          status_changed_at?: string | null
+          submission_id?: string
+          submitted_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      inquiry_events: {
+        Row: {
+          actor_kind: string
+          actor_name: string | null
+          actor_portal_user_id: string | null
+          actor_team_member_id: string | null
+          client_id: string
+          created_at: string
+          detail: Json
+          from_status: string | null
+          id: string
+          inquiry_id: string
+          kind: string
+          to_status: string | null
+        }
+        Insert: {
+          actor_kind: string
+          actor_name?: string | null
+          actor_portal_user_id?: string | null
+          actor_team_member_id?: string | null
+          client_id: string
+          created_at?: string
+          detail?: Json
+          from_status?: string | null
+          id?: string
+          inquiry_id: string
+          kind: string
+          to_status?: string | null
+        }
+        Update: {
+          actor_kind?: string
+          actor_name?: string | null
+          actor_portal_user_id?: string | null
+          actor_team_member_id?: string | null
+          client_id?: string
+          created_at?: string
+          detail?: Json
+          from_status?: string | null
+          id?: string
+          inquiry_id?: string
+          kind?: string
+          to_status?: string | null
+        }
+        Relationships: []
+      }
+      inquiry_notes: {
+        Row: {
+          author_kind: string
+          author_name: string
+          author_portal_user_id: string | null
+          author_team_member_id: string | null
+          body: string
+          client_id: string
+          created_at: string
+          id: string
+          inquiry_id: string
+        }
+        Insert: {
+          author_kind: string
+          author_name: string
+          author_portal_user_id?: string | null
+          author_team_member_id?: string | null
+          body: string
+          client_id: string
+          created_at?: string
+          id?: string
+          inquiry_id: string
+        }
+        Update: {
+          author_kind?: string
+          author_name?: string
+          author_portal_user_id?: string | null
+          author_team_member_id?: string | null
+          body?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          inquiry_id?: string
+        }
+        Relationships: []
+      }
+      inquiry_sources: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          id: string
+          kind: string
+          label: string
+          secret_name: string
+          site_url: string | null
+          source_key: string
+          token_issued_at: string | null
+          token_issued_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          kind?: string
+          label: string
+          secret_name: string
+          site_url?: string | null
+          source_key: string
+          token_issued_at?: string | null
+          token_issued_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          kind?: string
+          label?: string
+          secret_name?: string
+          site_url?: string | null
+          source_key?: string
+          token_issued_at?: string | null
+          token_issued_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       invoice_line_items: {
         Row: {
           amount_cents: number
@@ -5877,6 +6132,336 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notification_consent_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          consent_method: string | null
+          consent_response: string | null
+          consented_at: string | null
+          created_at: string
+          detail: string | null
+          disclosure_url: string | null
+          disclosure_version: string | null
+          from_status: string | null
+          id: string
+          phone_e164: string
+          recipient_id: string
+          to_status: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          consent_method?: string | null
+          consent_response?: string | null
+          consented_at?: string | null
+          created_at?: string
+          detail?: string | null
+          disclosure_url?: string | null
+          disclosure_version?: string | null
+          from_status?: string | null
+          id?: string
+          phone_e164: string
+          recipient_id: string
+          to_status: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          consent_method?: string | null
+          consent_response?: string | null
+          consented_at?: string | null
+          created_at?: string
+          detail?: string | null
+          disclosure_url?: string | null
+          disclosure_version?: string | null
+          from_status?: string | null
+          id?: string
+          phone_e164?: string
+          recipient_id?: string
+          to_status?: string
+        }
+        Relationships: []
+      }
+      notification_inbound_keywords: {
+        Row: {
+          from_e164: string
+          keyword: string
+          provider_message_sid: string
+          received_at: string
+          sender_id: string
+        }
+        Insert: {
+          from_e164: string
+          keyword: string
+          provider_message_sid: string
+          received_at?: string
+          sender_id: string
+        }
+        Update: {
+          from_e164?: string
+          keyword?: string
+          provider_message_sid?: string
+          received_at?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
+      notification_jobs: {
+        Row: {
+          attempts: number
+          block_reason: string | null
+          body: string
+          channel: string
+          client_id: string
+          created_at: string
+          delivered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          from_e164: string | null
+          id: string
+          inquiry_id: string | null
+          kind: string
+          last_attempt_at: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          provider_message_sid: string | null
+          provider_status: string | null
+          provider_status_at: string | null
+          recipient_id: string
+          reconcile_checks: number
+          request_id: string | null
+          sender_id: string | null
+          sent_at: string | null
+          status: string
+          to_e164: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          block_reason?: string | null
+          body: string
+          channel?: string
+          client_id: string
+          created_at?: string
+          delivered_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          from_e164?: string | null
+          id?: string
+          inquiry_id?: string | null
+          kind: string
+          last_attempt_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          provider_message_sid?: string | null
+          provider_status?: string | null
+          provider_status_at?: string | null
+          recipient_id: string
+          reconcile_checks?: number
+          request_id?: string | null
+          sender_id?: string | null
+          sent_at?: string | null
+          status: string
+          to_e164: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          block_reason?: string | null
+          body?: string
+          channel?: string
+          client_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          from_e164?: string | null
+          id?: string
+          inquiry_id?: string | null
+          kind?: string
+          last_attempt_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          provider_message_sid?: string | null
+          provider_status?: string | null
+          provider_status_at?: string | null
+          recipient_id?: string
+          reconcile_checks?: number
+          request_id?: string | null
+          sender_id?: string | null
+          sent_at?: string | null
+          status?: string
+          to_e164?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notification_opt_outs: {
+        Row: {
+          last_keyword: string
+          last_message_sid: string | null
+          opted_out: boolean
+          phone_e164: string
+          sender_id: string
+          updated_at: string
+        }
+        Insert: {
+          last_keyword: string
+          last_message_sid?: string | null
+          opted_out: boolean
+          phone_e164: string
+          sender_id: string
+          updated_at?: string
+        }
+        Update: {
+          last_keyword?: string
+          last_message_sid?: string | null
+          opted_out?: boolean
+          phone_e164?: string
+          sender_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notification_recipients: {
+        Row: {
+          channel: string
+          client_id: string
+          consent_method: string | null
+          consent_recorded_at: string | null
+          consent_recorded_by: string | null
+          consent_response: string | null
+          consent_status: string
+          consented_at: string | null
+          created_at: string
+          created_by: string | null
+          delivery_test_confirmed_at: string | null
+          delivery_test_confirmed_by: string | null
+          delivery_test_job_id: string | null
+          disclosure_acknowledged: boolean
+          disclosure_url: string | null
+          disclosure_version: string | null
+          enabled: boolean
+          id: string
+          link_target: string
+          name: string
+          opted_out_at: string | null
+          phone_e164: string
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          client_id: string
+          consent_method?: string | null
+          consent_recorded_at?: string | null
+          consent_recorded_by?: string | null
+          consent_response?: string | null
+          consent_status?: string
+          consented_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivery_test_confirmed_at?: string | null
+          delivery_test_confirmed_by?: string | null
+          delivery_test_job_id?: string | null
+          disclosure_acknowledged?: boolean
+          disclosure_url?: string | null
+          disclosure_version?: string | null
+          enabled?: boolean
+          id?: string
+          link_target?: string
+          name: string
+          opted_out_at?: string | null
+          phone_e164: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          client_id?: string
+          consent_method?: string | null
+          consent_recorded_at?: string | null
+          consent_recorded_by?: string | null
+          consent_response?: string | null
+          consent_status?: string
+          consented_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivery_test_confirmed_at?: string | null
+          delivery_test_confirmed_by?: string | null
+          delivery_test_job_id?: string | null
+          disclosure_acknowledged?: boolean
+          disclosure_url?: string | null
+          disclosure_version?: string | null
+          enabled?: boolean
+          id?: string
+          link_target?: string
+          name?: string
+          opted_out_at?: string | null
+          phone_e164?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notification_senders: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          label: string
+          link_base_url: string
+          messaging_service_sid: string | null
+          phone_e164: string
+          provider: string
+          provider_account_sid: string
+          sender_key: string
+          updated_at: string
+          verification_checked_at: string | null
+          verification_checked_by: string | null
+          verification_evidence: string | null
+          verification_sid: string | null
+          verification_status: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label: string
+          link_base_url?: string
+          messaging_service_sid?: string | null
+          phone_e164: string
+          provider?: string
+          provider_account_sid: string
+          sender_key: string
+          updated_at?: string
+          verification_checked_at?: string | null
+          verification_checked_by?: string | null
+          verification_evidence?: string | null
+          verification_sid?: string | null
+          verification_status?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string
+          link_base_url?: string
+          messaging_service_sid?: string | null
+          phone_e164?: string
+          provider?: string
+          provider_account_sid?: string
+          sender_key?: string
+          updated_at?: string
+          verification_checked_at?: string | null
+          verification_checked_by?: string | null
+          verification_evidence?: string | null
+          verification_sid?: string | null
+          verification_status?: string
+        }
+        Relationships: []
       }
       offers: {
         Row: {
@@ -9760,6 +10345,13 @@ export type Database = {
         }
         Relationships: []
       }
+      portal_crm_lite: {
+        Row: {
+          client_id: string | null
+          portal_enabled: boolean | null
+        }
+        Relationships: []
+      }
       portal_entitlements: {
         Row: {
           client_id: string | null
@@ -9770,6 +10362,52 @@ export type Database = {
           service_name: string | null
           sort_order: number | null
           unit: string | null
+        }
+        Relationships: []
+      }
+      portal_inquiries: {
+        Row: {
+          budget: string | null
+          client_id: string | null
+          email: string | null
+          id: string | null
+          location: string | null
+          message: string | null
+          name: string | null
+          page_url: string | null
+          phone: string | null
+          phone_e164: string | null
+          received_at: string | null
+          service_type: string | null
+          status: string | null
+          status_changed_at: string | null
+          submitted_at: string | null
+        }
+        Relationships: []
+      }
+      portal_inquiry_events: {
+        Row: {
+          actor_kind: string | null
+          actor_name: string | null
+          client_id: string | null
+          created_at: string | null
+          from_status: string | null
+          id: string | null
+          inquiry_id: string | null
+          kind: string | null
+          to_status: string | null
+        }
+        Relationships: []
+      }
+      portal_inquiry_notes: {
+        Row: {
+          author_kind: string | null
+          author_name: string | null
+          body: string | null
+          client_id: string | null
+          created_at: string | null
+          id: string | null
+          inquiry_id: string | null
         }
         Relationships: []
       }
@@ -10735,6 +11373,23 @@ export type Database = {
       creative_spec_hash: { Args: { p_spec: Json }; Returns: string }
       creative_subjects_valid: { Args: { p: string[] }; Returns: boolean }
       creative_write: { Args: { p: Json }; Returns: Json }
+      crm_confirm_delivery_test: { Args: { p_job: string; p_recipient: string }; Returns: Json }
+      crm_inquiry_add_note: { Args: { p_body: string; p_inquiry: string }; Returns: Json }
+      crm_inquiry_set_status: {
+        Args: { p_expected?: string; p_inquiry: string; p_status: string }
+        Returns: Json
+      }
+      crm_notification_block_reason: {
+        Args: { p_recipient: string; p_sender: string; p_test?: boolean }
+        Returns: string
+      }
+      crm_phone_e164: { Args: { p: string }; Returns: string }
+      crm_record_notification_consent: { Args: { p: Json }; Returns: Json }
+      crm_set_sms_alerts: {
+        Args: { p_client: string; p_enabled: boolean; p_sender?: string }
+        Returns: Json
+      }
+      crm_set_sms_sender: { Args: { p_client: string; p_sender: string }; Returns: Json }
       drafter_caller_is_service: { Args: never; Returns: boolean }
       drafter_caller_is_superuser: { Args: never; Returns: boolean }
       drafter_copy_hash: { Args: { p_copy: string }; Returns: string }

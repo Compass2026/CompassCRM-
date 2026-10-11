@@ -37,6 +37,25 @@ export function createStore(supabase: Client) {
       return data as Record<string, unknown>;
     },
 
+    // CRM Lite's alert sender (crm_notification_*).
+    async notificationSenderKnown(accountSid: string): Promise<boolean> {
+      const { data, error } = await supabase.rpc("crm_notification_sender_known", { p_account_sid: accountSid });
+      if (error) throw new Error(error.message);
+      return data === true;
+    },
+
+    async recordNotificationKeyword(p: Record<string, unknown>): Promise<Record<string, unknown>> {
+      const { data, error } = await supabase.rpc("crm_notification_keyword", { p });
+      if (error) throw new Error(error.message);
+      return data as Record<string, unknown>;
+    },
+
+    async recordNotificationStatus(p: Record<string, unknown>): Promise<Record<string, unknown>> {
+      const { data, error } = await supabase.rpc("crm_notification_record_status", { p });
+      if (error) throw new Error(error.message);
+      return data as Record<string, unknown>;
+    },
+
     async recordStatus(p: Record<string, unknown>): Promise<Record<string, unknown>> {
       const { data, error } = await supabase.rpc("communication_record_status", { p });
       if (error) throw new Error(error.message);

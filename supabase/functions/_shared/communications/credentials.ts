@@ -84,3 +84,6 @@ export function webhookBase(override: string | null, supabaseUrl: string): strin
 
 export const INBOUND_PATH = "/messages/inbound";
 export const STATUS_PATH = "/messages/status";
+// CRM Lite alerts from Compass's own sender (docs/crm-lite.md).
+export const NOTIFY_INBOUND_PATH = "/notifications/inbound";
+export const NOTIFY_STATUS_PATH = "/notifications/status";

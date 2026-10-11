@@ -40,6 +40,7 @@
     "test:content-origin-ui": "UI_SPEC=tests/content-origin-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:communications": "UI_SPEC=tests/communications-integration.mjs scripts/test-tasks-ui.sh",
     "test:communications-ui": "UI_SPEC=tests/communications-ui.mjs scripts/test-tasks-ui.sh",
+    "test:crm-lite-ui": "UI_SPEC=tests/crm-lite-ui.mjs scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"
   },
   "dependencies": {

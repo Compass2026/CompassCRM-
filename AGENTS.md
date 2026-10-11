@@ -1651,6 +1651,39 @@ and the remaining manual Twilio steps: `docs/communications.md`.
   provider (a fake Twilio that answers 20404 to the parent key on any
   subaccount resource) and integration suites.
 
+## CRM Lite (Oct 11 2026; `20261011220000_crm_lite.sql` written, sandbox-tested, **not applied**; nothing deployed)
+
+Website inquiries saved in Compass, a New → Contacted → Closed workspace for
+the agency (Client › **Inquiries**) and the client's own portal sign-in
+(`/portal/inquiries`), and SMS inquiry alerts built with sending disabled.
+Pilot: Ginger Huff Interiors (`supabase/seeds/clients/ginger-huff-crm-lite.sql`,
+not run). Design, gates, setup, rollback: `docs/crm-lite.md`.
+
+- **Intake** is `inquiry-intake` (`verify_jwt = false`): a website server
+  sends `X-Compass-Source` plus that source's Bearer token (Vault,
+  `inquiry_sources.secret_name`, issued once by an admin through `crm-lite`).
+  **The client is the source's**, never a value in the request. One inquiry
+  per (source, submission id) by unique key; contacts (0063's `contacts`) are
+  matched by email / phone within the client only.
+- **Writes** to inquiries, notes, history and the outbox happen only inside
+  the `crm_*` functions. Status / notes: a teammate, or a portal contact of
+  the inquiry's own client while `crm_lite_settings.portal_enabled` is on.
+  Four portal views (`portal_crm_lite`, `portal_inquiries`,
+  `portal_inquiry_notes`, `portal_inquiry_events`) filter by
+  `portal_client_id()`.
+- **SMS stays off** until an admin records the sender's toll-free
+  verification approved, consent is complete (date, method, actual response,
+  disclosure acknowledged; a teammate only, never automatic), an admin
+  confirms a delivered test, and an admin switches the client on
+  (`crm_set_sms_alerts`). A job created while a gate is closed is `blocked`
+  for good: no old inquiries are ever texted. Unknown send outcomes are
+  reconciled against Twilio before any resend. STOP to the sender blocks
+  every client's alerts to that phone. Compass's own sender ("Compass -
+  Notifications" subaccount) uses the 0065 Vault names; BHG's is never used.
+- **Do not** send texts, record Ginger's consent from assumptions, approve the
+  sender before Twilio does, or invite / reset portal users as part of
+  CRM Lite work.
+
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
 The deterministic Authority Engine (`supabase/functions/authority/`, D1.1)
