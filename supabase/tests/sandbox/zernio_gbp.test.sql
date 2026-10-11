@@ -1,4 +1,4 @@
--- Tests for Business Profile publishing through Zernio (20261011040000), run
+-- Tests for Business Profile publishing through Zernio (20261011050000), run
 -- by scripts/test-portal-sandbox.sh after zernio_publisher.test.sql against
 -- the full replay + fixtures. Own harness schema (zg).
 --

@@ -1,7 +1,9 @@
 // source-assets' only door to the database and Storage: supabase-js with the
 // service role. It reads brand_assets and downloads stored files from the
 // private brand-assets bucket, and writes only through
-// brand_asset_record_hash (0055). It never uploads, moves or deletes a file.
+// brand_asset_record_hash (0055) and, for register (v2), one brand_assets
+// insert. It never uploads, moves or deletes a file itself: upload_slot hands
+// out signed upload URLs that cannot overwrite an existing object.
 import type { AssetRow, Read } from "./plan.ts";
 import { MAX_BYTES } from "./plan.ts";
 
@@ -50,6 +52,25 @@ export function createStore(supabase: Client) {
       if (!data) return { ok: false, reason: "missing" };
       if (data.size > MAX_BYTES) return { ok: false, reason: "too_large" };
       return { ok: true, bytes: new Uint8Array(await data.arrayBuffer()) };
+    },
+
+    async uploadSlot(storagePath: string): Promise<{ exists: true } | { exists: false; signed_url: string; token: string }> {
+      const dir = storagePath.slice(0, storagePath.lastIndexOf("/"));
+      const name = storagePath.slice(storagePath.lastIndexOf("/") + 1);
+      const { data: list, error: le } = await supabase.storage.from(BUCKET).list(dir, { search: name, limit: 10 });
+      if (le) throw new Error(le.message);
+      if ((list ?? []).some((o: { name: string }) => o.name === name)) return { exists: true };
+      const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(storagePath, { upsert: false });
+      if (error) throw new Error(error.message);
+      return { exists: false, signed_url: data.signedUrl, token: data.token };
+    },
+
+    async insertAsset(row: Record<string, unknown>): Promise<AssetRow> {
+      const { data, error } = await supabase.from("brand_assets").insert(row)
+        .select("id, client_id, kind, source, label, storage_path, url, mime_type, size_bytes, width, height, content_hash, creative_use")
+        .single();
+      if (error) throw new Error(error.message);
+      return data as AssetRow;
     },
 
     async record(p: Record<string, unknown>): Promise<Record<string, unknown>> {

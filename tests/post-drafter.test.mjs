@@ -92,7 +92,9 @@ test("refused: an unapproved service, a mismatched keyword, an offer on a standa
     [{ ...TARGET, keywordId: "kw-info" }, "keyword_intent_mismatch"],
     [{ ...TARGET, offerId: "o1" }, "offer_not_applicable"],
     [{ ...TARGET, ctaUrl: `${SITE}/contact` }, "cta_invalid"],
-    [{ ...TARGET, channel: "facebook" }, "channel_unsupported"],
+    [{ ...TARGET, channel: "instagram" }, "channel_unsupported"],
+    // Facebook is drafted (Oct 11 2026), but never with a Business Profile button.
+    [{ ...TARGET, channel: "facebook" }, "cta_not_applicable"],
     [{ ...TARGET, serviceId: null, keywordId: null }, "service_missing"],
   ];
   for (const [t, code] of cases) {

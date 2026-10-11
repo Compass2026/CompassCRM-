@@ -265,6 +265,50 @@ exercised by the real claim (tests below).
 **Nothing written:** `publisher_runs` 0, publisher tasks 0, no post changed,
 and no Zernio write.
 
+## Facebook drafts (Oct 11 2026; migration `20261011040705` applied, `post-drafter` v3)
+
+Applied Oct 11 2026 as `20261011040705`: the recorded SQL and the
+`drafter_write` body match the file by md5; grants unchanged (service_role
+only).
+
+The AI Drafter now writes Facebook drafts through the same governed path as
+Business Profile drafts, so a Facebook post no longer has to be typed in by
+hand to reach review. Nothing in it approves, schedules or publishes.
+
+- **Target:** `{channel: "facebook", postType: "standard", ctaType: null,
+  socialAccountId: <the client's Facebook Page row>, assetIds: [≤ 1]}`. The
+  Page is named explicitly, never inferred; the brief carries it as
+  `target.social_account` and `drafter_write` stores it on
+  `social_posts.social_account_id`, so the approval snapshot binds it.
+- **Refused** (brief and database): no Page, another client's Page, an
+  Instagram account, a button, an offer post, two images, an image that is
+  not a stored, hashed `photo` or `social_post` of the client, an Authority
+  hand-off (Business Profile only). A Business Profile brief that names a
+  social account is refused; Business Profile drafting is otherwise
+  unchanged (same brief hash, same one-open-per-service-and-intent rule).
+- **Fact rules are the drafter's:** the same brief, approved service and
+  page, usable claims only, the same linter (no unapproved place,
+  credential, tenure, pricing, response time, superlative, material or
+  digit without its linked claim). Facebook adds its own channel rules: no
+  hashtags, no URL in the copy, 200–1,200 characters.
+- **One open draft per concept:** no two open drafted Facebook posts may
+  share the same copy or the same image (`23505`). Several concepts for one
+  service and intent may queue side by side.
+- **The review gate is 0045's:** the post lands `in_review` /
+  `not_scheduled` with a `CLAUDE_APPROVAL` `post_review` task; a teammate
+  approves it, and only then can it be scheduled for the Zernio path above.
+- **Generated graphics** are filed by `source-assets` v2: `upload_slot`
+  returns a signed upload URL for `<client>/upload/<sha256>.<ext>` in the
+  private `brand-assets` bucket (no row; an existing object is never
+  overwritten), and `register` reads the object back, refuses bytes that do
+  not hash to their address, inserts an unreviewed `social_post` brand asset
+  whose notes record "<tool>-generated / non-evidentiary visual" and its
+  source, and records the hash. A generated graphic is never a photo of the
+  client's work, never a claim, source or E-E-A-T evidence; approving it for
+  creative use stays a teammate's step on Brand › Creative use.
+- **Tests:** `tests/post-drafter-facebook.test.mjs`, `tests/source-assets.test.mjs`,
+  the sandbox's `drafter_facebook.test.sql`.
+
 ## Tests
 
 - **Unit** (`npm test`, `tests/post-publisher-zernio.test.mjs`, 37 cases):
@@ -493,7 +537,7 @@ connect, edit, delete or webhook call.
 
 ### Schema
 
-Migration `20261011040000_zernio_gbp_publisher.sql` (additive):
+Migration `20261011050000_zernio_gbp_publisher.sql` (additive):
 - the binding check also allows `google_business` with `locations/<id>`;
 - `social_accounts_one_gbp_binding`, a unique index (one bound location per
   client);
@@ -539,7 +583,7 @@ Migration `20261011040000_zernio_gbp_publisher.sql` (additive):
 
 1. Merge the PR after review. It deploys the app to Vercel; Business Profile
    routing stays inert until a location is bound.
-2. Apply `20261011040000_zernio_gbp_publisher.sql` to production
+2. Apply `20261011050000_zernio_gbp_publisher.sql` to production
    (`iokcopiyzajigvhwexhe`).
 3. Deploy `post-publisher` from this branch: `handler.ts`, `zernio-path.ts`,
    `facebook-path.ts`, `facebook.ts`, `gbp-path.ts`, `gbp.ts`, `zernio.ts`,

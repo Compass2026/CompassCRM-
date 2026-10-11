@@ -211,7 +211,12 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_history_styl
 # append-only; publisher_runs takes the Zernio fields; a brand image carries
 # its hash onto a post.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/zernio_publisher.test.sql"
-# Business Profile through Zernio (20261011040000): only the publisher's
+# AI Drafter Facebook drafts (20261011040705): only drafter_write writes one,
+# on the client's own Facebook Page, no button, at most one stored and hashed
+# photo or graphic, in review and never approved or scheduled by it; one open
+# draft per concept; Business Profile drafts unchanged.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_facebook.test.sql"
+# Business Profile through Zernio (20261011050000): only the publisher's
 # service session records and binds a client's one Business Profile location
 # (locations/<id>); binding never enables; a team admin enables; the approval
 # binds the destination; publisher_runs records the pinned location.

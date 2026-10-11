@@ -329,7 +329,7 @@ export function createStore(supabase: Client) {
     },
 
     // ── Business Profile through Zernio ──
-    // The client's bound Business Profile location (at most one; 20261011040000).
+    // The client's bound Business Profile location (at most one; 20261011050000).
     async gbpLocationForClient(clientId: string): Promise<import("./facebook.ts").Binding | null> {
       const rows = (await one<import("./facebook.ts").Binding[]>(
         supabase.from("social_accounts").select(BINDING_COLS)
@@ -338,7 +338,7 @@ export function createStore(supabase: Client) {
       return rows[0] ?? null;
     },
 
-    // The client's explicit Business Profile transport (20261011040000): no
+    // The client's explicit Business Profile transport (20261011050000): no
     // row = google. Binding a location selects zernio; unbinding keeps it.
     async gbpTransportForClient(clientId: string): Promise<"google" | "zernio"> {
       const row = await one<{ gbp_transport: string }>(

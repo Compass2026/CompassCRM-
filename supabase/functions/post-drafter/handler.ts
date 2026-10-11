@@ -50,9 +50,9 @@ import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 2;
+export const HANDLER_VERSION = 3;
 export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts"] as const;
 
 export type Deps = {
   store: Store;
@@ -80,7 +80,7 @@ function parseTarget(t: unknown): DraftTarget | string {
   if (!str("channel") || !str("intent")) return "target.channel and target.intent are required";
   const postType = str("postType") ?? "standard";
   if (postType !== "standard" && postType !== "offer") return "target.postType is standard or offer";
-  for (const k of ["serviceId", "keywordId", "offerId"]) {
+  for (const k of ["serviceId", "keywordId", "offerId", "socialAccountId"]) {
     if (o[k] != null && !(typeof o[k] === "string" && UUID.test(o[k] as string))) return `target.${k} must be a uuid`;
   }
   const assetIds = o.assetIds ?? [];
@@ -95,6 +95,7 @@ function parseTarget(t: unknown): DraftTarget | string {
     ctaUrl: str("ctaUrl"),
     offerId: (o.offerId as string | null) ?? null,
     assetIds: assetIds as string[],
+    ...(o.socialAccountId != null ? { socialAccountId: o.socialAccountId as string } : {}),
   };
 }
 
@@ -126,7 +127,10 @@ export function createPostDrafter(deps: Deps) {
     Promise<{ ok: true; brief: Brief; hash: string; state: string | null } | { ok: false; status: number; body: Json }> {
     const input = await store.input(clientId);
     if (!input?.client) return { ok: false, status: 404, body: { error: "client_not_found" } };
-    const result = buildBrief(input, target);
+    // A Facebook brief also reads the client's Facebook Pages (v3).
+    const result = target.channel === "facebook"
+      ? buildBrief(input, target, { socialAccounts: await store.socialAccounts(clientId) })
+      : buildBrief(input, target);
     if (!result.ok) return { ok: false, status: 422, body: { eligible: false, refusals: result.refusals } };
     return { ok: true, brief: result.brief, hash: await briefHash(result.brief), state: input.client.state ?? null };
   }

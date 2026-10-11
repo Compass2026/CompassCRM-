@@ -18,8 +18,9 @@ import type { IntelligenceInput, OfferRow, SearchIntent } from "../../../src/lib
 
 export const DRAFTER_VERSION = "drafter-v1";
 
-// Channels the drafter writes for in v1.
-export const DRAFT_CHANNELS = ["google_business"] as const;
+// Channels the drafter writes for: Business Profile (v1) and Facebook
+// (Oct 11 2026; standard posts on an explicitly named Page, no button).
+export const DRAFT_CHANNELS = ["google_business", "facebook"] as const;
 export type DraftChannel = (typeof DRAFT_CHANNELS)[number];
 
 // Everything the brief builder reads: the canonical Client Intelligence input
@@ -86,7 +87,13 @@ export type DraftTarget = {
   ctaUrl?: string | null;
   offerId?: string | null;
   assetIds?: string[];
+  // Facebook only: the client's Facebook Page the post is for (required).
+  socialAccountId?: string | null;
 };
+
+// The client's Facebook Pages, read alongside the Client Intelligence input
+// for a Facebook brief.
+export type SocialAccountRow = { id: string; platform: string; external_account_id: string | null; display_name: string | null };
 
 export type Refusal = { code: string; message: string };
 
@@ -113,6 +120,8 @@ export type Brief = {
     cta: { type: string | null; url: string | null; in_copy_phrase: string | null };
     offer: { id: string; title: string; terms: string; starts_on: string | null; ends_on: string | null } | null;
     assets: { id: string; kind: string; label: string | null; storage_path: string }[];
+    // Facebook only (absent on a Business Profile brief): the Page.
+    social_account?: { id: string; page_id: string | null; name: string | null };
   };
   allowed_facts: {
     crm: { business_name: string; phone: string; website: string; places: string[]; services: string[] };

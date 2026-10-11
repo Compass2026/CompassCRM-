@@ -63,7 +63,7 @@ test("brief: rebuilt from live data, with its hash and the vendor-neutral model 
   assert.equal(r.body.brief.target.service.id, TARGET.serviceId);
   assert.equal(r.body.model_request.output_contract.copy, "string");
   assert.equal((await call(d, { mode: "brief", client_id: "00000000-0000-4000-8000-000000000000", target: TARGET })).status, 404);
-  const bad = await call(d, { mode: "brief", client_id: CLIENT, target: { ...TARGET, channel: "facebook" } });
+  const bad = await call(d, { mode: "brief", client_id: CLIENT, target: { ...TARGET, channel: "instagram" } });
   assert.equal(bad.status, 422);
   assert.equal(bad.body.refusals[0].code, "channel_unsupported");
 });
