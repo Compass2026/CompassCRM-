@@ -257,3 +257,83 @@ test("summarize counts what a dry run found", () => {
   const s = summarize([{ stored: "present", action: "record", issues: [], review_reset: true }, { stored: "no_file", action: "skip", issues: [{ code: "link_only" }], review_reset: false }]);
   assert.deepEqual(s, { assets: 2, stored: 1, link_only: 1, missing: 0, unreadable: 0, unsupported: 0, would_record: 1, unchanged: 0, would_reset_review: 1 });
 });
+
+// ── v2: upload_slot and register (generated graphics) ───────────────────────
+function uploads(stored = {}, over = {}) {
+  const calls = { slots: [], inserts: [], record: [] };
+  const rows = [];
+  const store = {
+    secret: async (n) => (n === "SYNC_CRON_SECRET" ? "cron" : null),
+    caller: async (jwt) => (jwt === "team" ? { member: MEMBER } : "none"),
+    client: async (id) => (id === CLIENT ? { id, name: "Lucas Construction" } : null),
+    assets: async () => rows.map((r) => ({ ...r })),
+    read: async (p) => (stored[p] ? { ok: true, bytes: stored[p] } : { ok: false, reason: "missing" }),
+    uploadSlot: async (p) => { calls.slots.push(p); return stored[p] ? { exists: true } : { exists: false, signed_url: `https://s.test/${p}?token=t`, token: "t" }; },
+    insertAsset: async (r) => {
+      calls.inserts.push(r);
+      const row = { id: `00000000-0000-4000-8000-0000000001${String(rows.length).padStart(2, "0")}`, url: null, content_hash: null, creative_use: "unreviewed", ...r };
+      rows.push(row); return row;
+    },
+    record: async (p) => { calls.record.push(p); const r = rows.find((x) => x.id === p.asset_id); r.content_hash = p.content_hash; return { asset_id: p.asset_id, content_hash: p.content_hash }; },
+    ...over,
+  };
+  return { fn: createSourceAssets({ store }), calls, rows };
+}
+const GRAPHIC = png(1080, 1350, 64);
+const SHA = hex(GRAPHIC);
+const PATH = `${CLIENT}/upload/${SHA}.png`;
+const FILE = { sha256: SHA, content_type: "image/png", file_name: "01-fall-gutter-cleaning-check.png", label: "01-fall-gutter-cleaning-check", kind: "social_post", provenance: { origin: "ai_generated", tool: "ChatGPT", source_ref: "drive:abc123" } };
+
+test("upload_slot: a signed URL per content address, an existing object is never re-offered, no row written", async () => {
+  const { fn, calls } = uploads({ [PATH]: GRAPHIC });
+  const other = "a".repeat(64);
+  const r = await fn.handle(req({ mode: "upload_slot", client_id: CLIENT, files: [{ sha256: SHA, content_type: "image/png" }, { sha256: other, content_type: "image/jpeg" }] }, { "x-cron-secret": "cron" }));
+  assert.equal(r.status, 200);
+  const b = await r.json();
+  assert.equal(b.writes, false);
+  assert.deepEqual(b.slots.map((s) => [s.storage_path, s.status]), [[PATH, "exists"], [`${CLIENT}/upload/${other}.jpg`, "ready"]]);
+  assert.match(b.slots[1].signed_url, /^https:/);
+  assert.equal(calls.inserts.length, 0);
+  for (const files of [[], [{ sha256: "nothex", content_type: "image/png" }], [{ sha256: SHA, content_type: "image/svg+xml" }]]) {
+    assert.equal((await fn.handle(req({ mode: "upload_slot", client_id: CLIENT, files }))).status, 400);
+  }
+});
+
+test("register: reads the upload back, inserts an unreviewed social_post with its provenance, records the hash; a re-run is unchanged", async () => {
+  const { fn, calls } = uploads({ [PATH]: GRAPHIC });
+  const r = await (await fn.handle(req({ mode: "register", client_id: CLIENT, files: [FILE] }, { "x-cron-secret": "cron" }))).json();
+  assert.equal(r.summary.registered, 1, JSON.stringify(r));
+  const ins = calls.inserts[0];
+  assert.equal(ins.kind, "social_post");
+  assert.equal(ins.source, "upload");
+  assert.equal(ins.storage_path, PATH);
+  assert.equal(ins.label, "01-fall-gutter-cleaning-check");
+  assert.equal(ins.file_name, "01-fall-gutter-cleaning-check.png");
+  assert.deepEqual([ins.width, ins.height, ins.mime_type], [1080, 1350, "image/png"]);
+  assert.match(ins.notes, /^ChatGPT-generated \/ non-evidentiary visual\..*never a claim, a source or E-E-A-T evidence.*drive:abc123/);
+  for (const k of ["creative_use", "depicts_own_work", "subjects", "focal_x", "content_hash"]) assert.equal(k in ins, false, `${k} is not set by register`);
+  assert.equal(calls.record[0].content_hash, SHA);
+  assert.equal(calls.record[0].expected_hash, null);
+  const again = await (await fn.handle(req({ mode: "register", client_id: CLIENT, files: [FILE] }))).json();
+  assert.equal(again.summary.unchanged, 1);
+  assert.equal(calls.inserts.length, 1, "idempotent on the path");
+});
+
+test("register refuses what it cannot prove: nothing uploaded, a photo kind, no provenance", async () => {
+  const { fn, calls } = uploads({});
+  const r = await (await fn.handle(req({ mode: "register", client_id: CLIENT, files: [FILE] }))).json();
+  assert.deepEqual(r.results.map((x) => [x.status, x.code]), [["refused", "not_uploaded"]]);
+  for (const f of [{ ...FILE, kind: "photo" }, { ...FILE, provenance: undefined }, { ...FILE, provenance: { origin: "own_work", tool: "x" } }, { ...FILE, label: "" }]) {
+    assert.equal((await fn.handle(req({ mode: "register", client_id: CLIENT, files: [f] }))).status, 400);
+  }
+  assert.equal(calls.inserts.length, 0);
+});
+
+test("register refuses bytes that do not hash to their address, or are another type", async () => {
+  const wrong = png(1080, 1350, 65);
+  const { fn, calls } = uploads({ [PATH]: wrong, [`${CLIENT}/upload/${SHA}.jpg`]: GRAPHIC });
+  const r = await (await fn.handle(req({ mode: "register", client_id: CLIENT, files: [FILE, { ...FILE, content_type: "image/jpeg" }] }))).json();
+  assert.deepEqual(r.results.map((x) => x.code), ["hash_mismatch", "type_mismatch"]);
+  assert.equal(calls.inserts.length, 0);
+  assert.equal(calls.record.length, 0);
+});

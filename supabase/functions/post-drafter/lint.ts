@@ -13,6 +13,7 @@
 // differentiators stated as fact. Plus the channel's own rules (reused from
 // the publisher), words the brand avoids and the keyword-use limit.
 import { channelProblems } from "../post-publisher/channel.ts";
+import { FACEBOOK_MAX_CHARS } from "../post-publisher/facebook.ts";
 import type { Brief, LintProblem, LintResult, ModelDraft } from "./types.ts";
 import { DETECTORS, MATERIAL_RE, NUMBER_RE, PHONE_RE, digits, escapeRe, mask, ngrams, spansOf, words } from "./rules.ts";
 
@@ -64,8 +65,20 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
 
   // ── Channel rules (the publisher's own) ──
   const assets = brief.target.assets.filter((a) => assetIds.includes(a.id)).map((a, i) => ({ id: a.id, storage_path: a.storage_path, url: null, sort_order: i }));
-  for (const p of channelProblems({ platform: brief.target.channel, post_type: brief.target.post_type, copy, cta_type: brief.target.cta.type, cta_url: brief.target.cta.url, offer: brief.target.offer, assets })) {
-    add(`channel_${p.code}`, p.message);
+  const facebook = brief.target.channel === "facebook";
+  if (facebook) {
+    // The Facebook publisher's rules that a draft can be judged on here (the
+    // image's hash is the database's check): standard, no button, a Page,
+    // one image at most, within Facebook's limit.
+    if (brief.target.post_type !== "standard") add("channel_post_type", "Only standard Facebook posts are drafted.");
+    if (brief.target.cta.type || brief.target.cta.url) add("channel_cta", "Facebook posts carry no button.");
+    if (!brief.target.social_account?.id) add("channel_no_account", "The brief names no Facebook Page.");
+    if (assets.length > 1) add("channel_too_many_images", "Facebook posts take one image in v1.");
+    if (copy.trim().length > FACEBOOK_MAX_CHARS) add("channel_too_long", `Facebook posts are at most ${FACEBOOK_MAX_CHARS} characters.`);
+  } else {
+    for (const p of channelProblems({ platform: brief.target.channel, post_type: brief.target.post_type, copy, cta_type: brief.target.cta.type, cta_url: brief.target.cta.url, offer: brief.target.offer, assets })) {
+      add(`channel_${p.code}`, p.message);
+    }
   }
   const len = copy.trim().length;
   if (len > 0 && len < rules.min_chars) add("too_short", `Write at least ${rules.min_chars} characters (this is ${len}).`);
@@ -74,9 +87,9 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
     warnings.push({ code: "length_outside_preferred", message: `Aim for ${rules.preferred_min_chars}–${rules.preferred_max_chars} characters (this is ${len}).` });
   }
   for (const m of copy.matchAll(/https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+\.(?:com|net|org|co|us|io|biz|info)\b\S*/gi)) {
-    add("url_in_body", "No links in the text: the button carries the link.", m[0]);
+    add("url_in_body", facebook ? "No links in the text." : "No links in the text: the button carries the link.", m[0]);
   }
-  for (const m of copy.matchAll(/(^|\s)(#[\p{L}\p{N}_]+)/gu)) add("hashtag", "No hashtags on Business Profile posts.", m[2]);
+  for (const m of copy.matchAll(/(^|\s)(#[\p{L}\p{N}_]+)/gu)) add("hashtag", facebook ? "No hashtags in drafted Facebook posts." : "No hashtags on Business Profile posts.", m[2]);
 
   // ── Mask what is allowed: verbatim linked claims, the canonical phone, approved places, the business name ──
   const spans: [number, number][] = [];

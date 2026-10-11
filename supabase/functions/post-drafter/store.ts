@@ -7,7 +7,7 @@
 // (drafter_write links the post in its own transaction, 0053).
 import type { AuthorityState } from "./authority.ts";
 import { DUPLICATE_WINDOW_DAYS } from "./authority.ts";
-import type { Brief, DrafterInput, LintResult } from "./types.ts";
+import type { Brief, DrafterInput, LintResult, SocialAccountRow } from "./types.ts";
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -71,6 +71,14 @@ export function createStore(supabase: Client) {
       const { data, error } = await supabase.rpc("client_intelligence_input", { p_client_id: clientId });
       if (error) throw new Error(error.message);
       return (data as DrafterInput | null) ?? null;
+    },
+
+    // The client's Facebook Pages (v3, Facebook briefs). Read-only.
+    async socialAccounts(clientId: string): Promise<SocialAccountRow[]> {
+      const { data, error } = await supabase.from("social_accounts").select("id, platform, external_account_id, display_name")
+        .eq("client_id", clientId).eq("platform", "facebook");
+      if (error) throw new Error(error.message);
+      return (data ?? []) as SocialAccountRow[];
     },
 
     // Submits already made against this brief (any outcome).

@@ -12,18 +12,43 @@
 //                recorded. Every write is brand_asset_record_hash (a
 //                compare-and-set on the path and the previous hash).
 //
-// It reads image bytes and never writes them: no upload, no transformation,
-// no path change. It never touches review fields (creative_use, own work,
-// subjects, focal point); only a teammate sets those. Link-only assets are
-// reported with the brand-scan import that would store them.
+//   upload_slot → (v2) a signed, single-use upload URL per file for the
+//                content address <client>/upload/<sha256>.<ext> in the private
+//                brand-assets bucket. Writes no row; an object already there
+//                is reported, never overwritten.
+//   register    → (v2) files an uploaded object as a new brand asset: the
+//                stored bytes are read back and must hash to the address,
+//                the row is inserted (unreviewed) with its provenance in the
+//                notes, and the hash is recorded through
+//                brand_asset_record_hash. Idempotent on the path.
+//
+// Apart from upload_slot it never writes image bytes: no transformation, no
+// path change, no delete. It never touches review fields (creative_use, own
+// work, subjects, focal point); only a teammate sets those, so a registered
+// file is unreviewed until a teammate approves it on Brand › Creative use.
+// register files generated graphics only (kind social_post): a picture made
+// by a tool is never a photo of the client's work, never a claim, source or
+// evidence, and the notes say so. Link-only assets are reported with the
+// brand-scan import that would store them.
 //
 // Callers: the worker (x-cron-secret = SYNC_CRON_SECRET) or a signed-in team
 // member (JWT on team_members). Deployed with verify_jwt = true.
 import { importSuggestion, inspect, summarize, type AssetRow, type Entry, type Read } from "./plan.ts";
 
-export const HANDLER_VERSION = 1;
-export const MODES = ["version", "inventory", "hash"] as const;
+export const HANDLER_VERSION = 2;
+export const MODES = ["version", "inventory", "hash", "upload_slot", "register"] as const;
 export const MAX_ASSETS = 60;
+export const MAX_UPLOADS = 12;
+// What register files, and how the provenance reads on the asset.
+export const REGISTER_KINDS = ["social_post"] as const;
+export const PROVENANCE = {
+  ai_generated: (tool: string) =>
+    `${tool}-generated / non-evidentiary visual. Illustrative only: not a photo of the client's work, ` +
+    `and never a claim, a source or E-E-A-T evidence because it exists.`,
+} as const;
+const EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+export const uploadPath = (clientId: string, sha256: string, contentType: string) =>
+  `${clientId}/upload/${sha256}.${EXT[contentType]}`;
 
 export type Store = {
   secret(name: string): Promise<string | null>;
@@ -32,6 +57,8 @@ export type Store = {
   assets(clientId: string): Promise<AssetRow[]>;
   read(storagePath: string): Promise<Read>;
   record(p: Record<string, unknown>): Promise<Record<string, unknown>>;
+  uploadSlot(storagePath: string): Promise<{ exists: true } | { exists: false; signed_url: string; token: string }>;
+  insertAsset(row: Record<string, unknown>): Promise<AssetRow>;
 };
 
 type Json = Record<string, unknown>;
@@ -81,6 +108,9 @@ export function createSourceAssets({ store }: { store: Store }) {
     if (!client) return reply(404, { error: "no such client" });
     const rows = await store.assets(clientId);
 
+    if (mode === "upload_slot") return uploadSlots(body!, clientId);
+    if (mode === "register") return register(body!, client, rows, who.via);
+
     if (mode === "inventory") {
       if (rows.length > MAX_ASSETS) return reply(413, { error: `more than ${MAX_ASSETS} assets; not supported in one call` });
       const list = await entries(rows);
@@ -129,6 +159,98 @@ export function createSourceAssets({ store }: { store: Store }) {
     return reply(200, {
       mode, writes: true, client: { id: client.id, name: client.name }, requested_via: who.via,
       summary: { requested: wanted.length, recorded: results.length - count("unchanged") - count("refused"), unchanged: count("unchanged"), refused: count("refused") },
+      results,
+    });
+  }
+
+  // upload_slot: {files: [{sha256, content_type}]}. Writes no row.
+  async function uploadSlots(body: Json, clientId: string): Promise<Response> {
+    const files = body.files;
+    if (!Array.isArray(files) || !files.length || files.length > MAX_UPLOADS) {
+      return reply(400, { error: `files lists 1–${MAX_UPLOADS} {sha256, content_type}` });
+    }
+    const bad = files.find((f) => !f || !HEX.test(String(f.sha256 ?? "")) || !EXT[String(f.content_type ?? "")]);
+    if (bad) return reply(400, { error: "each file needs a sha256 hex digest and a content_type of image/png, image/jpeg or image/webp" });
+    const slots: Json[] = [];
+    for (const f of files as Json[]) {
+      const path = uploadPath(clientId, String(f.sha256), String(f.content_type));
+      const s = await store.uploadSlot(path);
+      slots.push(s.exists ? { sha256: f.sha256, storage_path: path, status: "exists" }
+        : { sha256: f.sha256, storage_path: path, status: "ready", signed_url: s.signed_url, token: s.token });
+    }
+    return reply(200, { mode: "upload_slot", writes: false, bucket: "brand-assets", slots });
+  }
+
+  // register: {files: [{sha256, content_type, file_name, label, kind, provenance: {origin, tool, source_ref}}]}.
+  async function register(body: Json, client: { id: string; name: string }, rows: AssetRow[], via: string): Promise<Response> {
+    const files = body.files;
+    if (!Array.isArray(files) || !files.length || files.length > MAX_UPLOADS) {
+      return reply(400, { error: `files lists 1–${MAX_UPLOADS} uploads to register` });
+    }
+    for (const f of files as Json[]) {
+      const p = (f?.provenance ?? {}) as Json;
+      const ok = HEX.test(String(f?.sha256 ?? "")) && EXT[String(f?.content_type ?? "")]
+        && typeof f.label === "string" && f.label.trim().length > 0 && f.label.length <= 200
+        && typeof f.file_name === "string" && /^[\w.\- ]{1,200}$/.test(f.file_name)
+        && REGISTER_KINDS.includes(f.kind as typeof REGISTER_KINDS[number])
+        && p.origin === "ai_generated" && typeof p.tool === "string" && /^[\w .-]{1,40}$/.test(p.tool)
+        && (p.source_ref == null || (typeof p.source_ref === "string" && p.source_ref.length <= 300));
+      if (!ok) {
+        return reply(400, {
+          error: `each file needs sha256, content_type, file_name, label, kind (${REGISTER_KINDS.join(", ")}) ` +
+            `and provenance {origin: "ai_generated", tool, source_ref?}`,
+        });
+      }
+    }
+    const byPath = new Map(rows.filter((r) => r.storage_path).map((r) => [r.storage_path!, r]));
+    const results: Json[] = [];
+    for (const f of files as Json[]) {
+      const sha = String(f.sha256);
+      const path = uploadPath(client.id, sha, String(f.content_type));
+      const read = await store.read(path);
+      if (!read.ok) { results.push({ sha256: sha, storage_path: path, status: "refused", code: read.reason === "missing" ? "not_uploaded" : read.reason }); continue; }
+      let row = byPath.get(path) ?? null;
+      const probe = await inspect(row ?? {
+        id: "", client_id: client.id, kind: String(f.kind), source: "upload", label: String(f.label), storage_path: path,
+        url: null, mime_type: null, size_bytes: null, width: null, height: null, content_hash: null, creative_use: "unreviewed",
+      }, read);
+      const m = probe.measured;
+      if (!m) { results.push({ sha256: sha, storage_path: path, status: "refused", code: probe.issues[0]?.code ?? "unreadable" }); continue; }
+      if (m.content_hash !== sha) { results.push({ sha256: sha, storage_path: path, status: "refused", code: "hash_mismatch", measured: m.content_hash }); continue; }
+      if (m.content_type !== f.content_type) { results.push({ sha256: sha, storage_path: path, status: "refused", code: "type_mismatch", measured: m.content_type }); continue; }
+      try {
+        const existed = !!row;
+        if (!row) {
+          const p = f.provenance as Json;
+          const notes = [PROVENANCE.ai_generated(String(p.tool)),
+            p.source_ref ? `Source: ${p.source_ref} (${f.file_name}).` : `File: ${f.file_name}.`,
+            `Filed by source-assets/${HANDLER_VERSION}.`].join(" ");
+          row = await store.insertAsset({
+            client_id: client.id, kind: f.kind, source: "upload", label: String(f.label).trim(), storage_path: path,
+            file_name: f.file_name, mime_type: m.content_type, size_bytes: m.bytes, width: m.width, height: m.height,
+            notes, uploaded_by: `source-assets/${HANDLER_VERSION} (${via})`,
+          });
+          byPath.set(path, row);
+        }
+        if (row.content_hash === sha) {
+          results.push({ sha256: sha, storage_path: path, asset_id: row.id, status: "unchanged", width: m.width, height: m.height });
+          continue;
+        }
+        const r = await store.record({
+          asset_id: row.id, storage_path: path, expected_hash: row.content_hash,
+          content_hash: sha, width: m.width, height: m.height, byte_size: m.bytes, content_type: m.content_type,
+          raw_width: m.raw_width, raw_height: m.raw_height, orientation: m.orientation,
+          measured_by: `source-assets/${HANDLER_VERSION}`,
+        });
+        results.push({ ...r, sha256: sha, storage_path: path, asset_id: row.id, status: existed ? "hashed" : "registered", width: m.width, height: m.height, bytes: m.bytes });
+      } catch (err) {
+        results.push({ sha256: sha, storage_path: path, asset_id: row?.id ?? null, status: "refused", ...refusal(err) });
+      }
+    }
+    const count = (s: string) => results.filter((r) => r.status === s).length;
+    return reply(200, {
+      mode: "register", writes: true, client: { id: client.id, name: client.name }, requested_via: via,
+      summary: { requested: files.length, registered: count("registered"), hashed: count("hashed"), unchanged: count("unchanged"), refused: count("refused") },
       results,
     });
   }

@@ -1553,6 +1553,14 @@ Design, gates, endpoints and Lucas state: `docs/zernio-publisher.md`.
 - **No-write preflight:** `{mode: "preflight", post_id | fixture}`.
 - **Do not publish** a real Facebook post outside Tom's final steps in the
   doc.
+- **Facebook drafts** (Oct 11 2026; migration `20261011040000`,
+  `post-drafter` v3, `source-assets` v2; doc section "Facebook drafts"): the
+  AI Drafter writes a standard Facebook post with no button on an explicitly
+  named Page of the client (`socialAccountId`), at most one stored, hashed
+  photo or `social_post` graphic, and submits it to review; one open draft
+  per concept (copy, image). It never approves, schedules or publishes.
+  `source-assets` `upload_slot` / `register` file generated graphics into
+  private storage as unreviewed `social_post` assets marked non-evidentiary.
 
 ## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 

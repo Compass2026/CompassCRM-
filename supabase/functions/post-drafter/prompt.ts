@@ -18,7 +18,7 @@ export const MAX_ATTEMPTS = 3;
 export function modelRequest(brief: Brief, revision?: ModelRequest["revision"]): ModelRequest {
   const t = brief.target;
   const lines = [
-    `Write one ${t.channel === "google_business" ? "Google Business Profile" : t.channel} ${t.post_type} post for ${brief.client.name}.`,
+    `Write one ${t.channel === "google_business" ? "Google Business Profile" : t.channel === "facebook" ? `Facebook${t.social_account?.name ? ` (Page: ${t.social_account.name})` : ""}` : t.channel} ${t.post_type} post for ${brief.client.name}.`,
     `Search intent: ${t.search_intent}.${t.service ? ` Topic: ${t.service.name}.` : ""}${t.keyword ? ` The phrase "${t.keyword.text}" may appear at most ${t.keyword.max_exact_uses} time, only if it reads naturally.` : ""}`,
     `Write like a local business talking to neighbours, in the brand's voice (brief.brand). Not SEO copy.`,
     `Aim for about ${brief.channel_rules.preferred_min_chars}–${brief.channel_rules.preferred_max_chars} characters (never under ${brief.channel_rules.min_chars} or over ${brief.channel_rules.max_chars}), plain text, no hashtags, no links, no emoji. Make the point in the first ${brief.channel_rules.lead_chars} characters.`,

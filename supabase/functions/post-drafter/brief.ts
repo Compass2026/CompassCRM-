@@ -24,6 +24,7 @@ import {
   type IntelligenceInput,
 } from "../../../src/lib/client-intelligence.ts";
 import { GBP_CTA_TYPES, GBP_SUMMARY_MAX } from "../post-publisher/channel.ts";
+import { FACEBOOK_MAX_CHARS } from "../post-publisher/facebook.ts";
 import {
   DRAFT_CHANNELS,
   DRAFTER_VERSION,
@@ -33,6 +34,7 @@ import {
   type DrafterInput,
   type DraftTarget,
   type Refusal,
+  type SocialAccountRow,
 } from "./types.ts";
 import { claimCategories, hostOf, normalizeUrl, stableJson, words } from "./rules.ts";
 
@@ -42,6 +44,9 @@ export const KEYWORD_MAX_EXACT_USES = 1;
 // at least 300, aim for about 450–700, normally no more than 900. Google's
 // limit (GBP_SUMMARY_MAX, 1500) is the channel's hard maximum, separately.
 export const GBP_RULES = { min_chars: 300, preferred_min_chars: 450, preferred_max_chars: 700, max_chars: 900, lead_chars: 100 } as const;
+// Facebook (Oct 11 2026): the same quality floor in spirit, a little more
+// room. FACEBOOK_MAX_CHARS is Facebook's own limit, separately.
+export const FACEBOOK_RULES = { min_chars: 200, preferred_min_chars: 350, preferred_max_chars: 800, max_chars: 1200, lead_chars: 120 } as const;
 
 // Claim categories never cited in v1, and categories the hard rules allow
 // only once the client has confirmed them.
@@ -87,7 +92,7 @@ function sourcePath(source: string | null): string {
 const mentions = (text: string, tokens: string[]) =>
   words(text).some((w) => tokens.some((t) => w.startsWith(t) || (w.length >= 4 && t.startsWith(w))));
 
-export function buildBrief(input: DrafterInput, target: DraftTarget): BriefResult {
+export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { socialAccounts?: SocialAccountRow[] } = {}): BriefResult {
   const refusals: Refusal[] = [];
   const refuse = (code: string, message: string) => refusals.push({ code, message });
   const areas = assessIntelligence(toIntelligence(input));
@@ -100,6 +105,20 @@ export function buildBrief(input: DrafterInput, target: DraftTarget): BriefResul
   const intent = normalizeIntent(target.intent);
   if (!intent) refuse("intent_invalid", `"${target.intent}" is not a search intent.`);
   if (target.postType !== "standard" && target.postType !== "offer") refuse("post_type_invalid", `"${target.postType}" is not a post type.`);
+
+  // ── Facebook: a standard post with no button, on a named Page of this client ──
+  const facebook = target.channel === "facebook";
+  let socialAccount: Brief["target"]["social_account"] | null = null;
+  if (facebook) {
+    if (target.postType !== "standard") refuse("post_type_invalid", "Facebook drafts are standard posts in v1.");
+    if (target.ctaType?.trim() || target.ctaUrl?.trim()) refuse("cta_not_applicable", "Facebook posts carry no button.");
+    const account = (extra.socialAccounts ?? []).find((a) => a.id === target.socialAccountId && a.platform === "facebook");
+    if (!target.socialAccountId) refuse("social_account_missing", "A Facebook draft names the client's Facebook Page (socialAccountId).");
+    else if (!account) refuse("social_account_unknown", "The Facebook Page is not one of this client's Facebook accounts.");
+    else socialAccount = { id: account.id, page_id: account.external_account_id, name: account.display_name };
+  } else if (target.socialAccountId) {
+    refuse("social_account_not_applicable", "Only a Facebook draft names a social account.");
+  }
 
   // ── Per-draft gate ──
   const gate: Record<string, string> = {};
@@ -224,13 +243,16 @@ export function buildBrief(input: DrafterInput, target: DraftTarget): BriefResul
 
   // ── Assets (optional, approved brand photos with a stored file) ──
   const assets: Brief["target"]["assets"] = [];
+  // Facebook may also carry a stored social graphic (kind social_post); it is
+  // presentation, never evidence. The database checks the stored file's hash.
+  const kinds = facebook ? ["photo", "social_post"] : ["photo"];
   for (const id of target.assetIds ?? []) {
     const a = input.assets.find((x) => x.id === id);
     if (!a) refuse("asset_unknown", "The photo is not one of this client's brand assets.");
-    else if (a.kind !== "photo" || !a.storage_path) refuse("asset_unusable", `Asset ${a.label ?? a.id} is not a stored photo.`);
+    else if (!kinds.includes(a.kind) || !a.storage_path) refuse("asset_unusable", `Asset ${a.label ?? a.id} is not a stored ${facebook ? "photo or social graphic" : "photo"}.`);
     else assets.push({ id: a.id, kind: a.kind, label: a.label, storage_path: a.storage_path });
   }
-  if (assets.length > 1) refuse("too_many_assets", "Business Profile posts take one photo in v1.");
+  if (assets.length > 1) refuse("too_many_assets", facebook ? "Facebook posts take one image in v1." : "Business Profile posts take one photo in v1.");
 
   // ── Facts a draft may state; what it may not ──
   const places = [...new Set(input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name).filter(Boolean) as string[])];
@@ -261,6 +283,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget): BriefResul
       cta: { type: ctaType, url: ctaUrl, in_copy_phrase: input.board?.standing_cta ?? null },
       offer,
       assets,
+      ...(socialAccount ? { social_account: socialAccount } : {}),
     },
     allowed_facts: {
       crm: {
@@ -290,12 +313,12 @@ export function buildBrief(input: DrafterInput, target: DraftTarget): BriefResul
       differentiators_citable: false,
     },
     channel_rules: {
-      min_chars: GBP_RULES.min_chars,
-      preferred_min_chars: GBP_RULES.preferred_min_chars,
-      preferred_max_chars: GBP_RULES.preferred_max_chars,
-      max_chars: GBP_RULES.max_chars,
-      hard_max_chars: GBP_SUMMARY_MAX,
-      lead_chars: GBP_RULES.lead_chars,
+      min_chars: (facebook ? FACEBOOK_RULES : GBP_RULES).min_chars,
+      preferred_min_chars: (facebook ? FACEBOOK_RULES : GBP_RULES).preferred_min_chars,
+      preferred_max_chars: (facebook ? FACEBOOK_RULES : GBP_RULES).preferred_max_chars,
+      max_chars: (facebook ? FACEBOOK_RULES : GBP_RULES).max_chars,
+      hard_max_chars: facebook ? FACEBOOK_MAX_CHARS : GBP_SUMMARY_MAX,
+      lead_chars: (facebook ? FACEBOOK_RULES : GBP_RULES).lead_chars,
       hashtags: false,
       urls_in_body: false,
       keyword_max_exact_uses: KEYWORD_MAX_EXACT_USES,
