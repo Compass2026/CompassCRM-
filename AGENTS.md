@@ -10,6 +10,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Compass Client Platform
 
+## Client progress and backlinks (October 12, 2026)
+
+See `docs/client-growth-and-backlinks.md` for the Progress dashboard and backlink
+acquisition workflow. Migration `20261012173948_client_growth_and_backlinks.sql`
+is additive and awaits deployment. Portal progress uses client-scoped read-only
+views with private evidence stripped. Baselines remain in the append-only ledger.
+Link checks are append-only; a placement stage is not proof of a live backlink.
+Do not represent imported query/page GSC sums as full property totals or tracked
+placements as the complete backlink profile. No automated outreach is enabled.
+
 ## Native Agreements (October 7, 2026)
 
 `docs/durable-payment-links.md` describes the 7-day client payment capability

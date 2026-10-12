@@ -82,6 +82,11 @@ export default async function PortalOverviewPage() {
         </p>
       </div>
 
+      <Link href="/portal/growth" className="block rounded-2xl bg-gradient-to-br from-navy-900 to-blue-900 p-6 text-white">
+        <p className="text-xs uppercase tracking-wider text-blue-200">Your progress dashboard</p>
+        <p className="mt-2 text-xl font-semibold">Your starting point. Your results today.</p>
+        <p className="mt-2 text-sm text-blue-100">Explore baseline comparisons, trends, and backlink growth →</p>
+      </Link>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.label}>

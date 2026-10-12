@@ -85,13 +85,16 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /d
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_fixtures.sql" -o /dev/null
 # CRM Lite inquiries for the same generic checks (its four portal views).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_fixtures.sql" -o /dev/null
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth_portal_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_access.test.sql"
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth_portal_teardown.sql" -o /dev/null
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_teardown.sql" -o /dev/null
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_teardown.sql" -o /dev/null
 # 0043: task assignment, history, comments (same replay, own harness schema).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/task_assignment.test.sql"
 # 0041: scorecard ledger (same replay, own harness schema).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/report_measurements.test.sql"
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth.test.sql"
 # 0045: post record and human review gate. Switches between the worker
 # (postgres) and PostgREST's authenticator login inside the file.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_post_review.test.sql"

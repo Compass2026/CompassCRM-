@@ -1,3 +1,6 @@
+import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
+import type { GrowthMeasurement, SearchHistory } from "./client-growth";
+
 export type Json =
   | string
   | number
@@ -14,6 +17,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      backlink_opportunities: {
+        Row: BacklinkOpportunity
+        Insert: Omit<BacklinkOpportunity, "id"|"stage"|"created_at"|"updated_at"> & { id?:string; stage?:BacklinkOpportunity["stage"]; created_at?:string; updated_at?:string }
+        Update: Partial<BacklinkOpportunity>
+        Relationships: []
+      }
+      backlink_checks: {
+        Row: BacklinkCheck
+        Insert: Omit<BacklinkCheck, "recorded_at"|"recorded_by"> & { recorded_at?:string; recorded_by?:string|null }
+        Update: never
+        Relationships: []
+      }
       client_brand_workspaces: {
         Row: {
           id: string
@@ -11308,6 +11323,10 @@ export type Database = {
       }
     }
     Views: {
+      portal_growth_measurements: { Row: GrowthMeasurement; Relationships: [] }
+      client_growth_search: { Row: SearchHistory; Relationships: [] }
+      portal_growth_search: { Row: SearchHistory; Relationships: [] }
+      portal_backlinks: { Row: PortalBacklink; Relationships: [] }
       authority_latest: {
         Row: {
           client_id: string | null

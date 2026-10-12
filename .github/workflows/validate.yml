@@ -65,3 +65,21 @@ jobs:
           sudo install /tmp/postgrest /usr/local/bin/postgrest
       - name: Review a fictional blog through the real browser and database
         run: npm run test:blog-drafter-ui
+
+  client-growth-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Verify dashboard and backlink browser flows with fictional data
+        run: CHROME_PATH=/usr/bin/google-chrome node --no-warnings tests/client-growth-ui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: client-growth-screenshots
+          path: docs/screenshots/client-growth/

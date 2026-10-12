@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 
 const tabs = [
   { label: "Overview", segment: "" },
+  { label: "Progress", segment: "growth" },
+  { label: "Backlinks", segment: "backlinks" },
   { label: "Rankings", segment: "rankings" },
   { label: "Search traffic", segment: "search" },
   { label: "What we've done", segment: "work-log" },

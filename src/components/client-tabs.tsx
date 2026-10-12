@@ -9,6 +9,7 @@ import { useActiveInView } from "@/components/use-active-in-view";
 
 const tabs = [
   { label: "Overview", segment: "" },
+  { label: "Progress", segment: "growth" },
   { label: "Plan", segment: "plan" },
   { label: "Agreements", segment: "agreements" },
   { label: "Brand", segment: "brand" },
@@ -18,6 +19,7 @@ const tabs = [
   { label: "Foundation", segment: "foundation" },
   { label: "Intelligence", segment: "intelligence" },
   { label: "Authority", segment: "authority" },
+  { label: "Backlinks", segment: "backlinks" },
   { label: "Services", segment: "services" },
   { label: "Keywords", segment: "keywords" },
   { label: "Planner", segment: "planner" },
