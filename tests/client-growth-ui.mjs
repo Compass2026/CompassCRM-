@@ -115,6 +115,14 @@ try{
  await page.locator('select[name="range"]').selectOption('month');await page.locator('input[name="month"]').fill('2026-09');await page.getByRole('button',{name:'Update view'}).click();await page.waitForURL(/range=month/);await page.getByText('All measurements & sources',{exact:false}).click();await page.getByText('Result in selected dates').first().waitFor();
  assert.equal(await page.locator('article').getByText('Aug 31, 2026',{exact:true}).count(),8);
  await page.getByText('All measurements & sources',{exact:false}).click();
+ for(const [i,metric]of ['website_sessions','website_users','website_pageviews'].entries())for(const [month,value]of [['08',30+i],['09',50+i]])measurements.push({...fixture,id:`traffic-${i}-${month}`,source:'Google Analytics 4',scope:'GA4 properties/123 | client.example.test | America/Chicago | complete_month',metric,sequence:50+i*2+(month==='09'?1:0),window_start:`2026-${month}-01`,window_end:`2026-${month}-${month==='08'?'31':'30'}`,value});
+ await page.reload({waitUntil:'networkidle'});
+ const traffic=page.getByRole('region',{name:'Website traffic analytics',exact:true});
+ await traffic.getByRole('button',{name:'Chart Website visitors',exact:true}).click();
+ assert.match(await traffic.getByTestId('chart-readout').innerText(),/51 website visitors/);
+ await traffic.getByRole('button',{name:'Bars',exact:true}).click();
+ assert.match(await traffic.getByTestId('performance-plot').getAttribute('aria-label'),/Website visitors bar chart/);
+ await page.screenshot({path:`${shots}/traffic-desktop.png`,fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:`${shots}/progress-mobile.png`,fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  await page.setViewportSize({width:1440,height:1000});
