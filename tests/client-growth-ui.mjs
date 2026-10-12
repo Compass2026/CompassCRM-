@@ -66,6 +66,7 @@ try{
  const team=await context(teamId),page=await team.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/growth`,{waitUntil:'networkidle'});
  await page.getByRole('heading',{name:"Where we started. How you're growing."}).waitFor();
+ assert.equal(await page.getByRole('heading',{name:"Where we started. How you're growing."}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
  assert.equal(await page.locator('section[aria-label="Client growth dashboard"] article').count(),9);
  assert.equal(await page.getByText('+10 (+100.0%) since baseline',{exact:true}).count(),4);
  await page.screenshot({path:`${shots}/progress-desktop.png`,fullPage:true});
