@@ -1,6 +1,6 @@
 import type { GrowthRanking } from "./growth-rankings";
 import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
-import type { GrowthMeasurement, SearchHistory } from "./client-growth";
+import type { GrowthMeasurement, SearchHistory, GrowthWork } from "./client-growth";
 
 export type Json =
   | string
@@ -18,6 +18,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      gsc_performance_imports: {
+        Row: { id: string; client_id: string; property: string; period: string; period_end: string; data: Json; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      gsc_performance_sync_runs: {
+        Row: { id: string; client_id: string; created_at: string; finished_at: string | null; status: string; results: Json }
+        Insert: { id?: string; client_id: string; status: string; results: Json }
+        Update: { finished_at?: string | null; status?: string; results?: Json }
+        Relationships: []
+      }
       gbp_performance_imports: {
         Row: { id: string; client_id: string; account_id: string; location_id: string; period: string; period_end: string; data: Json; created_at: string }
         Insert: never
@@ -11336,6 +11348,8 @@ export type Database = {
       }
     }
     Views: {
+      client_growth_work: { Row: GrowthWork; Relationships: [] }
+      portal_growth_work: { Row: GrowthWork; Relationships: [] }
       client_growth_rankings: { Row: GrowthRanking; Relationships: [] }
       portal_growth_rankings: { Row: GrowthRanking; Relationships: [] }
       portal_growth_measurements: { Row: GrowthMeasurement; Relationships: [] }
@@ -12889,6 +12903,10 @@ export type Database = {
       }
     }
     Functions: {
+      gsc_performance_record: {
+        Args: { p_client_id: string; p_property: string; p_start: string; p_end: string; p_data: Json }
+        Returns: Json
+      }
       gbp_performance_record: {
         Args: { p_client_id: string; p_account_id: string; p_location_id: string; p_start: string; p_end: string; p_data: Json }
         Returns: Json
