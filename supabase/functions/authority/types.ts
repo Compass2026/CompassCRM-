@@ -49,7 +49,7 @@ export type PageGroupRow = {
   id: string; name: string; page_type: string; status: string; city_tier: string | null;
   target_url: string | null; primary_keyword_id: string | null; supporting_keyword_ids: string[];
 };
-export type KeywordExtra = { id: string; volume: number | null; cpc: number | null; city: string | null };
+export type KeywordExtra = { id: string; volume: number | null; cpc: number | null; competition?: number | null; city: string | null };
 export type GscRow = {
   query: string; page: string | null; impressions: number; clicks: number; avg_position: number | null;
   period_start: string; period_end: string; keyword_id: string | null;
@@ -114,7 +114,8 @@ export type KeywordRole =
   | "home_ambiguous";    // a flag only: Home-like, but another governed page or rule competes; a person decides
 export type KeywordAssignment = {
   keyword_id: string; keyword: string; service_id: string | null; intent: string | null; money: boolean;
-  priority: string | null; volume: number | null; target_path: string | null; role: KeywordRole; flags: string[]; reasons: Reason[];
+  tracked?: boolean; priority: string | null; volume: number | null; cpc?: number | null; competition?: number | null;
+  target_path: string | null; role: KeywordRole; flags: string[]; reasons: Reason[];
   // Stored intent (FACT) vs a conservative assessment of the query text
   // (HEURISTIC). Never written back.
   intent_check: { stored: string | null; assessed: "navigational" | "informational" | "commercial_or_transactional" | "ambiguous"; conflict: boolean; reason: string };

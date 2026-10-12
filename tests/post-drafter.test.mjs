@@ -89,7 +89,7 @@ test("refused: missing, off-site or unapproved target page", () => {
 test("refused: an unapproved service, a mismatched keyword, an offer on a standard post, a button to another page", () => {
   const cases = [
     [{ ...TARGET, serviceId: "svc-draft", keywordId: null }, "service_not_approved"],
-    [{ ...TARGET, keywordId: "kw-info" }, "keyword_intent_mismatch"],
+    [{ ...TARGET, keywordId: "11111111-1111-4111-8111-111111111111" }, "keyword_intent_mismatch"],
     [{ ...TARGET, offerId: "o1" }, "offer_not_applicable"],
     [{ ...TARGET, ctaUrl: `${SITE}/contact` }, "cta_invalid"],
     [{ ...TARGET, channel: "instagram" }, "channel_unsupported"],

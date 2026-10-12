@@ -50,9 +50,9 @@ import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 3;
+export const HANDLER_VERSION = 4;
 export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns"] as const;
 
 export type Deps = {
   store: Store;
@@ -80,6 +80,8 @@ function parseTarget(t: unknown): DraftTarget | string {
   if (!str("channel") || !str("intent")) return "target.channel and target.intent are required";
   const postType = str("postType") ?? "standard";
   if (postType !== "standard" && postType !== "offer") return "target.postType is standard or offer";
+  const campaignMode = str("campaignMode") ?? "keyword";
+  if (campaignMode !== "keyword" && campaignMode !== "non_search") return "target.campaignMode is keyword or non_search";
   for (const k of ["serviceId", "keywordId", "offerId", "socialAccountId"]) {
     if (o[k] != null && !(typeof o[k] === "string" && UUID.test(o[k] as string))) return `target.${k} must be a uuid`;
   }
@@ -89,6 +91,7 @@ function parseTarget(t: unknown): DraftTarget | string {
     channel: str("channel")!,
     postType,
     intent: str("intent")!,
+    campaignMode,
     serviceId: (o.serviceId as string | null) ?? null,
     keywordId: (o.keywordId as string | null) ?? null,
     ctaType: str("ctaType"),

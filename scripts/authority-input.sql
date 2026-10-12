@@ -22,7 +22,7 @@ select client_intelligence_input(c.id) || jsonb_build_object('authority', jsonb_
             'status', g.status, 'city_tier', g.city_tier, 'target_url', g.target_url, 'primary_keyword_id', g.primary_keyword_id,
             'supporting_keyword_ids', g.supporting_keyword_ids) order by g.name)
            from page_groups g where g.client_id = c.id), '[]'::jsonb),
-  'keywordExtras', coalesce((select jsonb_agg(jsonb_build_object('id', k.id, 'volume', k.volume, 'cpc', k.cpc, 'city', k.city))
+  'keywordExtras', coalesce((select jsonb_agg(jsonb_build_object('id', k.id, 'volume', k.volume, 'cpc', k.cpc, 'competition', k.competition, 'city', k.city))
            from keywords k where k.client_id = c.id), '[]'::jsonb),
   'moneyKeywordIds', coalesce((select jsonb_agg(m.keyword_id) from money_keywords m where m.client_id = c.id), '[]'::jsonb),
   'gsc', coalesce((select jsonb_agg(jsonb_build_object('query', g.query, 'page', g.page, 'impressions', g.impressions,

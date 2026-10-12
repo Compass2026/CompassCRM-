@@ -156,7 +156,8 @@ export function classifyKeywords(input: AuthorityInput, ctx: KeywordContext): Ke
     const ex = extras.get(k.id);
     return {
       keyword_id: k.id, keyword: text, service_id: k.service_id, intent: k.intent, money: money.has(k.id) || k.is_money,
-      priority: k.priority, volume: ex?.volume ?? null, target_path: target, role, flags: [...flags], reasons, intent_check, home_check,
+      tracked: !!k.is_tracked, priority: k.priority, volume: ex?.volume ?? null, cpc: ex?.cpc ?? null,
+      competition: ex?.competition ?? null, target_path: target, role, flags: [...flags], reasons, intent_check, home_check,
       unapproved_places: unapproved.map((p) => p.name),
     };
   });

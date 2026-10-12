@@ -73,9 +73,9 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       listTeamMembers(supabase),
       supabase.from("post_claims").select("claim_id, claims(id, claim, status, source)").eq("post_id", postId),
       supabase.from("claims").select("id, claim, status, source").eq("client_id", clientId).order("created_at"),
-      supabase.from("services").select("id, name, status").eq("client_id", clientId).order("sort_order"),
+      supabase.from("services").select("id, name, status, page_url, primary_keyword_id").eq("client_id", clientId).order("sort_order"),
       supabase.from("offers").select("id, title, terms, status, starts_on, ends_on").eq("client_id", clientId).order("title"),
-      supabase.from("keywords").select("id, keyword").eq("client_id", clientId).eq("is_tracked", true).order("keyword"),
+      supabase.from("keywords").select("id, keyword, intent, target_url, priority, is_money, is_tracked, service_id").eq("client_id", clientId).eq("is_active", true).order("keyword"),
       supabase.rpc("social_post_readiness", { p_post_id: postId }),
       supabase.from("post_events").select("id, kind, actor_kind, actor_id, from_value, to_value, detail, created_at").eq("post_id", postId).order("id"),
       post.review_task_id
@@ -129,7 +129,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const { data: drafterRun } = post.drafter_run_id
     ? await supabase
         .from("drafter_runs")
-        .select("id, created_at, runtime, attempt, status, requested_via, brief_version, brief_hash, copy_hash, claim_ids, lint, target")
+        .select("id, created_at, runtime, attempt, status, requested_via, brief_version, brief_hash, copy_hash, claim_ids, lint, target, authority_opportunity_id")
         .eq("id", post.drafter_run_id)
         .maybeSingle()
     : { data: null };
@@ -196,6 +196,19 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const service = (services ?? []).find((s) => s.id === post.service_id);
   const offer = (offers ?? []).find((o) => o.id === post.offer_id);
   const keyword = (keywords ?? []).find((k) => k.id === post.keyword_id);
+  const primaryKeyword = service?.primary_keyword_id
+    ? (keywords ?? []).find((k) => k.id === service.primary_keyword_id) ?? null
+    : null;
+  const { data: authorityOpportunity } = drafterRun?.authority_opportunity_id
+    ? await supabase.from("authority_opportunities")
+        .select("topic, opportunity")
+        .eq("id", drafterRun.authority_opportunity_id)
+        .eq("client_id", clientId)
+        .maybeSingle()
+    : { data: null };
+  const authorityReason = authorityOpportunity
+    ? ((authorityOpportunity.opportunity as { gap?: string } | null)?.gap ?? authorityOpportunity.topic ?? null)
+    : null;
   // The account the post names: part of the approved snapshot, so the reviewer
   // sees which Page an approval binds. A Facebook draft gets the client's only
   // Facebook Page when it is saved (createPostAction / updatePostAction).
@@ -232,6 +245,33 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           </span>
         </div>
       </div>
+
+      <section aria-label="Campaign foundation" className="surface space-y-2 p-4 text-sm sm:p-5" data-campaign-foundation>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">Campaign foundation</h3>
+          {keyword?.priority && <Badge variant="outline" className="text-[10px] uppercase">{keyword.priority}</Badge>}
+          {keyword?.is_money && <Badge variant="outline" className="border-green-200 bg-green-50 text-[10px] text-green-800">money</Badge>}
+          {keyword?.is_tracked && <Badge variant="outline" className="border-blue-200 bg-blue-50 text-[10px] text-blue-800">tracked</Badge>}
+        </div>
+        <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-1 text-xs [&>dd]:[overflow-wrap:anywhere]">
+          <dt className="text-muted-foreground">Primary keyword</dt>
+          <dd>{primaryKeyword?.keyword ?? "—"}</dd>
+          <dt className="text-muted-foreground">Post keyword</dt>
+          <dd>{keyword?.keyword ?? "Non-search / legacy"}</dd>
+          <dt className="text-muted-foreground">Search intent</dt>
+          <dd className="capitalize">{post.search_intent}</dd>
+          <dt className="text-muted-foreground">Service</dt>
+          <dd>{service?.name ?? "—"}</dd>
+          <dt className="text-muted-foreground">Target page</dt>
+          <dd className="break-all">{service?.page_url ?? keyword?.target_url ?? drafter?.targetPage ?? "—"}</dd>
+          {authorityReason && (
+            <>
+              <dt className="text-muted-foreground">Authority reason</dt>
+              <dd>{authorityReason}</dd>
+            </>
+          )}
+        </dl>
+      </section>
 
       {drafter && (
         <section aria-label="AI Drafter" className="surface space-y-2 p-4 text-sm sm:p-5">
