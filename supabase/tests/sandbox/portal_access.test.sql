@@ -88,7 +88,7 @@ do $$
 declare v record; n int;
 begin
   select count(*) into n from t.portal_views();
-  perform t.ok('A0 nineteen portal views exist (growth includes rankings)', n = 19, n || ' views');
+  perform t.ok('A0 twenty portal views exist (growth includes published work)', n = 20, n || ' views');
 
   for v in
     select c.relname, pg_get_userbyid(c.relowner) owner, r.rolsuper, r.rolbypassrls,
