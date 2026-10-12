@@ -39,7 +39,7 @@ begin
   q := blog_publication_queue(d.id,d.version,now()+interval '1 hour');
   perform cd.ok('PUB4a safe pre-write failure can be requeued with intact history',
     q<>p and (select status='cancelled' and last_error like 'Keyword, brand%' from blog_publications where id=p)
-    and (select status='queued' and released_by is not null and snapshot=d.approved_snapshot from blog_publications where id=q));
+    and (select status='queued' and released_by is not null and snapshot=(select snapshot from blog_publications where id=p) from blog_publications where id=q));
   perform cd.ok('PUB4b requeue remains idempotent',
     q=blog_publication_queue(d.id,d.version,now()+interval '1 hour'));
   perform blog_publication_cancel(q);
