@@ -26,6 +26,27 @@ function harness(options={}) {
 test('authorization refuses before acquiring or writing publication',async()=>{
  const h=harness({deps:{authorized:async()=>false}});assert.equal((await h.run()).status,403);assert.deepEqual(h.calls,[]);
 });
+test('rebuilds approved snapshot draft identity and original note without skipping checks',async()=>{
+ const h=harness();
+ const note='Keep the approved article and link its current money pages.';
+ h.r.brief=buildBlogBrief(lucas(),{...draftRow(),request_note:note}).brief;
+ delete h.r.id;
+ delete h.r.request_note;
+ // A real SQL approval snapshot contains draft_id, but neither id nor
+ // request_note at the top level. The latter is frozen in brief.target.
+ const r=await h.run();
+ assert.equal((await r.json()).status,'uncertain');
+ assert.ok(h.calls.includes('read'), 'foundation matches and reaches website checks');
+});
+test('a genuine approved foundation change is still blocked',async()=>{
+ const h=harness();
+ delete h.r.id;
+ delete h.r.request_note;
+ h.r.brief.brand.tagline='An outdated campaign brand';
+ const r=await h.run();
+ assert.equal((await r.json()).status,'blocked');
+ assert.ok(!h.calls.includes('read'));
+});
 test('revocation immediately before commit blocks with no external write',async()=>{
  const h=harness({revoke:true});const r=await h.run();assert.equal((await r.json()).status,'blocked');
  assert.ok(h.calls.includes('authorize'));assert.ok(!h.calls.includes('push'));
