@@ -114,13 +114,6 @@ export function createBlogPublisher(deps: Deps) {
       const delivery = preparePublication(r,p.release_hash,read,date);
       if (delivery.already_present) throw new Error("Approved release exists; reconcile the verified live page without writing another commit.");
       await deps.authorize(p.id,p.lease_token);
-        evidence = {...previous,commit_sha:sha,url:delivery.url,
-          deployment_state:"READY",deployment_target:"production",live_verified:true,
-          reconciliation:{mode:"existing_release",deployment_id:deployment.deployment_id ?? null}};
-        await deps.finish(p.id,p.lease_token,"published",evidence);
-        return Response.json({status:"published",url:delivery.url,commit_sha:sha,reconciled:true});
-      }
-      await deps.authorize(p.id,p.lease_token);
       externalWriteStarted = true;
       const pushRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,repo:r.destination.repo_url.replace("https://github.com/",""),
         branch:r.destination.branch,expected_head:delivery.expected_head,files:delivery.files,
