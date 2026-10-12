@@ -1,7 +1,7 @@
 -- Client progress reads the existing immutable measurement ledger.
 -- Portal views deliberately follow 0037's owner-view boundary: explicit
 -- client filter, minimal columns, SELECT only. No base-table portal access.
-create view public.portal_growth_measurements with (security_barrier = true) as
+create view public.portal_growth_measurements with (security_barrier = true, security_invoker = false) as
 select id, client_id, sequence, metric, scope, source, platform, channel,
        context, report_period, window_start, window_end, status, value, created_at
 from public.report_measurements
@@ -16,7 +16,7 @@ select client_id, period_start, period_end, sum(clicks)::bigint as clicks,
 from public.gsc_snapshots group by client_id, period_start, period_end;
 revoke all on public.client_growth_search from public, anon, authenticated;
 grant select on public.client_growth_search to authenticated;
-create view public.portal_growth_search with (security_barrier = true) as
+create view public.portal_growth_search with (security_barrier = true, security_invoker = false) as
 select client_id, period_start, period_end, sum(clicks)::bigint as clicks,
        sum(impressions)::bigint as impressions, count(*)::bigint as imported_rows
 from public.gsc_snapshots where client_id = (select public.portal_client_id())
@@ -122,7 +122,7 @@ revoke all on function public.guard_backlink_check() from public, anon, authenti
 create trigger guard_backlink_check before insert or update or delete on public.backlink_checks
 for each row execute function public.guard_backlink_check();
 
-create view public.portal_backlinks with (security_barrier = true) as
+create view public.portal_backlinks with (security_barrier = true, security_invoker = false) as
 select o.id, o.client_id, o.title, o.source_url, o.target_url, k.keyword,
        b.name as brand_name, c.observed_on, c.result, c.rel, c.anchor_text,
        (select min(x.observed_on) from public.backlink_checks x where x.opportunity_id=o.id and x.result='live') as first_live_on
