@@ -20,6 +20,10 @@ import { AuthorityRunControls } from "@/components/authority/authority-run-contr
 import { AuthorityRunProvider } from "@/components/authority/authority-run-context";
 import { getClientAgreement, usageByKey } from "@/lib/entitlements";
 import { MonthlyAllocation } from "@/components/entitlements/monthly-allocation";
+import { KeywordCampaigns } from "@/components/authority/keyword-campaigns";
+import type { KeywordCampaign } from "../../../../../../supabase/functions/authority/campaigns";
+
+type CampaignReport = { opportunities: Opportunity[]; pillars: PillarLite[]; site: string | null; campaigns?: KeywordCampaign[] };
 
 // The Authority Engine's recorded runs (0048). Every read is the signed-in
 // teammate's own (RLS: is_team()). The controls start a full analysis or a
@@ -56,17 +60,17 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
   ]);
 
   const failure = clientQ.error ?? latestQ.error ?? runsQ.error ?? statesQ.error ?? eventsQ.error;
-  let report: { opportunities: Opportunity[]; pillars: PillarLite[]; site: string | null } | null = null;
+  let report: CampaignReport | null = null;
   let reportError: string | null = null;
   const latest = latestQ.data as unknown as LatestRow | null;
   if (!failure && latest?.run_id) {
     const { data, error } = await supabase
       .from("authority_runs")
-      .select("opportunities:report->opportunities, pillars:report->pillars, site:inventory->>site")
+      .select("opportunities:report->opportunities, pillars:report->pillars, campaigns:report->campaigns, site:inventory->>site")
       .eq("id", latest.run_id)
       .single();
     if (error) reportError = error.message;
-    else report = data as unknown as { opportunities: Opportunity[]; pillars: PillarLite[]; site: string | null };
+    else report = data as unknown as CampaignReport;
   }
 
   // C2: the record-content card counts what is recorded against the pages the
@@ -149,6 +153,7 @@ export default async function AuthorityPage({ params }: { params: Promise<{ clie
         <AuthorityHeader header={view.header} controls={controls} />
         <AuthorityBanners banners={view.banners} />
         {!view.empty && <AuthoritySummary summary={view.summary} />}
+        <KeywordCampaigns campaigns={report?.campaigns ?? []} />
         {!view.empty && (
           <MonthlyAllocation
             title="Planning within the agreement"

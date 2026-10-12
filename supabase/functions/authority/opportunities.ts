@@ -89,24 +89,26 @@ export function buildOpportunities(ctx: {
 
   for (const p of pillars) {
     const value = pillarValue(p, keywords);
-    const primary = keywords.find((k) => k.service_id === p.service_id && k.role === "primary") ?? null;
+    const primary = keywords.find((k) => k.service_id === p.service_id && k.role === "primary" && input.keywords.some((row) => row.id === k.keyword_id && row.is_active)) ?? null;
     const relevant = p.evidence.relevant.map((c) => c.id);
     const cov = p.coverage;
 
     // ── Owner page missing / broken → create it (or finish the proposal) ──
     if (p.owner.state !== "live") {
       const hasEvidence = relevant.length > 0;
+      const foundation = !!primary && !primary.intent_check.conflict && !p.owner.conflict;
       const reasons: Reason[] = [...p.owner.reasons];
       if (p.owner.pending_proposal) reasons.push({ tag: "HEURISTIC", text: "Finish the pending proposal rather than starting a second page." });
       if (p.gsc.impressions) reasons.push({ tag: "FACT", text: `Search demand already exists: ${p.gsc.impressions} impressions in ${p.gsc.window}${demandNote(p.gsc.coverage)}, best position ${p.gsc.best_position ?? "–"}, landing on ${p.gsc.landing_pages.map((l) => l.path).join(", ")}.` });
       out.push(base({
         id: `service_page:${slug(p.name)}`, key: `service_page:${p.service_id}`, topic: p.name, service_id: p.service_id,
-        action: hasEvidence ? "create" : "insufficient_evidence", content_type: "service_page",
+        action: !foundation ? "blocked_data_prerequisite" : hasEvidence ? "create" : "insufficient_evidence", content_type: "service_page",
         target: { keyword_id: primary?.keyword_id ?? null, keyword: primary?.keyword ?? null, intent: primary?.intent ?? "commercial", location: null, owner_path: p.owner.path, cta: null },
         evidence_claim_ids: relevant, existing_coverage: cov,
         gap: `The owner page ${p.owner.path ?? "(none)"} is ${p.owner.state === "none" ? "not defined" : p.owner.state.replace("_", " ")}.`,
-        blockers: hasEvidence ? [] : ["No usable claim relevant to this service."],
+        blockers: [...(!foundation ? ["Resolve primary keyword, intent and owner-page conflicts before creating a page."] : []), ...(hasEvidence ? [] : ["No usable claim relevant to this service."])],
         gates: [
+          { gate: "keyword_foundation", pass: foundation, detail: "A validated primary keyword and unambiguous owner are required." },
           { gate: "approved_service", pass: true, detail: "Approved service." },
           { gate: "evidence", pass: hasEvidence, detail: `${relevant.length} relevant usable claim(s).` },
           { gate: "owner_page", pass: true, detail: "This opportunity creates it." },

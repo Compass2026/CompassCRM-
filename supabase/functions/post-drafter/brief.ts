@@ -38,6 +38,8 @@ import {
   type SocialAccountRow,
 } from "./types.ts";
 import { claimCategories, hostOf, normalizeUrl, stableJson, words } from "./rules.ts";
+import { assessIntent } from "../authority/intent.ts";
+import { buildPlaceIndex } from "../authority/urls.ts";
 
 export const MAX_CLAIMS = 2;
 export const KEYWORD_MAX_EXACT_USES = 1;
@@ -94,6 +96,11 @@ const mentions = (text: string, tokens: string[]) =>
   words(text).some((w) => tokens.some((t) => w.startsWith(t) || (w.length >= 4 && t.startsWith(w))));
 
 export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { socialAccounts?: SocialAccountRow[] } = {}): BriefResult {
+  // Missing target fields inherit from the selected keyword. Explicit
+  // disagreements still refuse below; never rewrite the stored keyword.
+  const selected = input.keywords.find((k) => k.id === target.keywordId);
+  target = { ...target, intent: target.intent?.trim() || selected?.intent || "",
+    serviceId: target.serviceId ?? selected?.service_id ?? null };
   const refusals: Refusal[] = [];
   const refuse = (code: string, message: string) => refusals.push({ code, message });
   const areas = assessIntelligence(toIntelligence(input));
@@ -207,16 +214,35 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     }
   }
 
-  // ── Keyword (optional) ──
+  // ── Keyword foundation and unique owner ──
   let keyword: Brief["target"]["keyword"] = null;
   if (target.keywordId) {
     const k = input.keywords.find((x) => x.id === target.keywordId);
     if (!k) refuse("keyword_unknown", "The keyword is not one of this client's keywords.");
     else {
       if (!k.is_active) refuse("keyword_inactive", `"${k.keyword}" is not active.`);
-      if (service && k.service_id !== service.id && service.primary_keyword_id !== k.id) refuse("keyword_wrong_service", `"${k.keyword}" is not mapped to ${service.name}.`);
+      if (service && (k.service_id ? k.service_id !== service.id : service.primary_keyword_id !== k.id)) refuse("keyword_wrong_service", `"${k.keyword}" is not mapped to ${service.name}.`);
       if (normalizeIntent(k.intent) !== intent) refuse("keyword_intent_mismatch", `"${k.keyword}" is ${k.intent ?? "unlabelled"}, not ${intent}.`);
+      const places = input.locations.map((l) => l.city || l.name).filter((p): p is string => !!p);
+      const assessed = assessIntent(k.keyword, normalizeIntent(k.intent), {
+        clientName: input.client.name, places: buildPlaceIndex(places, places, []),
+      });
+      if (assessed.conflict) refuse("keyword_intent_conflict", `"${k.keyword}": ${assessed.reason} Review the keyword intent before drafting.`);
       if (k.target_url && pageUrl && normalizeUrl(k.target_url) !== normalizeUrl(pageUrl)) refuse("keyword_wrong_page", `"${k.keyword}" targets ${k.target_url}, not ${pageUrl}.`);
+      // Check equivalent keyword rows too: separate IDs must not hide two
+      // primary owners for the same demand. Supporting assets keep one owner.
+      const sameText = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+      const primary = input.keywords.find((x) => x.id === service?.primary_keyword_id);
+      const ownerKeywords = new Set([sameText(k.keyword), ...(primary ? [sameText(primary.keyword)] : [])]);
+      const cluster = input.keywords.filter((x) => x.is_active && ownerKeywords.has(sameText(x.keyword)));
+      const ids = new Set(cluster.map((x) => x.id));
+      const owners = new Set([
+        pageUrl,
+        ...cluster.map((x) => x.target_url),
+        ...input.services.filter((s) => s.status === "approved" && s.primary_keyword_id && ids.has(s.primary_keyword_id)).map((s) => s.page_url),
+        ...input.pageGroups.filter((g) => g.status === "approved" && g.primary_keyword_id && ids.has(g.primary_keyword_id)).map((g) => g.target_url),
+      ].map(normalizeUrl).filter(Boolean));
+      if (owners.size > 1) refuse("keyword_owner_conflict", `"${k.keyword}" has competing owner pages: ${[...owners].join(", ")}. Resolve ownership before drafting.`);
       keyword = { id: k.id, text: k.keyword, tracked: !!k.is_tracked, money: !!k.is_money, max_exact_uses: KEYWORD_MAX_EXACT_USES };
     }
   }

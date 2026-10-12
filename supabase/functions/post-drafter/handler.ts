@@ -50,7 +50,7 @@ import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 4;
+export const HANDLER_VERSION = 5;
 export const MODES = ["brief", "check", "submit", "version"] as const;
 export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns"] as const;
 
@@ -77,7 +77,7 @@ function parseTarget(t: unknown): DraftTarget | string {
   if (!t || typeof t !== "object") return "target is required";
   const o = t as Record<string, unknown>;
   const str = (k: string) => (typeof o[k] === "string" && (o[k] as string).trim() ? (o[k] as string).trim() : null);
-  if (!str("channel") || !str("intent")) return "target.channel and target.intent are required";
+  if (!str("channel")) return "target.channel is required";
   const postType = str("postType") ?? "standard";
   if (postType !== "standard" && postType !== "offer") return "target.postType is standard or offer";
   const campaignMode = str("campaignMode") ?? "keyword";
@@ -90,7 +90,7 @@ function parseTarget(t: unknown): DraftTarget | string {
   return {
     channel: str("channel")!,
     postType,
-    intent: str("intent")!,
+    intent: str("intent") ?? "",
     campaignMode,
     serviceId: (o.serviceId as string | null) ?? null,
     keywordId: (o.keywordId as string | null) ?? null,
