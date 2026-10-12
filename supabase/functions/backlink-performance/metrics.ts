@@ -20,7 +20,8 @@ export function summaryMetrics(raw:unknown,host:string) {
 export function historyMetrics(raw:unknown,host:string,start:string,end:string) {
  const {result,...receipt}=providerResult(raw,host,'timeseries_new_lost_summary');
  if(result.date_from!==start||result.date_to!==end||result.group_range!=='month'||!Array.isArray(result.items)||result.items_count!==result.items.length)throw new Error('incomplete_history');
- if(!result.items.length)throw new Error('incomplete_history');
+ const expected=(Number(end.slice(0,4))-Number(start.slice(0,4)))*12+Number(end.slice(5,7))-Number(start.slice(5,7))+1;
+ if(result.items.length!==expected)throw new Error('incomplete_history');
  const seen=new Set<string>();
  const months=result.items.map((item:{date:string;new_backlinks:number;lost_backlinks:number})=>{
   const date=item.date?.slice(0,10),first=date?.slice(0,7)+'-01';

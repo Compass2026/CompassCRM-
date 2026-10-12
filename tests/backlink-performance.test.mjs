@@ -10,6 +10,7 @@ test('backlink provider identity, missing counts and incomplete history fail clo
  for(const bad of [null,-1,1.5,11]){const r=structuredClone(summary);r.tasks[0].result[0].referring_domains=bad;assert.throws(()=>summaryMetrics(r,'example.test'));}
  const history=response('timeseries_new_lost_summary',{date_from:'2026-09-01',date_to:'2026-09-30',group_range:'month',items_count:1,items:[{date:'2026-09-30 00:00:00 +00:00',new_backlinks:2,lost_backlinks:1}]});
  assert.equal(historyMetrics(history,'example.test','2026-09-01','2026-09-30').months[0].values.links_new,2);
+ assert.throws(()=>historyMetrics(history,'example.test','2026-08-01','2026-09-30'));
  history.tasks[0].result[0].items[0].date='2026-09-29';assert.throws(()=>historyMetrics(history,'example.test','2026-09-01','2026-09-30'));
 });
 test('weekly claim bounds provider charges; missing auth and failed claims make no requests',async()=>{
