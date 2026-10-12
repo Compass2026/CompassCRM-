@@ -44,7 +44,7 @@ export async function BrandWorkspaces({clientId,workspaces,selected}:{clientId:s
       {ownKeywords.length?<ul className="grid gap-2 text-sm md:grid-cols-2">{ownKeywords.map(k=><li key={k.id}>{k.keyword} <span className="text-muted-foreground">· {k.intent??'Intent needed'}{k.target_url?'':' · Owner page needed'}</span></li>)}</ul>:<p className="text-sm text-muted-foreground">Assign this brand’s services below, then complete their keyword and owner-page mappings. Another brand’s keywords are not used as a fallback.</p>}
       <Link href={`/clients/${clientId}/planner`} className="mt-4 inline-block underline text-sm">Open the client content calendar</Link>
     </CardContent></Card>
-    <form action={saveBrandWorkspace.bind(null,clientId,b.id,b.version)} className="space-y-6">
+    <form key={`${b.id}:${b.version}`} action={saveBrandWorkspace.bind(null,clientId,b.id,b.version)} className="space-y-6">
       <Card><CardHeader><CardTitle>Brand identity and guidance</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
         {(['name','phone','website_url'] as const).map(k=><label key={k} className="space-y-1 text-sm"><span>{k==='website_url'?'Website':k==='phone'?'Phone':'Brand name'}</span><input className="field w-full" name={k} defaultValue={b[k]} required /></label>)}
         {WORKSPACE_TEXT_FIELDS.map(([k,label])=><label key={k} className="space-y-1 text-sm"><span>{label}</span><textarea className="field w-full min-h-24" name={k} defaultValue={b[k]}/></label>)}
