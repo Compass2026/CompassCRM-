@@ -1,3 +1,4 @@
+import { workspaceGate } from "../post-drafter/workspace.ts";
 // content-drafter: the governed brief for a blog draft (0067). Pure.
 //
 // Built from the same canonical Client Intelligence input as the post
@@ -127,7 +128,7 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
   // ── The same per-draft gate as the post drafter ──
   const areas = assessIntelligence(input as unknown as IntelligenceInput);
   const area = (key: string) => areas.find((a) => a.key === key);
-  const gate: Record<string, string> = {};
+  const gate: Record<string, string> = workspaceGate(input);
   if (!input.board) refuse("brand_board_missing", "The client has no brand board.");
   else if (input.board.status !== "approved") refuse("brand_board_not_approved", `The brand board is ${input.board.status}, not approved.`);
   gate.brand_board = input.board?.status ?? "missing";

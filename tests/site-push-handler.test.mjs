@@ -597,3 +597,12 @@ test('a publisher cannot overwrite a repository revision newer than the one it r
   const after = await s.post({client_id:CLIENT,read:true,paths:['data/blog-posts.json']});
   assert.equal(after.body.head,before.body.head);
 });
+
+
+test("explicit blog site selection never falls back to the client's first website", async () => {
+  const siteId="00000000-0000-4000-8000-000000000099";
+  const h=setup({site:LUCAS_SITE,repos:TOM_REPO});
+  const missing=await h.post({client_id:CLIENT,site_id:siteId,read:true,paths:["data/blog-posts.json"]});
+  assert.equal(missing.status,404);
+  assert.equal(h.supabase.store.sites.length,1);
+});

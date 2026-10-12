@@ -67,9 +67,9 @@ export function createStore(supabase: Client) {
     },
 
     // The one read of Client Intelligence (0047).
-    async input(clientId: string): Promise<DrafterInput | null> {
-      const { data, error } = await supabase.rpc("client_intelligence_input", { p_client_id: clientId });
-      if (error) throw new Error(error.message);
+    async input(clientId: string, serviceId: string | null = null): Promise<DrafterInput | null> {
+      const { data, error } = await supabase.rpc("client_intelligence_for_content", { p_client_id: clientId, p_service_id: serviceId });
+      if (error) throw Object.assign(new Error(error.message), { code: error.code });
       return (data as DrafterInput | null) ?? null;
     },
 

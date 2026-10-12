@@ -1,3 +1,4 @@
+import { workspaceGate } from "./workspace.ts";
 // AI Drafter v1: the Governed Brief Builder. Pure; reads nothing, writes
 // nothing, knows no model.
 //
@@ -180,7 +181,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   }
 
   // ── Per-draft gate ──
-  const gate: Record<string, string> = {};
+  const gate: Record<string, string> = workspaceGate(input);
   if (!input.board) refuse("brand_board_missing", "The client has no brand board.");
   else if (input.board.status !== "approved") refuse("brand_board_not_approved", `The brand board is ${input.board.status}, not approved.`);
   gate.brand_board = input.board?.status ?? "missing";

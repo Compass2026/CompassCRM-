@@ -240,13 +240,21 @@ export function createSitePushHandler(deps: HandlerDeps) {
     );
   }
   const org = (await secret("GITHUB_ORG")) ?? "Compass2026";
-  const { data: siteRow } = await supabase
+  const siteQuery = supabase
     .from("sites")
     .select("id, repo_url, branch, preview_branch, vercel_project, stack, work_mode, controlled_by_compass, content_adapter, content_paths")
-    .eq("client_id", client.id)
+    .eq("client_id", client.id);
+  if (body.site_id != null) {
+    if (!/^[0-9a-f-]{36}$/i.test(body.site_id) || body.domain || body.deploy || body.archive) {
+      return Response.json({error:"A site id is supported only for content reads and writes"},{status:400});
+    }
+    siteQuery.eq("id",body.site_id);
+  }
+  const { data: siteRow, error: siteError } = await siteQuery
     .order("created_at")
     .limit(1)
     .maybeSingle();
+  if (siteError || (body.site_id && !siteRow)) return Response.json({error:"Website destination not found for this client"},{status:404});
   const repoFromSite = siteRow?.repo_url?.match(/github\.com\/([^/]+)\/([^/#?]+)/i);
   const full: string = body.repo ?? (repoFromSite ? `${repoFromSite[1]}/${repoFromSite[2].replace(/\.git$/, "")}` : `${org}/${repoSlug(client.name)}`);
   const [owner, name] = full.split("/");
@@ -1181,12 +1189,9 @@ export function createSitePushHandler(deps: HandlerDeps) {
     if (!commit) throw new Error("nothing to commit");
     const commitUrl = `${repoUrl}/commit/${commit.sha}`;
     const branchUrl = `${repoUrl}/tree/${branch}`;
-    const { data: site } = await supabase
-      .from("sites")
-      .select("id, repo_url")
-      .eq("client_id", client.id)
-      .limit(1)
-      .maybeSingle();
+    const recordQuery = supabase.from("sites").select("id, repo_url").eq("client_id", client.id);
+    if (siteRow) recordQuery.eq("id", siteRow.id);
+    const { data: site } = await recordQuery.limit(1).maybeSingle();
     if (site) {
       await supabase
         .from("sites")

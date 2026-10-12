@@ -1,3 +1,4 @@
+import { workspaceAccounts } from "./workspace.ts";
 // post-drafter — AI Drafter v1, Deliverable 2: the governed write path.
 //
 //   brief   → rebuild the governed brief from LIVE Client Intelligence (the
@@ -50,9 +51,9 @@ import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 5;
+export const HANDLER_VERSION = 6;
 export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces"] as const;
 
 export type Deps = {
   store: Store;
@@ -128,11 +129,15 @@ export function createPostDrafter(deps: Deps) {
   // one in.
   async function rebuild(clientId: string, target: DraftTarget):
     Promise<{ ok: true; brief: Brief; hash: string; state: string | null } | { ok: false; status: number; body: Json }> {
-    const input = await store.input(clientId);
+    let input;
+    try { input = await store.input(clientId, target.serviceId); } catch (e) {
+      if ((e as {code?:string}).code === "23514") return {ok:false,status:422,body:{eligible:false,refusals:[{code:"brand_service_required",message:(e as Error).message}]}};
+      throw e;
+    }
     if (!input?.client) return { ok: false, status: 404, body: { error: "client_not_found" } };
     // A Facebook brief also reads the client's Facebook Pages (v3).
     const result = target.channel === "facebook"
-      ? buildBrief(input, target, { socialAccounts: await store.socialAccounts(clientId) })
+      ? buildBrief(input, target, { socialAccounts: workspaceAccounts(input, await store.socialAccounts(clientId)) })
       : buildBrief(input, target);
     if (!result.ok) return { ok: false, status: 422, body: { eligible: false, refusals: result.refusals } };
     return { ok: true, brief: result.brief, hash: await briefHash(result.brief), state: input.client.state ?? null };
