@@ -260,7 +260,7 @@ select set_config('request.jwt.claims', '', false);
 -- ── K. The weekly blog completes only at approval (0068) ────────────────────
 \c - supabase_admin
 \o /dev/null
-insert into tasks (id, client_id, title, owner, status, key) values (cd.id('weekly'), cd.id('b'), 'Weekly blog post', 'CLAUDE', 'open', 'blog_post');
+insert into tasks (id, client_id, title, owner, status, key, due_date) values (cd.id('weekly'), cd.id('b'), 'Weekly blog post', 'CLAUDE', 'open', 'blog_post', date_trunc('week', now() at time zone 'America/Chicago')::date+8);
 \o
 \c - authenticator
 set role authenticated;
@@ -278,9 +278,10 @@ declare r jsonb; r2 jsonb;
 begin
   r := content_draft_open_weekly(jsonb_build_object('task_id', cd.id('weekly'), 'topic', 'When to clear a slow drain', 'search_intent', 'informational', 'keyword_id', cd.id('kw-b')));
   perform cd.save('weekly_draft', r->>'draft_id');
-  perform cd.ok('K2 the worker opens a draft for the weekly task: requested, in this week''s blog slot, the task in progress',
+  perform cd.ok('K2 the worker opens a draft for the weekly task: requested, in the due date''s next-week slot, the task in progress',
     (select status = 'requested' and source_task_id = cd.id('weekly') and plan_item_id = (r->>'plan_item_id')::uuid from content_drafts where id = (r->>'draft_id')::uuid)
-    and (select deliverable = 'blog' and week_start = date_trunc('week', (now() at time zone 'America/Chicago'))::date
+    and (select deliverable = 'blog' and week_start = date_trunc('week', (now() at time zone 'America/Chicago'))::date+7
+                  and planned_date = (select due_date from tasks where id=cd.id('weekly'))
            from content_plan_items where id = (r->>'plan_item_id')::uuid)
     and (select status::text from tasks where id = cd.id('weekly')) = 'in_progress');
   r2 := content_draft_open_weekly(jsonb_build_object('task_id', cd.id('weekly'), 'topic', 'Something else', 'search_intent', 'informational'));
