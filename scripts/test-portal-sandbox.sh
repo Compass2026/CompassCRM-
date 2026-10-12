@@ -92,6 +92,7 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billin
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/task_assignment.test.sql"
 # 0041: scorecard ledger (same replay, own harness schema).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/report_measurements.test.sql"
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth.test.sql"
 # 0045: post record and human review gate. Switches between the worker
 # (postgres) and PostgREST's authenticator login inside the file.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_post_review.test.sql"
