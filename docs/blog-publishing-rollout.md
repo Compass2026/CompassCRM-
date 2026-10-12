@@ -1,6 +1,6 @@
 # Blog publishing rollout and BHG activation
 
-Status: integration branch, not deployed. Reviewed October 12, 2026 UTC (October 11 Central).
+Status: human-review-only workflow deployed October 12, 2026 UTC (October 11 Central). Lucas pilot saved in review. Automatic release and article graphics remain a later phase.
 
 ## Goal
 
@@ -30,13 +30,13 @@ Automatic blog publishing does not automatically enable automatic release for Fa
 
 ## Work recovered and updated
 
-The existing `claude/blog-drafter` branch at `13392c5` contains the weekly planner, article editor, governed drafter, approval and Markdown export. Its migrations 0065 content planner, 0066 content status, 0067 drafts and 0068 weekly completion are absent from production.
+The existing `claude/blog-drafter` branch at `13392c5` contains the weekly planner, article editor, governed drafter, approval and Markdown export. Its migrations 0065 content planner, 0066 content status, 0067 drafts and 0068 weekly completion were absent from production at recovery and are now applied.
 
 Integrated that branch with production main `8740e378f462c722f4baf067f4f185b82121133a`, preserving the current social, billing and CRM Lite code. Resolved merge conflicts in the shared brief and test harness. The blog brief now reuses the current keyword foundation, derives missing intent/service from the selected keyword, uses live keyword text, and refuses inactive/foreign keywords, intent contradictions, unapproved pages and competing keyword owners. Regression coverage includes these failure cases.
 
 ## Implementation and verification (October 11, 2026)
 
-Completed on the integration branch:
+Deployed in CRM PR #119, with the scheduling correction and generated types in PR #120:
 
 - Every new social/blog brief requires an active governed keyword; the old non-search exception is retired. Blog briefs record the keyword, campaign/plan relationship and approved owner page. Planner and weekly requests require keywords.
 - Draft guards bind system flags to trusted sessions, reject worker metadata bypasses, freeze requested foundation, forbid claim UPDATE, and version/serialize human claim changes.
@@ -47,9 +47,18 @@ Completed on the integration branch:
 - Lucas and BHG renderer upgrades preserve approved Markdown, H1, metadata and CTA, and carry a release marker for verification. No client article is included in those website changes.
 - Two weekly tasks are planned within the existing monthly allowance. The planner counts completed slots too, preventing repeat generation after completion.
 
-Validation: full CRM build, lint, app TypeScript, PostgreSQL migration/role suite and browser review workflow passed on the initial publisher checkpoint. Both site renderer TypeScript/build checks passed. The final cadence/history additions are being rechecked. Edge Function type checking and targeted transport/retry tests pass locally.
+Validation: full CRM build, lint, app TypeScript, PostgreSQL migration/role suite, billing checks and real browser review workflow passed on final heads 98b387f and 9910db9. Both site renderer TypeScript/build checks passed. Edge Function type checking and targeted transport/retry tests passed locally. A live Sunday request with a Monday due date exposed a planner-week constraint failure; the transaction rolled back. Forward migration 20261012033430_blog_weekly_due_week.sql now assigns the due-date week, with a next-week regression test. The retried live request succeeded.
 
-Deployment and actual Lucas review draft are the next gate. No pilot article has been approved, queued or published by this work.
+Production evidence:
+
+- CRM PR #119 merged as `05935c4`; PR #120 merged as `7db1e0d`. Both production deployments reached READY.
+- Lucas renderer PR #10 merged as `5851da7`, BHG renderer PR #13 as `978b7f0`; both production deployments reached READY. These changes contain no new client article.
+- Planner/draft migrations, publication/approval-history migration and due-date-week forward fix applied. All five new tables have RLS and deny anonymous reads.
+- `content-drafter`, `blog-publisher` and keyword-governed `post-drafter` deployed. The publication cron processes only explicitly human-queued articles.
+- [Lucas pilot review](https://compass-crm-ten.vercel.app/clients/102d3b20-2795-44ae-bd64-d1e43916291c/drafts/40687f9b-5b77-4f22-ae8d-f15b8b8f963a): 945 words, version 1, status `in_review`, keyword `christmas light hanging service wentzville`, service-page owner `/christmas-lights`, three sourced claims. Blocking lint passes; two warnings flag paraphrased claims rather than exact quotations. The human reviewer can inspect both sources.
+- Readback confirms zero approval records, zero publication records and no final content post for this pilot. Its task remains in progress pending review. Existing Lucas social posts remain under their existing review state.
+
+Human review and an explicitly queued approved article are the next release gate. No real pilot has been published, so live content delivery remains to be demonstrated after approval.
 
 ## Later automatic-release phase
 
@@ -62,7 +71,7 @@ Client `3eaa3389-2a33-4004-837c-8aef90404410`, website `https://bhgsafety.com/`.
 | Area | Live record | Remaining action |
 | --- | --- | --- |
 | Agreement | 8 blogs, 8 GBP posts, 8 social posts, 4 new pages, 1 refresh per month | Reuse existing allowance; do not create another agreement |
-| Website | Compass-controlled, `Compass2026/BHGSafetyPartners`, main, `markdown_blog`, `content/blog`, Vercel `bhg-safety-partners` | Validate current repository format and approved-article publisher |
+| Website | Compass-controlled, `Compass2026/BHGSafetyPartners`, main, `markdown_blog`, `content/blog`, Vercel `bhg-safety-partners` | Renderer contract deployed and production READY; verify first approved delivery after brand review |
 | Keywords | 94 active; 37 have service, intent and target URL populated | Audit eligible clusters; fix mappings from verified pages; do not invent intent/ownership |
 | Page groups | 22 | Reconcile with services and live pages |
 | Brand | Version 1, status draft; Canva folder recorded | Team reviews and approves the actual board |
