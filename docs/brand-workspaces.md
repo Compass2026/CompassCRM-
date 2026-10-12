@@ -8,7 +8,7 @@ The creative engine also resolves name, phone, website, CTA, claims and source a
 
 ## Release sequence
 
-1. Push branch `codex/bhg-brand-workspaces` to the existing CRM repository and open a PR. **Currently blocked:** automatic approval review rejected the push; repository metadata confirms that `Compass2026/CompassCRM-` is public. Obtain explicit user approval for publishing this change there before retrying. No workaround push or deployment has occurred.
+1. Push branch `codex/bhg-brand-workspaces` to the existing CRM repository and open a PR. Tom explicitly approved publication to the existing repository on October 12 after its public visibility was disclosed. PR #122 passed native database, application, billing and browser checks and merged as `83c6454`.
 2. Pass the existing Validate CRM workflow, including the native PostgreSQL role/migration replay and blog browser suite. Run `scripts/test-portal-sandbox.sh` with the new `brand_workspaces.test.sql` suite.
 3. Apply `20261012163631_brand_workspaces.sql` before deploying code that queries the new table. No profile rows are inserted by the migration, so existing client behavior remains active during rollout.
 4. Deploy the app and `post-drafter`, `content-drafter`, `blog-publisher`, `site-push`, and `creative-engine` from the tested commit. Retain existing authentication settings. Verify the versions and inspect a legacy-client brief before activation.
@@ -23,4 +23,4 @@ The creative engine also resolves name, phone, website, CTA, claims and source a
 - `node scripts/test-brand-workspaces-pglite.mjs` replays every migration and passes 18 brand checks, including human review, keyword/evidence isolation, destination selection and portal RLS. This supplemental runner retains PGlite's initial postgres superuser and is not a substitute for the native PostgreSQL CI gate.
 - The broad unit run had a version expectation fixed for the new handler version. Its existing social review PGlite process exited after 36 passing tests without an assertion failure. The final two tests both pass when run separately. Full CI still required.
 
-No production brand migration, profile activation, post approval or publishing was performed during the local build.
+Production update on October 12: migration applied, app deployed, all five Edge Functions updated. Three BHG profiles are active as drafts. Safety has its existing services, evidence, assets and blog site; Forklift has its existing service and 12 keywords with owner-page correction still needed; Heavy Equipment has a proposed service awaiting its keyword/evidence setup. All share the confirmed phone. Facebook and shared GBP connections remain pending. No brand/post approvals or public posts were made.
