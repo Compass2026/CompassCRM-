@@ -150,11 +150,17 @@ begin
 
   -- Status
   select status into st from content_plan_board where id = pl.id('i-gbp');
-  perform pl.ok('D1 intent + service → ready to generate', st = 'ready_to_generate', st);
+  perform pl.ok('D1 intent and service without a keyword stays planned', st = 'planned', st);
+  update content_plan_items set keyword_id = pl.id('kw-a') where id = pl.id('i-gbp');
+  perform pl.ok('D1b selecting an active keyword enables generation',
+    (select status from content_plan_board where id = pl.id('i-gbp')) = 'ready_to_generate');
   e := pl.try(pl.item(pl.id('i-planned'), a, w, 'social', 'facebook', 'educational', 'Roof care tips'));
   select status into st from content_plan_board where id = pl.id('i-planned');
   perform pl.ok('D2 no intent → planned', e is null and st = 'planned', coalesce(e, st));
-  perform pl.ok('D3 an authority blog with intent is ready (a blog needs no service)',
+  perform pl.ok('D3 an authority blog also needs a keyword',
+    (select status from content_plan_board where id = pl.id('i-auth-blog')) = 'planned');
+  update content_plan_items set keyword_id = pl.id('kw-a') where id = pl.id('i-auth-blog');
+  perform pl.ok('D3b an authority blog with a keyword and intent is ready',
     (select status from content_plan_board where id = pl.id('i-auth-blog')) = 'ready_to_generate');
 
   perform pl.ok('L1 a post for another channel cannot fill the slot',
