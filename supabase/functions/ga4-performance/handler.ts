@@ -13,9 +13,14 @@ export function createGa4Performance({supabase,fetch:request=fetch,now=()=>new D
    if(member?.role!=="admin")return Response.json({error:"forbidden"},{status:403});
   }
   const body=await req.json().catch(()=>null);
-  if(!body||typeof body.client_id!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.client_id)||(body.months!==undefined&&(!Number.isInteger(body.months)||body.months<1||body.months>6)))return Response.json({error:"invalid_request"},{status:400});
+  if(!body||typeof body.client_id!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.client_id)||(body.brand_workspace_id!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.brand_workspace_id))||(body.months!==undefined&&(!Number.isInteger(body.months)||body.months<1||body.months>6)))return Response.json({error:"invalid_request"},{status:400});
   const {data:client,error}=await supabase.from("clients").select("id,status,ga4_property,website_url").eq("id",body.client_id).maybeSingle();
   if(error||!client)return Response.json({error:"client_unavailable"},{status:404});
+  if(body.brand_workspace_id) {
+   const {data:brand,error:brandError}=await supabase.from("client_brand_workspaces").select("id,client_id,website_url,ga4_property").eq("id",body.brand_workspace_id).eq("client_id",client.id).maybeSingle();
+   if(brandError||!brand)return Response.json({error:"brand_unavailable"},{status:404});
+   client.website_url=brand.website_url;client.ga4_property=brand.ga4_property;
+  }
   if(!["active","launching"].includes(client.status)||!/^properties\/\d+$/.test(client.ga4_property??"")||!client.website_url)return Response.json({error:"property_binding_required"},{status:422});
   const credentials=await Promise.all([secret("GOOGLE_OPS_CLIENT_ID").then(async v=>v??await secret("GSC_CLIENT_ID")),secret("GOOGLE_OPS_CLIENT_SECRET").then(async v=>v??await secret("GSC_CLIENT_SECRET")),secret("GOOGLE_OPS_REFRESH_TOKEN")]);
   if(credentials.some(v=>!v))return Response.json({error:"google_connection_missing"},{status:424});
@@ -47,7 +52,7 @@ export function createGa4Performance({supabase,fetch:request=fetch,now=()=>new D
      try {
       const raw=await read(`https://analyticsdata.googleapis.com/v1beta/${client.ga4_property}:runReport`,{method:"POST",headers,body:JSON.stringify({dateRanges:[{startDate:period.start,endDate:period.end}],metrics:Object.keys(GA4_METRICS).map(name=>({name})),dimensionFilter:{filter:{fieldName:"hostName",inListFilter:{values:[host,`www.${host}`],caseSensitive:false}}},limit:"1"})});
       const data=normalizeGa4(raw,metadata.timeZone,host,period.coverage);
-      const saved=await supabase.rpc("ga4_performance_record",{p_client_id:client.id,p_property:client.ga4_property,p_start:period.start,p_end:period.end,p_data:data});
+      const saved=await supabase.rpc("ga4_performance_record",{p_client_id:client.id,p_property:client.ga4_property,p_start:period.start,p_end:period.end,p_data:body.brand_workspace_id?{...data,brand_workspace_id:body.brand_workspace_id}:data});
       if(saved.error)throw new Error("import_write_failed");
       results.push({month:period.start,...saved.data});
      }catch(e){fail(period.start,e);if(e instanceof Error&&/^(import_write_failed|google_http_(401|403|429))$/.test(e.message))break;}

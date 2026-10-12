@@ -15,6 +15,11 @@ on:
           - blog-publisher
           - post-publisher
           - google-ops
+          - reporting-connections
+          - backlink-performance
+          - ga4-performance
+          - gsc-performance
+          - gbp-performance
           - rank-sync
           - brightlocal-sync
           - site-push

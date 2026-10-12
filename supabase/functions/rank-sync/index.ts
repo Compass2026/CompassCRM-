@@ -267,22 +267,30 @@ Deno.serve(async (req) => {
 
   const job = (async () => {
     const tagged = ready.filter((r) => r.tag && /^[0-9a-f-]{36}$/i.test(r.tag));
-    const { data: kws } = await supabase
-      .from("keywords")
-      .select("id, keyword, city, client_id")
-      .in("id", tagged.map((r) => r.tag!));
+    // Bound PostgREST URLs as the client roster grows. Never ignore read errors.
+    const kws: {id:string;keyword:string;city:string|null;client_id:string}[]=[];
+    for(let offset=0;offset<tagged.length;offset+=80) {
+      let query=supabase.from("keywords").select("id, keyword, city, client_id")
+        .in("id",tagged.slice(offset,offset+80).map(r=>r.tag!));
+      if(body.client_id)query=query.eq("client_id",body.client_id);
+      const {data,error}=await query;
+      if(error)throw new Error(`keyword_lookup_failed: ${error.code}`);
+      kws.push(...(data??[]));
+    }
     const kwById = new Map((kws ?? []).map((k) => [k.id, k]));
     const clientIds = [...new Set((kws ?? []).map((k) => k.client_id))];
-    const { data: clients } = await supabase
+    const { data: clients, error: clientsError } = await supabase
       .from("clients")
       .select("id, name, dba, city, state, website_url, sites(url)")
       .in("id", clientIds);
-    const { data: runs } = await supabase
+    if(clientsError)throw new Error(`client_lookup_failed: ${clientsError.code}`);
+    const { data: runs, error: runsError } = await supabase
       .from("rank_runs")
       .select("id, client_id, started_at, checks_count")
       .in("client_id", clientIds)
       .eq("status", "running")
       .order("started_at", { ascending: false });
+    if(runsError)throw new Error(`run_lookup_failed: ${runsError.code}`);
     const runFor = new Map<string, { id: string; started_at: string; checks_count: number | null }>();
     for (const r of runs ?? []) if (!runFor.has(r.client_id)) runFor.set(r.client_id, r);
     const isUsFor = new Map<string, (it: Item) => boolean>();
@@ -334,7 +342,10 @@ Deno.serve(async (req) => {
       if (error) errors.push(`snapshots: ${error.message}`);
       else inserted = (data ?? []).length;
       const checked = [...new Set(rows.map((r) => r.keyword_id as string))];
-      await supabase.from("keywords").update({ last_checked: new Date().toISOString() }).in("id", checked);
+      if(!error)for(let offset=0;offset<checked.length;offset+=80) {
+        const marked=await supabase.from("keywords").update({last_checked:new Date().toISOString()}).in("id",checked.slice(offset,offset+80));
+        if(marked.error)errors.push(`keyword timestamp: ${marked.error.code}`);
+      }
     }
 
     // Close runs whose keywords have all answered; recompute the City Index.
@@ -367,9 +378,15 @@ Deno.serve(async (req) => {
         await supabase.rpc("recompute_location_indexes", { p_client_id: clientId, p_period: run.started_at.slice(0, 7) + "-01" });
       }
     }
-    console.log(JSON.stringify({ rank_sync_collect: { ready: ready.length, inserted, cost, errors: errors.slice(0, 20) } }));
+    const result={ready:ready.length,matched:kws.length,inserted,cost,errors:errors.slice(0,20)};
+    console.log(JSON.stringify({rank_sync_collect:result}));
+    return result;
   })();
 
+  if(body.wait===true) {
+    try{return Response.json({ok:true,mode,...await job});}
+    catch(e){return Response.json({error:e instanceof Error?e.message:"collection_failed"},{status:503});}
+  }
   EdgeRuntime.waitUntil(job);
   return Response.json({ ok: true, mode, ready: ready.length }, { status: 202 });
 });
