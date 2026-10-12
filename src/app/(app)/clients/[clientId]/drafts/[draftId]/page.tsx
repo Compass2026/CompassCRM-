@@ -1,3 +1,5 @@
+import { blogClient } from "@/lib/blog-publications";
+import { BlogPublicationControls } from "@/components/drafts/blog-publication-controls";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +30,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
   const { data: d } = await supabase.from("content_drafts").select("*").eq("id", draftId).eq("client_id", clientId).maybeSingle();
   if (!d || !isDraftStatus(d.status)) notFound();
 
+  const { data: publications } = await blogClient(supabase).from("blog_publications").select("id,draft_version,status,scheduled_at,published_url,last_error").eq("draft_id", draftId).order("released_at", { ascending: false });
   const [members, { data: linked }, { data: claims }, { data: service }, { data: finalPost }, { data: problems }] = await Promise.all([
     listTeamMembers(supabase),
     supabase.from("content_draft_claims").select("claim_id, claims(id, claim, status, source)").eq("draft_id", draftId),
@@ -81,6 +84,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
         </p>
       )}
 
+      {d.deliverable === "blog" && <BlogPublicationControls draftId={draftId} clientId={clientId} version={d.version} approved={d.status === "approved"} publications={publications ?? []} />}
       <section className="surface space-y-2 p-4 text-sm" data-draft-brief>
         <h3 className="font-semibold">Brief</h3>
         <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-y-1 text-xs [&>dd]:[overflow-wrap:anywhere]">

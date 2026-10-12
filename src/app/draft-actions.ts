@@ -166,3 +166,38 @@ export async function deleteDraftAction(clientId: string, draftId: string): Prom
   revalidateDraft(clientId);
   redirect(`/clients/${clientId}/planner`);
 }
+
+export async function queueBlogAction(_prev: DraftFormState, form: FormData): Promise<DraftFormState> {
+  const supabase = await start();
+  if (!supabase) return { error: NOT_TEAM };
+  const id = String(form.get("draft_id") ?? "");
+  const clientId = String(form.get("client_id") ?? "");
+  const version = Number(form.get("version"));
+  if (!isUuid(id) || !isUuid(clientId) || !Number.isInteger(version) || version < 1) return { error: "Reload the draft and try again." };
+  const { data: draft } = await supabase.from("content_drafts").select("id").eq("id",id).eq("client_id",clientId).maybeSingle();
+  if (!draft) return {error:"Draft not found."};
+  const { blogClient } = await import("@/lib/blog-publications");
+  const scheduled = String(form.get("scheduled_at") ?? "");
+  if (scheduled && !Number.isFinite(Date.parse(scheduled))) return {error:"Choose a valid publication time."};
+  const { error } = await blogClient(supabase).rpc("blog_publication_queue",{
+    p_draft_id:id,p_version:version,...(scheduled ? {p_scheduled_at:new Date(scheduled).toISOString()} : {}),
+  });
+  if (error) return {error:error.message};
+  revalidateDraft(clientId,id);
+  return {ok:true,text:"Queued for website checks and publication. The article is marked published only after the live page is verified."};
+}
+
+export async function cancelBlogPublicationAction(_prev: DraftFormState, form: FormData): Promise<DraftFormState> {
+  const supabase = await start();
+  if (!supabase) return {error:NOT_TEAM};
+  const id=String(form.get("publication_id")??"");
+  if (!isUuid(id)) return {error:"Publication not found."};
+  const { blogClient } = await import("@/lib/blog-publications");
+  const api=blogClient(supabase);
+  const {data:p}=await api.from("blog_publications").select("draft_id,client_id").eq("id",id).maybeSingle();
+  if (!p) return {error:"Publication not found."};
+  const {error}=await api.rpc("blog_publication_cancel",{p_id:id});
+  if (error) return {error:error.message};
+  revalidateDraft(p.client_id,p.draft_id);
+  return {ok:true,text:"Publication cancelled. The reviewed article remains in history."};
+}

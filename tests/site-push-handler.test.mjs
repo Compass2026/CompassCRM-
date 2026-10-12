@@ -587,3 +587,13 @@ test("the revert commit is still authored and committed by the team member", asy
   assert.equal(commit.body.author.email, TEAM_EMAIL);
   assert.equal(commit.body.committer.email, TEAM_EMAIL);
 });
+
+test('a publisher cannot overwrite a repository revision newer than the one it read', async () => {
+  const s = setup({site:LUCAS_SITE,repos:{'Compass2026/ridge-safety':{files:{'data/blog-posts.json':'[]'}}}});
+  const before = await s.post({client_id:CLIENT,read:true,paths:['data/blog-posts.json']});
+  const r = await s.post({client_id:CLIENT,branch:'main',expected_head:'0'.repeat(40),files:[{path:'data/blog-posts.json',content:'[{"slug":"new"}]'}]});
+  assert.equal(r.status,409);
+  assert.equal(r.body.error,'repository_changed');
+  const after = await s.post({client_id:CLIENT,read:true,paths:['data/blog-posts.json']});
+  assert.equal(after.body.head,before.body.head);
+});

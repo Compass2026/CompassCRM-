@@ -240,3 +240,4 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_planner.tes
 # reopen / re-approve, reject, web pages with no final record yet, Billing
 # sees one article, team-only access).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_drafts.test.sql"
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_publication.test.sql"

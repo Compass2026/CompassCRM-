@@ -9,6 +9,8 @@ import type { DraftRow, SitePage } from "./brief.ts";
 // deno-lint-ignore no-explicit-any
 type Client = any;
 
+type WriteResult = { draft_id: string; status: string; version: number; word_count: number };
+type OpenResult = { draft_id: string; plan_item_id: string; status: string; reused: boolean };
 export type WriteError = { code: string | null; message: string };
 
 export function createStore(supabase: Client) {
@@ -44,15 +46,15 @@ export function createStore(supabase: Client) {
       return (data ?? []) as SitePage[];
     },
     // The weekly blog (0068): open the draft for a blog_post task.
-    async openWeekly(p: Record<string, unknown>): Promise<Record<string, unknown> | { error: WriteError }> {
+    async openWeekly(p: Record<string, unknown>): Promise<OpenResult | { error: WriteError }> {
       const { data, error } = await supabase.rpc("content_draft_open_weekly", { p });
       if (error) return { error: { code: error.code ?? null, message: error.message } };
-      return data as Record<string, unknown>;
+      return data as OpenResult;
     },
-    async write(p: Record<string, unknown>): Promise<Record<string, unknown> | { error: WriteError }> {
+    async write(p: Record<string, unknown>): Promise<WriteResult | { error: WriteError }> {
       const { data, error } = await supabase.rpc("content_draft_write", { p });
       if (error) return { error: { code: error.code ?? null, message: error.message } };
-      return data as Record<string, unknown>;
+      return data as WriteResult;
     },
   };
 }

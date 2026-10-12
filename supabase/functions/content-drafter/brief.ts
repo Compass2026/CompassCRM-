@@ -64,6 +64,9 @@ export type BlogBrief = {
   gate: Record<string, string>;
   target: {
     draft_id: string;
+    campaign_id: string;
+    keyword_id: string;
+    owner_page: { id: string; url: string } | null;
     topic: string;
     primary_keyword: string | null;
     search_intent: string;
@@ -109,7 +112,7 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
   // Reuse the current search foundation: a live keyword, matching intent and
   // service, and one approved owner page, including equivalent keyword rows.
   const foundation = buildBrief(input, {
-    channel: "google_business", postType: "standard",
+    channel: "google_business", postType: "standard", ctaType: null,
     keywordId: draft.keyword_id, serviceId: draft.service_id,
     intent: draft.search_intent ?? "",
   });
@@ -199,6 +202,12 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
       gate,
       target: {
         draft_id: draft.id,
+        campaign_id: draft.plan_item_id ?? draft.id,
+        keyword_id: keyword.id,
+        owner_page: foundation.brief.target.service ? {
+          id: foundation.brief.target.service.page_group_id,
+          url: foundation.brief.target.service.page_url,
+        } : null,
         topic: draft.topic,
         primary_keyword: draft.primary_keyword,
         search_intent: intent,
