@@ -32,18 +32,12 @@
 // OAuth app: GSC_CLIENT_ID / GSC_CLIENT_SECRET (GOOGLE_OPS_CLIENT_ID / _SECRET
 // override, same as google-ops). Its authorized redirect URIs must include
 // this function's own URL. Scopes requested: business.manage, analytics.edit,
-// gmail.compose, openid, email.
+// gmail.compose, analytics.readonly, openid, email.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const SCOPES = [
-  "https://www.googleapis.com/auth/business.manage",
-  "https://www.googleapis.com/auth/analytics.edit",
-  "https://www.googleapis.com/auth/gmail.compose",
-  "openid",
-  "email",
-];
-const REQUIRED = SCOPES.slice(0, 3);
+import { SCOPES, missingGoogleScopes } from "./scopes.ts";
+
 const ACCT = "https://mybusinessaccountmanagement.googleapis.com/v1";
 const BIZ = "https://mybusinessbusinessinformation.googleapis.com/v1";
 const GA = "https://analyticsadmin.googleapis.com/v1beta";
@@ -132,7 +126,7 @@ Deno.serve(async (req) => {
     }
 
     const granted: string[] = String(token.scope ?? "").split(" ").filter(Boolean);
-    const missing = REQUIRED.filter((s) => !granted.includes(s));
+    const missing = missingGoogleScopes(granted);
 
     let email: string | null = null;
     const who = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${token.access_token}` } });
