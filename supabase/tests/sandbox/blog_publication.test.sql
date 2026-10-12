@@ -25,7 +25,20 @@ begin
   perform cd.ok('PUB4 direct publication mutation and worker-only APIs are refused',
     cd.try(format('update blog_publications set status=''published'' where id=%L',p)) like '42501%'
     and cd.try(format('select blog_publication_claim(%L)',p)) like '42501%');
-  perform blog_publication_cancel(p);
+  -- Simulate the publisher detecting a foundation mismatch before any
+  -- repository write. The genuine teammate must explicitly retry.
+  perform set_config('compass.blog_publication_write','on',true);
+  update blog_publications set status='blocked',
+    last_error='Keyword, brand or campaign foundation changed since review. Regenerate and review before publishing.',
+    evidence='{}'::jsonb where id=p;
+  perform set_config('compass.blog_publication_write','',true);
+  q := blog_publication_queue(d.id,d.version,now()+interval '1 hour');
+  perform cd.ok('PUB4a safe pre-write failure can be requeued with intact history',
+    q<>p and (select status='cancelled' and last_error like 'Keyword, brand%' from blog_publications where id=p)
+    and (select status='queued' and released_by is not null and snapshot=d.approved_snapshot from blog_publications where id=q));
+  perform cd.ok('PUB4b requeue remains idempotent',
+    q=blog_publication_queue(d.id,d.version,now()+interval '1 hour'));
+  perform blog_publication_cancel(q);
   update content_drafts set status='draft' where id=d.id;
   perform cd.ok('PUB5a approval history survives reopening',
     (select count(*) from content_draft_reviews where draft_id=d.id)>=2);
