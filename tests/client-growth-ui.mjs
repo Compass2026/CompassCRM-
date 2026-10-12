@@ -15,6 +15,7 @@ const measurements=['organic_sessions','forms','referring_domains','pages_live']
 ]);
 const ranking={client_id:clientId,keyword_id:keywordId,keyword:'roof repair',keyword_city:'Springfield',location_id:'home',location_name:'Springfield',result_type:'organic',first_position:18,first_checked_at:'2026-08-01T00:00:00Z',position:2,checked_at:'2026-09-28T00:00:00Z',previous_position:5,previous_checked_at:'2026-09-21T00:00:00Z'};
 const rankingRows=[ranking,{...ranking,result_type:'map_pack',position:1},{...ranking,keyword_id:'second',keyword:'roof replacement',position:null},{...ranking,keyword_id:'third',keyword:'new keyword',result_type:null,first_position:null,first_checked_at:null,position:null,checked_at:null}];
+measurements.push({...fixture,id:'gbp1',metric:'gbp_directions',sequence:20,source:'Google Business Profile via Zernio',window_start:'2026-09-01',window_end:'2026-09-30',report_period:'2026-09-01',value:45});
 const opportunities=[],checks=[],unexpected=[];let failInsert=true;
 const upstream=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');
@@ -71,6 +72,8 @@ try{
  await page.getByRole('heading',{name:"Where we started. How you're growing."}).waitFor();
  assert.equal(await page.getByRole('heading',{name:"Where we started. How you're growing."}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
  assert.equal(await page.locator('section[aria-label="Client growth dashboard"] article').count(),9);
+ await page.getByText('Direction requests',{exact:true}).waitFor();
+ assert.ok(await page.getByText('Automatically imported complete months.',{exact:false}).isVisible());
  assert.equal(await page.getByText('+10 (+100.0%) since baseline',{exact:true}).count(),4);
  assert.match(await page.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+3/);
  assert.match(await page.getByTestId('maps-rankings').innerText(),/Average position: 1.0/);

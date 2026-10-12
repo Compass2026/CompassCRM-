@@ -23,7 +23,7 @@ const current = row({ id: "00000000-0000-4000-8000-000000000003", sequence: 2, r
 test("nine areas include social, reviews and qualified leads", () => {
   assert.equal(REPORT_AREAS.length, 9);
   assert.ok(REPORT_AREAS.some((a) => a.key === "social"));
-  assert.equal(new Set(REPORT_AREAS.flatMap((a) => a.metrics.map(([key]) => key))).size, 31);
+  assert.equal(new Set(REPORT_AREAS.flatMap((a) => a.metrics.map(([key]) => key))).size, 32);
 });
 test("zero is measured; unavailable data cannot masquerade as zero", () => {
   assert.equal(parseMeasurement(client, form({ value: "0" })).value, 0);
@@ -111,10 +111,11 @@ test("0041 leaves the transaction to apply_migration and stamps its own audit co
   assert.match(code, /new\.recorded_by := coalesce\(auth\.uid\(\)::text/);
   assert.match(code, /references public\.clients\(id\) on delete restrict/, "clients with history cannot be deleted");
 });
-test("the scorecard says its numbers are recorded by hand", () => {
+test("the scorecard identifies automatic GBP imports and other recorded evidence", () => {
   const ui = readFileSync("src/components/client-scorecard.tsx", "utf8");
-  assert.match(ui, /Recorded by hand\./);
-  assert.match(ui, /does not read the rank-tracking or Search Console snapshots/);
+  assert.match(ui, /Recorded with source and evidence\./);
+  assert.match(ui, /Google Business Profile performance imports complete months automatically/);
+  assert.match(ui, /Rank-tracking and Search Console snapshots stay in their trackers/);
 });
 test("the worker's baseline rule applies to new clients only and never pauses silently", () => {
   const skill = readFileSync(".claude/skills/foundation-worker/SKILL.md", "utf8");

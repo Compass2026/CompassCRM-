@@ -18,6 +18,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      gbp_performance_imports: {
+        Row: { id: string; client_id: string; account_id: string; location_id: string; period: string; period_end: string; data: Json; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      gbp_performance_sync_runs: {
+        Row: { id: string; created_at: string; finished_at: string | null; status: string; results: Json }
+        Insert: { id?: string; created_at?: string; finished_at?: string | null; status: string; results: Json }
+        Update: { finished_at?: string | null; status?: string; results?: Json }
+        Relationships: []
+      }
       backlink_opportunities: {
         Row: BacklinkOpportunity
         Insert: Omit<BacklinkOpportunity, "id"|"stage"|"created_at"|"updated_at"> & { id?:string; stage?:BacklinkOpportunity["stage"]; created_at?:string; updated_at?:string }
@@ -12877,6 +12889,10 @@ export type Database = {
       }
     }
     Functions: {
+      gbp_performance_record: {
+        Args: { p_client_id: string; p_account_id: string; p_location_id: string; p_start: string; p_end: string; p_data: Json }
+        Returns: Json
+      }
       authority_apply: {
         Args: {
           p_action: string

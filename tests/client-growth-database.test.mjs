@@ -17,5 +17,6 @@ test("growth and backlink client isolation, evidence, ownership and grants after
   await db.exec(readFileSync("supabase/tests/sandbox/fixtures.sql","utf8"));
   await db.exec(readFileSync("supabase/tests/sandbox/client_growth.test.sql","utf8"));
   await db.exec(readFileSync("supabase/tests/sandbox/growth_rankings.test.sql","utf8"));
+  await db.exec(readFileSync("supabase/tests/sandbox/gbp_performance.test.sql","utf8"));
  }finally{await db.close();}
 });

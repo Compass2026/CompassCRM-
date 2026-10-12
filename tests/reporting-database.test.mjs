@@ -30,6 +30,7 @@ test("report migration enforces history, input validation, RLS and intake task i
     $$;
   `);
   await db.exec(migration);
+  await db.exec(readFileSync("supabase/migrations/20261012184123_gbp_performance_import.sql", "utf8").split("-- Import receipts")[0]);
   await db.exec(`insert into clients values ('${clientA}'), ('${clientB}')`);
   assert.equal((await db.query("select * from tasks where key = 'reporting_baseline'")).rows.length, 2);
   const insert = async (patch = {}) => {

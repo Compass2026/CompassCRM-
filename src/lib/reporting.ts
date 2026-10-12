@@ -32,7 +32,7 @@ export const REPORT_AREAS = [
     ["referring_domains", "Unique referring websites", "point"], ["links_new", "Relevant new backlinks", "window"], ["links_lost", "Relevant lost backlinks", "window"],
   ] },
   { key: "gbp", label: "Google Business Profile", next: "Connect or verify a Business Profile performance export.", metrics: [
-    ["gbp_views", "Profile views", "window"], ["gbp_clicks", "Website clicks", "window"], ["gbp_call_clicks", "Call-button clicks (not calls)", "window"],
+    ["gbp_views", "Profile impressions", "window"], ["gbp_clicks", "Website clicks", "window"], ["gbp_call_clicks", "Call-button clicks (not calls)", "window"], ["gbp_directions", "Direction requests", "window"],
   ] },
   { key: "reviews", label: "Reviews", next: "Record review totals, rating and unanswered reviews for this profile.", metrics: [
     ["reviews_total", "Total reviews", "point"], ["reviews_rating", "Average rating (out of 5)", "point"], ["reviews_new", "New reviews", "window"], ["reviews_unanswered", "Unanswered reviews", "point"],
