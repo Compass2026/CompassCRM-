@@ -98,6 +98,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth.test.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/growth_rankings.test.sql"
 # This suite explicitly switches session identity to test PostgREST and worker boundaries.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/gbp_performance.test.sql"
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/dashboard_reporting.test.sql"
 # 0045: post record and human review gate. Switches between the worker
 # (postgres) and PostgREST's authenticator login inside the file.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_post_review.test.sql"
