@@ -63,3 +63,11 @@ test('publisher carries the reviewed service and exact site through read and wri
  await run(new Request('https://test/publish',{method:'POST',body:JSON.stringify({publication_id:DRAFT_ID})}));
  assert.equal(seen.length,2);assert.equal(seen[0].site_id,seen[1].site_id);
 });
+
+test('live verification checks external body links even when absent from internal-link metadata',()=>{
+ const url='https://example.test/blog/roof';
+ const r={h1:'Roof guide',body_markdown:'Read [the source](https://source.example.test/research).',internal_links:[]};
+ const html=`<link rel="canonical" href="${url}"><article data-compass-release="${hash}"><h1>Roof guide</h1><p>Read <a href="https://source.example.test/research">the source</a>.</p></article>`;
+ assert.equal(verifyLiveArticle(html,r,hash,url),true);
+ assert.equal(verifyLiveArticle(html.replace('https://source.example.test/research','https://other.example.test'),r,hash,url),false);
+});

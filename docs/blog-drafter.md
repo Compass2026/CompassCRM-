@@ -178,3 +178,27 @@ never complete it.
   above, and page types (service, use-case, commercial landing,
   comparison; location only from a `location_page` opportunity).
 - **Automatic website publishing.**
+
+## Linking standard (October 12, 2026)
+
+Blog brief v2 targets 3–4 distinct approved service-page destinations in the
+article body, including the keyword owner page. Counts exclude the separate
+CTA, repeat destinations, fragment variations, home pages and blog articles.
+The minimum is three, or the number of approved service destinations if fewer
+exist. A small site receives a visible `money_page_gap` lint warning for human
+review and service-page planning. Do not fill a count with unrelated services.
+
+At least one external citation is required. `links.external` contains only
+exact HTTPS source URLs from relevant eligible CRM claims. Source prose,
+unsupported claims and arbitrary pages on a source's domain are not permitted.
+The article must link the claim and state its text, with descriptive citation
+anchor text nearby. Sources must be checked for credibility, relevance and
+live availability when recorded in CRM. URL eligibility is not a substitute
+for editorial source review. External URLs cannot become a CTA or an internal
+link recommendation. If no suitable source is recorded, add a sourced claim
+before requesting generation; do not invent a source.
+
+Both the drafter and the publisher run these checks. Live article verification
+also checks external body links. Existing review drafts need regeneration
+under v2 before publication because the reviewed rule set changes. Human
+article approval and the separate publication action remain required.

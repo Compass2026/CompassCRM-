@@ -29,7 +29,8 @@ export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, ur
   // Check every authored nonempty line, not just a title that might also occur
   // on a 404, old article or listing page.
   if (!prose.split(/\n+/).map((s)=>s.replace(/^\s*(?:-|\d+\.)\s+/,"").trim()).filter(Boolean).every((s)=>text.includes(plain(s)))) return false;
-  return r.internal_links.every((l)=>html.includes(`href="${l.url.replaceAll("&","&amp;")}"`));
+  const bodyUrls = [...r.body_markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
+  return [...r.internal_links.map((l) => l.url), ...bodyUrls].every((url)=>html.includes(`href="${url.replaceAll("&","&amp;")}"`));
 }
 export function createBlogPublisher(deps: Deps) {
   return async (req: Request): Promise<Response> => {
