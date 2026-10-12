@@ -134,3 +134,17 @@ views, calls and website clicks still require separate performance ingestion.
 untracked keywords, tenant isolation and read-only grants in both replay suites.
 The existing browser acceptance covers summary totals, comparisons and mobile layout.
 Apply the additive migration before releasing this dashboard extension.
+
+## Interactive performance design (October 12, 2026)
+
+The Progress dashboard now opens with a performance studio: selectable metric
+cards, an accessible line/bar chart, a baseline toggle, dated inspection buttons
+and recent-measurement controls. A GBP action donut requires all three action
+metrics to share an exact period, source and scope. It never mixes impressions
+with actions or treats actions as unique people. Ranking segments are disjoint
+per keyword using the best checked location; selecting one filters the searchable
+keyword table. Reporting date filters still apply to complete measurement windows,
+and original baselines remain fixed. The ranking snapshot is independent of those
+filters. Full measurement records and missing coverage remain under expandable
+sections. Team and portal render the same charts from existing scoped data.
+No new provider calls, database schema, or access permissions are introduced.
