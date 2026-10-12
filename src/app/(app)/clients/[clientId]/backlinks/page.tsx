@@ -1,13 +1,16 @@
+import { BacklinkProfileForm } from "@/components/backlink-profile-form";
+import { GrowthAnalytics } from "@/components/growth-charts";
+import { growthRange } from "@/lib/client-growth";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { loadBacklinks } from "@/lib/growth-data";
+import { loadBacklinks, loadGrowth } from "@/lib/growth-data";
 import { BACKLINK_STAGES, BACKLINK_KINDS, backlinkStatus, latestBacklinkCheck } from "@/lib/backlinks";
 import { growthDate } from "@/lib/client-growth";
 import { AddBacklinkForm, BacklinkProgressForm, BacklinkCheckForm } from "@/components/backlink-forms";
 
 export default async function BacklinksPage({params,searchParams}:{params:Promise<{clientId:string}>;searchParams:Promise<{stage?:string}>}) {
   const {clientId}=await params,{stage}=await searchParams,db=await createClient();
-  const [data,keywords,brands,client]=await Promise.all([loadBacklinks(db,clientId),db.from("keywords").select("id,keyword,target_url,service_id").eq("client_id",clientId).eq("is_active",true).order("keyword").limit(1000),db.from("client_brand_workspaces").select("id,name,website_url,service_ids").eq("client_id",clientId),db.from("clients").select("website_url").eq("id",clientId).maybeSingle()]);
+  const [data,keywords,brands,client,profile]=await Promise.all([loadBacklinks(db,clientId),db.from("keywords").select("id,keyword,target_url,service_id").eq("client_id",clientId).eq("is_active",true).order("keyword").limit(1000),db.from("client_brand_workspaces").select("id,name,website_url,service_ids").eq("client_id",clientId),db.from("clients").select("website_url").eq("id",clientId).maybeSingle(),loadGrowth(db,clientId)]);
   const enriched=data.opportunities.map(o=>{const history=data.checks.filter(c=>c.opportunity_id===o.id);return {o,history,latest:latestBacklinkCheck(history),status:backlinkStatus(latestBacklinkCheck(history),history.some(c=>c.result==="live"))};});
   const live=enriched.filter(o=>o.status==="Verified live");
   const domains=new Set(live.map(({o})=>new URL(o.source_url).hostname.toLowerCase().replace(/^www\./,"")));
@@ -15,6 +18,8 @@ export default async function BacklinksPage({params,searchParams}:{params:Promis
   const lookupError=keywords.error||brands.error||client.error||keywords.data?.length===1000;
   return <div className="space-y-5"><div className="rounded-2xl bg-navy-900 p-6 text-white"><p className="text-xs uppercase tracking-widest text-blue-200">Authority building</p><h2 className="mt-2 text-2xl font-semibold text-white">Backlink growth</h2><p className="mt-2 text-sm text-blue-100">Turn keyword priorities into relevant placements. Track every opportunity and retain dated evidence.</p></div>
     {data.error?<p role="alert" className="callout">{data.error}</p>:<><div className="grid gap-3 sm:grid-cols-4">{[["Opportunities",enriched.length],["Verified live links",live.length],["Verified referring websites",domains.size],["Need attention",enriched.filter(o=>["Lost link","Needs recheck","Could not check"].includes(o.status)).length]].map(([label,value])=><div key={label} className="surface p-4"><p className="text-2xl font-semibold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{label}</p></div>)}</div><p className="text-xs text-muted-foreground">Counts cover placements tracked here, not the entire web backlink profile. Live verification expires after 30 days. Link checks are recorded by the team.</p></>}
+    <section className="space-y-4"><h3 className="text-xl font-semibold">Backlink profile history</h3>{profile.error?<p role="alert">{profile.error}</p>:<GrowthAnalytics rows={profile.rows} range={growthRange({})} area="backlinks"/>}</section>
+    {!lookupError&&<BacklinkProfileForm clientId={clientId} sites={[...(client.data?.website_url?[{name:"Client website",website:client.data.website_url}]:[]),...(brands.data??[]).map(b=>({name:b.name,website:b.website_url}))]}/>}
     {lookupError?<p role="alert" className="callout">Keyword or brand choices could not be loaded completely. Retry before adding an opportunity.</p>:<AddBacklinkForm clientId={clientId} keywords={keywords.data??[]} brands={brands.data??[]} websiteUrl={client.data?.website_url??null}/>}
     <nav className="flex flex-wrap gap-2" aria-label="Backlink stages">{[["","All"],...Object.entries(BACKLINK_STAGES)].map(([k,v])=><Link key={k} href={`/clients/${clientId}/backlinks${k?`?stage=${k}`:""}`} aria-current={(stage??"")===k?"page":undefined} className={`rounded-full px-3 py-2 text-xs font-medium ${(stage??"")===k?"bg-blue-700 text-white":"bg-blue-50 text-blue-800"}`}>{v}</Link>)}</nav>
     {!data.error&&!visible.length&&<p className="surface p-8 text-center text-sm text-muted-foreground">No opportunities in this view. Start with a relevant association, supplier, local publication, or partner.</p>}
