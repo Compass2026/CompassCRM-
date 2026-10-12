@@ -1,6 +1,6 @@
 // CRM Lite: shared, pure rules for the inquiry workspace (agency and client
 // portal) and the alert setup. The database enforces every rule again
-// (20261011220000_crm_lite.sql); this decides what to show.
+// (20261012002616_crm_lite.sql); this decides what to show.
 
 export const INQUIRY_STATUSES = ["new", "contacted", "closed"] as const;
 export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];

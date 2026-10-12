@@ -190,7 +190,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications.test
 # the Edge Functions' identity, case-variant and whitespace handling, who may
 # read what) and Twilio's mixed-case SIDs through the registry and messages.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications_secrets.test.sql"
-# CRM Lite (20261011220000): website inquiries saved once per submission under
+# CRM Lite (20261012002616): website inquiries saved once per submission under
 # the source's own client, contact matching within the client only, status
 # and notes by a teammate or the client's own portal contact, the portal
 # views, the SMS gates (sender approval, complete consent, a confirmed

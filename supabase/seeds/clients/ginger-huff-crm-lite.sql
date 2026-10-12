@@ -1,7 +1,7 @@
 -- Ginger Huff Interiors — CRM Lite pilot setup (docs/crm-lite.md).
 --
 -- Data script, not a migration. Run as postgres through the Supabase MCP
--- AFTER 20261011220000_crm_lite.sql is applied, after a rolled-back dry run.
+-- AFTER 20261012002616_crm_lite.sql is applied, after a rolled-back dry run.
 -- Idempotent: it only inserts what is missing and never changes a row a
 -- teammate has touched.
 --

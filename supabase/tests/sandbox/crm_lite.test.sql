@@ -1,4 +1,4 @@
--- Tests for CRM Lite (20261011220000_crm_lite.sql), run by
+-- Tests for CRM Lite (20261012002616_crm_lite.sql), run by
 -- scripts/test-portal-sandbox.sh on the same replay. Own harness schema (cl)
 -- and its own fictional clients, people and numbers (555 numbers, example
 -- domains); no real Twilio identifier. Nothing is sent anywhere.

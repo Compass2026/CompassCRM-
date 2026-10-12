@@ -1681,13 +1681,16 @@ and the remaining manual Twilio steps: `docs/communications.md`.
   provider (a fake Twilio that answers 20404 to the parent key on any
   subaccount resource) and integration suites.
 
-## CRM Lite (Oct 11 2026; `20261011220000_crm_lite.sql` written, sandbox-tested, **not applied**; nothing deployed)
+## CRM Lite (Oct 11 2026; `20261012002616_crm_lite.sql` applied Oct 12 2026 as `20261012002616`)
 
 Website inquiries saved in Compass, a New → Contacted → Closed workspace for
 the agency (Client › **Inquiries**) and the client's own portal sign-in
 (`/portal/inquiries`), and SMS inquiry alerts built with sending disabled.
-Pilot: Ginger Huff Interiors (`supabase/seeds/clients/ginger-huff-crm-lite.sql`,
-not run). Design, gates, setup, rollback: `docs/crm-lite.md`.
+Pilot: Ginger Huff Interiors (`supabase/seeds/clients/ginger-huff-crm-lite.sql`).
+Design, gates, setup, rollback: `docs/crm-lite.md`. The Supabase connector
+refuses some SQL shapes (`…);` then `update … set`, `drop …`): a migration
+that times out never reached Postgres; stage it and apply as
+`docs/crm-lite.md` › "Applying the migration" describes.
 
 - **Website recovery:** Ginger website PR #1 (`94c2fef`) persists validated
   inquiries in a private Vercel Blob outbox before success, delivers in a
