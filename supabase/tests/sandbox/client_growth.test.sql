@@ -36,7 +36,8 @@ end $$;
 
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000011',true);
 do $$ declare n int; payload text; begin
- select count(*) into n from portal_growth_measurements;
+ select count(*) into n from portal_growth_measurements where id='00000000-0000-4000-8000-00000000e001';
+ if exists(select 1 from portal_growth_measurements where client_id<>'00000000-0000-4000-b000-00000000000a') then raise exception 'foreign measurements exposed'; end if;
  if n <> 1 then raise exception 'portal measurements leaked or missing: %',n; end if;
  select jsonb_agg(to_jsonb(m))::text into payload from portal_growth_measurements m;
  if payload like '%PRIVATE%' or payload like '%recorded_by%' then raise exception 'private measurement columns exposed'; end if;
