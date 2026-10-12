@@ -1,3 +1,5 @@
+import { GrowthRankingSummary } from "./growth-ranking-summary";
+import type { GrowthRanking } from "@/lib/growth-rankings";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, CalendarDays, Flag, Layers3 } from "lucide-react";
 import { REPORT_AREAS, STATUS_LABELS, agencyToday } from "@/lib/reporting";
@@ -25,7 +27,7 @@ function Trend({points,label}:{points:{date:string;value:number|null}[];label:st
   </figure>;
 }
 
-export function ClientGrowthDashboard({rows,search,range,action,teamClientId,error,searchError}:{rows:GrowthMeasurement[];search:SearchHistory[];range:GrowthRange;action:string;teamClientId?:string;error?:string|null;searchError?:string|null}) {
+export function ClientGrowthDashboard({rows,search,range,action,teamClientId,error,searchError,rankings,rankingsError}:{rankings:GrowthRanking[];rankingsError?:string|null;rows:GrowthMeasurement[];search:SearchHistory[];range:GrowthRange;action:string;teamClientId?:string;error?:string|null;searchError?:string|null}) {
   const series=growthSeries(rows,range);
   const measured=series.filter(s=>s.current?.status==="measured");
   const starting=series.map(s=>s.baseline?.window_end).filter((d):d is string=>!!d).sort()[0];
@@ -41,6 +43,7 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
       </div>
       <p className="mt-4 text-xs text-blue-100">Each metric keeps its own original baseline. Measurements recorded after work began are labeled as the first available measurement.</p>
     </div>
+    <GrowthRankingSummary rows={rankings} error={rankingsError} teamClientId={teamClientId}/>
     <form action={action} className="surface flex flex-wrap items-end gap-3 p-4" aria-label="Progress dates">
       <label className="text-sm">Show<select name="range" defaultValue={range.mode} className="field-sm mt-1 block"><option value="all">Since starting with Compass</option><option value="month">Monthly view</option><option value="custom">Custom dates</option></select></label>
       <label className="text-sm">Month<input name="month" type="month" className="field-sm mt-1 block" defaultValue={range.end.slice(0,7)} max={agencyToday().slice(0,7)}/></label>
