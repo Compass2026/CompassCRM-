@@ -423,6 +423,13 @@ export function createSitePushHandler(deps: HandlerDeps) {
       baseTree = headInfo.tree;
     }
 
+    // A publisher edits the exact repository revision it read. The ref update
+    // also remains non-forced, protecting against a push during this request.
+    if (body.expected_head != null && (!/^[0-9a-f]{40}$/.test(String(body.expected_head))
+        || body.expected_head !== headInfo?.sha)) {
+      return Response.json({ error: "repository_changed", message: "Read the latest repository and rebuild the change." }, { status: 409 });
+    }
+
     // ── Read mode: the pushed tree, text files inline ───────────────────
     if (readOnly) {
       if (!headInfo) {

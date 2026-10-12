@@ -1987,6 +1987,77 @@ stands. No billing, no approvals, no uploads yet.
   an hour, so **custom SMTP (Resend, `send.compassmarketing.ai` is verified)
   must be set in Auth → Emails before inviting real clients.**
 
+## Content Planner (0065 written, not applied; Oct 4 2026)
+
+The weekly production view of the Production MVP sprint: per managed
+client, **Social X/2 | GBP X/2 | Blogs X/2 | Web Pages X/1**, where X is
+approved or delivered pieces. The targets (`WEEKLY_TARGETS` in
+`src/lib/content-planner.ts`) are a cadence, not a quota. Full model,
+statuses, the scoped next slices and go-live: `docs/content-planner.md`.
+
+- **0065:** `content_plan_items` holds one planned piece per client and week
+  (Monday).
+  - Fields: deliverable, channel, purpose (the seven), topic, intent,
+    keyword, service, Authority opportunity (exactly when the purpose is
+    `authority`), target page, planned date, and the linked post / blog.
+  - A hold (`blocked` with a reason, or `delivered`) plus the delivered
+    link.
+  - `content_plan_board` (security invoker) derives the status:
+    blocked → delivered → approved → in_review → drafting →
+    ready_to_generate → planned.
+  - Team only. It touches no Billing object; Billing's quota counts the
+    posts and blogs themselves.
+  - **Not applied.** The planner types in `database.types.ts` are
+    hand-written until 0065 is applied and the types are regenerated.
+- **Pages:** **Production** (main nav, `/production`) for all clients'
+  week, and the client **Planner** tab (`/clients/[id]/planner`).
+  - Plan items per slot; **From Authority** plans a ready opportunity with
+    its topic, intent, service and target page.
+  - Link an existing draft, block / mark delivered, edit, remove.
+  - Generating from the plan, and the Blog and Web Page Drafters, are
+    scoped there and not built.
+- **Tests:** `tests/content-planner.test.mjs`, the sandbox's
+  `content_planner.test.sql` (41), `npm run test:planner-ui` (11).
+
+## Blog Drafter v1 (0066–0068 written, not applied; Oct 4 2026)
+
+Planner / Authority → **Generate draft** → the worker writes it through the
+`content-drafter` function → human review → **Approve** → ONE final
+`content_posts` row → Copy / Download Markdown. Full design, rules, tests and
+go-live: `docs/blog-drafter.md`.
+
+- **0066** adds `content_status` `approved`, in its own migration (a new
+  enum value cannot be used in the transaction that adds it).
+- **0067** `content_drafts` + `content_draft_claims` are the mutable
+  drafting state for blogs, and next web pages.
+  - **Draft attempts never touch `content_posts`, so Billing never counts
+    one.**
+  - `content_draft_approve` is version-pinned and idempotent: one row per
+    draft, updated on re-approval.
+  - Generated content arrives only through `content_draft_write`, in the
+    drafter session. Only a teammate approves.
+  - `content_draft_request` / `_regenerate` / `_approve` are team-callable
+    security-definer functions on the portal suite's reviewed list.
+  - Web pages will finalize to ONE `change_log` row (`page_added` /
+    `page_rewrite`; Tom, Oct 4). That promotion is the Web Page Drafter's;
+    not built.
+- **`content-drafter`** (Edge Function, not deployed; on the deploy list)
+  reuses `post-drafter`'s loader, gate, claim rule (`eligibleClaims`),
+  detectors and place rule, on every word a reader sees, plus blog
+  structure and approved-page links. The worker's playbook is *Content
+  draft request*.
+- **Pages:** the planner's **Generate draft** / **Open the draft**, and
+  `/clients/[id]/drafts/[draftId]` (preview, claims, review, edit,
+  regenerate, Copy Markdown, Download .md).
+- **0068 (completion rules; Tom, Oct 4):** a blog completes only at
+  approval.
+  - The weekly `blog_post` task opens a draft (`content-drafter` `open` →
+    `content_draft_open_weekly`) in that week's Planner slot, and stays open
+    until approval closes it with the final row.
+  - Reopening returns the final row to `draft`: the slot stops counting, and
+    Billing's count is unchanged.
+- **Not yet:** the Web Page Drafter.
+
 ## Known state / open items (as of Sept 13 2026)
 
 - **Stripe secrets are not in Vault yet.** Billing code is deployed but inert

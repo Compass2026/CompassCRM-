@@ -135,23 +135,17 @@ test("a malformed socialAccountId is refused at the boundary", async () => {
 });
 
 
-test("keyword-first: a missing keyword is refused; non-search mode must be explicit and cannot carry service grounding", () => {
-  const missing = fbBrief({ ...FB, keywordId: null });
-  assert.equal(missing.ok, false);
-  assert.ok(missing.refusals.some((f) => f.code === "keyword_missing"));
-
-  const disguised = fbBrief({ ...FB, campaignMode: "non_search", keywordId: null });
-  assert.equal(disguised.ok, false);
-  assert.ok(disguised.refusals.some((f) => f.code === "service_not_applicable"));
-
-  const brandOnly = fbBrief({
-    ...FB,
-    campaignMode: "non_search",
-    serviceId: null,
-    keywordId: null,
-  });
-  assert.equal(brandOnly.ok, true, JSON.stringify(brandOnly.refusals));
-  assert.equal(brandOnly.brief.target.campaign_mode, "non_search");
-  assert.equal(brandOnly.brief.target.keyword, null);
-  assert.equal(brandOnly.brief.target.service, null);
+test("every new campaign requires a governed keyword, including brand/community angles", () => {
+  for (const target of [
+    { ...FB, keywordId: null },
+    { ...FB, campaignMode: "non_search", keywordId: null },
+    { ...FB, campaignMode: "non_search", serviceId: null, keywordId: null },
+  ]) {
+    const result = fbBrief(target);
+    assert.equal(result.ok, false);
+    assert.ok(result.refusals.some((f) => f.code === "keyword_missing"));
+  }
+  const legacyMode = fbBrief({ ...FB, campaignMode: "non_search" });
+  assert.equal(legacyMode.ok, false);
+  assert.ok(legacyMode.refusals.some((f) => f.code === "campaign_mode_retired"));
 });
