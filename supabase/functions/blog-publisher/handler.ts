@@ -5,10 +5,11 @@ import { parseBlogDraft } from "../content-drafter/handler.ts";
 import { stableJson } from "../post-drafter/rules.ts";
 import type { DrafterInput } from "../post-drafter/types.ts";
 type Json = Record<string, unknown>;
-type Publication = { id: string; lease_token: string; release_hash: string; snapshot: BlogRelease & Json; scheduled_at: string; status: string };
+type Publication = { id: string; lease_token: string; release_hash: string; snapshot: BlogRelease & Json; scheduled_at: string; status: string; evidence?: Json; reconcile_reason?: string };
 export type Deps = {
   authorized(req: Request): Promise<boolean>;
   claim(id: string): Promise<Publication>;
+  resume(id: string): Promise<Publication>;
   authorize(id: string, token: string): Promise<void>;
   finish(id: string, token: string, status: string, evidence: Json, error?: string): Promise<void>;
   input(client: string, service: string | null): Promise<DrafterInput>;
@@ -38,12 +39,13 @@ export function createBlogPublisher(deps: Deps) {
     if (!await deps.authorized(req)) return Response.json({error:"forbidden"},{status:403});
     const body = await req.json().catch(()=>null);
     if (!/^[0-9a-f-]{36}$/i.test(body?.publication_id ?? "")) return Response.json({error:"publication_id required"},{status:400});
+    const reconciling = body.reconcile === true;
     let p: Publication;
-    try { p = await deps.claim(body.publication_id); }
+    try { p = reconciling ? await deps.resume(body.publication_id) : await deps.claim(body.publication_id); }
     catch (error) { return Response.json({error:String(error)},{status:409}); }
     if (p.status !== "publishing" || !p.lease_token) return Response.json(p);
     let externalWriteStarted = false;
-    let evidence: Json = {};
+    let evidence: Json = reconciling ? {...(p.evidence ?? {})} : {};
     try {
       const r = p.snapshot;
       const input = await deps.input(r.client_id, (r as BlogRelease & {service_id?: string}).service_id ?? null);
@@ -72,7 +74,37 @@ export function createBlogPublisher(deps: Deps) {
       const read = await readRes.json() as RepositoryRead;
       const date = new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(p.scheduled_at));
       const delivery = preparePublication(r,p.release_hash,read,date);
-      if (delivery.already_present) throw new Error("The released article already exists. Reconcile its deployment without creating another commit.");
+      if (delivery.already_present) {
+        if (!reconciling) throw new Error("The released article already exists. Reconcile its deployment without creating another commit.");
+        // An identical release already exists in the repository. Do not push
+        // another commit or approve new copy: verify its original deployment
+        // and all visible text, links and release markers on the live domain.
+        const previous = p.evidence ?? {};
+        const transport = (previous.transport ?? {}) as Json;
+        const vercel = (transport.vercel ?? {}) as Json;
+        const deploymentUrl = String(vercel.deployment_url ?? "");
+        const sha = String(previous.commit_sha ?? "");
+        if (!deploymentUrl || !/^[0-9a-f]{40}$/.test(sha)) {
+          throw new Error("The existing release needs manual provenance reconciliation.");
+        }
+        const deployRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,deployment_status:deploymentUrl});
+        if (!deployRes.ok) throw new Error("Production deployment inspection is temporarily unavailable.");
+        const deployment = await deployRes.json() as Json;
+        if (deployment.ready_state !== "READY" || deployment.target !== "production") {
+          throw new Error("The original production deployment is not READY.");
+        }
+        const live = await deps.fetchLive(delivery.url);
+        if (!live.ok || /noindex/i.test(live.headers.get("x-robots-tag") ?? "")
+           || !verifyLiveArticle(await live.text(),r,p.release_hash,delivery.url)) {
+          throw new Error("The approved article is not yet fully verified on the public website.");
+        }
+        await deps.authorize(p.id,p.lease_token);
+        evidence = {...previous,commit_sha:sha,url:delivery.url,
+          deployment_state:"READY",deployment_target:"production",live_verified:true,
+          reconciliation:{mode:"existing_release",deployment_id:deployment.deployment_id ?? null}};
+        await deps.finish(p.id,p.lease_token,"published",evidence);
+        return Response.json({status:"published",url:delivery.url,commit_sha:sha,reconciled:true});
+      }
       await deps.authorize(p.id,p.lease_token);
       externalWriteStarted = true;
       const pushRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,repo:r.destination.repo_url.replace("https://github.com/",""),
@@ -92,9 +124,16 @@ export function createBlogPublisher(deps: Deps) {
       await deps.finish(p.id,p.lease_token,"published",evidence);
       return Response.json({status:"published",url:delivery.url,commit_sha:sha});
     } catch (error) {
-      const status = externalWriteStarted ? "uncertain" : "blocked";
+      // An uncertain release is never retried blindly. On reconciliation,
+      // preserve its previous commit/transport receipt so the next read can
+      // distinguish a completed write from a rejected fast-forward update.
+      const status = externalWriteStarted || reconciling ? "uncertain" : "blocked";
       const message = error instanceof Error ? error.message : String(error);
-      await deps.finish(p.id,p.lease_token,status,evidence,message);
+      if (reconciling) evidence = {...evidence,reconciliation_error:message};
+      const recordedError = reconciling
+        ? "Website commit or deployment is not confirmed. Reconcile before retrying."
+        : message;
+      await deps.finish(p.id,p.lease_token,status,evidence,recordedError);
       return Response.json({status,error:message},{status:409});
     }
   };
