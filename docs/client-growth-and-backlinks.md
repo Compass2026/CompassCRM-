@@ -89,20 +89,25 @@ immutable baselines, and explicit unavailable states.
 
 ## Implementation verification, October 12
 
-Local implementation is committed on `codex/client-progress-backlinks`.
+Implementation is on `codex/client-progress-backlinks`, pull request #125.
 TypeScript, ESLint, the production webpack build, and all six new feature and
-full-replay database tests passed. The existing full test suite stops in the
-unchanged `social-post-review-migration.test.mjs` process after 35 of its checks
-pass; it also stops when run alone, without reporting an assertion failure.
-That result requires CI investigation before release and has not been waived.
+full-replay database tests passed locally. The complete test suite passed in
+GitHub CI; the local social-post-review test process was killed with SIGKILL
+without an assertion failure.
 
-Native PostgreSQL binaries are unavailable in this environment. The mandatory
-native sandbox command was attempted; the PGlite replay passed. Browser
-acceptance is implemented but has not run: Chrome installation returned an
-invalid/empty download. CI has a Chrome-based job and screenshot upload ready.
+Native PostgreSQL replay reached 689 passing generic portal access checks.
+Growth-specific checks use their own fixture IDs while rejecting all foreign
+client rows, allowing other ledger fixtures to coexist. All native suites remain
+required on the final branch head.
+
+Browser verification covers baseline comparisons, date filters, mobile overflow,
+failed-save retry retention, backlink workflow actions and client-only views.
+It found a form reset after failed saves, which is fixed by retaining input values
+until successful completion. Screenshot review found dark inherited headings on
+dark hero panels; explicit white headings and a computed-color assertion fix this.
+CI uploads screenshots for visual review. Final CI results are tracked on the PR.
 
 Tom explicitly authorized uploading this branch and opening a pull request on
-October 12. The command-line Git client has no GitHub credentials, so the connected
-GitHub app is used for the upload. No production migration or deployment has been
-performed. Native and browser CI gates and screenshot review remain required
-before releasing the additive migration and app.
+October 12. The connected GitHub app performed the upload. No production migration
+or deployment has been performed. Apply the additive migration before the app,
+only after all final CI gates and screenshot review pass.
