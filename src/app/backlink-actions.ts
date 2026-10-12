@@ -54,3 +54,20 @@ export async function recordBacklinkCheckAction(clientId:string,id:string,_state
     refresh(clientId);return {savedId:input.id};
   }catch(e){return failure(e);}
 }
+
+export async function recordBacklinkProfileAction(clientId:string,_state:BacklinkActionState,form:FormData):Promise<BacklinkActionState> {
+ try {
+  const db=await teamClient(clientId);
+  const [{data:client,error:ce},{data:brands,error:be}]=await Promise.all([db.from("clients").select("website_url").eq("id",clientId).maybeSingle(),db.from("client_brand_workspaces").select("website_url").eq("client_id",clientId)]);
+  if(ce||be||!client)throw new Error("Client website choices are unavailable. Please retry.");
+  const {parseBacklinkProfile}=await import("@/lib/backlink-profile");
+  const rows=parseBacklinkProfile(clientId,form,[client.website_url,...(brands??[]).map(b=>b.website_url)].filter((v):v is string=>!!v));
+  const {error}=await db.from("report_measurements").insert(rows);
+  if(error?.code==="23505") {
+   const {data:existing}=await db.from("report_measurements").select("*").eq("client_id",clientId).in("id",rows.map(r=>r.id));
+   if(existing?.length!==rows.length||rows.some(r=>{const old=existing.find(e=>e.id===r.id);return !old||Object.entries(r).some(([k,v])=>old[k as keyof typeof old]!==v);}))throw new Error("This submission was already saved with different values. Start a new report.");
+  }else if(error)throw new Error("Profile report could not be saved. Your entries are kept for retry.");
+  refresh(clientId);revalidatePath(`/clients/${clientId}/growth`);revalidatePath("/portal/growth");
+  return {savedId:rows[0].id};
+ }catch(e){return failure(e);}
+}

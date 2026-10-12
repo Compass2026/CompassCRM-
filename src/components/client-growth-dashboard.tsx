@@ -48,6 +48,8 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
       </div>
     </div>
     {!error && <GrowthAnalytics rows={rows} range={range}/>}
+    {!error && <section className="space-y-4"><h3 className="text-xl font-semibold text-navy-900">Website traffic</h3><GrowthAnalytics rows={rows} range={range} area="traffic"/></section>}
+    {!error && <section className="space-y-4"><h3 className="text-xl font-semibold text-navy-900">Backlink profile growth</h3><GrowthAnalytics rows={rows} range={range} area="backlinks"/></section>}
     <GrowthWorkSummary work={work} range={range} error={workError}/>
     <GrowthRankingSummary rows={rankings} error={rankingsError} teamClientId={teamClientId}/>
     <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer text-sm font-semibold text-navy-900">Reporting dates &amp; filters <span className="ml-2 text-xs font-normal text-slate-500">Monthly and custom views</span></summary>

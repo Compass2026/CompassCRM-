@@ -29,7 +29,7 @@ export const REPORT_AREAS = [
     ["citations_correct", "Accurate listings", "point"], ["citations_incorrect", "Incorrect listings", "point"], ["citations_missing", "Missing listings", "point"],
   ] },
   { key: "backlinks", label: "Backlinks", next: "Review referring websites and relevant new or lost links.", metrics: [
-    ["referring_domains", "Unique referring websites", "point"], ["links_new", "Relevant new backlinks", "window"], ["links_lost", "Relevant lost backlinks", "window"],
+    ["backlinks_total", "Indexed backlinks", "point"], ["referring_domains", "Unique referring websites", "point"], ["links_new", "Relevant new backlinks", "window"], ["links_lost", "Relevant lost backlinks", "window"],
   ] },
   { key: "gbp", label: "Google Business Profile", next: "Connect or verify a Business Profile performance export.", metrics: [
     ["gbp_views", "Profile impressions", "window"], ["gbp_clicks", "Website clicks", "window"], ["gbp_call_clicks", "Call-button clicks (not calls)", "window"], ["gbp_directions", "Direction requests", "window"],
@@ -42,6 +42,7 @@ export const REPORT_AREAS = [
   ] },
   { key: "search", label: "Search traffic", next: "Verify Search Console totals and GA4 organic sessions for the same dates.", metrics: [
     ["search_impressions", "Search impressions", "window"], ["search_clicks", "Organic search clicks", "window"], ["organic_sessions", "Organic website sessions", "window"],
+    ["website_sessions", "Website sessions", "window"], ["website_users", "Website visitors", "window"], ["website_pageviews", "Page views", "window"],
   ] },
   { key: "leads", label: "Leads & inquiries", next: "Verify successful submissions and tracked calls; review lead quality separately.", metrics: [
     ["forms", "Successful form submissions", "window"], ["calls", "Tracked calls", "window"], ["qualified_leads", "Verified qualified inquiries", "window"],
@@ -145,6 +146,7 @@ function fullCalendarMonth(row: Measurement): boolean {
 export function compareMeasurements(current?: Measurement, previous?: Measurement): { delta: number | null; reason: string } {
   if (!current || !previous || current.status !== "measured" || previous.status !== "measured" || current.value === null || previous.value === null) return { delta: null, reason: "Comparable measurements needed" };
   if (seriesKey(current) !== seriesKey(previous)) return { delta: null, reason: "Source or scope changed" };
+  if (current.source === "Google Analytics 4" && !current.scope.includes("complete_month")) return { delta: null, reason: "Partial periods are not compared with a starting baseline" };
   if (current.id === previous.id) return { delta: null, reason: "Starting measurement" };
   if (current.window_start <= previous.window_end) return { delta: null, reason: "Overlapping or reversed dates" };
   const metric = METRICS.find((m) => m.key === current.metric);
