@@ -1,7 +1,8 @@
+import { GrowthAnalytics } from "./growth-charts";
 import { GrowthRankingSummary } from "./growth-ranking-summary";
 import type { GrowthRanking } from "@/lib/growth-rankings";
 import Link from "next/link";
-import { ArrowUpRight, BarChart3, CalendarDays, Flag, Layers3 } from "lucide-react";
+import { ArrowUpRight, BarChart3, CalendarDays, Flag, Layers3, Activity } from "lucide-react";
 import { REPORT_AREAS, STATUS_LABELS, agencyToday } from "@/lib/reporting";
 import { deltaLabel, growthDate, growthSeries, type GrowthMeasurement, type GrowthRange, type SearchHistory } from "@/lib/client-growth";
 
@@ -33,17 +34,21 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
   const starting=series.map(s=>s.baseline?.window_end).filter((d):d is string=>!!d).sort()[0];
   const latest=measured.map(s=>s.current!.window_end).sort().at(-1);
   const visibleSearch=search.filter(s=>s.period_start>=range.start&&s.period_end<=range.end);
-  return <section aria-label="Client growth dashboard" className="space-y-6">
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy-900 to-blue-900 p-6 text-white sm:p-8">
-      <p className="text-xs font-semibold uppercase tracking-[.18em] text-blue-200">Your marketing progress</p>
-      <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Where we started. How you&apos;re growing.</h2>
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-blue-100">Your starting point, latest measured results, and the work moving your business forward.</p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        {[{icon:Flag,label:"Earliest recorded baseline",text:growthDate(starting)},{icon:CalendarDays,label:"Latest measurement in view",text:growthDate(latest)},{icon:Layers3,label:"Measured series in view",text:error?"Unavailable":String(measured.length)}].map(({icon:Icon,label,text})=><div key={label} className="rounded-xl border border-white/15 bg-white/10 p-4"><Icon className="mb-2 size-4 text-orange-300"/><p className="text-xs text-blue-100">{label}</p><p className="mt-1 text-lg font-semibold">{text}</p></div>)}
+  return <section aria-label="Client growth dashboard" className="space-y-7">
+    <div className="relative isolate overflow-hidden rounded-3xl bg-navy-900 p-6 text-white shadow-xl shadow-blue-900/10 sm:p-8">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-40 size-[30rem] rounded-full border-[64px] border-blue-500/10" />
+      <div aria-hidden="true" className="pointer-events-none absolute right-28 top-12 size-64 rounded-full border border-white/10" />
+      <div className="relative flex flex-wrap items-start justify-between gap-5"><div><p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-blue-200"><span className="size-2 rounded-full bg-orange-400" /> Compass performance studio</p>
+      <h2 className="mt-3 max-w-2xl text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl">Where we started.<br/><span className="text-blue-200">How you&apos;re growing.</span></h2>
+      <p className="mt-3 max-w-xl text-sm leading-relaxed text-blue-100/80">A clear view of your visibility, engagement, and progress. Explore the numbers behind your marketing.</p></div>
+      <div className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs text-blue-100"><Activity className="size-3.5 text-orange-300" /> {measured.length} measured series</div></div>
+      <div className="relative mt-7 grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-3">
+        {[{icon:Flag,label:"First available baseline",text:growthDate(starting)},{icon:CalendarDays,label:"Latest measured period",text:growthDate(latest)},{icon:Layers3,label:"Your perspective",text:range.mode==="all"?"Full measurement history":range.mode==="month"?"Monthly performance":"Selected date range"}].map(({icon:Icon,label,text})=><div key={label} className="flex items-center gap-3"><span className="rounded-xl bg-white/5 p-2.5"><Icon className="size-4 text-blue-200"/></span><div><p className="text-[10px] uppercase tracking-wider text-blue-200/70">{label}</p><p className="mt-1 text-sm font-semibold">{text}</p></div></div>)}
       </div>
-      <p className="mt-4 text-xs text-blue-100">Each metric keeps its own original baseline. Measurements recorded after work began are labeled as the first available measurement.</p>
     </div>
+    {!error && <GrowthAnalytics rows={rows} range={range}/>}
     <GrowthRankingSummary rows={rankings} error={rankingsError} teamClientId={teamClientId}/>
+    <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer text-sm font-semibold text-navy-900">Reporting dates &amp; filters <span className="ml-2 text-xs font-normal text-slate-500">Monthly and custom views</span></summary>
     <form action={action} className="surface flex flex-wrap items-end gap-3 p-4" aria-label="Progress dates">
       <label className="text-sm">Show<select name="range" defaultValue={range.mode} className="field-sm mt-1 block"><option value="all">Since starting with Compass</option><option value="month">Monthly view</option><option value="custom">Custom dates</option></select></label>
       <label className="text-sm">Month<input name="month" type="month" className="field-sm mt-1 block" defaultValue={range.end.slice(0,7)} max={agencyToday().slice(0,7)}/></label>
@@ -52,10 +57,11 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
       <button className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-semibold text-white">Update view</button>
       <p className="w-full text-xs text-muted-foreground">Date filters include complete measurement windows only. Original baselines stay fixed. Monthly and custom views never prorate totals.</p>
     </form>
+    </details>
     {range.error&&<p role="alert" className="callout">{range.error} Showing all history.</p>}
     {error?<p role="alert" className="callout">{error}</p>:<>
       {!rows.length&&<p className="callout">Your starting scorecard is being prepared. Available search history appears below; missing measurements are not shown as zero.</p>}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer text-sm font-semibold text-navy-900">All measurements &amp; sources <span className="ml-2 text-xs font-normal text-slate-500">Baselines, history and coverage</span></summary><p className="mt-3 text-xs text-slate-500">Each metric keeps its original baseline. Measurements recorded after work began are labeled as the first available measurement.</p><div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {REPORT_AREAS.map(area=>{
           const items=series.filter(s=>s.metric.area===area.key);
           return <article key={area.key} className="surface min-w-0 border-t-4 border-t-blue-500 p-5">
@@ -63,7 +69,7 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
             {!items.length?<div className="mt-4"><p className="text-sm text-muted-foreground">Baseline not yet recorded</p><p className="mt-2 text-xs text-muted-foreground">{area.next}</p></div>:items.map(s=><div key={s.key} className="mt-5 border-t pt-4 first:border-0">
               <p className="font-medium text-sm">{s.metric.label}</p>
               {s.definition.source==="Google Business Profile via Zernio"&&<p className="mt-1 text-xs text-muted-foreground">Automatically imported complete months. {s.metric.key==="gbp_views"?"Search and Maps impressions across devices and days, not unique people.":s.metric.key==="gbp_call_clicks"?"Call-button clicks do not confirm connected calls.":"Google may revise recent reporting."}</p>}
-              <p className="mt-1 break-words text-xs text-muted-foreground">{s.definition.scope}{s.definition.platform!=="none"?` · ${s.definition.platform} / ${s.definition.channel}`:""}</p>
+              <details className="mt-1 text-xs text-muted-foreground"><summary className="cursor-pointer">Measurement scope</summary><p className="mt-1 break-words">{s.definition.scope}{s.definition.platform!=="none"?` · ${s.definition.platform} / ${s.definition.channel}`:""}</p></details>
               <div className="mt-3 grid grid-cols-2 gap-3"><div><p className="text-[11px] uppercase tracking-wider text-muted-foreground">Starting baseline</p><p className="mt-1 text-lg font-semibold">{value(s.baseline)}</p><p className="text-xs text-muted-foreground">{growthDate(s.baseline?.window_end)}</p></div><div><p className="text-[11px] uppercase tracking-wider text-muted-foreground">{range.mode==="all"?"Latest result":"Result in selected dates"}</p><p className="mt-1 text-lg font-semibold text-navy-900">{value(s.current)}</p><p className="text-xs text-muted-foreground">{growthDate(s.current?.window_end)}</p></div></div>
               <p className={`mt-3 text-xs font-semibold ${s.change.delta===null||s.change.delta===0?"text-muted-foreground":(s.change.delta>0)!==s.lowerIsBetter?"text-emerald-700":"text-amber-700"}`}>{deltaLabel(s.change.delta,s.baseline?.value)}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">{s.change.reason}</p>
@@ -75,7 +81,7 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
             </div>)}
           </article>;
         })}
-      </div>
+      </div></details>
     </>}
     <div className="surface p-5 sm:p-6"><h3 className="font-semibold text-navy-900">Search Console history</h3><p className="mt-2 text-sm text-muted-foreground">Available imported query and page rows. These are not property-wide totals; coverage can vary between imports. The earliest import may be after your work with Compass started.</p>
       {searchError?<p role="alert" className="mt-3 text-sm">{searchError}</p>:visibleSearch.length?<><div className="mt-4 grid gap-6 sm:grid-cols-2">{(["clicks","impressions"] as const).map(metric=><div key={metric}><p className="text-sm font-medium">Imported {metric}</p><Trend label={`Imported search ${metric}`} points={visibleSearch.map(s=>({date:s.period_end,value:s[metric]}))}/></div>)}</div><details className="mt-4"><summary className="cursor-pointer text-sm text-blue-700">View source periods</summary><div className="overflow-x-auto"><table className="mt-3 w-full text-left text-xs"><thead><tr><th className="p-2">Period</th><th>Clicks</th><th>Impressions</th><th>Imported rows</th></tr></thead><tbody>{visibleSearch.map(s=><tr key={`${s.period_start}/${s.period_end}`} className="border-t"><td className="p-2 whitespace-nowrap">{growthDate(s.period_start)} to {growthDate(s.period_end)}</td><td>{number(s.clicks)}</td><td>{number(s.impressions)}</td><td>{number(s.imported_rows)}</td></tr>)}</tbody></table></div></details></>:<p className="mt-4 text-sm text-muted-foreground">No imported search periods within these dates.</p>}
