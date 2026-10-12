@@ -125,6 +125,7 @@ test('uncertain GitHub ref conflict rereads current branch and can push from new
 
 test('repository already contains exact approved release: reconcile without duplicate write',async()=>{
  const h=harness();
+ h.r.brief.brand.tagline='Brand updated since authorized original release';
  const prior={head:'b'.repeat(40),repo_url:h.r.destination.repo_url,branch:'main',files:[
    {path:'compass-blog.json',content:JSON.stringify({version:1,adapter:'lucas_json',keyword_provenance:true,markdown:true,seo_fields:true})},
    {path:'data/blog-posts.json',content:'[]'}]};
@@ -150,4 +151,27 @@ test('repository already contains exact approved release: reconcile without dupl
  assert.ok(seen.includes('deployment_status'));
  assert.ok(!seen.includes('push'));
  assert.equal(seen.some(v=>Array.isArray(v)&&v[0]==='finish'&&v[3]==='published'),false);
+ const finish=seen.find(v=>Array.isArray(v)&&v[0]==='finish');
+ assert.equal(finish[4].commit_sha,'c'.repeat(40),'existing receipt survives incomplete verification');
+ assert.equal(finish[4].transport.vercel.deployment_url,'https://example.vercel.app');
+});
+
+test('missing commit receipt can only verify an existing release and cannot push',async()=>{
+ const h=harness();
+ const seen=[];
+ const repo={head:'b'.repeat(40),repo_url:h.r.destination.repo_url,branch:'main',files:[
+  {path:'compass-blog.json',content:JSON.stringify({version:1,adapter:'lucas_json',keyword_provenance:true,markdown:true,seo_fields:true})},
+  {path:'data/blog-posts.json',content:'[]'}]};
+ const worker=createBlogPublisher({
+  authorized:async()=>true,claim:async()=>{throw new Error('Wrong flow')},
+  resume:async()=>({id:DRAFT_ID,lease_token:'lease',status:'publishing',snapshot:h.r,release_hash:hash,scheduled_at:'2026-10-12T16:00:00Z',
+   evidence:{lint:{ok:true}},reconcile_reason:'verify existing release only'}),
+  authorize:async()=>seen.push('authorize'),finish:async(...args)=>seen.push(['finish',...args]),
+  input:async()=>lucas(),pages:async()=>[],
+  sitePush:async(body)=>{seen.push(body.read?'read':'push');if(body.read)return Response.json(repo);throw Error('No mutation permitted');},
+  fetchLive:async()=>new Response('Not found',{status:404})
+ });
+ const res=await worker(new Request('https://example.test/publish',{method:'POST',body:JSON.stringify({publication_id:DRAFT_ID,reconcile:true})}));
+ assert.equal((await res.json()).status,'uncertain');
+ assert.deepEqual(seen.filter(x=>typeof x==='string'),['read']);
 });
