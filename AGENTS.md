@@ -20,6 +20,14 @@ Link checks are append-only; a placement stage is not proof of a live backlink.
 Do not represent imported query/page GSC sums as full property totals or tracked
 placements as the complete backlink profile. No automated outreach is enabled.
 
+## Google Business Profile performance (October 12, 2026)
+
+`docs/gbp-performance.md` describes the read-only Zernio importer and daily refresh
+of complete calendar months. It uses the existing read key and exact GBP binding.
+The service RPC appends source-labelled report evidence; retries do not duplicate
+it, corrections preserve the first baseline, and portal views reuse the report
+ledger boundary. No publishing, reconnecting, plan changes or purchases occur.
+
 ## Native Agreements (October 7, 2026)
 
 `docs/durable-payment-links.md` describes the 7-day client payment capability
