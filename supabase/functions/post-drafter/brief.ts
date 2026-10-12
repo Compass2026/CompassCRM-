@@ -232,9 +232,12 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
       // Check equivalent keyword rows too: separate IDs must not hide two
       // primary owners for the same demand. Supporting assets keep one owner.
       const sameText = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
-      const cluster = input.keywords.filter((x) => x.is_active && sameText(x.keyword) === sameText(k.keyword));
+      const primary = input.keywords.find((x) => x.id === service?.primary_keyword_id);
+      const ownerKeywords = new Set([sameText(k.keyword), ...(primary ? [sameText(primary.keyword)] : [])]);
+      const cluster = input.keywords.filter((x) => x.is_active && ownerKeywords.has(sameText(x.keyword)));
       const ids = new Set(cluster.map((x) => x.id));
       const owners = new Set([
+        pageUrl,
         ...cluster.map((x) => x.target_url),
         ...input.services.filter((s) => s.status === "approved" && s.primary_keyword_id && ids.has(s.primary_keyword_id)).map((s) => s.page_url),
         ...input.pageGroups.filter((g) => g.status === "approved" && g.primary_keyword_id && ids.has(g.primary_keyword_id)).map((g) => g.target_url),

@@ -43,6 +43,15 @@ test("the same normalized owner URL may be shared by service, keyword and page g
   assert.equal(result.ok, true, JSON.stringify(result.refusals));
 });
 
+test("a supporting keyword cannot bypass its primary keyword's owner conflict", () => {
+  const input = lucas();
+  input.pageGroups.push({ ...input.pageGroups[0], id: "competing", target_url: `${PAGE}-other` });
+  const supporting = input.keywords[1];
+  const result = buildBrief(input, { ...TARGET, keywordId: supporting.id, intent: supporting.intent });
+  assert.equal(result.ok, false);
+  assert.ok(result.refusals.some((r) => r.code === "keyword_owner_conflict"));
+});
+
 const base = {
   keyword_id: "00000000-0000-4000-8000-000000000001",
   keyword: "example",
