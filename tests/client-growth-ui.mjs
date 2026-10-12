@@ -13,6 +13,8 @@ const measurements=['organic_sessions','forms','referring_domains','pages_live']
  {...fixture,id:`${i}a`,metric,sequence:i*2+1,window_start:['organic_sessions','forms'].includes(metric)?'2026-08-01':'2026-08-31',window_end:'2026-08-31',report_period:null,value:10},
  {...fixture,id:`${i}b`,metric,sequence:i*2+2,window_start:['organic_sessions','forms'].includes(metric)?'2026-09-01':'2026-09-30',window_end:'2026-09-30',report_period:'2026-09-01',value:20},
 ]);
+const ranking={client_id:clientId,keyword_id:keywordId,keyword:'roof repair',keyword_city:'Springfield',location_id:'home',location_name:'Springfield',result_type:'organic',first_position:18,first_checked_at:'2026-08-01T00:00:00Z',position:2,checked_at:'2026-09-28T00:00:00Z',previous_position:5,previous_checked_at:'2026-09-21T00:00:00Z'};
+const rankingRows=[ranking,{...ranking,result_type:'map_pack',position:1},{...ranking,keyword_id:'second',keyword:'roof replacement',position:null},{...ranking,keyword_id:'third',keyword:'new keyword',result_type:null,first_position:null,first_checked_at:null,position:null,checked_at:null}];
 const opportunities=[],checks=[],unexpected=[];let failInsert=true;
 const upstream=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');
@@ -29,6 +31,7 @@ const upstream=http.createServer(async(req,res)=>{
  if(['/rest/v1/portal_billing_summary','/rest/v1/portal_crm_lite'].includes(url.pathname))return reply(null);
  if(['/rest/v1/report_measurements','/rest/v1/portal_growth_measurements'].includes(url.pathname))return reply(measurements);
  if(['/rest/v1/client_growth_search','/rest/v1/portal_growth_search'].includes(url.pathname))return reply([{client_id:clientId,period_start:'2026-08-01',period_end:'2026-08-28',clicks:10,impressions:100,imported_rows:5},{client_id:clientId,period_start:'2026-09-01',period_end:'2026-09-28',clicks:30,impressions:200,imported_rows:8}]);
+ if(['/rest/v1/client_growth_rankings','/rest/v1/portal_growth_rankings'].includes(url.pathname))return reply(rankingRows);
  if(url.pathname==='/rest/v1/keywords')return reply([{id:keywordId,keyword:'roof repair',target_url:'/roof-repair',service_id:null}]);
  if(url.pathname==='/rest/v1/client_brand_workspaces')return reply([]);
  if(url.pathname==='/rest/v1/backlink_opportunities'){
@@ -69,6 +72,12 @@ try{
  assert.equal(await page.getByRole('heading',{name:"Where we started. How you're growing."}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
  assert.equal(await page.locator('section[aria-label="Client growth dashboard"] article').count(),9);
  assert.equal(await page.getByText('+10 (+100.0%) since baseline',{exact:true}).count(),4);
+ assert.match(await page.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+3/);
+ assert.match(await page.getByTestId('maps-rankings').innerText(),/Average position: 1.0/);
+ assert.match(await page.getByTestId('organic-rankings').innerText(),/2 of 3 keywords checked/);
+ await page.getByText('Keyword progress: first check to latest',{exact:true}).click();
+ await page.getByRole('cell',{name:'Up 16',exact:true}).waitFor();
+ assert.ok(await page.getByText('Not found in checked results',{exact:true}).isVisible());
  await page.screenshot({path:`${shots}/progress-desktop.png`,fullPage:true});
  await page.locator('select[name="range"]').selectOption('month');await page.locator('input[name="month"]').fill('2026-09');await page.getByRole('button',{name:'Update view'}).click();await page.waitForURL(/range=month/);await page.getByText('Result in selected dates').first().waitFor();
  assert.equal(await page.locator('article').getByText('Aug 31, 2026',{exact:true}).count(),4);
@@ -87,6 +96,7 @@ try{
  await page.screenshot({path:`${shots}/backlinks-team.png`,fullPage:true});
  const portal=await context(portalId),clientPage=await portal.newPage();clientPage.on('pageerror',e=>errors.push(e.message));
  await clientPage.goto(`http://127.0.0.1:${port}/portal/growth`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:"Where we started. How you're growing."}).waitFor();assert.equal(await clientPage.getByText('Record measurements & review reports',{exact:true}).count(),0);
+ assert.match(await clientPage.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+3/);
  await clientPage.goto(`http://127.0.0.1:${port}/portal/backlinks`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:'Regional trade association'}).waitFor();assert.doesNotMatch(await clientPage.locator('body').innerText(),/PRIVATE/);assert.equal(await clientPage.getByRole('button',{name:'Save link check'}).count(),0);
  await clientPage.setViewportSize({width:390,height:844});await clientPage.screenshot({path:`${shots}/backlinks-portal-mobile.png`,fullPage:true});assert.equal(await clientPage.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);

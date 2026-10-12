@@ -1,3 +1,4 @@
+import type { GrowthRanking } from "./growth-rankings";
 import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
 import type { GrowthMeasurement, SearchHistory } from "./client-growth";
 
@@ -11323,6 +11324,8 @@ export type Database = {
       }
     }
     Views: {
+      client_growth_rankings: { Row: GrowthRanking; Relationships: [] }
+      portal_growth_rankings: { Row: GrowthRanking; Relationships: [] }
       portal_growth_measurements: { Row: GrowthMeasurement; Relationships: [] }
       client_growth_search: { Row: SearchHistory; Relationships: [] }
       portal_growth_search: { Row: SearchHistory; Relationships: [] }

@@ -108,6 +108,29 @@ dark hero panels; explicit white headings and a computed-color assertion fix thi
 CI uploads screenshots for visual review. Final CI results are tracked on the PR.
 
 Tom explicitly authorized uploading this branch and opening a pull request on
-October 12. The connected GitHub app performed the upload. No production migration
-or deployment has been performed. Apply the additive migration before the app,
-only after all final CI gates and screenshot review pass.
+October 12. The connected GitHub app performed the upload. PR #125 was merged and released on October 12 after final CI passed.
+Supabase recorded the migration as `20261012181624`; Vercel production deployed
+main commit `d7f2c2f10023a633f6f379845cfce843d356996d`.
+
+
+## Keyword and Maps ranking summary
+
+Migration `20261012182258_dashboard_ranking_metrics.sql` adds team and tenant-scoped
+portal read models. The dashboard counts every active tracked keyword, including
+keywords without snapshots. It displays organic and Maps/GBP top-3 and top-10
+keyword totals plus average positions. Each keyword qualifies once in any checked
+location; averages cover ranked keyword/location pairs and exclude not-found rows.
+No checks is unavailable, not zero. Checks older than 14 days are flagged.
+
+The expandable table compares first and latest DataForSEO checks for the same
+keyword, location and result type. Other sources and future checks are excluded.
+The first chronological check is labeled as such, not an onboarding baseline.
+A missing latest position remains missing even when an earlier rank exists.
+This operational snapshot is independent of the dated scorecard filters. GBP
+views, calls and website clicks still require separate performance ingestion.
+
+`tests/growth-rankings.test.mjs` covers counting, missing values and movement.
+`growth_rankings.test.sql` covers source/location separation, null latest ranks,
+untracked keywords, tenant isolation and read-only grants in both replay suites.
+The existing browser acceptance covers summary totals, comparisons and mobile layout.
+Apply the additive migration before releasing this dashboard extension.

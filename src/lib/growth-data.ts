@@ -52,3 +52,14 @@ export async function loadPortalBacklinks(supabase:SupabaseClient<Database>,clie
   }
   return {rows:[],error:"Backlink history exceeds the current limit."};
 }
+
+export async function loadGrowthRankings(supabase:SupabaseClient<Database>,clientId:string,portal=false) {
+  const rankings:import("./growth-rankings").GrowthRanking[]=[];
+  for(let offset=0;offset<20000;offset+=500) {
+    const {data,error}=await supabase.from(portal?"portal_growth_rankings":"client_growth_rankings").select("*").eq("client_id",clientId).order("keyword_id").order("location_id").order("result_type").range(offset,offset+499);
+    if(error) return {rankings:[],rankingsError:"Keyword rankings could not be loaded. Please retry."};
+    rankings.push(...(data??[]));
+    if((data?.length??0)<500) return {rankings,rankingsError:null};
+  }
+  return {rankings:[],rankingsError:"Ranking history exceeds this dashboard's limit. Ask Compass to review the complete keyword list."};
+}
