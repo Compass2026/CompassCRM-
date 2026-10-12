@@ -32,5 +32,7 @@ export async function recordMeasurementAction(clientId: string, _previous: Repor
     return { error: "The measurement could not be saved. Check that reporting setup is approved and the dates and values are valid. Your entry has been kept for retry." };
   }
   revalidatePath(`/clients/${clientId}/reports`);
+  revalidatePath(`/clients/${clientId}/growth`);
+  revalidatePath("/portal/growth");
   return { savedId: input.id };
 }
