@@ -67,7 +67,7 @@ try{
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/growth`,{waitUntil:'networkidle'});
  await page.getByRole('heading',{name:"Where we started. How you're growing."}).waitFor();
  assert.equal(await page.locator('section[aria-label="Client growth dashboard"] article').count(),9);
- assert.equal(await page.getByText('+10 (100.0%) since baseline',{exact:true}).count(),4);
+ assert.equal(await page.getByText('+10 (+100.0%) since baseline',{exact:true}).count(),4);
  await page.screenshot({path:`${shots}/progress-desktop.png`,fullPage:true});
  await page.locator('select[name="range"]').selectOption('month');await page.locator('input[name="month"]').fill('2026-09');await page.getByRole('button',{name:'Update view'}).click();await page.waitForURL(/range=month/);await page.getByText('Result in selected dates').first().waitFor();
  assert.equal(await page.locator('article').getByText('Aug 31, 2026',{exact:true}).count(),4);
