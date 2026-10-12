@@ -39,3 +39,9 @@ No measured backlink-profile baseline or acquisition opportunities exist yet. Th
 ## Release verification
 
 Run `npm test`, TypeScript, lint and build. `scripts/test-portal-sandbox.sh` runs the real PostgreSQL portal and importer boundaries; `tests/client-growth-database.test.mjs` also replays the migration chain in PGlite. Browser acceptance covers interactive filtering, unsafe links, responsive layout and portal routes. Apply the migration before releasing the UI and deploy the Edge Function with JWT verification enabled; include the shared complete-month helper from `gbp-performance/metrics.ts`. Backfill six months per verified client and inspect finished run results and receipts.
+
+## Analytics permission follow-up
+
+October 12: Tom enabled both Analytics Admin and Data APIs in compass-client-platform. A fresh Admin account inventory now succeeds. The Compass Marketing | Client Analytics account (408850978) contains Lucas (492819658), Resilient Boxing (555161974), BHG Safety (555174237) and Ginger Huff (558430574). Property names alone do not prove website mapping; confirm web data streams before binding.
+
+The existing Ops grant includes analytics.edit but not analytics.readonly. Google Connect now requests analytics.readonly and treats a missing reporting grant as partial; the broader analytics scope also satisfies reporting. Existing Business Profile, Analytics administration and Gmail draft scopes remain requested. No worker or publisher switch changes. Reconnect through Settings > Google hands using the Compass Workspace account, grant the reporting permission, then verify the stored scope and Data API access before importing traffic. Enabling APIs alone does not grant OAuth reporting access.
