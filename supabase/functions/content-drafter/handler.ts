@@ -24,7 +24,7 @@ import { blogBriefHash, buildBlogBrief, CONTENT_DRAFTER_VERSION, type BlogBrief 
 import { lintBlog, type BlogDraft } from "./lint.ts";
 import type { Store } from "./store.ts";
 
-export const HANDLER_VERSION = 2;
+export const HANDLER_VERSION = 3;
 export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
@@ -77,7 +77,11 @@ export function createContentDrafter(deps: Deps) {
     if (!["requested", "draft", "rejected"].includes(draft.status)) {
       return { ok: false, status: 409, body: { error: "draft_not_open", message: `The draft is ${draft.status}; nothing to write.` } };
     }
-    const input = await store.input(draft.client_id);
+    let input;
+    try { input = await store.input(draft.client_id, draft.service_id); } catch (e) {
+      if ((e as {code?:string}).code === "23514") return {ok:false,status:422,body:{eligible:false,refusals:[{code:"brand_service_required",message:(e as Error).message}]}};
+      throw e;
+    }
     if (!input?.client) return { ok: false, status: 404, body: { error: "client_not_found" } };
     const result = buildBlogBrief(input, draft, await store.sitePages(draft.client_id));
     if (!result.ok) return { ok: false, status: 422, body: { eligible: false, refusals: result.refusals } };

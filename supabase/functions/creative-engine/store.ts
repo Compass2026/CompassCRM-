@@ -7,6 +7,7 @@
 // It reads posts and template approvals; it never changes them except
 // through those functions.
 // It reads brand-asset bytes; it never writes, moves or deletes them.
+import { CopyRefusal } from "./text.ts";
 import type { Facts } from "./govern.ts";
 import type { Store } from "./handler.ts";
 import { MAX_SOURCE_BYTES } from "./render.ts";
@@ -35,7 +36,7 @@ export function createStore(supabase: Client): Store {
       return { member: m?.id ?? null };
     },
 
-    async facts(clientId): Promise<Facts | null> {
+    async facts(clientId, serviceId = null): Promise<Facts | null> {
       const { data: client, error } = await supabase.from("clients").select("id, name, phone, website_url, status").eq("id", clientId).maybeSingle();
       if (error) throw new Error(error.message);
       if (!client) return null;
@@ -49,12 +50,18 @@ export function createStore(supabase: Client): Store {
           .eq("client_id", clientId),
       ]);
       for (const r of [brand, board, services, claims, assets]) if (r.error) throw new Error(r.error.message);
+      const {data:workspaces,error:workspaceError}=await supabase.from("client_brand_workspaces")
+        .select("id,name,phone,website_url,tagline,standing_cta,status,service_ids,claim_ids,asset_ids").eq("client_id",clientId);
+      if(workspaceError) throw new Error(workspaceError.message);
+      const workspace=(workspaces??[]).find((b:{service_ids:string[]})=>serviceId&&b.service_ids.includes(serviceId));
+      if(workspaces?.length&&!workspace) throw new CopyRefusal("brand_service_required","Select a service assigned to a brand before making creative.");
+      if(workspace&&workspace.status!=="approved") throw new CopyRefusal("brand_review_required","Review and approve this brand before making creative.");
       return {
-        client,
-        brand: { tagline: brand.data?.tagline ?? null, standing_cta: board.data?.standing_cta ?? null },
-        services: services.data ?? [],
-        claims: (claims.data ?? []).map((c: { status: unknown }) => ({ ...c, status: String(c.status) })),
-        assets: (assets.data ?? []).map((a: Record<string, unknown>) => ({
+        client:workspace?{...client,name:workspace.name,phone:workspace.phone,website_url:workspace.website_url}:client,
+        brand: { tagline: workspace?.tagline ?? brand.data?.tagline ?? null, standing_cta: workspace?.standing_cta ?? board.data?.standing_cta ?? null },
+        services: (services.data ?? []).filter((s:{id:string})=>!workspace||workspace.service_ids.includes(s.id)),
+        claims: (claims.data ?? []).filter((c:{id:string})=>!workspace||workspace.claim_ids.includes(c.id)).map((c: { status: unknown }) => ({ ...c, status: String(c.status) })),
+        assets: (assets.data ?? []).filter((a:{id:string})=>!workspace||workspace.asset_ids.includes(a.id)).map((a: Record<string, unknown>) => ({
           ...a, kind: String(a.kind), subjects: (a.subjects as string[] | null) ?? [],
           focal_x: a.focal_x == null ? null : Number(a.focal_x), focal_y: a.focal_y == null ? null : Number(a.focal_y),
         })),

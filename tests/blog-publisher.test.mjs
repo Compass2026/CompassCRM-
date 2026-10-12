@@ -46,3 +46,20 @@ test('live verification requires release marker, canonical, exact H1, body and l
  assert.equal(verifyLiveArticle(html.replace('our guide','another guide'),r,hash,'https://example.test/blog/roof'),false);
  assert.equal(verifyLiveArticle(html,r,'sha256:wrong','https://example.test/blog/roof'),false);
 });
+
+
+test('publisher carries the reviewed service and exact site through read and write',async()=>{
+ const h=harness(); const seen=[];
+ const run=createBlogPublisher({authorized:async()=>true,
+  claim:async()=>({id:DRAFT_ID,lease_token:'token',status:'publishing',snapshot:h.r,release_hash:hash,scheduled_at:'2026-10-12T16:00:00Z'}),
+  authorize:async()=>{},finish:async()=>{},
+  input:async(client,service)=>{assert.equal(service,h.r.service_id);return lucas();},pages:async()=>[],
+  sitePush:async(body)=>{seen.push(body);assert.equal(body.site_id,h.r.destination.site_id);
+   if(body.read)return Response.json({head:'b'.repeat(40),repo_url:h.r.destination.repo_url,branch:'main',files:[
+    {path:'compass-blog.json',content:JSON.stringify({version:1,adapter:'lucas_json',keyword_provenance:true,markdown:true,seo_fields:true})},
+    {path:'data/blog-posts.json',content:'[]'}]});
+   return Response.json({commit_url:'https://github.com/example/site/commit/'+'c'.repeat(40),vercel:{ready_state:'READY',target:'production'}});
+  },fetchLive:async()=>new Response('',{status:404})});
+ await run(new Request('https://test/publish',{method:'POST',body:JSON.stringify({publication_id:DRAFT_ID})}));
+ assert.equal(seen.length,2);assert.equal(seen[0].site_id,seen[1].site_id);
+});

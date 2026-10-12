@@ -1,3 +1,4 @@
+import { BrandWorkspaces } from "@/components/brand-workspaces";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isImage, isLightColor, loadBrandBoard } from "@/lib/brand";
@@ -47,12 +48,16 @@ const selectClass =
   "field";
 
 export default async function BrandPage({
-  params,
+  params, searchParams,
 }: {
   params: Promise<{ clientId: string }>;
+  searchParams: Promise<{brand?:string}>;
 }) {
   const { clientId } = await params;
   const supabase = await createClient();
+  const {data:workspaces,error:workspaceError}=await supabase.from("client_brand_workspaces").select("*").eq("client_id",clientId).order("created_at").order("slug");
+  if(workspaceError) throw new Error(workspaceError.message);
+  if(workspaces?.length) return <BrandWorkspaces clientId={clientId} workspaces={workspaces} selected={(await searchParams).brand}/>;
   const data = await loadBrandBoard(supabase, clientId);
   if (!data) notFound();
 

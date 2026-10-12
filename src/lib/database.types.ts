@@ -14,6 +14,109 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_brand_workspaces: {
+        Row: {
+          id: string
+          client_id: string
+          slug: string
+          name: string
+          website_url: string
+          phone: string
+          positioning: string
+          voice_tone: string
+          audience: string
+          tagline: string
+          differentiators: string
+          ai_guidance: string
+          imagery_style: string
+          typography_notes: string
+          words_we_use: string[]
+          words_we_avoid: string[]
+          content_pillars: string[]
+          hard_rules: string[]
+          standing_cta: string
+          palette: Json
+          service_ids: string[]
+          claim_ids: string[]
+          asset_ids: string[]
+          blog_site_id: string | null
+          facebook_account_id: string | null
+          status: string
+          version: number
+          approved_by: string | null
+          approved_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          slug: string
+          name: string
+          website_url: string
+          phone: string
+          positioning?: string
+          voice_tone?: string
+          audience?: string
+          tagline?: string
+          differentiators?: string
+          ai_guidance?: string
+          imagery_style?: string
+          typography_notes?: string
+          words_we_use?: string[]
+          words_we_avoid?: string[]
+          content_pillars?: string[]
+          hard_rules?: string[]
+          standing_cta?: string
+          palette?: Json
+          service_ids?: string[]
+          claim_ids?: string[]
+          asset_ids?: string[]
+          blog_site_id?: string | null
+          facebook_account_id?: string | null
+          status?: string
+          version?: number
+          approved_by?: string | null
+          approved_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          slug?: string
+          name?: string
+          website_url?: string
+          phone?: string
+          positioning?: string
+          voice_tone?: string
+          audience?: string
+          tagline?: string
+          differentiators?: string
+          ai_guidance?: string
+          imagery_style?: string
+          typography_notes?: string
+          words_we_use?: string[]
+          words_we_avoid?: string[]
+          content_pillars?: string[]
+          hard_rules?: string[]
+          standing_cta?: string
+          palette?: Json
+          service_ids?: string[]
+          claim_ids?: string[]
+          asset_ids?: string[]
+          blog_site_id?: string | null
+          facebook_account_id?: string | null
+          status?: string
+          version?: number
+          approved_by?: string | null
+          approved_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
       agreement_contracts: {
         Row: {
           client_id: string

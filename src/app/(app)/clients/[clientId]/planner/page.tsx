@@ -39,7 +39,7 @@ export default async function PlannerPage({ params, searchParams }: {
   const week = parseWeek((await searchParams).week);
   const supabase = await createClient();
 
-  const [clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ] = await Promise.all([
+  const [clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ, brandsQ] = await Promise.all([
     supabase.from("clients").select("id, name, status").eq("id", clientId).maybeSingle(),
     supabase.from("content_plan_board").select("*").eq("client_id", clientId).eq("week_start", week)
       .order("planned_date", { ascending: true, nullsFirst: false }).order("created_at"),
@@ -53,10 +53,11 @@ export default async function PlannerPage({ params, searchParams }: {
       .select("id, content_type, topic, intent, section, action, effective_status, target_path")
       .eq("client_id", clientId).eq("present", true).in("effective_status", ["open", "in_progress"])
       .in("content_type", Object.keys(OPPORTUNITY_DELIVERABLE)).in("section", ["fix_now", "ready"]),
+    supabase.from("client_brand_workspaces").select("id,name,slug,service_ids").eq("client_id",clientId),
   ]);
   const client = clientQ.data;
   if (!client) notFound();
-  const failure = boardQ.error ?? linkedQ.error;
+  const failure = boardQ.error ?? linkedQ.error ?? brandsQ.error;
   if (failure) {
     return <p className="surface p-4 text-sm text-red-700">The planner could not be read: {failure.message}</p>;
   }
@@ -70,6 +71,7 @@ export default async function PlannerPage({ params, searchParams }: {
   const plannedOpps = new Set((linkedQ.data ?? []).flatMap((r) => (r.authority_opportunity_id && r.week_start === week ? [r.authority_opportunity_id] : [])));
   const services = (servicesQ.data ?? []).map((s) => ({ id: s.id, label: s.name }));
   const keywords = (keywordsQ.data ?? []).map((k) => ({ id: k.id, label: k.keyword }));
+  const brandByService = new Map((brandsQ.data??[]).flatMap(b=>b.service_ids.map(id=>[id,b] as const)));
   const serviceName = new Map((servicesQ.data ?? []).map((s) => [s.id, s.name]));
   const keywordName = new Map((keywordsQ.data ?? []).map((k) => [k.id, k.keyword]));
   const posts = postsQ.data ?? [];
@@ -129,6 +131,7 @@ export default async function PlannerPage({ params, searchParams }: {
                     </div>
                     <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-0.5 text-xs [&>dd]:[overflow-wrap:anywhere]">
                       {i.search_intent && (<><dt className="text-muted-foreground">Intent</dt><dd>{i.search_intent}</dd></>)}
+                      {!!brandsQ.data?.length && <><dt className="text-muted-foreground">Brand</dt><dd>{i.service_id&&brandByService.has(i.service_id)?<Link className="underline" href={`${base}/brand?brand=${brandByService.get(i.service_id)!.slug}`}>{brandByService.get(i.service_id)!.name}</Link>:'Assign a brand service'}</dd></>}
                       {i.service_id && (<><dt className="text-muted-foreground">Service</dt><dd>{serviceName.get(i.service_id) ?? "—"}</dd></>)}
                       {i.keyword_id && (<><dt className="text-muted-foreground">Keyword</dt><dd>{keywordName.get(i.keyword_id) ?? "—"}</dd></>)}
                       {i.target_url && (<><dt className="text-muted-foreground">Destination</dt><dd>{i.target_url}</dd></>)}

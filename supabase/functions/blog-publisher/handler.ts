@@ -11,7 +11,7 @@ export type Deps = {
   claim(id: string): Promise<Publication>;
   authorize(id: string, token: string): Promise<void>;
   finish(id: string, token: string, status: string, evidence: Json, error?: string): Promise<void>;
-  input(client: string): Promise<DrafterInput>;
+  input(client: string, service: string | null): Promise<DrafterInput>;
   pages(client: string): Promise<{ url: string; title: string }[]>;
   sitePush(body: Json): Promise<Response>;
   fetchLive(url: string): Promise<Response>;
@@ -45,7 +45,7 @@ export function createBlogPublisher(deps: Deps) {
     let evidence: Json = {};
     try {
       const r = p.snapshot;
-      const input = await deps.input(r.client_id);
+      const input = await deps.input(r.client_id, (r as BlogRelease & {service_id?: string}).service_id ?? null);
       const brief = buildBlogBrief(input, {...r,id:r.draft_id,deliverable:"blog",status:"approved"} as unknown as DraftRow,await deps.pages(r.client_id));
       if (!brief.ok) throw new Error(brief.refusals.map((x)=>x.message).join(" "));
       const foundation = (b: Record<string, unknown>) => stableJson({
@@ -59,7 +59,7 @@ export function createBlogPublisher(deps: Deps) {
       const lint = lintBlog(brief.brief,parsed,{gazetteer:(input.client.state && deps.gazetteer?.[input.client.state]) || []});
       if (!lint.ok) throw new Error(lint.problems.map((x)=>x.message).join(" "));
       evidence = {lint};
-      const readRes = await deps.sitePush({client_id:r.client_id,read:true,paths:publicationPaths(r)});
+      const readRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,read:true,paths:publicationPaths(r)});
       if (!readRes.ok) throw new Error("Could not read the approved website repository");
       const read = await readRes.json() as RepositoryRead;
       const date = new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(p.scheduled_at));
@@ -67,7 +67,7 @@ export function createBlogPublisher(deps: Deps) {
       if (delivery.already_present) throw new Error("The released article already exists. Reconcile its deployment without creating another commit.");
       await deps.authorize(p.id,p.lease_token);
       externalWriteStarted = true;
-      const pushRes = await deps.sitePush({client_id:r.client_id,repo:r.destination.repo_url.replace("https://github.com/",""),
+      const pushRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,repo:r.destination.repo_url.replace("https://github.com/",""),
         branch:r.destination.branch,expected_head:delivery.expected_head,files:delivery.files,
         message:`Publish approved blog ${r.slug} [${p.id}]`});
       const pushed = await pushRes.json();

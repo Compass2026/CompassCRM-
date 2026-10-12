@@ -34,7 +34,7 @@ export const MODES = ["version", "register", "plan", "preview", "post"] as const
 export type Store = {
   secret(name: string): Promise<string | null>;
   caller(jwt: string): Promise<"none" | { member: string | null }>;
-  facts(clientId: string): Promise<Facts | null>;
+  facts(clientId: string, serviceId?: string | null): Promise<Facts | null>;
   read(storagePath: string): Promise<Uint8Array>;
   template(key: string, version: number): Promise<{ id: string; spec_hash: string; status: string } | null>;
   post(postId: string): Promise<PostFacts | null>;
@@ -132,7 +132,7 @@ export function createCreativeEngine({ store, engine }: { store: Store; engine: 
     const parsed = parseRequest(body);
     if (parsed instanceof Response) return parsed;
     const { t, req: rr } = parsed;
-    const facts = await store.facts(rr.client_id);
+    const facts = await store.facts(rr.client_id, rr.service_id);
     if (!facts) return reply(404, { status: "refused", code: "client_unknown", message: "No such client" });
 
     let registered: { id: string; spec_hash: string; status: string } | null = null;
@@ -226,7 +226,7 @@ export function createCreativeEngine({ store, engine }: { store: Store; engine: 
     if (await store.clientTemplateStatus(post.client_id, registered.id) !== "approved") {
       return no("template_not_approved", "This template version is not approved for the client; approve it on its preview first");
     }
-    const facts = await store.facts(post.client_id);
+    const facts = await store.facts(post.client_id, post.service_id);
     if (!facts) return reply(404, { status: "refused", code: "client_unknown", message: "No such client" });
 
     const copyHash = await sha256Hex(new TextEncoder().encode(post.copy ?? ""));

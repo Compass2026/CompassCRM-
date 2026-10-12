@@ -21,7 +21,7 @@ Deno.serve(createBlogPublisher({
   claim: (id) => rpc("blog_publication_claim",{p_id:id}),
   authorize: (id,token) => rpc("blog_publication_authorize",{p_id:id,p_token:token}),
   finish: (id,token,status,evidence,error) => rpc("blog_publication_finish",{p_id:id,p_token:token,p_status:status,p_evidence:evidence,p_error:error??null}),
-  async input(client) { const input=await store.input(client); if (!input) throw new Error("Client intelligence unavailable"); return input; },
+  async input(client,service) { const input=await store.input(client,service); if (!input) throw new Error("Client intelligence unavailable"); return input; },
   pages: store.sitePages,
   async sitePush(body) {
     const secret = await store.secret("SYNC_CRON_SECRET");
