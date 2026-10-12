@@ -335,7 +335,7 @@ test("keys are ID-based, unique, and survive renaming a service", () => {
 test("sections follow the action and content type", () => {
   const r = run();
   const sec = (key) => r.opportunities.find((o) => o.key === key).section;
-  assert.equal(sec(`service_page:${REPAIR}`), "fix_now");
+  assert.equal(sec(`service_page:${REPAIR}`), "blocked", "conflicting owners must be resolved before creating a competing page");
   assert.equal(sec("page_improvement:home"), "fix_now");
   assert.equal(sec(`gbp_post:${ROOF}:transactional`), "ready");
   assert.equal(sec(`gbp_post:${ROOF}:commercial`), "ready", "cadence-deferred is still ready, with eligible_from");
@@ -351,7 +351,7 @@ test("objectives are fixed templates, present only where they apply", () => {
   const r = run();
   const obj = (key) => r.opportunities.find((o) => o.key === key).objective;
   assert.match(obj(`gbp_post:${ROOF}:transactional`), /^Prompt people ready to act to request roof replacement and send them to \/services\/roof-replacement\.$/);
-  assert.match(obj(`service_page:${REPAIR}`), /Give Roof Repair its own live page/);
+  assert.equal(obj(`service_page:${REPAIR}`), null, "owner conflict blocks content creation");
   assert.equal(obj("confirm_market:ofallon"), null);
   assert.equal(obj("topic:signs_replacement"), null);
 });

@@ -12,6 +12,7 @@ import { TEMPLATES } from "./playbooks.ts";
 import { findConflicts, pageWordingIssues } from "./conflicts.ts";
 import { buildOpportunities } from "./opportunities.ts";
 import { homeContext } from "./home.ts";
+import { buildKeywordCampaigns } from "./campaigns.ts";
 import { classifyPages, prefixes, slugWords, type ClassifiedPage } from "./site.ts";
 import { buildInventory, normPath, placesIn, buildPlaceIndex, type Inventory, type PlaceIndex } from "./urls.ts";
 import {
@@ -301,6 +302,7 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
       inventory: { fetched_at: a.inventory?.fetched_at ?? null, pages: inv.byPath.size },
     },
     pillars, keywords, conflicts, supporting, home: homeSummary, opportunities, judgments: judgments(input, pillars),
+    campaigns: buildKeywordCampaigns(input, keywords, pillars, opportunities),
   };
 }
 

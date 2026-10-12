@@ -2,6 +2,46 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { keywordCampaignRank } from "../supabase/functions/authority/opportunities.ts";
+import { buildBrief } from "../supabase/functions/post-drafter/brief.ts";
+import { lucas, TARGET, KW, PAGE } from "./fixtures/drafter-lucas.mjs";
+
+test("keyword foundation derives missing intent and service without mutating input", () => {
+  const target = { ...TARGET, intent: "", serviceId: null };
+  const result = buildBrief(lucas(), target);
+  assert.equal(result.ok, true, JSON.stringify(result.refusals));
+  assert.equal(result.brief.target.search_intent, "commercial");
+  assert.equal(result.brief.target.service.id, TARGET.serviceId);
+  assert.equal(target.intent, "");
+  assert.equal(target.serviceId, null);
+});
+
+test("direct drafting refuses a stored intent contradiction even when caller agrees", () => {
+  const input = lucas();
+  input.keywords[0].intent = "navigational";
+  const result = buildBrief(input, { ...TARGET, intent: "navigational" });
+  assert.equal(result.ok, false);
+  assert.ok(result.refusals.some((r) => r.code === "keyword_intent_conflict"));
+  assert.equal(input.keywords[0].intent, "navigational");
+});
+
+test("direct drafting refuses two primary owner pages and duplicate-text aliases", () => {
+  for (const duplicateText of [false, true]) {
+    const input = lucas();
+    const otherId = "00000000-0000-4000-8000-000000000099";
+    if (duplicateText) input.keywords.push({ ...input.keywords[0], id: otherId, keyword: "  ROOF replacement   WENTZVILLE  ", target_url: `${PAGE}-other` });
+    input.pageGroups.push({ ...input.pageGroups[0], id: "other", primary_keyword_id: duplicateText ? otherId : KW, target_url: `${PAGE}-other` });
+    const result = buildBrief(input, TARGET);
+    assert.equal(result.ok, false);
+    assert.ok(result.refusals.some((r) => r.code === "keyword_owner_conflict"));
+  }
+});
+
+test("the same normalized owner URL may be shared by service, keyword and page group", () => {
+  const input = lucas();
+  input.pageGroups[0].target_url = `${PAGE}/?utm_source=review`;
+  const result = buildBrief(input, TARGET);
+  assert.equal(result.ok, true, JSON.stringify(result.refusals));
+});
 
 const base = {
   keyword_id: "00000000-0000-4000-8000-000000000001",

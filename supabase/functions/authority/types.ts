@@ -10,8 +10,9 @@
 // objective, audience framing and differentiation on top of an opportunity;
 // it may never introduce any of the above.
 import type { DrafterInput } from "../post-drafter/types.ts";
+import type { KeywordCampaign } from "./campaigns.ts";
 
-export const AUTHORITY_VERSION = "authority-v1.3";
+export const AUTHORITY_VERSION = "authority-v1.4";
 
 // Every statement the engine makes carries one of these.
 export type Tag = "FACT" | "HEURISTIC" | "RESEARCH_REQUIRED" | "REQUIRES_CONFIRMATION";
@@ -190,4 +191,5 @@ export type AuthorityReport = {
   pillars: Pillar[]; keywords: KeywordAssignment[]; conflicts: Conflict[]; supporting: SupportingTopic[];
   home: HomeSummary;
   opportunities: Opportunity[]; judgments: string[];
+  campaigns?: KeywordCampaign[];
 };
