@@ -5,8 +5,10 @@ Issue #88. Migrations `0063_communications.sql` (**applied Oct 2 2026** as
 5 2026** as `20261005033418`), Edge Functions `communications` (v2, JWT
 verified; **v3 deployed Oct 6 2026**) and `twilio-webhook` (v2,
 `verify_jwt = false`; deployed Oct 5 2026), the client **Communications** tab. The parent Main key and the
-BHG subaccount's Auth Token are in Vault; outbound sending is off. Phase 2 (CRM Lite:
-opportunities, pipelines, notes) is not started.
+BHG subaccount's Auth Token are in Vault; outbound sending is off. CRM Lite
+(website inquiries, follow-up, SMS inquiry alerts from Compass's own sender)
+is `docs/crm-lite.md`; it reuses `contacts`, the Twilio provider, the 0065
+Vault reads and `twilio-webhook`.
 
 ## Architecture
 

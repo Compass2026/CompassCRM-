@@ -46,6 +46,9 @@ export default async function PortalLayout({
     .select("collection")
     .maybeSingle();
 
+  // Inquiries appear once Compass turns on CRM Lite portal access.
+  const { data: crmLite } = await supabase.from("portal_crm_lite").select("client_id").maybeSingle();
+
   return (
     <div className="min-h-screen">
       <header className="bg-navy-900 text-cream">
@@ -83,7 +86,7 @@ export default async function PortalLayout({
           </div>
         </div>
         <div className="mx-auto max-w-5xl px-4">
-          <PortalNav showBilling={!!billing?.collection} />
+          <PortalNav showBilling={!!billing?.collection} showInquiries={!!crmLite} />
         </div>
         <div className="h-0.5 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-400" />
       </header>

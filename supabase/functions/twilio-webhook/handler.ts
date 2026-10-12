@@ -17,12 +17,23 @@
 // ignored. The answer to an inbound message is an empty <Response/>: Compass
 // never sends an automatic reply, and STOP / HELP replies are Twilio's.
 //
+// CRM Lite (docs/crm-lite.md) adds Compass's own alert sender:
+//
+//   POST …/twilio-webhook/notifications/inbound   the sender number's inbound URL
+//   POST …/twilio-webhook/notifications/status    an alert's StatusCallback (?j=<job id>)
+//
+// Same signature rule (the sender subaccount's Auth Token). Inbound to the
+// sender records STOP / START / HELP only (crm_notification_keyword); any
+// other text is acknowledged and not stored. An inbound sent to
+// /messages/inbound by an account that is an alert sender, not a client's,
+// is handled the same way. Client routes are unchanged.
+//
 // Logs carry SIDs and outcome codes only — never a body, a phone number's
 // message, a token or the signature.
-import { INBOUND_PATH, STATUS_PATH, ACCOUNT_SID, MESSAGE_SID } from "../_shared/communications/credentials.ts";
+import { INBOUND_PATH, STATUS_PATH, NOTIFY_INBOUND_PATH, NOTIFY_STATUS_PATH, ACCOUNT_SID, MESSAGE_SID } from "../_shared/communications/credentials.ts";
 import { optOutFromTwilio, optOutKeyword } from "../../../src/lib/communications.ts";
 
-export const HANDLER_VERSION = 2;
+export const HANDLER_VERSION = 3;
 
 export type Validator = (authToken: string, signature: string, url: string, params: Record<string, string>) => boolean;
 
@@ -32,6 +43,10 @@ export type Store = {
   accountKnown(accountSid: string): Promise<boolean>;
   recordInbound(p: Record<string, unknown>): Promise<Record<string, unknown>>;
   recordStatus(p: Record<string, unknown>): Promise<Record<string, unknown>>;
+  // CRM Lite's alert sender (optional so a store without it answers 403).
+  notificationSenderKnown?(accountSid: string): Promise<boolean>;
+  recordNotificationKeyword?(p: Record<string, unknown>): Promise<Record<string, unknown>>;
+  recordNotificationStatus?(p: Record<string, unknown>): Promise<Record<string, unknown>>;
 };
 
 export type Log = (event: string, detail: Record<string, unknown>) => void;
@@ -64,7 +79,9 @@ export function createTwilioWebhook(deps: { store: Store; validate: Validator; p
     // some proxies); the route is what follows the function's name.
     const at = url.pathname.indexOf("/twilio-webhook");
     const route = at >= 0 ? url.pathname.slice(at + "/twilio-webhook".length) : url.pathname;
-    if (route !== INBOUND_PATH && route !== STATUS_PATH) return text(404, "not found");
+    if (route !== INBOUND_PATH && route !== STATUS_PATH && route !== NOTIFY_INBOUND_PATH && route !== NOTIFY_STATUS_PATH) {
+      return text(404, "not found");
+    }
 
     const contentType = req.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().startsWith("application/x-www-form-urlencoded")) return text(415, "form posts only");
@@ -79,7 +96,12 @@ export function createTwilioWebhook(deps: { store: Store; validate: Validator; p
       log("rejected", { route, reason: "unsigned_or_no_account" });
       return text(403, "forbidden");
     }
-    if (!(await store.accountKnown(accountSid))) {
+    // Whose account: a client's subaccount (0063) or a CRM Lite alert sender.
+    const notifyRoute = route === NOTIFY_INBOUND_PATH || route === NOTIFY_STATUS_PATH;
+    const clientAccount = notifyRoute ? false : await store.accountKnown(accountSid);
+    const senderAccount = clientAccount ? false
+      : (route === STATUS_PATH ? false : !!(await store.notificationSenderKnown?.(accountSid)));
+    if (!clientAccount && !senderAccount) {
       log("rejected", { route, reason: "unknown_account", account: accountSid });
       return text(403, "forbidden");
     }
@@ -99,6 +121,8 @@ export function createTwilioWebhook(deps: { store: Store; validate: Validator; p
       log("ignored", { route, reason: "no_message_sid", account: accountSid });
       return route === INBOUND_PATH ? twiml() : text(200, "");
     }
+
+    if (senderAccount) return notification(route === NOTIFY_STATUS_PATH ? "status" : "inbound", url, params, messageSid, accountSid);
 
     if (route === INBOUND_PATH) {
       const fromTwilio = optOutFromTwilio(params.OptOutType);
@@ -144,6 +168,46 @@ export function createTwilioWebhook(deps: { store: Store; validate: Validator; p
       const code = codeOf(e);
       log("status_failed", { message: messageSid, account: accountSid, status, code });
       if (code === "invalid") return text(200, ""); // a status Compass does not track; nothing to retry
+      if (code === "forbidden") return text(403, "forbidden");
+      return text(500, "error");
+    }
+  }
+
+  // CRM Lite alert sender: keywords in, delivery status of alerts.
+  async function notification(kind: "inbound" | "status", url: URL, params: Record<string, string>, messageSid: string,
+                              accountSid: string): Promise<Response> {
+    if (kind === "inbound") {
+      const keyword = optOutFromTwilio(params.OptOutType) ?? optOutKeyword(params.Body);
+      if (!keyword) {
+        log("notify_inbound", { message: messageSid, account: accountSid, keyword: null });
+        return twiml();
+      }
+      try {
+        const r = await store.recordNotificationKeyword!({
+          message_sid: messageSid, account_sid: accountSid, to: params.To, from: params.From, keyword,
+        });
+        log("notify_inbound", { message: messageSid, account: accountSid, keyword, duplicate: r.duplicate === true });
+        return twiml();
+      } catch (e) {
+        const code = codeOf(e);
+        log("notify_inbound_failed", { message: messageSid, account: accountSid, code });
+        if (code === "unknown_number") return text(404, "number not an alert sender in Compass");
+        if (code === "invalid") return text(400, "invalid message");
+        return text(500, "error");
+      }
+    }
+    const status = (params.MessageStatus ?? params.SmsStatus ?? "").toLowerCase();
+    try {
+      const r = await store.recordNotificationStatus!({
+        job_id: url.searchParams.get("j"), message_sid: messageSid, account_sid: accountSid, status,
+        error_code: params.ErrorCode ?? null, error_message: params.ErrorMessage ?? null,
+      });
+      log("notify_status", { message: messageSid, account: accountSid, status, job: r.job_id });
+      return text(200, "");
+    } catch (e) {
+      const code = codeOf(e);
+      log("notify_status_failed", { message: messageSid, account: accountSid, status, code });
+      if (code === "invalid" || code === "not_found") return text(200, "");
       if (code === "forbidden") return text(403, "forbidden");
       return text(500, "error");
     }

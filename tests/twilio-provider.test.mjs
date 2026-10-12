@@ -160,3 +160,28 @@ test("createSubaccount with an API key: Twilio sends no auth_token → authToken
   assert.equal(sub.sid, "AC" + "9".repeat(32));
   assert.equal(sub.authToken, "");
 });
+
+// CRM Lite: Compass's alert sender sends from one number (no Messaging
+// Service) and lists messages before any resend whose outcome is unknown.
+test("CRM Lite: a send from a number uses From, never a Messaging Service", async () => {
+  const f = fakeFetch([{ status: 201, body: { sid: "SM" + "f".repeat(32), status: "queued" } }]);
+  const t = createTwilioProvider(f.fn);
+  await t.sendMessage(SUB, { messagingServiceSid: null, from: "+18885550199", to: "+16185550100", body: "Alert", statusCallbackUrl: "https://h/n?j=1" });
+  assert.deepEqual(f.calls[0].form, { From: "+18885550199", To: "+16185550100", Body: "Alert", StatusCallback: "https://h/n?j=1" });
+  await assert.rejects(() => t.sendMessage(SUB, { to: "+16185550100", body: "x", statusCallbackUrl: "https://h" }));
+});
+
+test("CRM Lite: listing messages is a GET on the subaccount, filtered by both numbers; complete when there is no next page", async () => {
+  const f = fakeFetch([
+    { status: 200, body: { messages: [{ sid: "SM" + "1".repeat(32), body: "Alert", status: "delivered", date_created: "Sat, 11 Oct 2026 15:00:00 +0000" }], next_page_uri: null } },
+    { status: 200, body: { messages: [], next_page_uri: "/2010-04-01/Accounts/x/Messages.json?Page=1" } },
+  ]);
+  const t = createTwilioProvider(f.fn);
+  const a = await t.listMessages(SUB, { to: "+16185550100", from: "+18885550199", pageSize: 50 });
+  assert.equal(f.calls[0].method, "GET");
+  assert.equal(f.calls[0].url, `https://api.twilio.com/2010-04-01/Accounts/${SUB.accountSid}/Messages.json?To=%2B16185550100&From=%2B18885550199&PageSize=50`);
+  assert.equal(f.calls[0].auth, auth(SUB));
+  assert.equal(a.complete, true);
+  assert.equal(a.messages[0].body, "Alert");
+  assert.equal((await t.listMessages(SUB, { to: "+1", from: "+1", pageSize: 50 })).complete, false);
+});

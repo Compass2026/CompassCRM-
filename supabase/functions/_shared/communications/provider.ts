@@ -48,6 +48,8 @@ export type ProviderNumber = {
 
 export type MessagingService = { sid: string; friendlyName: string };
 
+export type ListedMessage = { sid: string; body: string; status: string; dateCreated: string | null };
+
 export type SendResult = { sid: string; status: string; errorCode: string | null; errorMessage: string | null };
 
 export type Registration = {
@@ -91,9 +93,17 @@ export interface MessagingProvider {
     friendlyName: string; inboundUrl: string; statusCallbackUrl: string; useCase: string;
   }): Promise<MessagingService>;
   addNumberToService(sub: SubaccountCredential, serviceSid: string, numberSid: string): Promise<void>;
+  // From a Messaging Service (client messaging, 0063), or from one number
+  // (Compass's CRM Lite alert sender) when no service is given.
   sendMessage(sub: SubaccountCredential, opts: {
-    messagingServiceSid: string; to: string; body: string; statusCallbackUrl: string;
+    messagingServiceSid?: string | null; from?: string | null; to: string; body: string; statusCallbackUrl: string;
   }): Promise<SendResult>;
+  // The most recent messages between two numbers in the subaccount, newest
+  // first (CRM Lite: checked before any resend whose outcome is unknown).
+  // complete is false when Twilio has more pages than the one read.
+  listMessages(sub: SubaccountCredential, opts: { to: string; from: string; pageSize: number }): Promise<{
+    messages: ListedMessage[]; complete: boolean;
+  }>;
   fetchTollFreeVerification(sub: SubaccountCredential, sid: string): Promise<Registration>;
   fetchCustomerProfile(sub: SubaccountCredential, sid: string): Promise<Registration>;
 }

@@ -14,6 +14,7 @@ import {
   type AvailableNumber,
   type CreatedKey,
   type CreatedSubaccount,
+  type ListedMessage,
   type MessagingProvider,
   type MessagingService,
   type ParentCredential,
@@ -162,13 +163,25 @@ export function createTwilioProvider(fetchImpl: FetchLike): ProvisioningProvider
     },
 
     async sendMessage(c: SubaccountCredential, opts): Promise<SendResult> {
+      if (!opts.messagingServiceSid && !opts.from) throw new Error("a message needs a Messaging Service or a From number");
       const j = await call(c, "POST", sub(c, "/Messages.json"), {
-        MessagingServiceSid: opts.messagingServiceSid,
+        MessagingServiceSid: opts.messagingServiceSid || undefined,
+        From: opts.messagingServiceSid ? undefined : opts.from || undefined,
         To: opts.to,
         Body: opts.body,
         StatusCallback: opts.statusCallbackUrl,
       });
       return { sid: String(j.sid), status: String(j.status ?? "queued"), errorCode: str(j.error_code), errorMessage: str(j.error_message) };
+    },
+
+    async listMessages(c: SubaccountCredential, opts): Promise<{ messages: ListedMessage[]; complete: boolean }> {
+      const q = new URLSearchParams({ To: opts.to, From: opts.from, PageSize: String(opts.pageSize) });
+      const j = await call(c, "GET", sub(c, `/Messages.json?${q}`));
+      const list = Array.isArray(j.messages) ? (j.messages as Json[]) : [];
+      return {
+        messages: list.map((m) => ({ sid: String(m.sid), body: String(m.body ?? ""), status: String(m.status ?? ""), dateCreated: str(m.date_created) })),
+        complete: !j.next_page_uri,
+      };
     },
 
     async fetchTollFreeVerification(c: SubaccountCredential, sid: string): Promise<Registration> {
