@@ -34,16 +34,26 @@ The existing `claude/blog-drafter` branch at `13392c5` contains the weekly plann
 
 Integrated that branch with production main `8740e378f462c722f4baf067f4f185b82121133a`, preserving the current social, billing and CRM Lite code. Resolved merge conflicts in the shared brief and test harness. The blog brief now reuses the current keyword foundation, derives missing intent/service from the selected keyword, uses live keyword text, and refuses inactive/foreign keywords, intent contradictions, unapproved pages and competing keyword owners. Regression coverage includes these failure cases.
 
-## Engineering gates before production
+## Implementation and verification (October 11, 2026)
 
-1. Harden and verify the draft write boundary. In the recovered 0067 guard, `compass.content_draft_system` is treated as authorization on its own. Bind it to the trusted caller, reject unauthorized metadata-only changes, and cover worker attempts with and without forged flags. Guard UPDATE of claim relations as well as INSERT/DELETE, and serialize claim changes with draft approval.
-2. Freeze the complete approval artifact. The recovered snapshot has a body hash but no body, and does not bind all keyword/service/owner/destination inputs. Publishing must read an immutable released artifact and recheck claims and human approval or the explicitly enabled automatic-release policy immediately before the write. Retargeting or editing invalidates the release. Preserve human review and automatic policy-release history separately.
-3. Complete the website publisher. Existing `site-push` supports recorded adapters (`lucas_json`, BHG `markdown_blog`) but has no draft-aware approval-to-publish operation. Add per-client destination readiness, exact approved-content conversion, collision handling, duplicate-safe retries, pinned repository/branch/path, deployment confirmation and live-page verification before recording published. Protect against unrelated edits when a JSON blog file is updated. Unsupported adapters retain export/manual delivery.
-4. Add publication and scheduling controls to the draft review page and per-client review/automatic blog modes as specified above. Publish is separate from human approval or policy release. Record queued, publishing, published and blocked/uncertain outcomes honestly; include the verified URL in the existing production and reporting read models. Do not count draft attempts as delivered.
-5. Preserve keyword-first readiness in the planner and weekly worker. A topic alone must not be shown as draftable when the drafter requires a governed keyword. Align the weekly task generator with two weekly blog slots and the existing monthly allocation, without duplicating open work or exceeding the agreement. The current legacy generator opens one task per week.
-6. Run the full migration/role and UI workflows, then apply reviewed migrations, regenerate database types, deploy content-drafter and the publisher, and test a pilot draft without approving or publishing client content on the team's behalf.
+Completed on the integration branch:
 
-No production migrations, enablement, approvals, scheduling or publication were performed during this integration. The recovered branch's old deployment instructions do not mean these gates have passed.
+- Every new social/blog brief requires an active governed keyword; the old non-search exception is retired. Blog briefs record the keyword, campaign/plan relationship and approved owner page. Planner and weekly requests require keywords.
+- Draft guards bind system flags to trusted sessions, reject worker metadata bypasses, freeze requested foundation, forbid claim UPDATE, and version/serialize human claim changes.
+- Approval captures the full article, evidence, brief, keyword mapping and destination. Append-only approval history survives reopening.
+- Human approval and queueing are separate. The review page supports immediate/future scheduling, cancellation and publication history.
+- The publisher rebuilds live keyword/brand grounding, lints the article, rechecks release/claims/destination before the write, and uses a pinned repository revision. Duplicate slugs refuse; exact retries are recognized. An interrupted delivery stays uncertain and needs reconciliation, never blind re-publication.
+- Only an exact production deployment and verified live article become published in the CRM. A deployment alone does not count as published.
+- Lucas and BHG renderer upgrades preserve approved Markdown, H1, metadata and CTA, and carry a release marker for verification. No client article is included in those website changes.
+- Two weekly tasks are planned within the existing monthly allowance. The planner counts completed slots too, preventing repeat generation after completion.
+
+Validation: full CRM build, lint, app TypeScript, PostgreSQL migration/role suite and browser review workflow passed on the initial publisher checkpoint. Both site renderer TypeScript/build checks passed. The final cadence/history additions are being rechecked. Edge Function type checking and targeted transport/retry tests pass locally.
+
+Deployment and actual Lucas review draft are the next gate. No pilot article has been approved, queued or published by this work.
+
+## Later automatic-release phase
+
+The initial release is human-review-only. A per-client admin-controlled automatic mode, separate policy-release history, comprehensive originality/overlap checks and integrated article graphics remain to implement before unattended release is available. There is no automatic approval-count threshold and no automatic enabling of Facebook or GBP. Do not represent the reviewed pilot as an already-operational auto-publishing mode.
 
 ## BHG Safety Partners: observed readiness
 
@@ -60,7 +70,7 @@ Client `3eaa3389-2a33-4004-837c-8aef90404410`, website `https://bhgsafety.com/`.
 | Facebook/GBP | No social_accounts rows; no CRM GBP location | Connect/identify exact BHG accounts in Zernio, bind in CRM, verify, enable after review |
 | Search Console | `sc-domain:bhgsafety.com` recorded | Check recent sync and measurement coverage |
 | GA4 | No property recorded | Connect verified property for traffic/conversion reporting; does not block drafting |
-| Existing blogs | Three published records and one legacy draft document | Check overlap before commissioning more articles |
+| Existing blogs | Three published CRM records, seven repository blog files, and one legacy draft document | Reconcile repository coverage and check all existing articles for overlap |
 
 Open content facts: conflicting 45+/65+ years; Outreach Trainer/DOL-card authorization on four OSHA courses; CPR/First Aid issuer and validity; course duration/class size/prerequisites. Exclude those unsupported claims until confirmed. Only Hannibal is an active location in the drafting records; broad service-area text does not authorize additional local claims. Use verified service facts for an initial pilot rather than waiting for every possible claim.
 

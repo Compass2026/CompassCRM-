@@ -303,7 +303,7 @@ begin
       values ('00000000-0000-4000-b000-00000000000a', 'Extra blog post', 'TOM', 'open', 'blog_post')$q$);
   perform be.ok('U15 ...and a task for it', e is null, e);
   u := be.use('00000000-0000-4000-b000-00000000000a', 'blog_posts');
-  perform be.ok('U16 the extra work is counted, not refused', (u ->> 'used')::int = 7 and (u ->> 'over_allocation')::int = 5, u::text);
+  perform be.ok('U16 the extra work is counted, not refused', (u ->> 'used')::int = 8 and (u ->> 'over_allocation')::int = 6, u::text);
 end $$;
 reset role;
 select set_config('request.jwt.claims', '', false);
