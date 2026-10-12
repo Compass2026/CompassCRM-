@@ -19,6 +19,7 @@ Deno.serve(createBlogPublisher({
     return !!await store.teamMemberForJwt((req.headers.get("authorization")??"").replace(/^Bearer /,""));
   },
   claim: (id) => rpc("blog_publication_claim",{p_id:id}),
+  resume: (id) => rpc("blog_publication_resume",{p_id:id}),
   authorize: (id,token) => rpc("blog_publication_authorize",{p_id:id,p_token:token}),
   finish: (id,token,status,evidence,error) => rpc("blog_publication_finish",{p_id:id,p_token:token,p_status:status,p_evidence:evidence,p_error:error??null}),
   async input(client,service) { const input=await store.input(client,service); if (!input) throw new Error("Client intelligence unavailable"); return input; },
