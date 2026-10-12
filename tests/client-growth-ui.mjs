@@ -72,7 +72,7 @@ try{
  assert.equal(await page.getByRole('heading',{name:"Where we started. How you're growing."}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
  assert.equal(await page.locator('section[aria-label="Client growth dashboard"] article').count(),9);
  assert.equal(await page.getByText('+10 (+100.0%) since baseline',{exact:true}).count(),4);
- assert.match(await page.getByTestId('tracked-keywords').innerText(),/Keywords tracked\n3/);
+ assert.match(await page.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+3/);
  assert.match(await page.getByTestId('maps-rankings').innerText(),/Average position: 1.0/);
  assert.match(await page.getByTestId('organic-rankings').innerText(),/2 of 3 keywords checked/);
  await page.getByText('Keyword progress: first check to latest',{exact:true}).click();
@@ -96,7 +96,7 @@ try{
  await page.screenshot({path:`${shots}/backlinks-team.png`,fullPage:true});
  const portal=await context(portalId),clientPage=await portal.newPage();clientPage.on('pageerror',e=>errors.push(e.message));
  await clientPage.goto(`http://127.0.0.1:${port}/portal/growth`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:"Where we started. How you're growing."}).waitFor();assert.equal(await clientPage.getByText('Record measurements & review reports',{exact:true}).count(),0);
- assert.match(await clientPage.getByTestId('tracked-keywords').innerText(),/Keywords tracked\n3/);
+ assert.match(await clientPage.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+3/);
  await clientPage.goto(`http://127.0.0.1:${port}/portal/backlinks`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:'Regional trade association'}).waitFor();assert.doesNotMatch(await clientPage.locator('body').innerText(),/PRIVATE/);assert.equal(await clientPage.getByRole('button',{name:'Save link check'}).count(),0);
  await clientPage.setViewportSize({width:390,height:844});await clientPage.screenshot({path:`${shots}/backlinks-portal-mobile.png`,fullPage:true});assert.equal(await clientPage.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
