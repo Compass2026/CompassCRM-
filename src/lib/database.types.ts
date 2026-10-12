@@ -898,12 +898,6 @@ export type Database = {
           },
         ]
       }
-      billing_payment_links: {
-        Row: { id: string; client_id: string; token_hash: string; livemode: boolean; customer_id: string; agreement: Json; issued_by: string; created_at: string; expires_at: string; revoked_at: string | null; request_id: string; latest_session_id: string | null; lease_id: string | null; lease_until: string | null }
-        Insert: { id?: string; client_id: string; token_hash: string; livemode: boolean; customer_id: string; agreement: Json; issued_by: string; created_at?: string; expires_at?: string; revoked_at?: string | null; request_id?: string; latest_session_id?: string | null; lease_id?: string | null; lease_until?: string | null }
-        Update: { revoked_at?: string | null; expires_at?: string; latest_session_id?: string | null; request_id?: string; lease_id?: string | null; lease_until?: string | null }
-        Relationships: []
-      }
       billing_audit_events: {
         Row: {
           action: string
@@ -1182,6 +1176,100 @@ export type Database = {
           },
         ]
       }
+      billing_payment_links: {
+        Row: {
+          agreement: Json
+          client_id: string
+          created_at: string
+          customer_id: string
+          expires_at: string
+          id: string
+          issued_by: string
+          latest_session_id: string | null
+          lease_id: string | null
+          lease_until: string | null
+          livemode: boolean
+          request_id: string
+          revoked_at: string | null
+          token_hash: string
+        }
+        Insert: {
+          agreement: Json
+          client_id: string
+          created_at?: string
+          customer_id: string
+          expires_at?: string
+          id?: string
+          issued_by: string
+          latest_session_id?: string | null
+          lease_id?: string | null
+          lease_until?: string | null
+          livemode: boolean
+          request_id?: string
+          revoked_at?: string | null
+          token_hash: string
+        }
+        Update: {
+          agreement?: Json
+          client_id?: string
+          created_at?: string
+          customer_id?: string
+          expires_at?: string
+          id?: string
+          issued_by?: string
+          latest_session_id?: string | null
+          lease_id?: string | null
+          lease_until?: string | null
+          livemode?: boolean
+          request_id?: string
+          revoked_at?: string | null
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_payment_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_payment_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_payment_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_payment_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_payment_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_payment_links_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_reconciliation_results: {
         Row: {
           attention_reasons: string[]
@@ -1397,6 +1485,123 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      blog_publications: {
+        Row: {
+          client_id: string
+          commit_sha: string | null
+          draft_id: string
+          draft_version: number
+          evidence: Json | null
+          id: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          published_at: string | null
+          published_url: string | null
+          release_hash: string
+          released_at: string
+          released_by: string
+          scheduled_at: string
+          snapshot: Json
+          status: string
+        }
+        Insert: {
+          client_id: string
+          commit_sha?: string | null
+          draft_id: string
+          draft_version: number
+          evidence?: Json | null
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          published_at?: string | null
+          published_url?: string | null
+          release_hash: string
+          released_at?: string
+          released_by: string
+          scheduled_at: string
+          snapshot: Json
+          status?: string
+        }
+        Update: {
+          client_id?: string
+          commit_sha?: string | null
+          draft_id?: string
+          draft_version?: number
+          evidence?: Json | null
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          published_at?: string | null
+          published_url?: string | null
+          release_hash?: string
+          released_at?: string
+          released_by?: string
+          scheduled_at?: string
+          snapshot?: Json
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blog_publications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "blog_publications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "blog_publications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "blog_publications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blog_publications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blog_publications_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "content_drafts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blog_publications_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "content_plan_board"
+            referencedColumns: ["draft_id"]
+          },
+          {
+            foreignKeyName: "blog_publications_released_by_fkey"
+            columns: ["released_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       brand_assets: {
         Row: {
@@ -4109,6 +4314,103 @@ export type Database = {
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "content_draft_claims_draft_fk"
+            columns: ["draft_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "content_drafts"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      content_draft_reviews: {
+        Row: {
+          approved_hash: string
+          client_id: string
+          draft_id: string
+          id: string
+          reviewed_at: string
+          reviewed_by: string
+          snapshot: Json
+          version: number
+        }
+        Insert: {
+          approved_hash: string
+          client_id: string
+          draft_id: string
+          id?: string
+          reviewed_at: string
+          reviewed_by: string
+          snapshot: Json
+          version: number
+        }
+        Update: {
+          approved_hash?: string
+          client_id?: string
+          draft_id?: string
+          id?: string
+          reviewed_at?: string
+          reviewed_by?: string
+          snapshot?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_draft_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_draft_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_draft_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_draft_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_draft_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_draft_reviews_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "content_drafts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_draft_reviews_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "content_plan_board"
+            referencedColumns: ["draft_id"]
+          },
+          {
+            foreignKeyName: "content_draft_reviews_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
         ]
       }
       content_drafts: {
@@ -4264,7 +4566,126 @@ export type Database = {
             foreignKeyName: "content_drafts_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_drafts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_drafts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_drafts_final_fk"
+            columns: ["final_content_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "content_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_keyword_fk"
+            columns: ["keyword_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "keywords"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunities"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunity_state"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_plan_item_fk"
+            columns: ["plan_item_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "content_plan_board"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_plan_item_fk"
+            columns: ["plan_item_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "content_plan_items"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_drafts_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_drafts_service_fk"
+            columns: ["service_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_source_task_fk"
+            columns: ["source_task_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_task_fk"
+            columns: ["request_task_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_drafts_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -4350,7 +4771,91 @@ export type Database = {
             foreignKeyName: "content_plan_items_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_content_post_fk"
+            columns: ["content_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "content_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_keyword_fk"
+            columns: ["keyword_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "keywords"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunities"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunity_state"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_service_fk"
+            columns: ["service_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_social_post_fk"
+            columns: ["social_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -4954,7 +5459,64 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_sms_alerts_enabled_by_fkey"
+            columns: ["sms_alerts_enabled_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_sms_sender_id_fkey"
+            columns: ["sms_sender_id"]
+            isOneToOne: false
+            referencedRelation: "notification_senders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       decisions: {
         Row: {
@@ -5670,7 +6232,57 @@ export type Database = {
           submitted_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiries_contact_id_client_id_fkey"
+            columns: ["contact_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "inquiries_source_id_client_id_fkey"
+            columns: ["source_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "inquiry_sources"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
       }
       inquiry_events: {
         Row: {
@@ -5715,7 +6327,71 @@ export type Database = {
           kind?: string
           to_status?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inquiry_events_actor_portal_user_id_fkey"
+            columns: ["actor_portal_user_id"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_actor_team_member_id_fkey"
+            columns: ["actor_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
       }
       inquiry_notes: {
         Row: {
@@ -5751,7 +6427,71 @@ export type Database = {
           id?: string
           inquiry_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inquiry_notes_author_portal_user_id_fkey"
+            columns: ["author_portal_user_id"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_author_team_member_id_fkey"
+            columns: ["author_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
       }
       inquiry_sources: {
         Row: {
@@ -5799,7 +6539,57 @@ export type Database = {
           token_issued_by?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inquiry_sources_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_sources_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_sources_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_sources_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_sources_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_sources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_sources_token_issued_by_fkey"
+            columns: ["token_issued_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       invoice_line_items: {
         Row: {
@@ -6458,7 +7248,57 @@ export type Database = {
           recipient_id?: string
           to_status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_consent_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_consent_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_consent_events_recipient_id_client_id_fkey"
+            columns: ["recipient_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "notification_recipients"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
       }
       notification_inbound_keywords: {
         Row: {
@@ -6482,7 +7322,15 @@ export type Database = {
           received_at?: string
           sender_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_inbound_keywords_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "notification_senders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_jobs: {
         Row: {
@@ -6572,7 +7420,71 @@ export type Database = {
           to_e164?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_recipient_id_client_id_fkey"
+            columns: ["recipient_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "notification_recipients"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "notification_senders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_opt_outs: {
         Row: {
@@ -6599,7 +7511,15 @@ export type Database = {
           sender_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_opt_outs_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "notification_senders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_recipients: {
         Row: {
@@ -6677,7 +7597,71 @@ export type Database = {
           phone_e164?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_consent_recorded_by_fkey"
+            columns: ["consent_recorded_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_delivery_test_confirmed_by_fkey"
+            columns: ["delivery_test_confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_delivery_test_job_id_fkey"
+            columns: ["delivery_test_job_id"]
+            isOneToOne: false
+            referencedRelation: "notification_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_senders: {
         Row: {
@@ -6734,7 +7718,15 @@ export type Database = {
           verification_sid?: string | null
           verification_status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_senders_verification_checked_by_fkey"
+            columns: ["verification_checked_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       offers: {
         Row: {
@@ -7610,7 +8602,50 @@ export type Database = {
           id?: never
           to_transport?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "publisher_client_transport_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transport_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transport_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transport_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transport_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transport_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       publisher_client_transports: {
         Row: {
@@ -7634,7 +8669,50 @@ export type Database = {
           client_id?: string
           gbp_transport?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "publisher_client_transports_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publisher_client_transports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       publisher_runs: {
         Row: {
@@ -10554,6 +11632,8 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           deliverable: string | null
+          draft_id: string | null
+          draft_status: string | null
           hold: string | null
           hold_reason: string | null
           id: string | null
@@ -10574,15 +11654,97 @@ export type Database = {
           updated_at: string | null
           updated_by: string | null
           week_start: string | null
-          draft_id: string | null
-          draft_status: string | null
         }
         Relationships: [
           {
             foreignKeyName: "content_plan_items_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_content_post_fk"
+            columns: ["content_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "content_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_keyword_fk"
+            columns: ["keyword_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "keywords"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunities"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_opportunity_fk"
+            columns: ["authority_opportunity_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "authority_opportunity_state"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_service_fk"
+            columns: ["service_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_social_post_fk"
+            columns: ["social_post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -10724,7 +11886,51 @@ export type Database = {
           client_id: string | null
           portal_enabled: boolean | null
         }
-        Relationships: []
+        Insert: {
+          client_id?: string | null
+          portal_enabled?: boolean | null
+        }
+        Update: {
+          client_id?: string | null
+          portal_enabled?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lite_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       portal_entitlements: {
         Row: {
@@ -10757,7 +11963,43 @@ export type Database = {
           status_changed_at: string | null
           submitted_at: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       portal_inquiry_events: {
         Row: {
@@ -10771,7 +12013,57 @@ export type Database = {
           kind: string | null
           to_status: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_events_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
       }
       portal_inquiry_notes: {
         Row: {
@@ -10783,7 +12075,57 @@ export type Database = {
           id: string | null
           inquiry_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_agreement_price"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_status"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_entitlements"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "inquiry_notes_inquiry_id_client_id_fkey"
+            columns: ["inquiry_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "portal_inquiries"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
       }
       portal_progress: {
         Row: {
@@ -11569,6 +12911,9 @@ export type Database = {
         Args: { p_customer: string; p_livemode: boolean }
         Returns: Record<string, unknown>
       }
+      billing_payment_link_read: { Args: { p_hash: string }; Returns: Json }
+      billing_payment_link_write: { Args: { p: Json }; Returns: Json }
+      billing_payment_plan: { Args: { p_client: string }; Returns: Json }
       billing_reconcile_begin: { Args: { p: Json }; Returns: Json }
       billing_reconcile_client: { Args: { p: Json }; Returns: undefined }
       billing_reconcile_finish: { Args: { p: Json }; Returns: undefined }
@@ -11587,6 +12932,33 @@ export type Database = {
         Returns: Json
       }
       billing_void_external_payment: { Args: { p: Json }; Returns: Json }
+      blog_publication_authorize: {
+        Args: { p_id: string; p_token: string }
+        Returns: undefined
+      }
+      blog_publication_cancel: { Args: { p_id: string }; Returns: undefined }
+      blog_publication_claim: { Args: { p_id: string }; Returns: Json }
+      blog_publication_finish: {
+        Args: {
+          p_error?: string
+          p_evidence: Json
+          p_id: string
+          p_status: string
+          p_token: string
+        }
+        Returns: undefined
+      }
+      blog_publication_problems: {
+        Args: {
+          d: Database["public"]["Tables"]["content_drafts"]["Row"]
+          p_snapshot: Json
+        }
+        Returns: string[]
+      }
+      blog_publication_queue: {
+        Args: { p_draft_id: string; p_scheduled_at?: string; p_version: number }
+        Returns: string
+      }
       brand_asset_record_hash: { Args: { p: Json }; Returns: Json }
       client_canva_folders: {
         Args: { p_client_id?: string }
@@ -11717,7 +13089,10 @@ export type Database = {
         Args: { d: Database["public"]["Tables"]["content_drafts"]["Row"] }
         Returns: string[]
       }
-      content_draft_problems_for: { Args: { p_draft_id: string }; Returns: string[] }
+      content_draft_problems_for: {
+        Args: { p_draft_id: string }
+        Returns: string[]
+      }
       content_draft_regenerate: {
         Args: { p_draft_id: string; p_note?: string }
         Returns: Json
@@ -11726,6 +13101,8 @@ export type Database = {
         Args: { p_note?: string; p_page_type?: string; p_plan_item_id: string }
         Returns: Json
       }
+      content_draft_write: { Args: { p: Json }; Returns: Json }
+      content_drafter_session_active: { Args: never; Returns: boolean }
       converge_client: { Args: { p_client_id: string }; Returns: boolean }
       create_monthly_cycles: { Args: { p_period?: string }; Returns: number }
       create_stage_tasks: {
@@ -11765,23 +13142,60 @@ export type Database = {
       creative_spec_hash: { Args: { p_spec: Json }; Returns: string }
       creative_subjects_valid: { Args: { p: string[] }; Returns: boolean }
       creative_write: { Args: { p: Json }; Returns: Json }
-      crm_confirm_delivery_test: { Args: { p_job: string; p_recipient: string }; Returns: Json }
-      crm_inquiry_add_note: { Args: { p_body: string; p_inquiry: string }; Returns: Json }
+      crm_caller: { Args: never; Returns: string }
+      crm_confirm_delivery_test: {
+        Args: { p_job: string; p_recipient: string }
+        Returns: Json
+      }
+      crm_greatest_status: { Args: { a: string; b: string }; Returns: string }
+      crm_in_write: { Args: never; Returns: boolean }
+      crm_ingest_inquiry: { Args: { p: Json }; Returns: Json }
+      crm_inquiry_actor: { Args: { p_inquiry: string }; Returns: Json }
+      crm_inquiry_add_note: {
+        Args: { p_body: string; p_inquiry: string }
+        Returns: Json
+      }
+      crm_inquiry_alert_text: {
+        Args: { p_inquiry: string; p_recipient: string; p_sender: string }
+        Returns: string
+      }
       crm_inquiry_set_status: {
         Args: { p_expected?: string; p_inquiry: string; p_status: string }
         Returns: Json
       }
+      crm_inquiry_source: { Args: { p_key: string }; Returns: Json }
+      crm_is_admin: { Args: never; Returns: boolean }
+      crm_notification_begin_test: { Args: { p: Json }; Returns: Json }
       crm_notification_block_reason: {
         Args: { p_recipient: string; p_sender: string; p_test?: boolean }
         Returns: string
       }
+      crm_notification_claim: { Args: { p_limit?: number }; Returns: Json }
+      crm_notification_claim_unknown: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
+      crm_notification_keyword: { Args: { p: Json }; Returns: Json }
+      crm_notification_record_status: { Args: { p: Json }; Returns: Json }
+      crm_notification_result: { Args: { p: Json }; Returns: Json }
+      crm_notification_sender_known: {
+        Args: { p_account_sid: string }
+        Returns: boolean
+      }
       crm_phone_e164: { Args: { p: string }; Returns: string }
       crm_record_notification_consent: { Args: { p: Json }; Returns: Json }
+      crm_record_token_issued: {
+        Args: { p_actor: string; p_source: string }
+        Returns: Json
+      }
       crm_set_sms_alerts: {
         Args: { p_client: string; p_enabled: boolean; p_sender?: string }
         Returns: Json
       }
-      crm_set_sms_sender: { Args: { p_client: string; p_sender: string }; Returns: Json }
+      crm_set_sms_sender: {
+        Args: { p_client: string; p_sender: string }
+        Returns: Json
+      }
       drafter_caller_is_service: { Args: never; Returns: boolean }
       drafter_caller_is_superuser: { Args: never; Returns: boolean }
       drafter_copy_hash: { Args: { p_copy: string }; Returns: string }
@@ -11860,7 +13274,12 @@ export type Database = {
       }
       publisher_post_gate: { Args: { p_post_id: string }; Returns: Json }
       publisher_record_gbp_transport: {
-        Args: { p_client_id: string; p_flag: string; p_kind: string; p_transport: string }
+        Args: {
+          p_client_id: string
+          p_flag: string
+          p_kind: string
+          p_transport: string
+        }
         Returns: boolean
       }
       publisher_reminder_state: {
@@ -12042,7 +13461,13 @@ export type Database = {
       claim_status: "sourced" | "unverified" | "confirmed"
       client_request_status: "draft" | "sent" | "answered" | "closed"
       client_status: "launching" | "active" | "paused" | "offboarded"
-      content_status: "idea" | "brief" | "draft" | "review" | "approved" | "published"
+      content_status:
+        | "idea"
+        | "brief"
+        | "draft"
+        | "review"
+        | "approved"
+        | "published"
       cycle_status: "open" | "complete"
       deliverable_type: "drive" | "site" | "sheet" | "report" | "other"
       department: "seo" | "website" | "social" | "paid_ads"
@@ -12272,7 +13697,14 @@ export const Constants = {
       claim_status: ["sourced", "unverified", "confirmed"],
       client_request_status: ["draft", "sent", "answered", "closed"],
       client_status: ["launching", "active", "paused", "offboarded"],
-      content_status: ["idea", "brief", "draft", "review", "approved", "published"],
+      content_status: [
+        "idea",
+        "brief",
+        "draft",
+        "review",
+        "approved",
+        "published",
+      ],
       cycle_status: ["open", "complete"],
       deliverable_type: ["drive", "site", "sheet", "report", "other"],
       department: ["seo", "website", "social", "paid_ads"],
