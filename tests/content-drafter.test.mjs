@@ -184,3 +184,35 @@ test("blog foundation refuses cross-client, inactive, conflicting intent and own
   const unapproved = lucas(); unapproved.pageGroups[0].status = "draft";
   refuse(unapproved, draftRow(), "target_page_unapproved");
 });
+
+test('link policy: unique service destinations, CTA exclusion and small-site gaps', () => {
+  const b = brief();
+  const original = clone(GOOD_BLOG);
+  assert.ok(lintBlog(b, original).warnings.some((w) => w.code === 'money_page_gap'));
+  const repair = `${SITE}/roofing-repairs/`;
+  const repeated = {...original, body_markdown: original.body_markdown.replace(`(${repair})`, `(${PAGE}#details)`)};
+  assert.ok(codes(lintBlog(b, repeated)).includes('money_links_missing'));
+  const input = lucas();
+  input.services.push({id:'third',name:'Roof Maintenance',status:'approved',page_url:`${SITE}/maintenance`});
+  const more = buildBlogBrief(input, draftRow()).brief;
+  assert.ok(codes(lintBlog(more, original)).includes('money_links_missing'));
+  const complete = {...original, body_markdown: original.body_markdown + `\nExplore [roof maintenance](${SITE}/maintenance).`};
+  assert.equal(lintBlog(more, complete).ok, true);
+});
+
+test('external citations: exact eligible sources and a stated linked claim, never arbitrary domains', () => {
+  const b = brief();
+  const source = b.links.external.find((e) => e.claim_ids.includes(OC)).url;
+  const original = clone(GOOD_BLOG);
+  assert.ok(codes(lintBlog(b, {...original, claim_ids:[]})).includes('external_citation_unsubstantiated'));
+  assert.ok(codes(lintBlog(b, {...original, body_markdown: original.body_markdown.replace('Owens Corning Preferred Contractor', 'local contractor')})).includes('external_citation_unsubstantiated'));
+  for (const url of [source+'?redirect=https://other.test', 'https://www.owenscorning.com/unreviewed', 'https://www.owenscorning.com.evil.test/']) {
+    assert.ok(codes(lintBlog(b, {...original, body_markdown:original.body_markdown.replace(source,url)})).includes('link_not_allowed'));
+  }
+  assert.ok(codes(lintBlog(b, {...original, cta:{...original.cta,url:source}})).includes('link_not_allowed'));
+  assert.ok(codes(lintBlog(b, {...original, internal_links:[{url:source,anchor:'manufacturer'}]})).includes('link_not_allowed'));
+  assert.ok(codes(lintBlog(b, {...original, body_markdown:original.body_markdown.replace(`[manufacturer contractor profile](${source})`, 'the manufacturer profile')})).includes('external_citation_missing'));
+  const input = lucas(); input.claims.find((c)=>c.id===OC).source='https://www.owenscorning.com/profile and client intake';
+  const result=buildBlogBrief(input,draftRow()).brief;
+  assert.ok(!result.links.external.some((e)=>e.claim_ids.includes(OC)), 'source prose never grants a domain allowlist');
+});

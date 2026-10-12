@@ -41,8 +41,8 @@ export const GOOD_BLOG = {
   body_markdown: [
     section(OUTLINE[0].heading, 0),
     section(OUTLINE[1].heading, 1),
-    section(OUTLINE[2].heading, 2) + `\nIf replacing makes more sense, learn how our [roof replacement](${PAGE}) process works.\n`,
-    section(OUTLINE[3].heading, 3) + "\nLucas Construction is an Owens Corning Preferred Contractor serving homeowners in Wentzville.\n",
+    section(OUTLINE[2].heading, 2) + `\nIf replacing makes more sense, learn how our [roof replacement](${PAGE}) process works. For a smaller issue, explore [roof repair](${SITE}/roofing-repairs/).\n`,
+    section(OUTLINE[3].heading, 3) + "\nLucas Construction is an Owens Corning Preferred Contractor serving homeowners in Wentzville. See the [manufacturer contractor profile](https://www.owenscorning.com/en-us/roofing/contractors/contractor-profile/234319).\n",
   ].join("\n"),
   internal_links: [{ url: PAGE, anchor: "roof replacement", reason: "The service the article is about." }],
   cta: { text: "Request a quote", url: PAGE },

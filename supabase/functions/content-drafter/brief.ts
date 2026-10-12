@@ -1,3 +1,4 @@
+import { citationUrl } from "./links.ts";
 import { workspaceGate } from "../post-drafter/workspace.ts";
 // content-drafter: the governed brief for a blog draft (0067). Pure.
 //
@@ -12,7 +13,7 @@ import { buildBrief, eligibleClaims } from "../post-drafter/brief.ts";
 import { hostOf, normalizeUrl, stableJson } from "../post-drafter/rules.ts";
 import type { BriefClaim, DrafterInput, Refusal } from "../post-drafter/types.ts";
 
-export const CONTENT_DRAFTER_VERSION = "content-drafter-v1";
+export const CONTENT_DRAFTER_VERSION = "content-drafter-v2";
 
 // Compass's blog rules (v1). The weekly blog has always been 700–1,100
 // words; a long piece may run to 2,000.
@@ -33,6 +34,9 @@ export const BLOG_RULES = {
   min_claims: 1,
   max_claims: 4,
   keyword_max_exact_uses: 5,
+  money_links_min: 3,
+  money_links_preferred_max: 4,
+  external_citations_min: 1,
 } as const;
 
 // The draft row the request opened (0067), as the store reads it.
@@ -96,7 +100,9 @@ export type BlogBrief = {
     differentiators: string[];
     differentiators_citable: false;
   };
-  links: { site: string | null; required: LinkTarget[]; allowed: LinkTarget[] };
+  links: { site: string | null; required: LinkTarget[]; allowed: LinkTarget[];
+    money_pages: LinkTarget[]; external: { url: string; claim_ids: string[] }[];
+    guidance: string[] };
   cta: { text: string | null; url: string | null };
   rules: typeof BLOG_RULES;
 };
@@ -243,7 +249,19 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
         differentiators,
         differentiators_citable: false,
       },
-      links: { site, required, allowed },
+      links: {
+        site, required, allowed,
+        money_pages: allowed.filter((l) => l.kind === "service"),
+        external: [...new Set(eligible.map((c) => citationUrl(c.source)).filter((url): url is string => !!url && hostOf(url) !== siteHost))]
+          .map((url) => ({ url, claim_ids: eligible.filter((c) => citationUrl(c.source) === url).map((c) => c.id) })),
+        guidance: [
+          "Use 3–4 distinct relevant money-page destinations in contextual body links. The separate CTA, repeats, fragments, home page and article links do not count.",
+          "Keep the keyword owner page linked. Choose related services only; never introduce an unrelated service to fill a quota.",
+          "If fewer than three money pages are available, link the relevant available pages and retain the review warning identifying the page gap. Never invent URLs.",
+          "Include at least one external citation from links.external. Cite its eligible claim in claim_ids and state that claim in the article, with descriptive link text nearby.",
+          "Use only the exact sourced external URL, not a homepage or an invented URL on the same domain. If none is available, source a relevant credible reference in CRM before drafting.",
+        ],
+      },
       cta: { text: input.board?.standing_cta ?? null, url: pageUrl ?? site },
       rules: BLOG_RULES,
     },

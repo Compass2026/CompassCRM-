@@ -84,7 +84,7 @@ const PAGE = `${SITE}/services/roof-replacement`;
 const W = currentWeek();
 const article = (over = {}) => JSON.parse(JSON.stringify({
   ...GOOD_BLOG,
-  body_markdown: GOOD_BLOG.body_markdown.replaceAll(LUCAS_PAGE, PAGE).replaceAll("Lucas Construction", "Sandbox Roofing"),
+  body_markdown: GOOD_BLOG.body_markdown.replaceAll(LUCAS_PAGE, PAGE).replaceAll("Lucas Construction", "Sandbox Roofing").replaceAll("https://lucasconstructionmo.com/roofing-repairs/", PAGE).replaceAll("https://www.owenscorning.com/en-us/roofing/contractors/contractor-profile/234319", "https://manufacturer.example.test/roofing/contractors/contractor-profile/1"),
   internal_links: [{ url: PAGE, anchor: "roof replacement", reason: "The service the article is about." }],
   cta: { text: "Request a quote", url: PAGE },
   claim_ids: [OC],

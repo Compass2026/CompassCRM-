@@ -9,6 +9,7 @@
 // places the client has not approved. Then the article's own rules:
 // structure, length, links only to the client's approved pages, the
 // standing CTA, the keyword limit.
+import { citationUrl } from "./links.ts";
 import { COMMON_WORD_PLACES, PLACE_AFTER, PLACE_BEFORE } from "../post-drafter/lint.ts";
 import { DETECTORS, MATERIAL_RE, NUMBER_RE, PHONE_RE, digits, escapeRe, mask, ngrams, normalizeUrl, spansOf, words } from "../post-drafter/rules.ts";
 import type { LintProblem, LintResult } from "../post-drafter/types.ts";
@@ -104,26 +105,45 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   if (linked.length > brief.allowed_facts.max_claims) add("too_many_claims", `Link at most ${brief.allowed_facts.max_claims} claims.`);
   if (linked.length < brief.allowed_facts.min_claims) add("too_few_claims", `A ${brief.target.search_intent} article links at least ${brief.allowed_facts.min_claims} usable claim.`);
 
-  // ── Links: the client's own approved pages only ──
+  // Internal destinations and exact, claim-backed external citations are
+  // separate allowlists. Neither the CTA nor metadata counts as a body link.
   const allowedUrls = new Set(brief.links.allowed.map((l) => normalizeUrl(l.url)));
+  const external = brief.links.external;
   const bodyLinks = [...body.matchAll(MD_LINK)].map((m) => ({ anchor: m[1], url: m[2] }));
-  const checkUrl = (url: string, where: string) => {
+  const checkInternal = (url: string, where: string) => {
     const n2 = normalizeUrl(url);
     if (!n2 || !allowedUrls.has(n2)) add("link_not_allowed", `${where} links to ${url}, which is not one of the client's approved pages.`, url);
   };
-  for (const l of bodyLinks) checkUrl(l.url, "The body");
-  for (const l of draft.internal_links ?? []) checkUrl(l.url, "An internal-link recommendation");
+  const cited = new Set<string>();
+  for (const l of bodyLinks) {
+    if (allowedUrls.has(normalizeUrl(l.url))) continue;
+    const citation = external.find((e) => citationUrl(l.url) === e.url);
+    if (!citation) { add("link_not_allowed", `The body links to ${l.url}, which is not an approved internal destination or sourced external citation.`, l.url); continue; }
+    const stated = linked.some((c) => citation.claim_ids.includes(c.id) && spansOf(visibleBody(body), c.text).length > 0);
+    if (!stated) add("external_citation_unsubstantiated", "An external citation must support a linked eligible claim stated in the body.", l.url);
+    else cited.add(citation.url);
+  }
+  for (const l of draft.internal_links ?? []) checkInternal(l.url, "An internal-link recommendation");
   for (const m of body.replace(MD_LINK, "$1").matchAll(BARE_URL)) add("url_in_body", "Link with anchor text, not a bare URL.", m[0]);
   for (const r of brief.links.required) {
     if (!bodyLinks.some((l) => normalizeUrl(l.url) === normalizeUrl(r.url))) {
       add("required_link_missing", `Link to ${r.label} (${r.url}) in the body.`, r.url);
     }
   }
+  const moneyUrls = new Set(brief.links.money_pages.map((l) => normalizeUrl(l.url)));
+  const moneyCount = new Set(bodyLinks.map((l) => normalizeUrl(l.url)).filter((url) => moneyUrls.has(url))).size;
+  const minimum = Math.min(R.money_links_min, moneyUrls.size);
+  if (moneyCount < minimum) add("money_links_missing", `Use at least ${minimum} distinct relevant money-page destinations in the body; found ${moneyCount}. The CTA and repeated destinations do not count.`);
+  if (moneyUrls.size < R.money_links_min) warn("money_page_gap", `Target ${R.money_links_min}–${R.money_links_preferred_max} distinct money pages. Only ${moneyUrls.size} approved service-page destinations are available. Plan relevant service pages; do not pad with duplicate links.`);
+  if (moneyCount > R.money_links_preferred_max) warn("money_links_above_target", `The article links ${moneyCount} money pages; review relevance against the ${R.money_links_min}–${R.money_links_preferred_max} target.`);
+  if (cited.size < R.external_citations_min) add("external_citation_missing", external.length
+    ? "Include at least one sourced external citation supporting an eligible claim in the article."
+    : "No usable external source is available. Record a relevant sourced claim with a verified HTTPS source in CRM before submitting.");
   if (!draft.cta?.text?.trim()) add("cta_missing", "A call to action is required.");
   else if (brief.cta.text && draft.cta.text.trim().toLowerCase() !== brief.cta.text.trim().toLowerCase()) {
     add("cta_not_standing", `The call to action is the brand's standing CTA: "${brief.cta.text}".`, draft.cta.text);
   }
-  if (draft.cta?.url) checkUrl(draft.cta.url, "The CTA");
+  if (draft.cta?.url) checkInternal(draft.cta.url, "The CTA");
 
   // ── Facts: everything a reader sees ──
   const text = [draft.title, draft.meta_title, draft.meta_description, draft.h1, ...outline.map((o) => o.heading), visibleBody(body), draft.cta?.text]
