@@ -1,0 +1,43 @@
+begin;
+reset role;
+reset session authorization;
+set session authorization supabase_admin;
+insert into client_brand_workspaces(id,client_id,slug,name,phone,website_url,gsc_property,ga4_property)
+values('00000000-0000-4000-c000-000000000001','00000000-0000-4000-b000-00000000000a','secondary','Secondary Brand','5555550100','https://secondary.example.test','sc-domain:secondary.example.test','properties/456');
+set session authorization authenticator;
+set role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+select set_config('request.jwt.claim.sub','',true);
+do $$ declare payload jsonb:='{"brand_workspace_id":"00000000-0000-4000-c000-000000000001","host":"secondary.example.test","time_zone":"America/Chicago","coverage":"complete_month","values":{"website_sessions":12,"website_users":10,"website_pageviews":25}}'; r jsonb; run uuid; first_seq bigint; begin
+ r:=ga4_performance_record('00000000-0000-4000-b000-00000000000a','properties/456','2026-08-01','2026-08-31',payload);
+ if r->>'status'<>'imported' then raise exception 'brand import missing'; end if;
+ begin perform ga4_performance_record('00000000-0000-4000-b000-00000000000b','properties/456','2026-08-01','2026-08-31',payload); raise exception 'foreign brand accepted'; exception when check_violation then null; end;
+ begin perform ga4_performance_record('00000000-0000-4000-b000-00000000000a','properties/456','2026-08-01','2026-08-31',jsonb_set(payload,'{host}','"a.example.test"')); raise exception 'parent data accepted'; exception when check_violation then null; end;
+ perform gsc_performance_record('00000000-0000-4000-b000-00000000000a','sc-domain:secondary.example.test','2026-08-01','2026-08-31','{"brand_workspace_id":"00000000-0000-4000-c000-000000000001","values":{"search_clicks":10,"search_impressions":100},"aggregation":"byProperty","search_type":"web"}');
+ begin perform backlink_sync_claim('00000000-0000-4000-b000-00000000000b','secondary.example.test'); raise exception 'foreign backlink host accepted'; exception when check_violation then null; end;
+ r:=backlink_sync_claim('00000000-0000-4000-b000-00000000000a','secondary.example.test'); run:=(r->>'id')::uuid;
+ if run is null then raise exception 'missing lease'; end if;
+ if backlink_sync_claim('00000000-0000-4000-b000-00000000000a','secondary.example.test')->>'id' is not null then raise exception 'duplicate API claim'; end if;
+ payload:='{"task_id":"00000000-0000-4000-d000-000000000001","values":{"backlinks_total":10,"referring_domains":8}}';
+ perform backlink_profile_record(run,'summary',current_date,current_date,payload);
+ select min(sequence) into first_seq from report_measurements where source='DataForSEO (unreviewed index)' and metric='backlinks_total';
+ if backlink_profile_record(run,'summary',current_date,current_date,payload)->>'status'<>'unchanged' then raise exception 'duplicate receipt'; end if;
+ perform backlink_profile_record(run,'summary',current_date,current_date,jsonb_set(payload,'{values,backlinks_total}','12'));
+ if (select value from report_measurements where sequence=first_seq)<>10 then raise exception 'baseline overwritten'; end if;
+ begin perform backlink_profile_record(run,'summary',current_date,current_date,jsonb_set(payload,'{values,referring_domains}','11')); raise exception 'bad domain count'; exception when check_violation then null; end;
+ begin perform backlink_profile_record(run,'history',date_trunc('month',current_date)::date,current_date,'{"task_id":"00000000-0000-4000-d000-000000000001","values":{"links_new":10,"links_lost":8}}'); raise exception 'incomplete month accepted'; exception when check_violation then null; end;
+end $$;
+reset role;
+reset session authorization;
+set session authorization postgres;
+set role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000011',true);
+do $$ begin
+ if exists(select 1 from backlink_profile_sync_runs) then raise exception 'private import exposed'; end if;
+ if not exists(select 1 from portal_growth_measurements where scope like '%secondary.example.test%') then raise exception 'own brand absent'; end if;
+ if has_function_privilege('authenticated','public.backlink_sync_claim(uuid,text)','execute') or has_function_privilege('anon','public.backlink_profile_record(uuid,text,date,date,jsonb)','execute') then raise exception 'unsafe grants'; end if;
+end $$;
+select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000012',true);
+do $$ begin if exists(select 1 from portal_growth_measurements where scope like '%secondary.example.test%') then raise exception 'foreign brand leak'; end if; end $$;
+rollback;
