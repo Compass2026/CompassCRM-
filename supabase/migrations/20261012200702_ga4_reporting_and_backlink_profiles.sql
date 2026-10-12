@@ -27,8 +27,8 @@ create table public.ga4_performance_sync_runs (
 );
 alter table public.ga4_performance_imports enable row level security;
 alter table public.ga4_performance_sync_runs enable row level security;
-create policy "team read gsc imports" on public.ga4_performance_imports for select to authenticated using ((select public.is_team()));
-create policy "team read gsc syncs" on public.ga4_performance_sync_runs for select to authenticated using ((select public.is_team()));
+create policy "team read ga4 imports" on public.ga4_performance_imports for select to authenticated using ((select public.is_team()));
+create policy "team read ga4 syncs" on public.ga4_performance_sync_runs for select to authenticated using ((select public.is_team()));
 revoke all on public.ga4_performance_imports,public.ga4_performance_sync_runs from public,anon,authenticated,service_role;
 grant select on public.ga4_performance_imports,public.ga4_performance_sync_runs to authenticated;
 grant select,insert,update on public.ga4_performance_sync_runs to service_role;
@@ -45,7 +45,7 @@ declare previous jsonb; receipt uuid; pair record; begin
  or not(p_data->'values' ?& array['website_sessions','website_users','website_pageviews'])
  or coalesce(p_data->>'coverage','') not in ('complete_month','month_to_date','partial_launch_month')
  or not exists(select 1 from pg_timezone_names where name=p_data->>'time_zone')
- or coalesce(p_data->>'host','')<>regexp_replace(lower(substring((select website_url from public.clients where id=p_client_id) from '^https?://([^/]+)')),'^www\.','')
+ or coalesce(p_data->>'host','') is distinct from regexp_replace(lower(substring((select website_url from public.clients where id=p_client_id) from '^https?://([^/]+)')),'^www\.','')
  then raise exception 'invalid metrics or host binding' using errcode='23514'; end if;
  if p_data->>'coverage'='complete_month' and (p_start<>date_trunc('month',p_start)::date or p_end<>(p_start+interval '1 month - 1 day')::date) then raise exception 'complete month required' using errcode='23514'; end if;
  for pair in select * from jsonb_each(p_data->'values') loop

@@ -50,3 +50,7 @@ configuration was added and the existing deployed commit redeployed, without
 changing client site code. Historical traffic that was never collected cannot be
 recovered by this importer. BHG/Resilient properties began September 21; Ginger
 began October 11. Do not label their launch periods as full historical months.
+
+The Lucas redeployment completed READY on October 12; the public homepage now
+loads the verified Google tag. Collection starts going forward, subject to
+Google processing. No historical sessions were fabricated.
