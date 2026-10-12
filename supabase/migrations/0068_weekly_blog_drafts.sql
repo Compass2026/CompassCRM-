@@ -91,9 +91,9 @@ begin
      and not exists (select 1 from content_drafts y where y.plan_item_id = x.id)
    order by x.created_at limit 1 for update;
   if i.id is null then
-    insert into content_plan_items (client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, notes)
+    insert into content_plan_items (client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, planned_date, notes)
     values (t.client_id, v_week, 'blog', 'educational', left(p->>'topic', 200), p->>'search_intent',
-            nullif(p->>'keyword_id', '')::uuid, nullif(p->>'service_id', '')::uuid, 'The weekly blog (opened by the worker).')
+            nullif(p->>'keyword_id', '')::uuid, nullif(p->>'service_id', '')::uuid, coalesce(t.due_date, v_week+2), 'The weekly blog (opened by the worker).')
     returning * into i;
   end if;
   select keyword into v_kw from keywords where id = nullif(p->>'keyword_id', '')::uuid and client_id = t.client_id;

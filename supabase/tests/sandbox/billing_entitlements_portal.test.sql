@@ -261,14 +261,14 @@ begin
   perform be.ok('U7 mid-month increase: remaining recalculates', (u ->> 'allocation')::int = 6 and (u ->> 'remaining')::int = 2, u::text);
   n := create_weekly_blog_tasks();
   perform be.ok('U8 ...and the weekly blog task is planned',
-    (select count(*) from tasks where key = 'blog_post' and client_id = a) = 1);
+    (select count(*) from tasks where key = 'blog_post' and client_id = a) = 2);
   perform be.ok('U9 ...logged within_allocation',
     exists (select 1 from automation_entitlement_log where client_id = a and decision = 'created' and reason = 'within_allocation'));
   u := be.use(a, 'blog_posts');
-  perform be.ok('U10 the open blog task counts as planned', (u ->> 'planned')::int = 2 and (u ->> 'remaining')::int = 1, u::text);
+  perform be.ok('U10 the open blog task counts as planned', (u ->> 'planned')::int = 3 and (u ->> 'remaining')::int = 0, u::text);
   n := create_weekly_blog_tasks();
   perform be.ok('U11 a second run the same week plans nothing more',
-    (select count(*) from tasks where key = 'blog_post' and client_id = a) = 1);
+    (select count(*) from tasks where key = 'blog_post' and client_id = a) = 2);
 end $$;
 
 -- Mid-month decrease: nothing already planned or done is removed.
@@ -283,11 +283,11 @@ declare a uuid := '00000000-0000-4000-b000-00000000000a'; u jsonb;
 begin
   u := be.use(a, 'blog_posts');
   perform be.ok('U12 mid-month decrease: remaining 0, the excess reported',
-    (u ->> 'allocation')::int = 2 and (u ->> 'remaining')::int = 0 and (u ->> 'over_allocation')::int = 3, u::text);
+    (u ->> 'allocation')::int = 2 and (u ->> 'remaining')::int = 0 and (u ->> 'over_allocation')::int = 4, u::text);
   perform be.ok('U13 ...and no work is deleted',
     (select count(*) from content_posts where client_id = a and origin = 'compass'
        and (published_at >= date_trunc('month', be.today()) or due_date >= date_trunc('month', be.today()))) = 4
-    and (select count(*) from tasks where key = 'blog_post' and client_id = a) = 1);
+    and (select count(*) from tasks where key = 'blog_post' and client_id = a) = 2);
 end $$;
 
 -- A person may always add work beyond the allocation.

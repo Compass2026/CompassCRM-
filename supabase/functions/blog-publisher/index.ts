@@ -5,7 +5,7 @@ import { createSitePushHandler } from "../site-push/handler.ts";
 import gazetteer from "../post-drafter/gazetteer.json" with { type: "json" };
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false,autoRefreshToken:false}});
 const store = createStore(supabase);
-const push = createSitePushHandler({supabase,fetch});
+const push = createSitePushHandler({supabase,fetch,timing:{findMs:60000,settleMs:60000,pollMs:4000}});
 const rpc = async (name: string,args: Record<string,unknown>) => {
   const {data,error} = await supabase.rpc(name,args);
   if (error) throw new Error(error.message);

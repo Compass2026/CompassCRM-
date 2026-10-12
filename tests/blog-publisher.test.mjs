@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBlogPublisher, verifyLiveArticle } from '../supabase/functions/blog-publisher/handler.ts';
+import { buildBlogBrief } from "../supabase/functions/content-drafter/brief.ts";
 import { lucas, OC, SITE } from './fixtures/drafter-lucas.mjs';
 import { GOOD_BLOG, draftRow, DRAFT_ID } from './fixtures/blog-lucas.mjs';
 const hash = 'sha256:'+'a'.repeat(64);
 function harness(options={}) {
  const r={...draftRow(),...structuredClone(GOOD_BLOG),version:1,draft_id:DRAFT_ID,claims:[{id:OC}],
   destination:{site_id:'site',url:SITE,repo_url:'https://github.com/example/site',branch:'main',controlled_by_compass:true,content_adapter:'lucas_json',content_paths:{blog:'data/blog-posts.json',blog_route:'/blog/{slug}'}}};
+ r.brief=buildBlogBrief(lucas(),draftRow()).brief;
  const calls=[];
  const deps={
   authorized:async()=>true, claim:async()=>({id:DRAFT_ID,lease_token:'token',status:'publishing',snapshot:r,release_hash:hash,scheduled_at:'2026-10-12T16:00:00Z'}),

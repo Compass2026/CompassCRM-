@@ -27,6 +27,8 @@ begin
     and cd.try(format('select blog_publication_claim(%L)',p)) like '42501%');
   perform blog_publication_cancel(p);
   update content_drafts set status='draft' where id=d.id;
+  perform cd.ok('PUB5a approval history survives reopening',
+    (select count(*) from content_draft_reviews where draft_id=d.id)>=2);
   perform cd.ok('PUB5 cancelling releases the draft for editing and preserves history',
     (select status='cancelled' and snapshot->>'body_markdown'=d.body_markdown from blog_publications where id=p));
 end $$;

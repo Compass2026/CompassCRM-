@@ -2,6 +2,7 @@ import { preparePublication, publicationPaths, type BlogRelease, type Repository
 import { buildBlogBrief, type DraftRow } from "../content-drafter/brief.ts";
 import { lintBlog } from "../content-drafter/lint.ts";
 import { parseBlogDraft } from "../content-drafter/handler.ts";
+import { stableJson } from "../post-drafter/rules.ts";
 import type { DrafterInput } from "../post-drafter/types.ts";
 type Json = Record<string, unknown>;
 type Publication = { id: string; lease_token: string; release_hash: string; snapshot: BlogRelease & Json; scheduled_at: string; status: string };
@@ -47,6 +48,12 @@ export function createBlogPublisher(deps: Deps) {
       const input = await deps.input(r.client_id);
       const brief = buildBlogBrief(input, {...r,id:r.draft_id,deliverable:"blog",status:"approved"} as unknown as DraftRow,await deps.pages(r.client_id));
       if (!brief.ok) throw new Error(brief.refusals.map((x)=>x.message).join(" "));
+      const foundation = (b: Record<string, unknown>) => stableJson({
+        client:b.client, target:b.target, brand:b.brand, gate:b.gate, cta:b.cta, rules:b.rules,
+      });
+      if (!r.brief || foundation(r.brief as Json) !== foundation(brief.brief as unknown as Json)) {
+        throw new Error("Keyword, brand or campaign foundation changed since review. Regenerate and review before publishing.");
+      }
       const parsed = parseBlogDraft({...r,claim_ids:(r.claims as {id:string}[]).map((c)=>c.id)});
       if (typeof parsed === "string") throw new Error(parsed);
       const lint = lintBlog(brief.brief,parsed,{gazetteer:(input.client.state && deps.gazetteer?.[input.client.state]) || []});

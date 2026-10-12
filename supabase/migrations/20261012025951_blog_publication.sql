@@ -212,8 +212,95 @@ select cron.schedule('blog-publisher-tick','*/5 * * * *',$$
     headers := jsonb_build_object('Content-Type','application/json',
       'Authorization','Bearer ' || get_secret('SUPABASE_ANON_KEY'),
       'x-cron-secret',get_secret('SYNC_CRON_SECRET')),
-    body := jsonb_build_object('publication_id',p.id),timeout_milliseconds := 1000)
+    body := jsonb_build_object('publication_id',p.id),timeout_milliseconds := 180000)
   from blog_publications p where (p.status='queued' and p.scheduled_at<=now())
     or (p.status='publishing' and p.lease_expires_at<now())
   order by p.scheduled_at limit 3;
 $$);
+
+
+-- Keep every human approval even when an article is reopened before queuing.
+create table content_draft_reviews (
+  id uuid primary key default gen_random_uuid(),
+  draft_id uuid not null references content_drafts(id),
+  client_id uuid not null references clients(id),
+  version int not null,
+  approved_hash text not null,
+  snapshot jsonb not null,
+  reviewed_by uuid not null references team_members(id),
+  reviewed_at timestamptz not null,
+  unique(draft_id,approved_hash)
+);
+alter table content_draft_reviews enable row level security;
+create policy "team reads blog approvals" on content_draft_reviews for select to authenticated using ((select is_team()));
+revoke all on content_draft_reviews from public,anon,authenticated,service_role;
+grant select on content_draft_reviews to authenticated,service_role;
+create function content_draft_review_history_guard() returns trigger
+language plpgsql security definer set search_path = public,pg_temp as $$
+begin
+  if tg_op <> 'INSERT' or pg_trigger_depth()<2 or not post_caller_is_human() then
+    raise exception 'Approval history is append-only and written by approval' using errcode='42501';
+  end if;
+  return new;
+end $$;
+revoke all on function content_draft_review_history_guard() from public,anon,authenticated;
+create trigger content_draft_review_history_guard before insert or update or delete on content_draft_reviews
+for each row execute function content_draft_review_history_guard();
+create function content_draft_record_review() returns trigger
+language plpgsql security definer set search_path = public,pg_temp as $$
+begin
+  if new.status='approved' and new.approved_hash is distinct from old.approved_hash then
+    insert into content_draft_reviews(draft_id,client_id,version,approved_hash,snapshot,reviewed_by,reviewed_at)
+      values(new.id,new.client_id,new.version,new.approved_hash,new.approved_snapshot,new.reviewed_by,new.reviewed_at)
+      on conflict(draft_id,approved_hash) do nothing;
+  end if;
+  return new;
+end $$;
+revoke all on function content_draft_record_review() from public,anon,authenticated;
+create trigger content_draft_record_review after update on content_drafts
+for each row execute function content_draft_record_review();
+
+-- Two weekly slots within the existing monthly agreement. Count completed
+-- tasks too, so completing the first article does not create another slot.
+create or replace function create_weekly_blog_tasks() returns integer
+language plpgsql security definer set search_path = public,pg_temp as $$
+declare c record; u record; made int:=0; existing int; slots int; n int;
+  week date:=date_trunc('week',now() at time zone 'America/Chicago')::date;
+begin
+  for c in select id,name from clients where status='active' order by id loop
+    perform pg_advisory_xact_lock(hashtextextended('blog:'||c.id::text,0));
+    select count(*) into existing from tasks where client_id=c.id and key='blog_post'
+      and (created_at at time zone 'America/Chicago')::date>=week
+      and (created_at at time zone 'America/Chicago')::date<week+7;
+    if existing>=2 then continue; end if;
+    begin
+      select allocation,used,remaining into u from client_quota_usage(c.id) where service_key='blog_posts';
+    exception when others then
+      insert into automation_entitlement_log(client_id,automation,service_key,decision,reason)
+        values(c.id,'weekly_blog_post','blog_posts','skipped','entitlements_unavailable');
+      continue;
+    end;
+    if u is null then
+      insert into automation_entitlement_log(client_id,automation,service_key,decision,reason)
+        values(c.id,'weekly_blog_post','blog_posts','skipped','entitlements_unavailable');
+      continue;
+    end if;
+    slots:=least(2-existing,u.remaining);
+    if u.allocation=0 or slots<=0 then
+      insert into automation_entitlement_log(client_id,automation,service_key,decision,reason,allocation,used)
+        values(c.id,'weekly_blog_post','blog_posts','skipped',case when u.allocation=0 then 'not_in_agreement' else 'allocation_used' end,u.allocation,u.used);
+      continue;
+    end if;
+    for n in 1..slots loop
+      insert into tasks(client_id,title,owner,status,playbook_step,autonomy_level,key,due_date)
+        values(c.id,'Blog slot '||(existing+n)||': governed keyword, sourced article, team review',
+          'CLAUDE','open','PB7','run_flag','blog_post',week+2+2*(existing+n-1));
+      insert into automation_entitlement_log(client_id,automation,service_key,decision,reason,allocation,used)
+        values(c.id,'weekly_blog_post','blog_posts','created','within_allocation',u.allocation,u.used+n);
+      made:=made+1;
+    end loop;
+    perform fire_foundation_worker(c.id,'Weekly blog drafts: select active governed keywords and stop for team review');
+  end loop;
+  return made;
+end $$;
+revoke all on function create_weekly_blog_tasks() from public,anon,authenticated,service_role;
