@@ -47,7 +47,14 @@ export function createBlogPublisher(deps: Deps) {
     try {
       const r = p.snapshot;
       const input = await deps.input(r.client_id, (r as BlogRelease & {service_id?: string}).service_id ?? null);
-      const brief = buildBlogBrief(input, {...r,id:r.draft_id,deliverable:"blog",status:"approved"} as unknown as DraftRow,await deps.pages(r.client_id));
+      // The immutable approval snapshot uses draft_id and stores the author's
+      // request note inside the approved brief, not as a top-level field.
+      // Rebuild with that same reviewed identity before comparing foundations.
+      // Never substitute today's note or skip validation of actual brand changes.
+      const approvedNote = (r.brief as { target?: { request_note?: string | null } } | undefined)?.target?.request_note ?? null;
+      const brief = buildBlogBrief(input, {
+        ...r, id:r.draft_id, request_note:approvedNote, deliverable:"blog",status:"approved",
+      } as unknown as DraftRow,await deps.pages(r.client_id));
       if (!brief.ok) throw new Error(brief.refusals.map((x)=>x.message).join(" "));
       const foundation = (b: Record<string, unknown>) => stableJson({
         client:b.client, target:b.target, brand:b.brand, gate:b.gate, cta:b.cta, rules:b.rules,
