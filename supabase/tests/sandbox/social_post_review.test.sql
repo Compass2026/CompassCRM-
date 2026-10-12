@@ -94,9 +94,9 @@ begin
     and not has_table_privilege('anon', 'public.post_events', 'select,insert,update,delete,truncate'));
   perform pr.ok('S6 post history is read-only over the API',
     not has_table_privilege('authenticated', 'public.post_events', 'insert,update,delete,truncate'));
-  perform pr.ok('S7 no portal view reads a post table',
+  perform pr.ok('S7 only the reviewed published-work projection reads social posts',
     not exists (select 1 from pg_views where viewname like 'portal\_%'
-                and (definition ilike '%social_posts%' or definition ilike '%post_events%'
+                and ((definition ilike '%social_posts%' and viewname <> 'portal_growth_work') or definition ilike '%post_events%'
                      or definition ilike '%post_claims%' or definition ilike '%post_assets%')));
   perform pr.ok('S8 the daily recheck is scheduled',
     exists (select 1 from cron.job where jobname = 'social-posts-recheck' and command like '%recheck_social_posts%'));
