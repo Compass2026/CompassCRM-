@@ -23,7 +23,7 @@ const current = row({ id: "00000000-0000-4000-8000-000000000003", sequence: 2, r
 test("nine areas include social, reviews and qualified leads", () => {
   assert.equal(REPORT_AREAS.length, 9);
   assert.ok(REPORT_AREAS.some((a) => a.key === "social"));
-  assert.equal(new Set(REPORT_AREAS.flatMap((a) => a.metrics.map(([key]) => key))).size, 32);
+  assert.equal(new Set(REPORT_AREAS.flatMap((a) => a.metrics.map(([key]) => key))).size, 36);
 });
 test("zero is measured; unavailable data cannot masquerade as zero", () => {
   assert.equal(parseMeasurement(client, form({ value: "0" })).value, 0);
