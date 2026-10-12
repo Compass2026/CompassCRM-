@@ -34,7 +34,7 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
   return <section aria-label="Client growth dashboard" className="space-y-6">
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy-900 to-blue-900 p-6 text-white sm:p-8">
       <p className="text-xs font-semibold uppercase tracking-[.18em] text-blue-200">Your marketing progress</p>
-      <h2 className="mt-2 text-2xl font-semibold sm:text-3xl">Where we started. How you&apos;re growing.</h2>
+      <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Where we started. How you&apos;re growing.</h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-blue-100">Your starting point, latest measured results, and the work moving your business forward.</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         {[{icon:Flag,label:"Earliest recorded baseline",text:growthDate(starting)},{icon:CalendarDays,label:"Latest measurement in view",text:growthDate(latest)},{icon:Layers3,label:"Measured series in view",text:error?"Unavailable":String(measured.length)}].map(({icon:Icon,label,text})=><div key={label} className="rounded-xl border border-white/15 bg-white/10 p-4"><Icon className="mb-2 size-4 text-orange-300"/><p className="text-xs text-blue-100">{label}</p><p className="mt-1 text-lg font-semibold">{text}</p></div>)}
