@@ -29,7 +29,7 @@ export const REPORT_AREAS = [
     ["citations_correct", "Accurate listings", "point"], ["citations_incorrect", "Incorrect listings", "point"], ["citations_missing", "Missing listings", "point"],
   ] },
   { key: "backlinks", label: "Backlinks", next: "Review referring websites and relevant new or lost links.", metrics: [
-    ["backlinks_total", "Indexed backlinks", "point"], ["referring_domains", "Unique referring websites", "point"], ["links_new", "Relevant new backlinks", "window"], ["links_lost", "Relevant lost backlinks", "window"],
+    ["backlinks_total", "Indexed backlinks", "point"], ["referring_domains", "Unique referring websites", "point"], ["links_new", "New backlinks", "window"], ["links_lost", "Lost backlinks", "window"],
   ] },
   { key: "gbp", label: "Google Business Profile", next: "Connect or verify a Business Profile performance export.", metrics: [
     ["gbp_views", "Profile impressions", "window"], ["gbp_clicks", "Website clicks", "window"], ["gbp_call_clicks", "Call-button clicks (not calls)", "window"], ["gbp_directions", "Direction requests", "window"],
