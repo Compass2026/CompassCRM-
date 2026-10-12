@@ -56,3 +56,14 @@ test('MDX execution, bad routes, unsafe paths and protocols refuse before any wr
  assert.throws(() => publicationUrl({...release, slug:'../bad'}));
  assert.throws(() => preparePublication({...release, destination:{...release.destination,content_paths:{...release.destination.content_paths,blog:'../secrets'}}},hash,read(),'2026-10-12'));
 });
+
+test('standalone JSON blog preserves approved data and a trailing-slash canonical', () => {
+ const r = {...release, destination:{...release.destination, content_adapter:'json_blog',content_paths:{blog:'data/blog-posts.json',blog_route:'/{slug}/'}}};
+ const repo = read(r); repo.files.push({path:'data/blog-posts.json',content:'[]'});
+ const result = preparePublication(r,hash,repo,'2026-10-12');
+ assert.equal(result.url,'https://example.test/roof-care/');
+ const article=JSON.parse(result.files[0].content)[0];
+ assert.equal(article.bodyMarkdown,release.body_markdown);
+ assert.deepEqual(article.cta,release.cta);
+ assert.equal(article.compass.keyword_id,release.keyword_id);
+});

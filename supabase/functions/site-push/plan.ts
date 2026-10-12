@@ -119,7 +119,7 @@ export function previewBranchName(slug: string, today = new Date()): string {
   return `compass/preview-${d}-${slug}`.replace(/[^a-zA-Z0-9/_.-]+/g, "-");
 }
 
-const KNOWN_ADAPTERS: ContentAdapterKey[] = ["foundation_brand_content", "lucas_json", "markdown_blog", "unsupported"];
+const KNOWN_ADAPTERS: ContentAdapterKey[] = ["foundation_brand_content", "json_blog", "lucas_json", "markdown_blog", "unsupported"];
 
 function adapterOf(site: SiteRowForPlan | null): ContentAdapterKey | null {
   const key = site?.content_adapter ?? site?.content_paths?.adapter ?? null;
