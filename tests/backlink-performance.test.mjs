@@ -4,6 +4,24 @@ import {summaryMetrics,historyMetrics} from '../supabase/functions/backlink-perf
 import {createBacklinkPerformance} from '../supabase/functions/backlink-performance/handler.ts';
 const id='00000000-0000-4000-a000-000000000001';
 const response=(kind,result)=>({status_code:20000,tasks:[{id,status_code:20000,data:{target:'example.test',function:kind},cost:0.02,result:[{target:'example.test',...result}]}]});
+test('claimed refresh imports the exact two complete provider months and finishes successfully',async()=>{
+ const writes=[],logs=[],requests=[];
+ const supabase={rpc:async(name,args)=>{
+  if(name==='get_secret')return {data:'secret'};
+  if(name==='backlink_sync_claim')return {data:{id}};
+  writes.push(args);return {data:{status:'imported',measurements:2}};
+ },from(name){const q={select(){return q},eq(){return q},update(value){logs.push(value);return q},maybeSingle:async()=>({data:{id,status:'active',website_url:'https://example.test'}}),then(resolve){resolve({data:[]})}};return q;}};
+ const run=createBacklinkPerformance({supabase,now:()=>new Date('2026-10-12T12:00:00Z'),fetch:async(url,init)=>{
+  const body=JSON.parse(init.body)[0];requests.push(body);
+  const history=url.includes('timeseries_new_lost_summary');
+  return Response.json(history?response('timeseries_new_lost_summary',{date_from:body.date_from,date_to:body.date_to,group_range:body.group_range,items_count:2,items:[{date:'2026-08-31 00:00:00 +00:00',new_backlinks:2,lost_backlinks:1},{date:'2026-09-30 00:00:00 +00:00',new_backlinks:3,lost_backlinks:0}]}):response('summary',{backlinks:10,referring_domains:8}));
+ }});
+ const result=await run(new Request('https://test',{method:'POST',headers:{'x-cron-secret':'secret'},body:JSON.stringify({client_id:id})}));
+ assert.equal((await result.json()).results[0].status,'completed');
+ assert.equal(requests.length,2);assert.equal(requests[1].date_from,'2026-08-01');assert.equal(requests[1].date_to,'2026-09-30');
+ assert.deepEqual(writes.map(w=>[w.p_kind,w.p_start,w.p_end]),[['summary','2026-10-12','2026-10-12'],['history','2026-08-01','2026-08-31'],['history','2026-09-01','2026-09-30']]);
+ assert.equal(logs[0].status,'completed');
+});
 test('backlink provider identity, missing counts and incomplete history fail closed',()=>{
  const summary=response('summary',{backlinks:10,referring_domains:8});assert.equal(summaryMetrics(summary,'example.test').values.backlinks_total,10);
  assert.throws(()=>summaryMetrics(summary,'foreign.test'));
