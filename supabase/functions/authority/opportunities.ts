@@ -89,7 +89,7 @@ export function buildOpportunities(ctx: {
 
   for (const p of pillars) {
     const value = pillarValue(p, keywords);
-    const primary = keywords.find((k) => k.service_id === p.service_id && k.role === "primary") ?? null;
+    const primary = keywords.find((k) => k.service_id === p.service_id && k.role === "primary" && input.keywords.some((row) => row.id === k.keyword_id && row.is_active)) ?? null;
     const relevant = p.evidence.relevant.map((c) => c.id);
     const cov = p.coverage;
 

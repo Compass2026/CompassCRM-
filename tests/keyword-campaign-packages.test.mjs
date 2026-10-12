@@ -27,6 +27,16 @@ test("packages block duplicate owner declarations, even with equivalent keyword 
   assert.ok(c.channels.every((c) => c.status === "blocked"));
 });
 
+test("an inactive primary keyword cannot authorize a new owner page", () => {
+  const input = lucasAuthority();
+  input.keywords.find((k) => k.id === KW).is_active = false;
+  input.authority.inventory.pages = [];
+  const report = runAuthority(input);
+  const opportunity = report.opportunities.find((o) => o.key === `service_page:${ROOF}`);
+  assert.equal(opportunity.action, "blocked_data_prerequisite");
+  assert.ok(opportunity.gates.some((g) => g.gate === "keyword_foundation" && !g.pass));
+});
+
 test("campaign metrics use only cluster demand in the latest window; unknown stays unknown", () => {
   const input = lucasAuthority();
   input.authority.gsc = [
