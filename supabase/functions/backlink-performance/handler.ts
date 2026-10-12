@@ -42,7 +42,7 @@ export function createBacklinkPerformance({supabase,fetch:request=fetch,now=()=>
      if(saved.error)throw new Error('import_write_failed');receipt.push({kind:'summary',...saved.data,cost:metrics.cost});
     }catch(e){failed=true;receipt.push({kind:'summary',status:'failed',code:errorCode(e)});}
     try {
-     const metrics=historyMetrics(await read('timeseries_new_lost_summary',{include_subdomains:true,group_range:'month',date_from:from,date_to:to}),host);
+     const metrics=historyMetrics(await read('timeseries_new_lost_summary',{include_subdomains:true,group_range:'month',date_from:from,date_to:to}),host,from,to);
      for(const month of metrics.months) {
       const saved=await supabase.rpc('backlink_profile_record',{p_run_id:runId,p_kind:'history',p_start:month.start,p_end:month.end,p_data:{task_id:metrics.task_id,values:month.values}});
       if(saved.error)throw new Error('import_write_failed');receipt.push({kind:'history',month:month.start,...saved.data});
