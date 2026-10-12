@@ -11,6 +11,7 @@
 
 export type ContentAdapterKey =
   | "foundation_brand_content" // Compass Website Foundation v1: typed TS content under brands/<brand>/content
+  | "json_blog" // Standalone JSON blog with the explicit Compass renderer contract
   | "lucas_json" // the Sept 14 contract: data/locations.json + data/blog-posts.json + /service-areas/[city]
   | "markdown_blog" // Next.js with a Markdown/MDX blog dir and JSON data files (BHG shape)
   | "unsupported";
@@ -94,6 +95,16 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
         ],
       };
     }
+    case "json_blog":
+      return {
+        key, label: "Compass JSON blog",
+        writes: { blog_post: paths.blog ?? "data/blog-posts.json" },
+        mutation: { ...DOC_ONLY, blog_post: "push" },
+        allowedPaths: [paths.blog ?? "data/blog-posts.json"],
+        verify: ["JSON parses; existing articles remain unchanged", "Verify complete article, canonical, SEO and release marker on the live URL"],
+        routes: { blog: paths.blog_route ?? "/blog/{slug}" },
+        notes: ["Only approved blog data may be pushed. Other website changes require a separate reviewed implementation."],
+      };
     case "lucas_json":
       return {
         key,
@@ -214,6 +225,13 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
     };
   }
 
+  if (has(/^compass-blog\.json$/) && has(/^data\/blog-posts\.json$/)
+      && has(/^src\/content\/compass-blog\.ts$/) && has(/^src\/routing\.ts$/)
+      && has(/^scripts\/prerender\.mjs$/)) {
+    return { adapter: "json_blog", paths: { adapter: "json_blog", blog: "data/blog-posts.json", blog_format: "json", blog_route: recorded?.blog_route ?? "/blog/{slug}/" },
+      reasons: ["Explicit Compass blog contract, JSON loader, routes and prerender pipeline are present"], missing_inputs: [], writable: true };
+  }
+
   const locations = recorded?.locations ?? "data/locations.json";
   const blogJson = recorded?.blog && recorded.blog_format !== "markdown" ? recorded.blog : "data/blog-posts.json";
   if (has(new RegExp(`^${escape(locations)}$`)) && has(new RegExp(`^${escape(blogJson)}$`)) && has(/^src\/app\/service-areas\/\[city\]\/page\.tsx$/)) {
@@ -290,7 +308,7 @@ export function assertWriteAllowed(adapter: ContentAdapterKey, path: string, con
   if (adapter === "foundation_brand_content" && /\/content\/locations\//.test(path)) {
     throw new Error(`Refusing ${path}: physical locations are a separate registry; a served city goes to content/cities`);
   }
-  if (adapter === "lucas_json" && /\.json$/i.test(path)) {
+  if ((adapter === "lucas_json" || adapter === "json_blog") && /\.json$/i.test(path)) {
     try {
       JSON.parse(content);
     } catch {
@@ -318,6 +336,7 @@ export interface ContentEntryVerdict {
 /** Does `path` fall under the adapter's declared write path for `kind`? */
 function matchesWritePath(adapter: ContentAdapterKey, kind: ChangeKind, path: string, paths: ContentPaths): boolean {
   switch (adapter) {
+    case "json_blog": return kind === "blog_post" && path === (paths.blog ?? "data/blog-posts.json");
     case "lucas_json": {
       const loc = paths.locations ?? "data/locations.json";
       const blog = paths.blog ?? "data/blog-posts.json";

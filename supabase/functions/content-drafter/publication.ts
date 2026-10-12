@@ -23,11 +23,11 @@ export function publicationUrl(r: BlogRelease): string {
   const site = new URL(r.destination.url);
   if (site.protocol !== "https:") fail("The website must use HTTPS");
   const route = r.destination.content_paths.blog_route;
-  if (!route || !/^\/[a-z0-9/-]*\{slug\}$/.test(route)) fail("A supported blog route is required");
+  if (!route || !/^\/[a-z0-9/-]*\{slug\}\/?$/.test(route)) fail("A supported blog route is required");
   return new URL(route.replace("{slug}", r.slug), site.origin).href;
 }
 export function publicationPaths(r: BlogRelease): string[] {
-  if (r.destination.content_adapter === "lucas_json") return ["compass-blog.json", safePath(r.destination.content_paths.blog ?? "")];
+  if (["lucas_json", "json_blog"].includes(r.destination.content_adapter)) return ["compass-blog.json", safePath(r.destination.content_paths.blog ?? "")];
   if (r.destination.content_adapter === "markdown_blog") return ["compass-blog.json", safePath(`${r.destination.content_paths.blog_dir}/${r.slug}.mdx`)];
   return fail("Website adapter needs manual delivery");
 }
@@ -59,7 +59,7 @@ export function preparePublication(r: BlogRelease, releaseHash: string, read: Re
   const path = publicationPaths(r)[1];
   const existing = read.files.find((f) => f.path === path);
   const marker = { draft_id: r.draft_id, release_hash: releaseHash, keyword_id: r.keyword_id, version: r.version };
-  if (d.content_adapter === "lucas_json") {
+  if (["lucas_json", "json_blog"].includes(d.content_adapter)) {
     if (!existing?.content) fail("The site's blog JSON could not be read; no overwrite is allowed");
     const posts = JSON.parse(existing!.content!);
     if (!Array.isArray(posts)) fail("The site's blog JSON must be an array");

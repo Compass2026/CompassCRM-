@@ -125,3 +125,18 @@ test("every adapter describes its verification and the Foundation pins the accep
   assert.equal(describeAdapter("unsupported").verify.length, 0);
   assert.equal(FOUNDATION_V1_SHA, "f928381b3a81e20694571cefc5091392b2c84e86");
 });
+
+test('standalone JSON blog grants only blog data writes, never city or component writes', () => {
+ const paths={adapter:'json_blog',blog:'data/blog-posts.json',blog_route:'/{slug}/'};
+ const detected=detectContentContract(['compass-blog.json','data/blog-posts.json','src/content/compass-blog.ts','src/routing.ts','scripts/prerender.mjs'],paths);
+ assert.equal(detected.adapter,'json_blog');
+ assert.equal(detected.paths.blog_route,'/{slug}/');
+ assert.equal(planMutation('json_blog','city_page',paths).mode,'proposed_document');
+ assert.equal(planMutation('json_blog','blog_post',paths).mode,'push');
+ assert.equal(validateContentEntry('json_blog',paths,['data/blog-posts.json']).ok,true);
+ assert.equal(validateContentEntry('json_blog',paths,['src/App.tsx']).ok,false);
+ assert.equal(validateContentEntry('json_blog',paths,['data/blog-posts.json'],['anything']).ok,false);
+ assertWriteAllowed('json_blog','data/blog-posts.json','[]',paths);
+ assert.throws(()=>assertWriteAllowed('json_blog','data/locations.json','[]',paths));
+ assert.throws(()=>assertWriteAllowed('json_blog','data/blog-posts.json','bad',paths));
+});
