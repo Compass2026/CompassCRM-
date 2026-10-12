@@ -95,6 +95,46 @@ function sourcePath(source: string | null): string {
 const mentions = (text: string, tokens: string[]) =>
   words(text).some((w) => tokens.some((t) => w.startsWith(t) || (w.length >= 4 && t.startsWith(w))));
 
+// The claims a draft may cite, most relevant first, and every other claim
+// with the reason it is not citable. Shared with the content-drafter
+// (blogs / pages), so both apply one rule: usable (confirmed, or sourced
+// with a source), not a never-cited category, confirmation where the hard
+// rules ask for it, and — when the draft has a service — related to it.
+export function eligibleClaims(
+  input: Pick<DrafterInput, "claims" | "brand">,
+  service: { name: string; segment?: string | null } | null,
+  pageUrl: string | null,
+): { eligible: BriefClaim[]; excluded: Brief["excluded"]["claims"] } {
+  const usable = new Set(usableClaims(input.claims).map((c) => c.id));
+  const differentiators = (input.brand?.differentiators ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
+  const diffSet = new Set(differentiators.map((d) => d.toLowerCase()));
+  const tokens = service ? serviceTokens(service) : [];
+  const eligible: BriefClaim[] = [];
+  const excludedClaims: Brief["excluded"]["claims"] = [];
+  for (const c of input.claims) {
+    if (!usable.has(c.id)) {
+      excludedClaims.push({ id: c.id, text: c.claim, reason: c.status === "sourced" ? "Marked sourced but has no source." : `${c.status}: never cited.` });
+      continue;
+    }
+    const cats = claimCategories(c.claim);
+    const hard = cats.find((x) => EXCLUDED_CATEGORIES[x]);
+    if (hard) { excludedClaims.push({ id: c.id, text: c.claim, reason: EXCLUDED_CATEGORIES[hard] }); continue; }
+    const needsConfirm = cats.find((x) => CONFIRMED_ONLY[x]);
+    if (needsConfirm && c.status !== "confirmed") { excludedClaims.push({ id: c.id, text: c.claim, reason: CONFIRMED_ONLY[needsConfirm] }); continue; }
+    // Relevance to the topic (deterministic; a person reviews the result).
+    const why: string[] = [];
+    let score = 0;
+    if (pageUrl && normalizeUrl(c.source) === normalizeUrl(pageUrl)) { score += 3; why.push("sourced from the target page"); }
+    if (tokens.length && mentions(c.claim, tokens)) { score += 2; why.push("names the service"); }
+    if (diffSet.has(c.claim.trim().toLowerCase())) { score += 2; why.push("matches an approved brand differentiator"); }
+    if (tokens.length && mentions(sourcePath(c.source), tokens)) { score += 1; why.push("source is about the service's segment"); }
+    if (service && score === 0) { excludedClaims.push({ id: c.id, text: c.claim, reason: `Not related to ${service.name}.` }); continue; }
+    eligible.push({ id: c.id, text: c.claim, status: c.status, source: c.source, relevance: score, why });
+  }
+  eligible.sort((a, b) => b.relevance - a.relevance || a.text.localeCompare(b.text));
+  return { eligible, excluded: excludedClaims };
+}
+
 export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { socialAccounts?: SocialAccountRow[] } = {}): BriefResult {
   // Missing target fields inherit from the selected keyword. Explicit
   // disagreements still refuse below; never rewrite the stored keyword.
@@ -248,33 +288,8 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   }
 
   // ── Claims ──
-  const usable = new Set(usableClaims(input.claims).map((c) => c.id));
   const differentiators = (input.brand?.differentiators ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
-  const diffSet = new Set(differentiators.map((d) => d.toLowerCase()));
-  const tokens = service ? serviceTokens(service) : [];
-  const eligible: BriefClaim[] = [];
-  const excludedClaims: Brief["excluded"]["claims"] = [];
-  for (const c of input.claims) {
-    if (!usable.has(c.id)) {
-      excludedClaims.push({ id: c.id, text: c.claim, reason: c.status === "sourced" ? "Marked sourced but has no source." : `${c.status}: never cited.` });
-      continue;
-    }
-    const cats = claimCategories(c.claim);
-    const hard = cats.find((x) => EXCLUDED_CATEGORIES[x]);
-    if (hard) { excludedClaims.push({ id: c.id, text: c.claim, reason: EXCLUDED_CATEGORIES[hard] }); continue; }
-    const needsConfirm = cats.find((x) => CONFIRMED_ONLY[x]);
-    if (needsConfirm && c.status !== "confirmed") { excludedClaims.push({ id: c.id, text: c.claim, reason: CONFIRMED_ONLY[needsConfirm] }); continue; }
-    // Relevance to the topic (deterministic; a person reviews the result).
-    const why: string[] = [];
-    let score = 0;
-    if (pageUrl && normalizeUrl(c.source) === normalizeUrl(pageUrl)) { score += 3; why.push("sourced from the target page"); }
-    if (tokens.length && mentions(c.claim, tokens)) { score += 2; why.push("names the service"); }
-    if (diffSet.has(c.claim.trim().toLowerCase())) { score += 2; why.push("matches an approved brand differentiator"); }
-    if (tokens.length && mentions(sourcePath(c.source), tokens)) { score += 1; why.push("source is about the service's segment"); }
-    if (service && score === 0) { excludedClaims.push({ id: c.id, text: c.claim, reason: `Not related to ${service.name}.` }); continue; }
-    eligible.push({ id: c.id, text: c.claim, status: c.status, source: c.source, relevance: score, why });
-  }
-  eligible.sort((a, b) => b.relevance - a.relevance || a.text.localeCompare(b.text));
+  const { eligible, excluded: excludedClaims } = eligibleClaims(input, service, pageUrl);
   const minClaims = campaignMode === "non_search" || intent === "navigational" ? 0 : 1;
   if (campaignMode === "keyword" && intent && intent !== "navigational" && eligible.length === 0) {
     refuse("no_usable_claim", `A ${intent} post needs at least one relevant confirmed or sourced claim${service ? ` about ${service.name}` : ""}.`);

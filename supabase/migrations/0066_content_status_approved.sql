@@ -1,0 +1,22 @@
+-- Blog Drafter, step 1 (Oct 4 2026): content_posts can say "approved".
+-- NOT APPLIED — held for approval with 0067.
+--
+-- An approved blog draft (0067) promotes to ONE content_posts row, the
+-- canonical final article, before anyone has published it on the site. The
+-- content_status enum had idea / brief / draft / review / published; none of
+-- them is "approved by Compass, not yet live". This adds 'approved' between
+-- review and published.
+--
+-- Its own migration because Postgres refuses a new enum value inside the
+-- transaction that adds it ("unsafe use of new value"), and 0067 uses it.
+--
+-- Effect elsewhere: Billing's monthly quota (0062, client_quota_usage)
+-- counts Compass content_posts that are not published as planned and
+-- published ones as completed, whatever the other status is, so an approved
+-- article counts exactly once, as planned until it is published. The client
+-- portal's work log shows published content only, unchanged.
+--
+-- Rollback: an enum value cannot be dropped in place; while no row uses it,
+-- recreate the type without it (rename, create, alter column, drop).
+
+alter type content_status add value if not exists 'approved' after 'review';
