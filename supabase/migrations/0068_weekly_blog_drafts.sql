@@ -78,6 +78,12 @@ begin
     raise exception 'A weekly blog draft names its topic and search intent' using errcode = '22023';
   end if;
 
+  select keyword into v_kw from keywords where id = nullif(p->>'keyword_id', '')::uuid
+    and client_id = t.client_id and is_active;
+  if v_kw is null then
+    raise exception 'Choose an active governed keyword before generating this item' using errcode = '22023';
+  end if;
+
   -- This week's empty blog slot, or a new one.
   select * into i from content_plan_items x
    where x.client_id = t.client_id and x.week_start = v_week and x.deliverable = 'blog'
@@ -137,7 +143,17 @@ begin
   v_snapshot := jsonb_build_object(
     'version', d.version, 'deliverable', d.deliverable, 'page_type', d.page_type,
     'title', d.title, 'slug', d.slug, 'meta_title', d.meta_title, 'meta_description', d.meta_description, 'h1', d.h1,
-    'outline', d.outline, 'body_hash', d.body_hash, 'word_count', d.word_count,
+    'draft_id', d.id, 'client_id', d.client_id, 'plan_item_id', d.plan_item_id,
+    'topic', d.topic, 'primary_keyword', d.primary_keyword, 'keyword_id', d.keyword_id,
+    'search_intent', d.search_intent, 'service_id', d.service_id,
+    'authority_opportunity_id', d.authority_opportunity_id, 'target_url', d.target_url,
+    'brief', d.brief, 'brief_hash', d.brief_hash, 'lint', d.lint,
+    'destination', (select jsonb_build_object('site_id', st.id, 'url', st.url,
+      'repo_url', st.repo_url, 'branch', st.branch, 'content_adapter', st.content_adapter,
+      'content_paths', st.content_paths, 'vercel_project', st.vercel_project,
+      'controlled_by_compass', st.controlled_by_compass)
+      from sites st where st.client_id = d.client_id order by st.created_at, st.id limit 1),
+    'outline', d.outline, 'body_markdown', d.body_markdown, 'body_hash', d.body_hash, 'word_count', d.word_count,
     'internal_links', d.internal_links, 'cta', d.cta, 'structured_data', d.structured_data,
     'claims', coalesce((select jsonb_agg(jsonb_build_object('id', cl.id, 'claim', cl.claim, 'status', cl.status, 'source', cl.source) order by cl.id)
                          from content_draft_claims dc join claims cl on cl.id = dc.claim_id where dc.draft_id = d.id), '[]'::jsonb));

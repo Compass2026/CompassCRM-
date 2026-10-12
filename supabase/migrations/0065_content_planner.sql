@@ -175,6 +175,7 @@ select i.*,
             select 1 from tasks t where t.client_id = i.client_id
                and t.key = 'authority_draft:' || i.authority_opportunity_id and t.status <> 'done')) then 'drafting'
     when i.search_intent is not null
+      and exists (select 1 from keywords k where k.id = i.keyword_id and k.client_id = i.client_id and k.is_active)
       and (i.service_id is not null or i.authority_opportunity_id is not null or i.deliverable = 'blog') then 'ready_to_generate'
     else 'planned'
   end as status,

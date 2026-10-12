@@ -59,15 +59,18 @@ insert into clients (id, name, city, state, status) values
   (cd.id('a'), 'Draft Roofing', 'Wentzville', 'MO', 'active'),
   (cd.id('b'), 'Draft Plumbing', 'Columbia', 'MO', 'active');
 insert into services (id, client_id, name, status) values (cd.id('svc'), cd.id('a'), 'Roof Replacement', 'approved');
-insert into keywords (id, client_id, keyword) values (cd.id('kw'), cd.id('a'), 'how long does a roof last missouri');
+insert into keywords (id, client_id, keyword, intent, service_id) values
+  (cd.id('kw'), cd.id('a'), 'how long does a roof last missouri', 'informational', cd.id('svc')),
+  (cd.id('kw-page'), cd.id('a'), 'roof replacement', 'commercial', cd.id('svc')),
+  (cd.id('kw-b'), cd.id('b'), 'when to clear a slow drain', 'informational', null);
 insert into claims (id, client_id, claim, status, source) values
   (cd.id('c-sourced'), cd.id('a'), 'Owens Corning Preferred Contractor', 'sourced', 'https://manufacturer.example.test/1'),
   (cd.id('c-unverified'), cd.id('a'), 'Family operated since 2018', 'unverified', null),
   (cd.id('c-b'), cd.id('b'), 'Licensed master plumber', 'sourced', 'https://state.example.test/1');
 insert into content_plan_items (id, client_id, week_start, deliverable, channel, purpose, topic, search_intent, keyword_id, service_id, planned_date) values
   (cd.id('i-blog'), cd.id('a'), date '2026-10-05', 'blog', null, 'educational', 'How long does a roof last', 'informational', cd.id('kw'), cd.id('svc'), date '2026-10-07'),
-  (cd.id('i-blog-2'), cd.id('a'), date '2026-10-05', 'blog', null, 'educational', 'Signs of hail damage', 'informational', null, cd.id('svc'), null),
-  (cd.id('i-page'), cd.id('a'), date '2026-10-05', 'web_page', null, 'service', 'Roof replacement page', 'commercial', null, cd.id('svc'), null),
+  (cd.id('i-blog-2'), cd.id('a'), date '2026-10-05', 'blog', null, 'educational', 'Signs of hail damage', 'informational', cd.id('kw'), cd.id('svc'), null),
+  (cd.id('i-page'), cd.id('a'), date '2026-10-05', 'web_page', null, 'service', 'Roof replacement page', 'commercial', cd.id('kw-page'), cd.id('svc'), null),
   (cd.id('i-gbp'), cd.id('a'), date '2026-10-05', 'gbp', 'google_business', 'service', 'Roof post', 'commercial', null, cd.id('svc'), null);
 \o
 
@@ -114,6 +117,13 @@ select cd.ok('W1 the worker''s SQL cannot write content or call the drafter''s w
   and cd.try(format('select content_draft_write(%L::jsonb)', cd.payload(cd.get('blog')::uuid, 320, array[cd.id('c-sourced')]))) like '42501%');
 \o
 
+-- A forged application flag or JWT on a worker SQL session is not authority.
+select set_config('compass.content_draft_system', 'on', false);
+select cd.ok('W2 a forged system flag cannot edit metadata or approve',
+  cd.try(format('update content_drafts set request_note = ''forged'' where id = %L', cd.get('blog'))) like '42501%'
+  and cd.try(format('update content_drafts set status = ''approved'' where id = %L', cd.get('blog'))) like '42501%');
+select set_config('compass.content_draft_system', '', false);
+
 -- ── The drafter writes ──────────────────────────────────────────────────────
 \c - authenticator
 set role service_role;
@@ -151,6 +161,9 @@ declare r jsonb; e text; v_post uuid; me uuid := (select id from team_members wh
 begin
   perform cd.ok('P1 the planner reads the draft in review', (select status from content_plan_board where id = cd.id('i-blog')) = 'in_review');
   perform cd.ok('P2 a draft in review is frozen', cd.try(format('update content_drafts set title = ''Edited'' where id = %L', b)) like '23514%');
+  perform cd.ok('P2b review freezes the campaign foundation',
+    cd.try(format('update content_drafts set target_url = ''https://other.example.test/'' where id = %L', b)) like '23514%'
+    and cd.try(format('update content_drafts set keyword_id = null where id = %L', b)) like '23514%');
   perform cd.ok('P3 approval is only through content_draft_approve',
     cd.try(format('update content_drafts set status = ''approved'' where id = %L', b)) is not null);
   e := cd.try(format('select content_draft_approve(%L, 99)', b));
@@ -166,6 +179,9 @@ begin
                                          and due_date = date '2026-10-07' from content_posts where id = v_post));
   perform cd.ok('A2 the draft records who approved what (version, hash, snapshot with its claims)',
     (select status = 'approved' and reviewed_by = me and approved_version = 1 and approved_hash ~ '^sha256:'
+            and approved_snapshot->>'body_markdown' = body_markdown
+            and approved_snapshot->>'keyword_id' = keyword_id::text
+            and approved_snapshot ? 'destination'
             and approved_snapshot->'claims'->0->>'claim' = 'Owens Corning Preferred Contractor'
             and final_content_post_id = v_post from content_drafts where id = b));
   perform cd.ok('A3 the plan item links the final article; the board reads approved',
@@ -196,7 +212,10 @@ begin
   update content_drafts set status = 'rejected', review_note = 'Too generic' where id = p;
   perform cd.ok('J2 rejected, with who and when', (select status = 'rejected' and reviewed_by = me from content_drafts where id = p)
     and (select status from content_plan_board where id = cd.id('i-page')) = 'drafting');
+  perform cd.save('claim_version', (select version::text from content_drafts where id = p));
   insert into content_draft_claims (draft_id, client_id, claim_id) values (p, cd.id('a'), cd.id('c-unverified'));
+  perform cd.ok('J2b claim-only changes invalidate the reviewed version',
+    (select version from content_drafts where id = p) = cd.get('claim_version')::int + 1);
   e := cd.try(format('update content_drafts set status = ''in_review'' where id = %L', p));
   perform cd.ok('J3 an unverified claim blocks submission', e like '23514%not confirmed or sourced%', e);
   delete from content_draft_claims where draft_id = p and claim_id = cd.id('c-unverified');
@@ -257,7 +276,7 @@ select cd.as_user('service_role', null);
 do $$
 declare r jsonb; r2 jsonb;
 begin
-  r := content_draft_open_weekly(jsonb_build_object('task_id', cd.id('weekly'), 'topic', 'When to clear a slow drain', 'search_intent', 'informational'));
+  r := content_draft_open_weekly(jsonb_build_object('task_id', cd.id('weekly'), 'topic', 'When to clear a slow drain', 'search_intent', 'informational', 'keyword_id', cd.id('kw-b')));
   perform cd.save('weekly_draft', r->>'draft_id');
   perform cd.ok('K2 the worker opens a draft for the weekly task: requested, in this week''s blog slot, the task in progress',
     (select status = 'requested' and source_task_id = cd.id('weekly') and plan_item_id = (r->>'plan_item_id')::uuid from content_drafts where id = (r->>'draft_id')::uuid)

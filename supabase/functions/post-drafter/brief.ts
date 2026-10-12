@@ -155,16 +155,14 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   if (target.postType !== "standard" && target.postType !== "offer") refuse("post_type_invalid", `"${target.postType}" is not a post type.`);
 
   // ── Campaign foundation ──
-  // Keyword-first is the default. A missing keyword is never interpreted as
-  // "navigational" or brand-only. Non-search work must opt in explicitly.
-  const campaignMode = target.campaignMode ?? "keyword";
-  if (campaignMode === "keyword" && !target.keywordId) {
-    refuse("keyword_missing", "Keyword-first campaigns require a governed keyword. Use campaignMode=non_search only for an intentional non-search brand/community/team/review/event asset.");
+  // Every new campaign starts with a governed keyword, including brand and
+  // community angles. Retain the old mode in stored records, never as a bypass.
+  const campaignMode = "keyword" as const;
+  if (!target.keywordId) {
+    refuse("keyword_missing", "Choose an active keyword from this client's governed keyword list before generating content.");
   }
-  if (campaignMode === "non_search") {
-    if (target.keywordId) refuse("keyword_not_applicable", "A non-search campaign must not carry a keyword.");
-    if (target.serviceId) refuse("service_not_applicable", "A non-search campaign must not masquerade as service/search content.");
-    if (target.postType === "offer") refuse("post_type_invalid", "Offers belong to keyword campaigns, not non-search campaign mode.");
+  if (target.campaignMode === "non_search") {
+    refuse("campaign_mode_retired", "Keyword provenance is required for every new campaign. Choose a governed keyword and use keyword mode.");
   }
 
   // ── Facebook: a standard post with no button, on a named Page of this client ──
@@ -290,7 +288,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   // ── Claims ──
   const differentiators = (input.brand?.differentiators ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
   const { eligible, excluded: excludedClaims } = eligibleClaims(input, service, pageUrl);
-  const minClaims = campaignMode === "non_search" || intent === "navigational" ? 0 : 1;
+  const minClaims = intent === "navigational" ? 0 : 1;
   if (campaignMode === "keyword" && intent && intent !== "navigational" && eligible.length === 0) {
     refuse("no_usable_claim", `A ${intent} post needs at least one relevant confirmed or sourced claim${service ? ` about ${service.name}` : ""}.`);
   }

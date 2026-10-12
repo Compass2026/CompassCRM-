@@ -32,3 +32,13 @@ jobs:
       - run: npm run check --prefix billing
       - run: npm run build --prefix billing
       - run: npm test --prefix billing
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL for isolated migration and role tests
+        run: sudo apt-get update && sudo apt-get install -y postgresql
+      - name: Replay migrations and verify database boundaries
+        run: scripts/test-portal-sandbox.sh

@@ -180,6 +180,11 @@ declare
   v_claims int;
   v_unusable int;
 begin
+  if not exists (select 1 from keywords k where k.id = d.keyword_id and k.client_id = d.client_id and k.is_active
+      and k.keyword = d.primary_keyword and k.intent = d.search_intent
+      and k.service_id is not distinct from d.service_id) then
+    v := v || 'The governed keyword or its mapping changed; create a new request from the current keyword list.'::text;
+  end if;
   if nullif(btrim(coalesce(d.title, '')), '') is null then v := v || 'A title is required.'::text; end if;
   if d.slug is null then v := v || 'A slug is required.'::text; end if;
   if nullif(btrim(coalesce(d.meta_title, '')), '') is null then v := v || 'A meta title is required.'::text;
@@ -218,10 +223,13 @@ declare
   v_human boolean := post_caller_is_human();
   v_drafter boolean := content_drafter_session_active();
   v_super boolean := drafter_caller_is_superuser();
-  v_system boolean := coalesce(current_setting('compass.content_draft_system', true), '') = 'on';
+  v_system boolean := (v_human or v_super) and coalesce(current_setting('compass.content_draft_system', true), '') = 'on';
   v_content_changed boolean;
   v_problems text[];
 begin
+  if not (v_human or v_drafter or v_super) then
+    raise exception 'Only a teammate or the content-drafter function changes a draft' using errcode = '42501';
+  end if;
   if tg_op = 'DELETE' then
     if not exists (select 1 from clients where id = old.client_id) then return old; end if;
     if not (v_human or v_super) then
@@ -252,10 +260,29 @@ begin
        is distinct from (old.id, old.client_id, old.deliverable, old.created_at, old.created_by) then
       raise exception 'A draft keeps its client and kind' using errcode = '23514';
     end if;
+    -- Requested campaign identity never drifts with article edits. A different
+    -- keyword, owner or deliverable is a new request with its own provenance.
+    if (new.topic, new.primary_keyword, new.keyword_id, new.search_intent, new.service_id,
+        new.authority_opportunity_id, new.target_url, new.page_type, new.plan_item_id)
+       is distinct from
+       (old.topic, old.primary_keyword, old.keyword_id, old.search_intent, old.service_id,
+        old.authority_opportunity_id, old.target_url, old.page_type, old.plan_item_id) then
+      raise exception 'Campaign foundation is immutable; create a new keyword-backed request' using errcode = '23514';
+    end if;
+    if not (v_system or v_super) and new.request_note is distinct from old.request_note then
+      raise exception 'Change the request note through regenerate' using errcode = '42501';
+    end if;
+    if not v_super and (new.body_hash, new.word_count, new.author_kind, new.updated_by, new.requested_by)
+      is distinct from (old.body_hash, old.word_count, old.author_kind, old.updated_by, old.requested_by) then
+      raise exception 'Derived draft metadata is maintained by the write boundary' using errcode = '42501';
+    end if;
+    if to_jsonb(new)->'source_task_id' is distinct from to_jsonb(old)->'source_task_id' then
+      raise exception 'A draft keeps its weekly source task' using errcode = '23514';
+    end if;
     v_content_changed := (new.title, new.slug, new.meta_title, new.meta_description, new.h1, new.outline, new.body_markdown,
-                          new.internal_links, new.cta, new.structured_data)
+                          new.internal_links, new.cta, new.structured_data, new.brief_hash)
                          is distinct from (old.title, old.slug, old.meta_title, old.meta_description, old.h1, old.outline,
-                                           old.body_markdown, old.internal_links, old.cta, old.structured_data);
+                                           old.body_markdown, old.internal_links, old.cta, old.structured_data, old.brief_hash);
     -- The brief and the drafter's own record are the drafter's.
     if not (v_drafter or v_system or v_super) and (
          (new.brief, new.brief_hash, new.lint, new.runtime) is distinct from (old.brief, old.brief_hash, old.lint, old.runtime)
@@ -283,6 +310,7 @@ begin
           raise exception 'Withdraw or reopen the draft to edit it (it is %)', old.status using errcode = '23514';
         end if;
         new.author_kind := 'team';
+        new.lint := null;
       else
         raise exception 'Only a teammate or the content-drafter function writes a draft''s content' using errcode = '42501';
       end if;
@@ -290,7 +318,9 @@ begin
       new.body_hash := encode(sha256(convert_to(coalesce(new.body_markdown, ''), 'UTF8')), 'hex');
       new.word_count := case when btrim(coalesce(new.body_markdown, '')) = '' then 0 else
         array_length(regexp_split_to_array(btrim(regexp_replace(new.body_markdown, '[#*>_`|]+', ' ', 'g')), '\s+'), 1) end;
-    elsif new.version is distinct from old.version and not v_super then
+    elsif new.version is distinct from old.version and not v_super
+      and not (pg_trigger_depth() > 1 and new.version = old.version + 1
+               and old.status in ('requested', 'draft', 'rejected')) then
       raise exception 'The version follows the content' using errcode = '42501';
     end if;
 
@@ -342,26 +372,35 @@ declare
   d content_drafts;
   c claims;
 begin
+  if tg_op = 'UPDATE' then
+    raise exception 'Claim links are replaced by unlinking and linking while the draft is editable' using errcode = '42501';
+  end if;
   if tg_op = 'DELETE' then
     if not exists (select 1 from content_drafts where id = old.draft_id) then return old; end if;
-    select * into d from content_drafts where id = old.draft_id;
+    select * into d from content_drafts where id = old.draft_id for update;
   else
-    select * into d from content_drafts where id = new.draft_id;
+    select * into d from content_drafts where id = new.draft_id for update;
     select * into c from claims where id = new.claim_id;
     if c.client_id is distinct from d.client_id or new.client_id is distinct from d.client_id then
       raise exception 'A draft stands only on its own client''s claims' using errcode = '23514';
     end if;
   end if;
-  if not (content_drafter_session_active() or drafter_caller_is_superuser()
+  if not ((content_drafter_session_active() and d.status in ('requested', 'draft', 'rejected')) or drafter_caller_is_superuser()
           or (post_caller_is_human() and d.status in ('draft', 'rejected'))) then
     raise exception 'A draft''s claims change with its content: by the drafter, or by a teammate while it is a draft'
       using errcode = '42501';
+  end if;
+  -- The draft row lock serializes changes with version-pinned approval.
+  -- Generated claims are replaced within content_draft_write's row lock;
+  -- human claim-only edits also advance the version the reviewer sees.
+  if post_caller_is_human() then
+    update content_drafts set version = version + 1 where id = d.id;
   end if;
   if tg_op = 'DELETE' then return old; end if;
   return new;
 end $$;
 revoke all on function content_draft_claims_guard() from public, anon, authenticated;
-create trigger content_draft_claims_guard before insert or delete on content_draft_claims
+create trigger content_draft_claims_guard before insert or update or delete on content_draft_claims
   for each row execute function content_draft_claims_guard();
 
 -- ── 4. Request (Generate) and regenerate ────────────────────────────────────
@@ -381,6 +420,7 @@ declare
   d content_drafts;
   v_task uuid;
   v_kw text;
+  v_keyword keywords;
 begin
   if not post_caller_is_human() then
     raise exception 'Only a signed-in teammate requests a draft' using errcode = '42501';
@@ -407,12 +447,20 @@ begin
   if exists (select 1 from content_drafts where plan_item_id = i.id and status in ('draft', 'in_review', 'approved')) then
     raise exception 'This item already has a draft; open it, or regenerate it from there' using errcode = '22023';
   end if;
-  select keyword into v_kw from keywords where id = i.keyword_id;
+  select * into v_keyword from keywords where id = i.keyword_id and client_id = i.client_id and is_active;
+  v_kw := v_keyword.keyword;
+  if v_kw is null then
+    raise exception 'Choose an active governed keyword before generating this item' using errcode = '22023';
+  end if;
+  if (i.search_intent is not null and i.search_intent is distinct from v_keyword.intent)
+     or (i.service_id is not null and i.service_id is distinct from v_keyword.service_id) then
+    raise exception 'The plan must match the governed keyword intent and service' using errcode = '22023';
+  end if;
   perform set_config('compass.content_draft_system', 'on', true);
   insert into content_drafts (client_id, plan_item_id, deliverable, page_type, topic, primary_keyword, keyword_id, search_intent,
                               service_id, authority_opportunity_id, target_url, request_note, requested_by)
   values (i.client_id, i.id, i.deliverable, case when i.deliverable = 'web_page' then p_page_type end, i.topic, v_kw, i.keyword_id,
-          i.search_intent, i.service_id, i.authority_opportunity_id, i.target_url, nullif(btrim(coalesce(p_note, '')), ''), task_actor())
+          v_keyword.intent, v_keyword.service_id, i.authority_opportunity_id, i.target_url, nullif(btrim(coalesce(p_note, '')), ''), task_actor())
   returning * into d;
   insert into tasks (client_id, title, notes, owner, key)
   values (i.client_id, left(format('Draft %s: %s', case i.deliverable when 'blog' then 'blog' else 'web page' end, i.topic), 200),
@@ -538,7 +586,17 @@ begin
   v_snapshot := jsonb_build_object(
     'version', d.version, 'deliverable', d.deliverable, 'page_type', d.page_type,
     'title', d.title, 'slug', d.slug, 'meta_title', d.meta_title, 'meta_description', d.meta_description, 'h1', d.h1,
-    'outline', d.outline, 'body_hash', d.body_hash, 'word_count', d.word_count,
+    'draft_id', d.id, 'client_id', d.client_id, 'plan_item_id', d.plan_item_id,
+    'topic', d.topic, 'primary_keyword', d.primary_keyword, 'keyword_id', d.keyword_id,
+    'search_intent', d.search_intent, 'service_id', d.service_id,
+    'authority_opportunity_id', d.authority_opportunity_id, 'target_url', d.target_url,
+    'brief', d.brief, 'brief_hash', d.brief_hash, 'lint', d.lint,
+    'destination', (select jsonb_build_object('site_id', st.id, 'url', st.url,
+      'repo_url', st.repo_url, 'branch', st.branch, 'content_adapter', st.content_adapter,
+      'content_paths', st.content_paths, 'vercel_project', st.vercel_project,
+      'controlled_by_compass', st.controlled_by_compass)
+      from sites st where st.client_id = d.client_id order by st.created_at, st.id limit 1),
+    'outline', d.outline, 'body_markdown', d.body_markdown, 'body_hash', d.body_hash, 'word_count', d.word_count,
     'internal_links', d.internal_links, 'cta', d.cta, 'structured_data', d.structured_data,
     'claims', coalesce((select jsonb_agg(jsonb_build_object('id', cl.id, 'claim', cl.claim, 'status', cl.status, 'source', cl.source) order by cl.id)
                          from content_draft_claims dc join claims cl on cl.id = dc.claim_id where dc.draft_id = d.id), '[]'::jsonb));
@@ -587,6 +645,7 @@ select i.*,
             select 1 from tasks t where t.client_id = i.client_id
                and t.key = 'authority_draft:' || i.authority_opportunity_id and t.status <> 'done')) then 'drafting'
     when i.search_intent is not null
+      and exists (select 1 from keywords k where k.id = i.keyword_id and k.client_id = i.client_id and k.is_active)
       and (i.service_id is not null or i.authority_opportunity_id is not null or i.deliverable = 'blog') then 'ready_to_generate'
     else 'planned'
   end as status,
