@@ -48,6 +48,44 @@ export function createBlogPublisher(deps: Deps) {
     let evidence: Json = reconciling ? {...(p.evidence ?? {})} : {};
     try {
       const r = p.snapshot;
+      if (reconciling) {
+        // Reconciliation is a read-and-verify operation first. The exact
+        // approved release may already be publicly deployed even if today's
+        // brand/keyword inputs changed after its initial authorized write.
+        // Recording that historical fact is not permission for a new write.
+        const inspect = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,read:true,paths:publicationPaths(r)});
+        if (!inspect.ok) throw new Error("Could not inspect the approved repository");
+        const repository = await inspect.json() as RepositoryRead;
+        const date = new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(p.scheduled_at));
+        const prepared = preparePublication(r,p.release_hash,repository,date);
+        if (prepared.already_present) {
+          const prior = p.evidence ?? {};
+          const vercel = ((prior.transport as Json | undefined)?.vercel ?? {}) as Json;
+          const deploymentUrl = String(vercel.deployment_url ?? r.destination.url);
+          const sha = String(prior.commit_sha ?? repository.head);
+          if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("Commit provenance cannot be established");
+          const inspectDeployment = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,deployment_status:deploymentUrl});
+          if (!inspectDeployment.ok) throw new Error("Production deployment inspection is unavailable");
+          const deployment = await inspectDeployment.json() as Json;
+          if (deployment.ready_state !== "READY" || deployment.target !== "production") {
+            throw new Error("Production deployment is not READY");
+          }
+          const live = await deps.fetchLive(prepared.url);
+          if (!live.ok || /noindex/i.test(live.headers.get("x-robots-tag") ?? "")
+              || !verifyLiveArticle(await live.text(),r,p.release_hash,prepared.url)) {
+            throw new Error("Exact approved article not yet verified on the public domain");
+          }
+          await deps.authorize(p.id,p.lease_token);
+          evidence = {...evidence,commit_sha:sha,url:prepared.url,
+            deployment_state:"READY",deployment_target:"production",live_verified:true,
+            reconciliation:{mode:"verified_existing_release",deployment_id:deployment.deployment_id ?? null}};
+          await deps.finish(p.id,p.lease_token,"published",evidence);
+          return Response.json({status:"published",url:prepared.url,commit_sha:sha,reconciled:true});
+        }
+        if (p.reconcile_reason === "verify existing release only") {
+          throw new Error("Missing-commit receipt requires manual review; do not create a new publication");
+        }
+      }
       const input = await deps.input(r.client_id, (r as BlogRelease & {service_id?: string}).service_id ?? null);
       // The immutable approval snapshot uses draft_id and stores the author's
       // request note inside the approved brief, not as a top-level field.
@@ -68,43 +106,13 @@ export function createBlogPublisher(deps: Deps) {
       if (typeof parsed === "string") throw new Error(parsed);
       const lint = lintBlog(brief.brief,parsed,{gazetteer:(input.client.state && deps.gazetteer?.[input.client.state]) || []});
       if (!lint.ok) throw new Error(lint.problems.map((x)=>x.message).join(" "));
-      evidence = {lint};
+      evidence = {...evidence,lint};
       const readRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,read:true,paths:publicationPaths(r)});
       if (!readRes.ok) throw new Error("Could not read the approved website repository");
       const read = await readRes.json() as RepositoryRead;
       const date = new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(p.scheduled_at));
       const delivery = preparePublication(r,p.release_hash,read,date);
-      if (delivery.already_present) {
-        if (!reconciling) throw new Error("The released article already exists. Reconcile its deployment without creating another commit.");
-        // An identical release already exists in the repository. Do not push
-        // another commit or approve new copy: verify its original deployment
-        // and all visible text, links and release markers on the live domain.
-        const previous = p.evidence ?? {};
-        const transport = (previous.transport ?? {}) as Json;
-        const vercel = (transport.vercel ?? {}) as Json;
-        const deploymentUrl = String(vercel.deployment_url ?? "");
-        const sha = String(previous.commit_sha ?? "");
-        if (!deploymentUrl || !/^[0-9a-f]{40}$/.test(sha)) {
-          throw new Error("The existing release needs manual provenance reconciliation.");
-        }
-        const deployRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,deployment_status:deploymentUrl});
-        if (!deployRes.ok) throw new Error("Production deployment inspection is temporarily unavailable.");
-        const deployment = await deployRes.json() as Json;
-        if (deployment.ready_state !== "READY" || deployment.target !== "production") {
-          throw new Error("The original production deployment is not READY.");
-        }
-        const live = await deps.fetchLive(delivery.url);
-        if (!live.ok || /noindex/i.test(live.headers.get("x-robots-tag") ?? "")
-           || !verifyLiveArticle(await live.text(),r,p.release_hash,delivery.url)) {
-          throw new Error("The approved article is not yet fully verified on the public website.");
-        }
-        await deps.authorize(p.id,p.lease_token);
-        evidence = {...previous,commit_sha:sha,url:delivery.url,
-          deployment_state:"READY",deployment_target:"production",live_verified:true,
-          reconciliation:{mode:"existing_release",deployment_id:deployment.deployment_id ?? null}};
-        await deps.finish(p.id,p.lease_token,"published",evidence);
-        return Response.json({status:"published",url:delivery.url,commit_sha:sha,reconciled:true});
-      }
+      if (delivery.already_present) throw new Error("Approved release exists; reconcile the verified live page without writing another commit.");
       await deps.authorize(p.id,p.lease_token);
       externalWriteStarted = true;
       const pushRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,repo:r.destination.repo_url.replace("https://github.com/",""),
