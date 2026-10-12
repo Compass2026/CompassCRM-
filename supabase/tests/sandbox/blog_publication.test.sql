@@ -27,11 +27,15 @@ begin
     and cd.try(format('select blog_publication_claim(%L)',p)) like '42501%');
   -- Simulate the publisher detecting a foundation mismatch before any
   -- repository write. The genuine teammate must explicitly retry.
+  -- Only the real publisher service can write a blocked receipt. Simulate its
+  -- role here; the teammate retains no direct mutation privilege.
+  perform set_config('role','service_role',true);
   perform set_config('compass.blog_publication_write','on',true);
   update blog_publications set status='blocked',
     last_error='Keyword, brand or campaign foundation changed since review. Regenerate and review before publishing.',
     evidence='{}'::jsonb where id=p;
   perform set_config('compass.blog_publication_write','',true);
+  perform set_config('role','authenticated',true);
   q := blog_publication_queue(d.id,d.version,now()+interval '1 hour');
   perform cd.ok('PUB4a safe pre-write failure can be requeued with intact history',
     q<>p and (select status='cancelled' and last_error like 'Keyword, brand%' from blog_publications where id=p)
