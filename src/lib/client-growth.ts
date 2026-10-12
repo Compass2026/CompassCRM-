@@ -54,3 +54,5 @@ export function deltaLabel(delta: number | null, baseline?: number | null): stri
 export function growthDate(date?: string | null): string {
   return date ? new Date(`${date.slice(0,10)}T12:00:00Z`).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }) : "Not measured";
 }
+
+export type GrowthWork = { id: string; client_id: string; kind: "blog" | "gbp" | "social"; title: string; published_on: string; url: string | null };

@@ -33,6 +33,7 @@ const upstream=http.createServer(async(req,res)=>{
  if(['/rest/v1/report_measurements','/rest/v1/portal_growth_measurements'].includes(url.pathname))return reply(measurements);
  if(['/rest/v1/client_growth_search','/rest/v1/portal_growth_search'].includes(url.pathname))return reply([{client_id:clientId,period_start:'2026-08-01',period_end:'2026-08-28',clicks:10,impressions:100,imported_rows:5},{client_id:clientId,period_start:'2026-09-01',period_end:'2026-09-28',clicks:30,impressions:200,imported_rows:8}]);
  if(['/rest/v1/client_growth_rankings','/rest/v1/portal_growth_rankings'].includes(url.pathname))return reply(rankingRows);
+ if(['/rest/v1/client_growth_work','/rest/v1/portal_growth_work'].includes(url.pathname))return reply([{id:'publication1',client_id:clientId,kind:'blog',title:'Roof care guide',published_on:'2026-09-05',url:'https://client.example.test/blog/roof'},{id:'publication2',client_id:clientId,kind:'social',title:'Facebook post',published_on:'2026-08-20',url:'javascript:alert(1)'}]);
  if(url.pathname==='/rest/v1/keywords')return reply([{id:keywordId,keyword:'roof repair',target_url:'/roof-repair',service_id:null}]);
  if(url.pathname==='/rest/v1/client_brand_workspaces')return reply([]);
  if(url.pathname==='/rest/v1/backlink_opportunities'){
@@ -71,6 +72,14 @@ try{
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/growth`,{waitUntil:'networkidle'});
  await page.getByRole('heading',{name:/Where we started.*How you're growing/}).waitFor();
  assert.equal(await page.getByRole('heading',{name:/Where we started.*How you're growing/}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
+ const work=page.getByRole('region',{name:'Published work',exact:true});
+ assert.equal(await work.getByRole('link').count(),1);
+ await work.getByRole('button',{name:/Blog posts/}).click();
+ assert.equal(await work.getByText('Facebook post',{exact:true}).count(),0);
+ await work.getByRole('button',{name:'Show all published work',exact:true}).click();
+ await work.getByRole('button',{name:'2026-08: 1 publications',exact:true}).click();
+ assert.equal(await work.getByText('Roof care guide',{exact:true}).count(),0);
+ await work.getByRole('button',{name:'Show all published work',exact:true}).click();
  await page.getByRole('button',{name:'Chart Website clicks',exact:true}).click();
  assert.match(await page.getByTestId('chart-readout').innerText(),/37 website clicks/);
  await page.getByRole('button',{name:'Inspect Aug 31, 2026',exact:true}).focus();

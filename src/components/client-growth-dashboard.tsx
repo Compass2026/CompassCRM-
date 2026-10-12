@@ -1,10 +1,11 @@
+import { GrowthWorkSummary } from "./growth-work-summary";
 import { GrowthAnalytics } from "./growth-charts";
 import { GrowthRankingSummary } from "./growth-ranking-summary";
 import type { GrowthRanking } from "@/lib/growth-rankings";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, CalendarDays, Flag, Layers3, Activity } from "lucide-react";
 import { REPORT_AREAS, STATUS_LABELS, agencyToday } from "@/lib/reporting";
-import { deltaLabel, growthDate, growthSeries, type GrowthMeasurement, type GrowthRange, type SearchHistory } from "@/lib/client-growth";
+import { deltaLabel, growthDate, growthSeries, type GrowthMeasurement, type GrowthRange, type SearchHistory, type GrowthWork } from "@/lib/client-growth";
 
 const number=(value:number|null|undefined)=>value==null?"Not measured":value.toLocaleString("en-US",{maximumFractionDigits:2});
 const value=(r?:GrowthMeasurement)=>r?.status==="measured"?number(r.value):r?STATUS_LABELS[r.status]:"Not measured";
@@ -28,7 +29,7 @@ function Trend({points,label}:{points:{date:string;value:number|null}[];label:st
   </figure>;
 }
 
-export function ClientGrowthDashboard({rows,search,range,action,teamClientId,error,searchError,rankings,rankingsError}:{rankings:GrowthRanking[];rankingsError?:string|null;rows:GrowthMeasurement[];search:SearchHistory[];range:GrowthRange;action:string;teamClientId?:string;error?:string|null;searchError?:string|null}) {
+export function ClientGrowthDashboard({rows,search,range,action,teamClientId,error,searchError,rankings,rankingsError,work,workError}:{work:GrowthWork[];workError?:string|null;rankings:GrowthRanking[];rankingsError?:string|null;rows:GrowthMeasurement[];search:SearchHistory[];range:GrowthRange;action:string;teamClientId?:string;error?:string|null;searchError?:string|null}) {
   const series=growthSeries(rows,range);
   const measured=series.filter(s=>s.current?.status==="measured");
   const starting=series.map(s=>s.baseline?.window_end).filter((d):d is string=>!!d).sort()[0];
@@ -47,6 +48,7 @@ export function ClientGrowthDashboard({rows,search,range,action,teamClientId,err
       </div>
     </div>
     {!error && <GrowthAnalytics rows={rows} range={range}/>}
+    <GrowthWorkSummary work={work} range={range} error={workError}/>
     <GrowthRankingSummary rows={rankings} error={rankingsError} teamClientId={teamClientId}/>
     <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer text-sm font-semibold text-navy-900">Reporting dates &amp; filters <span className="ml-2 text-xs font-normal text-slate-500">Monthly and custom views</span></summary>
     <form action={action} className="surface flex flex-wrap items-end gap-3 p-4" aria-label="Progress dates">

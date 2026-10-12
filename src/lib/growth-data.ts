@@ -63,3 +63,14 @@ export async function loadGrowthRankings(supabase:SupabaseClient<Database>,clien
   }
   return {rankings:[],rankingsError:"Ranking history exceeds this dashboard's limit. Ask Compass to review the complete keyword list."};
 }
+
+export async function loadGrowthWork(supabase:SupabaseClient<Database>,clientId:string,portal=false) {
+  const work:import("./client-growth").GrowthWork[]=[];
+  for(let offset=0;offset<20000;offset+=500) {
+    const {data,error}=await supabase.from(portal?"portal_growth_work":"client_growth_work").select("id,client_id,kind,title,published_on,url").eq("client_id",clientId).order("published_on",{ascending:false}).order("id").range(offset,offset+499);
+    if(error) return {work:[],workError:"Published work could not be loaded. Please retry."};
+    work.push(...(data??[]));
+    if((data?.length??0)<500) return {work,workError:null};
+  }
+  return {work:[],workError:"Published work exceeds this dashboard's limit. Ask Compass to review the full history."};
+}
