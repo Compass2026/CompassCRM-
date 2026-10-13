@@ -58,6 +58,20 @@ test("brief hash: stable for the same record, different when the record changes"
   assert.notEqual(await blogBriefHash(r.brief), await blogBriefHash(brief()));
 });
 
+test("lint: a brand-approved standing CTA is not an unsupported free-price claim", () => {
+  const b=brief();
+  b.cta.text="Get a Free Quote";
+  b.brand.standing_cta="Get a Free Quote";
+  const approved=lintBlog(b,{...clone(GOOD_BLOG),cta:{text:"Get a Free Quote",url:PAGE}},{gazetteer:GAZETTEER});
+  assert.ok(!codes(approved).includes("unsupported_pricing"),JSON.stringify(approved.problems));
+  assert.ok(!codes(approved).includes("cta_not_standing"),JSON.stringify(approved.problems));
+  const inBody=lintBlog(b,{...clone(GOOD_BLOG),body_markdown:GOOD_BLOG.body_markdown+"\\nGet a Free Quote\\n",cta:{text:"Get a Free Quote",url:PAGE}},{gazetteer:GAZETTEER});
+  assert.ok(codes(inBody).includes("unsupported_pricing"),"Unapproved free-price language inside prose still blocks");
+  const substituted=lintBlog(b,{...clone(GOOD_BLOG),cta:{text:"Get a Free Estimate",url:PAGE}},{gazetteer:GAZETTEER});
+  assert.ok(codes(substituted).includes("cta_not_standing"),"A non-matching CTA must still be rejected");
+  assert.ok(codes(substituted).includes("unsupported_pricing"),"Free offer in a non-approved CTA must still be rejected");
+});
+
 test("lint: the good draft passes", () => {
   const r = lint();
   assert.ok(wordCount(GOOD_BLOG.body_markdown) >= BLOG_RULES.min_words);
