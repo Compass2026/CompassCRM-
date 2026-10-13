@@ -105,6 +105,7 @@ test("integration failures drive linked alerts and onboarding; recovery removes 
  m.integrations[0].state='verified';v=buildOperationsV2(m);
  assert.equal(v.clients[0].readiness.find(c=>c.key==='analytics').state,'recorded');
  assert.ok(!v.alerts.some(a=>a.id==='a:integration:ga4'));
+ m.integrations[0].state='waiting';v=buildOperationsV2(m);assert.equal(v.clients[0].readiness.find(c=>c.key==='analytics').state,'waiting');assert.equal(v.alerts.find(a=>a.id==='a:integration:ga4').severity,'setup');
  m.integrations[0].state='running';v=buildOperationsV2(m);
  assert.equal(v.clients[0].readiness.find(c=>c.key==='analytics').state,'waiting');
 });
