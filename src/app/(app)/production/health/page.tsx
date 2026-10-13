@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Activity, ArrowRight, ChartNoAxesCombined, CircleAlert, Database, Layers3, ShieldCheck, Workflow } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { buildOperationsHealth, type HealthInputs, type ClientHealth } from "@/lib/operations-health";
+import { buildOperationsV2 } from "@/lib/operations-readiness";
+import { ControlCenterV2 } from "@/components/operations/control-center-v2";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +83,7 @@ export default async function OperationsHealthPage() {
   const [
     clientsQ, keywordsQ, sitesQ, gscQ, ga4Q, gbpQ, draftsQ,
     publicationsQ, liteQ, notificationsQ, backlinksQ, socialQ,
-    subscriptionsQ, portalQ,
+    subscriptionsQ, portalQ, measuredQ, brandsQ, boardsQ, intakeQ, detailedDraftsQ, detailedReleasesQ,
   ] = await Promise.all([
     db.from("clients").select("id,name,status").in("status", ["active", "launching"]).order("name"),
     db.from("keywords").select("client_id,is_active,is_tracked").limit(3000),
@@ -97,10 +99,19 @@ export default async function OperationsHealthPage() {
     db.from("social_accounts").select("client_id,publish_enabled").limit(3000),
     db.from("subscriptions").select("client_id,livemode,status").limit(3000),
     db.from("portal_users").select("client_id,is_active").limit(3000),
+    db.from("report_measurements").select("client_id,source,window_end,created_at").eq("status", "measured").limit(3000),
+    db.from("client_brand_workspaces").select("id,client_id,status,blog_site_id").limit(3000),
+    db.from("brand_boards").select("client_id,status").limit(3000),
+    db.from("inquiry_sources").select("client_id,enabled").limit(3000),
+    db.from("content_drafts").select("id,client_id,status,title,topic,request_task_id,created_at").limit(3000),
+    db.from("blog_publications").select("id,client_id,draft_id,status,last_error,released_at").limit(3000),
   ]);
   if (clientsQ.error) {
     return <section className="surface p-5" role="alert">The client roster could not be loaded. No health conclusions were drawn. Please retry.</section>;
   }
+  // A full page is an ambiguous truncated result, never a complete count.
+  const sourceCap = 3000;
+  const cap = (rows: unknown[] | null): boolean => (rows?.length ?? 0) >= sourceCap;
   const sourceResults = [
     ["Keywords", keywordsQ], ["Websites", sitesQ], ["Search Console", gscQ],
     ["Analytics", ga4Q], ["Business Profile", gbpQ], ["Drafts", draftsQ],
@@ -108,59 +119,64 @@ export default async function OperationsHealthPage() {
     ["SMS alerts", notificationsQ], ["Backlinks", backlinksQ],
     ["Social accounts", socialQ], ["Subscriptions", subscriptionsQ], ["Client portal", portalQ],
   ] as const;
-  const failedSources = sourceResults.filter(([, query]) => !!query.error).map(([name]) => name);
+  const failedSources = sourceResults.filter(([, query]) => !!query.error || cap(query.data)).map(([name]) => name);
   // null: read failed; []: successful empty read.
   const inputs: HealthInputs = {
     clients: clientsQ.data ?? [],
-    keywords: keywordsQ.error ? null : keywordsQ.data ?? [],
-    sites: sitesQ.error ? null : sitesQ.data ?? [],
-    gsc: gscQ.error ? null : gscQ.data ?? [],
-    ga4: ga4Q.error ? null : ga4Q.data ?? [],
-    gbp: gbpQ.error ? null : gbpQ.data ?? [],
-    drafts: draftsQ.error ? null : draftsQ.data ?? [],
-    publications: publicationsQ.error ? null : publicationsQ.data ?? [],
-    lite: liteQ.error ? null : liteQ.data ?? [],
-    notifications: notificationsQ.error ? null : notificationsQ.data ?? [],
-    backlinks: backlinksQ.error ? null : backlinksQ.data ?? [],
-    social: socialQ.error ? null : socialQ.data ?? [],
-    subscriptions: subscriptionsQ.error ? null : subscriptionsQ.data ?? [],
-    portal: portalQ.error ? null : portalQ.data ?? [],
+    keywords: keywordsQ.error || cap(keywordsQ.data) ? null : keywordsQ.data ?? [],
+    sites: sitesQ.error || cap(sitesQ.data) ? null : sitesQ.data ?? [],
+    gsc: gscQ.error || cap(gscQ.data) ? null : gscQ.data ?? [],
+    ga4: ga4Q.error || cap(ga4Q.data) ? null : ga4Q.data ?? [],
+    gbp: gbpQ.error || cap(gbpQ.data) ? null : gbpQ.data ?? [],
+    drafts: draftsQ.error || cap(draftsQ.data) ? null : draftsQ.data ?? [],
+    publications: publicationsQ.error || cap(publicationsQ.data) ? null : publicationsQ.data ?? [],
+    lite: liteQ.error || cap(liteQ.data) ? null : liteQ.data ?? [],
+    notifications: notificationsQ.error || cap(notificationsQ.data) ? null : notificationsQ.data ?? [],
+    backlinks: backlinksQ.error || cap(backlinksQ.data) ? null : backlinksQ.data ?? [],
+    social: socialQ.error || cap(socialQ.data) ? null : socialQ.data ?? [],
+    subscriptions: subscriptionsQ.error || cap(subscriptionsQ.data) ? null : subscriptionsQ.data ?? [],
+    portal: portalQ.error || cap(portalQ.data) ? null : portalQ.data ?? [],
   };
   const summary = buildOperationsHealth(inputs);
   const { counts, coverage } = summary;
   const attention = summary.clients.filter((c) => (c.publicationProblems ?? 0) > 0 || (c.inReview ?? 0) > 0);
   const smsOff = summary.clients.filter((c) => c.crmLite === "sms_off");
   const noLiveBilling = summary.clients.filter((c) => c.liveSubscriptions === 0);
+  // A limit reached is not a complete dataset. Fail closed rather than
+  // present truncated source totals as if all clients were accounted for.
+  const v2SourceErrors = [
+    ...failedSources,
+    ...(measuredQ.error || cap(measuredQ.data) ? ["Measurement freshness"] : []),
+    ...(brandsQ.error || cap(brandsQ.data) ? ["Brand workspaces"] : []),
+    ...(boardsQ.error || cap(boardsQ.data) ? ["Brand boards"] : []),
+    ...(intakeQ.error || cap(intakeQ.data) ? ["Inquiry intake sources"] : []),
+    ...(detailedDraftsQ.error || cap(detailedDraftsQ.data) ? ["Draft action queue"] : []),
+    ...(detailedReleasesQ.error || cap(detailedReleasesQ.data) ? ["Publisher action queue"] : []),
+  ];
+  const v2 = buildOperationsV2({
+    clients: summary.clients,
+    measured: measuredQ.error || cap(measuredQ.data) ? null : measuredQ.data ?? [],
+    brands: brandsQ.error || cap(brandsQ.data) ? null : brandsQ.data ?? [],
+    boards: boardsQ.error || cap(boardsQ.data) ? null : boardsQ.data ?? [],
+    intake: intakeQ.error || cap(intakeQ.data) ? null : intakeQ.data ?? [],
+    drafts: detailedDraftsQ.error || cap(detailedDraftsQ.data) ? null : detailedDraftsQ.data ?? [],
+    releases: detailedReleasesQ.error || cap(detailedReleasesQ.data) ? null : detailedReleasesQ.data ?? [],
+    sourceErrors: v2SourceErrors,
+    now: new Date().toISOString(),
+  });
+
 
   return <div className="space-y-7" data-operations-health>
-    <header className="relative overflow-hidden rounded-3xl bg-navy-900 p-6 text-white shadow-lg sm:p-8">
-      <div aria-hidden="true" className="pointer-events-none absolute -right-14 -top-28 size-80 rounded-full border-[52px] border-white/5" />
-      <div className="relative flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.2em] text-orange-300">
-            <Activity className="size-4" /> Compass operations
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Control Center</h1>
-          <p className="max-w-xl text-sm leading-6 text-blue-100/80">
-            All five layers. Real production records, blocked work, and source coverage.
-            No estimated activity or invented performance.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <Link href="/production" className="rounded-full border border-white/25 bg-white/10 px-4 py-2 hover:bg-white/20">Weekly production</Link>
-          <Link href="/clients" className="rounded-full bg-orange-500 px-4 py-2 font-semibold text-navy-900 hover:bg-orange-400">Clients</Link>
-        </div>
-      </div>
-      <div className="relative mt-6 flex flex-wrap gap-3 border-t border-white/15 pt-5 text-sm">
-        <span className="rounded-xl bg-white/10 px-4 py-2"><strong>{counts.clients}</strong> active / launching clients</span>
-        <span className="rounded-xl bg-white/10 px-4 py-2"><strong>{display(counts.publicationProblems)}</strong> publishing exceptions</span>
-        <span className="rounded-xl bg-white/10 px-4 py-2"><strong>{display(counts.inReview)}</strong> awaiting content review</span>
-      </div>
-    </header>
     {failedSources.length > 0 && <div role="alert" className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" data-source-warning>
       <CircleAlert className="mt-0.5 size-5 shrink-0" />
       <p><strong>Partial visibility:</strong> {failedSources.join(", ")} could not be read. Affected values show Unavailable or Unknown rather than zero.</p>
     </div>}
+    <ControlCenterV2 data={v2} />
+    <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4" data-legacy-health>
+      <summary className="cursor-pointer text-sm font-semibold text-navy-900">
+        Classic five-layer counts and detailed operations table
+      </summary>
+      <div className="mt-5 space-y-6">
     <section aria-labelledby="layers-heading" className="space-y-3">
       <div className="flex items-center gap-2">
         <Layers3 className="size-5 text-orange-600" />
@@ -211,9 +227,11 @@ export default async function OperationsHealthPage() {
         </table>
       </div>
     </section>
+      </div>
+    </details>
     <footer className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
       <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-blue-700" />
-      <p><strong>Read-only first release.</strong> Counts come from team-authorized production CRM records.
+      <p><strong>Read-only Control Center.</strong> Counts come from team-authorized production CRM records.
         A completed scheduled database job is not proof that an external provider delivered a notification.
         An approved draft is not a published article; only published release records count as execution.
         Data observations indicate presence, not automatic freshness. No SMS, billing, approval or publishing actions can be triggered here.</p>
