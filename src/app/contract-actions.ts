@@ -13,6 +13,7 @@ import {
 } from "@/lib/agreements-server";
 import type { Contract } from "@/lib/agreements";
 import { buildAgreementPdf } from "@/lib/agreement-pdf";
+import { buildAgreementEmail } from "@/lib/agreement-email";
 
 const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const base = (id: string) => `/clients/${id}/agreements`;
@@ -136,6 +137,7 @@ export async function sendContractLinkAction(
       issuer: string;
     }>(actor, "delivery", { id, token_hash: sha256(token) });
     const url = `${agreementOrigin()}/sign/${token}`;
+    const email = buildAgreementEmail(c, agreementOrigin(), url);
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -146,8 +148,7 @@ export async function sendContractLinkAction(
       body: JSON.stringify({
         from: process.env.AGREEMENTS_EMAIL_FROM,
         to: [recipient.email],
-        subject: `${recipient.issuer}: ${recipient.title}`,
-        text: `Hello ${recipient.name},\n\nPlease review your agreement from ${recipient.issuer}:\n${url}\n\nYou will verify your email before reviewing and signing. Contact us if you need changes or a paper copy. Signing does not authorize payment.\n\nThank you,\n${recipient.issuer}`,
+        ...email,
       }),
       signal: AbortSignal.timeout(15000),
     });

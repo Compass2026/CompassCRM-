@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentTeamRole } from "@/lib/team";
-import { agreementStaff, agreementMailReady } from "@/lib/agreements-server";
+import { agreementStaff, agreementMailReady, agreementOrigin } from "@/lib/agreements-server";
+import { buildAgreementEmail } from "@/lib/agreement-email";
+import { AgreementEmailPreview } from "@/components/agreements/agreement-email-preview";
 import { agreementStatus, type Contract } from "@/lib/agreements";
 import {
   saveContractAction,
@@ -157,12 +159,17 @@ export default async function AgreementPage({
                   id={c.id}
                   providerName={me.name}
                   issued={state === "issued"}
+                  origin={agreementOrigin()}
                   ready={
                     agreementMailReady() &&
                     !!c.recipient_email &&
                     c.snapshot.terms.length >= 50
                   }
                 />
+                <div className="mt-4 border-t pt-4">
+                  <AgreementEmailPreview email={buildAgreementEmail(c, agreementOrigin(), null)} recipient={c.recipient_email} />
+                  <p className="mt-2 text-xs text-muted-foreground">Uses the saved agreement details. Save draft changes before previewing.</p>
+                </div>
               </CardContent>
             </Card>
           )}
