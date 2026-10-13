@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {buildOperationalEvidence} from '../src/lib/operations-evidence.ts';
 const now='2026-10-13T03:00:00Z',recent='2026-10-12T12:00:00Z';
-const fixture=()=>({clients:[{id:'a',name:'A',website_url:'https://a.test'},{id:'b',name:'B',website_url:'https://b.test'}],keywords:[],rankings:[],rankRuns:[],backlinks:[],backlinkChecks:[],backlinkRuns:[],profileMeasures:[],social:[],notifications:[],billing:[],sites:[],brands:[],services:[],claims:[],authority:[],now});
+const fixture=()=>({clients:[{id:'a',name:'A',website_url:'https://a.test'},{id:'b',name:'B',website_url:'https://b.test'}],keywords:[],rankings:[],rankRuns:[],backlinks:[],backlinkChecks:[],backlinkRuns:[],profileMeasures:[],social:[],socialAccounts:[],notifications:[],billing:[],sites:[],brands:[],services:[],claims:[],authority:[],now});
 const card=(f,key)=>buildOperationalEvidence(f).cards.find(c=>c.clientId==='a'&&c.key===key);
 test('unavailable source evidence remains unknown, not empty or recorded',()=>{
  for(const [source,key] of [['rankings','rankings'],['backlinkChecks','backlinks'],['social','social'],['notifications','notifications'],['billing','billing'],['sites','websites']]){const f=fixture();f[source]=null;assert.equal(card(f,key).state,'unknown');}
@@ -42,4 +42,11 @@ test('brand onboarding requires approved scoped services, confirmed claims, mapp
  const f=fixture();f.brands=[{client_id:'a',id:'brand',name:'Brand',service_ids:['s'],claim_ids:['c'],blog_site_id:'site',website_url:'https://a.test'}];f.services=[{client_id:'a',id:'s',status:'approved'}];f.claims=[{client_id:'a',id:'c',status:'confirmed'}];f.keywords=[{client_id:'a',id:'k',is_active:true,is_tracked:true,service_id:'s',intent:'commercial',target_url:'https://a.test/service'}];f.sites=[{client_id:'b',id:'site',url:'https://a.test',controlled_by_compass:true,vercel_project:'project',repo_url:'repo'}];
  const out=buildOperationalEvidence(f);assert.equal(out.checks.a.find(c=>c.key==='services:brand').state,'recorded');assert.equal(out.checks.a.find(c=>c.key==='claims:brand').state,'recorded');assert.equal(out.checks.a.find(c=>c.key==='intent:brand').state,'recorded');assert.equal(out.checks.a.find(c=>c.key==='destination:brand').state,'missing');
  f.claims[0].status='unverified';assert.equal(buildOperationalEvidence(f).checks.a.find(c=>c.key==='claims:brand').state,'waiting');
+});
+
+test('social onboarding isolates brand account ownership without requiring publishing enabled',()=>{
+ const f=fixture();f.brands=[{client_id:'a',id:'brand',name:'Brand',service_ids:[],claim_ids:[],facebook_account_id:'account',website_url:'https://a.test'}];
+ f.socialAccounts=[{client_id:'b',id:'account',platform:'facebook',external_account_id:'external',publish_account_id:'provider'}];
+ assert.equal(buildOperationalEvidence(f).checks.a.find(c=>c.key==='social-channel:brand').state,'missing');
+ f.socialAccounts[0].client_id='a';assert.equal(buildOperationalEvidence(f).checks.a.find(c=>c.key==='social-channel:brand').state,'recorded');
 });

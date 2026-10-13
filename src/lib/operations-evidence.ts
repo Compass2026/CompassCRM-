@@ -12,6 +12,7 @@ export type OperationalInput={
  backlinkChecks:{opportunity_id:string;observed_on:string;recorded_at:string;result:string}[]|null;
  backlinkRuns:(Row & {host:string;status:string;created_at:string;finished_at:string|null;results:unknown})[]|null;
  profileMeasures:(Row & {scope:string;source:string;metric:string;window_end:string;created_at:string})[]|null;
+ socialAccounts:(Row & {id:string;platform:string;external_account_id:string|null;publish_account_id:string|null})[]|null;
  social:(Row & {id:string;platform:string;review_status:string;publish_status:string;last_attempt_at:string|null;scheduled_at:string|null;published_at:string|null;published_url:string|null;external_post_id:string|null})[]|null;
  notifications:(Row & {id:string;status:string;block_reason:string|null;last_attempt_at:string|null;delivered_at:string|null;provider_status:string|null;next_attempt_at:string|null;created_at:string})[]|null;
  billing:(Row & {status:string;livemode:boolean;checked_at:string;attention_reasons:string[];warnings:string[]})[]|null;
@@ -59,14 +60,14 @@ export function buildOperationalEvidence(input:OperationalInput):OperationalEvid
     const state=!r?'missing':r.status!=='completed'||outcomes.some(o=>o.status==='failed')?'partial':!good||!fresh(r.finished_at,8)||!measured||!fresh(measured.window_end,8)?'unverified':'current';
     return {host,state,run:r,measured};
    });
-   card('backlinks','Backlinks',!hosts.length?'setup':hostStatus.every(h=>h.state==='current')?'recorded':'attention',hostStatus.map(h=>`${h.host}: ${h.state}`).join('; ')+`. ${opportunities.filter(o=>o.stage==='research').length} opportunities in research. Provider index counts do not prove earned placements.`,latest(profileRuns,r=>r.created_at)?.created_at??null,latest(measures.filter(m=>valid(m.created_at)),m=>m.created_at)?.created_at??null,'Review incomplete provider history and prioritize the next backlink action.',base+'/backlinks');
+   card('backlinks','Backlinks',!hosts.length?'setup':hostStatus.every(h=>h.state==='current')?'recorded':'attention',(hosts.length?hostStatus.map(h=>`${h.host}: ${h.state}`).join('; '):'No configured website host')+`. ${opportunities.filter(o=>o.stage==='research').length} opportunities in research. Provider index counts do not prove earned placements.`,latest(profileRuns,r=>r.created_at)?.created_at??null,latest(measures.filter(m=>valid(m.created_at)),m=>m.created_at)?.created_at??null,'Review incomplete provider history and prioritize the next backlink action.',base+'/backlinks');
    const due=opportunities.filter(o=>o.stage!=='closed'&&o.due_on&&o.due_on<=day);
    if(due.length)warn('backlinks-due','Backlink follow-ups due',`${due.length} open opportunities have a due date on or before ${day}. Review their recorded next actions.`,base+'/backlinks');
    const unresolved=opportunities.filter(o=>o.stage==='placed'&&(()=>{const c=latest(input.backlinkChecks!.filter(c=>c.opportunity_id===o.id),c=>c.observed_on);return !c||c.result!=='live'||!fresh(c.observed_on,30);})());
    if(unresolved.length)warn('backlinks-check','Reported placements need verification',`${unresolved.length} placements lack a current live check. Review the latest evidence before claiming a live backlink.`,base+'/backlinks');
    if(opportunities.some(o=>o.stage==='research'))warn('backlinks-research','Backlink research ready for review',`${opportunities.filter(o=>o.stage==='research').length} researched opportunities await prioritization. Review relevance before approving outreach.`,base+'/backlinks','setup');
   }
-  const posts=own(input.social);
+  const posts=own(input.social),accounts=own(input.socialAccounts);
   if(input.social===null)card('social','Social publishing','unknown','Social review and delivery records unavailable.',null,null,'Reload social workflow evidence.',base+'/social');
   else {
    const problems=posts.filter(p=>p.publish_status==='failed'||(p.publish_status==='publishing'&&(!valid(p.last_attempt_at)||clock-time(p.last_attempt_at)>30*60000))||(p.publish_status==='scheduled'&&valid(p.scheduled_at)&&clock-time(p.scheduled_at)>35*60000));
@@ -99,6 +100,7 @@ export function buildOperationalEvidence(input:OperationalInput):OperationalEvid
    const scopedKeys=keys.filter(k=>!brands.length||scope.service_ids.includes(k.service_id??''));
    const mapped=scopedKeys.filter(k=>k.intent&&k.target_url&&serviceRows.some(s=>s.id===k.service_id&&s.status==='approved'));
    check('intent:'+scope.id,prefix+'Keyword intent and owner pages',input.keywords===null||input.services===null||input.brands===null?'unknown':scopedKeys.length&&mapped.length===scopedKeys.length?'recorded':'missing',base+'/keywords',`${mapped.length} of ${scopedKeys.length} tracked keywords have intent, approved service and owner page.`);
+   check('social-channel:'+scope.id,prefix+'Social channel connection',input.socialAccounts===null||input.brands===null?'unknown':accounts.some(a=>(brands.length?a.id===scope.facebook_account_id&&a.platform==='facebook':a.platform!=='google_business')&&!!a.external_account_id&&!!a.publish_account_id)?'recorded':'missing',base+'/social',brands.length?'Verify the brand-specific Facebook account. Connection does not enable or authorize publication.':'Verify the agreed social channels. Connection does not enable or authorize publication.');
    if(brands.length)check('destination:'+scope.id,prefix+'Website publishing destination',input.sites===null?'unknown':scope.blog_site_id&&sites.some(s=>s.id===scope.blog_site_id&&s.vercel_project&&s.repo_url&&reportingHost(s.url)===reportingHost(scope.website_url))?'recorded':'missing',base+'/brand','Destination must belong to this client and match the brand website. A mapping does not authorize publication.');
   }
   const authority=input.authority?.find(r=>r.client_id===id);

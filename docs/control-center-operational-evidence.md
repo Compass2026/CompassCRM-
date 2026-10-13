@@ -32,7 +32,7 @@ provider request, credential read or new database object is introduced.
 ## Onboarding
 
 Approved services, confirmed claims, keyword intent/service/owner-page mapping and
-brand website destination ownership are checked per brand, preserving BHG's three
+brand social account connections and website destination ownership are checked per brand, preserving BHG's three
 websites. Claims awaiting confirmation remain waiting. Missing source reads remain
 unknown. Recent Authority inventory is a separate evidence check, not approval to
 produce or publish content. A dated measurement is an observed reporting baseline,
