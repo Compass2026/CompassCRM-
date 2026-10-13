@@ -19,13 +19,13 @@ do $$ declare payload jsonb:='{"brand_workspace_id":"00000000-0000-4000-c000-000
  if run is null then raise exception 'missing lease'; end if;
  if backlink_sync_claim('00000000-0000-4000-b000-00000000000a','secondary.example.test')->>'id' is not null then raise exception 'duplicate API claim'; end if;
  payload:='{"task_id":"00000000-0000-4000-d000-000000000001","values":{"backlinks_total":10,"referring_domains":8}}';
- perform backlink_profile_record(run,'summary',current_date,current_date,payload);
+ perform backlink_profile_record(run,'summary',(now() at time zone 'America/Chicago')::date,(now() at time zone 'America/Chicago')::date,payload);
  select min(sequence) into first_seq from report_measurements where source='DataForSEO (unreviewed index)' and metric='backlinks_total';
- if backlink_profile_record(run,'summary',current_date,current_date,payload)->>'status'<>'unchanged' then raise exception 'duplicate receipt'; end if;
- perform backlink_profile_record(run,'summary',current_date,current_date,jsonb_set(payload,'{values,backlinks_total}','12'));
+ if backlink_profile_record(run,'summary',(now() at time zone 'America/Chicago')::date,(now() at time zone 'America/Chicago')::date,payload)->>'status'<>'unchanged' then raise exception 'duplicate receipt'; end if;
+ perform backlink_profile_record(run,'summary',(now() at time zone 'America/Chicago')::date,(now() at time zone 'America/Chicago')::date,jsonb_set(payload,'{values,backlinks_total}','12'));
  if (select value from report_measurements where sequence=first_seq)<>10 then raise exception 'baseline overwritten'; end if;
- begin perform backlink_profile_record(run,'summary',current_date,current_date,jsonb_set(payload,'{values,referring_domains}','11')); raise exception 'bad domain count'; exception when check_violation then null; end;
- begin perform backlink_profile_record(run,'history',date_trunc('month',current_date)::date,current_date,'{"task_id":"00000000-0000-4000-d000-000000000001","values":{"links_new":10,"links_lost":8}}'); raise exception 'incomplete month accepted'; exception when check_violation then null; end;
+ begin perform backlink_profile_record(run,'summary',(now() at time zone 'America/Chicago')::date,(now() at time zone 'America/Chicago')::date,jsonb_set(payload,'{values,referring_domains}','11')); raise exception 'bad domain count'; exception when check_violation then null; end;
+ begin perform backlink_profile_record(run,'history',date_trunc('month',(now() at time zone 'America/Chicago')::date)::date,(now() at time zone 'America/Chicago')::date,'{"task_id":"00000000-0000-4000-d000-000000000001","values":{"links_new":10,"links_lost":8}}'); raise exception 'incomplete month accepted'; exception when check_violation then null; end;
 end $$;
 reset role;
 reset session authorization;
