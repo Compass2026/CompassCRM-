@@ -606,3 +606,38 @@ test("explicit blog site selection never falls back to the client's first websit
   assert.equal(missing.status,404);
   assert.equal(h.supabase.store.sites.length,1);
 });
+
+test("a content entry updates only its own site's Vercel binding under a multi-brand client", async()=>{
+ const h=setup({site:LUCAS_SITE,repos:TOM_REPO,vercel:established()});
+ const target="00000000-0000-4000-8000-000000000051";
+ h.supabase.store.sites[0].id=target;
+ h.supabase.store.sites.push({id:"00000000-0000-4000-8000-000000000052",client_id:CLIENT,
+   url:"https://sibling.example.test",repo_url:"https://github.com/Compass2026/sibling",
+   branch:"main",stack:"nextjs",controlled_by_compass:true,vercel_project:"sibling-project",
+   staging_url:"https://sibling.example.test"});
+ const before=structuredClone(h.supabase.store.sites[1]);
+ const r=await h.post({client_id:CLIENT,site_id:target,branch:"main",
+   message:"Blog content entry",files:[{path:"data/blog-posts.json",content:"[]"}]});
+ assert.equal(r.status,200,JSON.stringify(r.body));
+ assert.equal(r.body.vercel.target,"production");
+ assert.equal(h.supabase.store.sites[0].vercel_project,"ridge-safety");
+ assert.deepEqual(h.supabase.store.sites[1],before,"sibling domain and Vercel binding must not be changed");
+ const vercelWrites=h.supabase.writes.filter(w=>w.table==="sites"&&w.op==="update"&&"vercel_project" in w.patch);
+ assert.equal(vercelWrites.length,1);
+ assert.deepEqual(vercelWrites[0].filters,[["id",target]]);
+});
+test("an explicit redeploy never rewrites another brand's Vercel project", async()=>{
+ const h=setup({site:LUCAS_SITE,repos:TOM_REPO,vercel:established()});
+ const sibling={id:"00000000-0000-4000-8000-000000000052",client_id:CLIENT,
+   url:"https://sibling.example.test",repo_url:"https://github.com/Compass2026/sibling",
+   branch:"main",stack:"nextjs",vercel_project:"sibling-project",
+   staging_url:"https://sibling.example.test"};
+ h.supabase.store.sites.push(structuredClone(sibling));
+ const r=await h.post({client_id:CLIENT,deploy:true});
+ assert.equal(r.status,200,JSON.stringify(r.body));
+ assert.equal(r.body.vercel.target,"production");
+ assert.deepEqual(h.supabase.store.sites[1],sibling);
+ const vercelWrites=h.supabase.writes.filter(w=>w.table==="sites"&&w.op==="update"&&"vercel_project" in w.patch);
+ assert.equal(vercelWrites.length,1);
+ assert.deepEqual(vercelWrites[0].filters,[["id","site-1"]]);
+});

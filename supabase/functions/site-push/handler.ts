@@ -997,11 +997,13 @@ export function createSitePushHandler(deps: HandlerDeps) {
 
     if (deployOnly) {
       const vercel = await vercelStep();
-      if ((vercel.status === "created" || vercel.status === "deployed") && vercel.target === "production") {
+      if ((vercel.status === "created" || vercel.status === "deployed") && vercel.target === "production" && siteRow?.id) {
+        // A client can own multiple independent branded websites.
+        // Updating by client_id corrupts sibling brands' Vercel projects.
         await supabase
           .from("sites")
           .update({ vercel_project: vercel.project, staging_url: vercel.staging_url })
-          .eq("client_id", client.id);
+          .eq("id", siteRow.id);
       }
       return Response.json({ repo_url: repoUrl, branch, deploy_only: true, vercel },
         { status: vercel.status === "failed" ? 502 : 200 });
@@ -1192,6 +1194,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
     const recordQuery = supabase.from("sites").select("id, repo_url").eq("client_id", client.id);
     if (siteRow) recordQuery.eq("id", siteRow.id);
     const { data: site } = await recordQuery.limit(1).maybeSingle();
+    let persistedSiteId: string | null = site?.id ?? null;
     if (site) {
       await supabase
         .from("sites")
@@ -1209,7 +1212,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
       // No row yet: record what the push implies. The stack comes from the
       // files (never astro by default); the branch of record is the branch
       // this push landed on only when it IS the branch of record.
-      await supabase.from("sites").insert({
+      const { data: insertedSite, error: insertSiteError } = await supabase.from("sites").insert({
         client_id: client.id,
         url: client.website_url,
         stack: plan.stackForInsert,
@@ -1220,15 +1223,21 @@ export function createSitePushHandler(deps: HandlerDeps) {
         work_mode: "new_build",
         last_pushed_at: new Date().toISOString(),
         last_commit_url: commitUrl,
-      });
+      }).select("id").single();
+      if (insertSiteError || !insertedSite?.id) {
+        throw new Error("The new website record could not be resolved after the Git commit.");
+      }
+      persistedSiteId = insertedSite.id;
     }
 
     const vercel = await vercelStep(commit.sha, preflight);
-    if ((vercel.status === "created" || vercel.status === "deployed") && vercel.target === "production") {
+    if ((vercel.status === "created" || vercel.status === "deployed") && vercel.target === "production" && persistedSiteId) {
+      // Keep each BHG brand's project metadata on the site that received
+      // this commit. All sibling sites must retain their own project binding.
       await supabase
         .from("sites")
         .update({ vercel_project: vercel.project, staging_url: vercel.staging_url })
-        .eq("client_id", client.id);
+        .eq("id", persistedSiteId);
     }
 
     return Response.json({
