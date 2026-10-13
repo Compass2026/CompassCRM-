@@ -10,6 +10,7 @@ const links = [
   { href: "/", label: "Dashboard" },
   { href: "/clients", label: "Clients" },
   { href: "/production", label: "Production" },
+  { href: "/production/health", label: "Control Center" },
   { href: "/tasks", label: "Tasks" },
   { href: "/brief", label: "Brief" },
   { href: "/settings", label: "Settings" },
@@ -22,7 +23,7 @@ export function AppNav({ className }: { className?: string }) {
     <nav ref={railRef} aria-label="Main" className={cn(navTrack, "sm:w-auto", className)}>
       {links.map((link) => {
         const active =
-          link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+          link.href === "/" ? pathname === "/" : link.href === "/production" ? pathname === "/production" : pathname.startsWith(link.href);
         return (
           <Link
             key={link.href}
