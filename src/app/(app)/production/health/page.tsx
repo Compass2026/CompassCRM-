@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Activity, ArrowRight, ChartNoAxesCombined, CircleAlert, Database, Layers3, ShieldCheck, Workflow } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { buildOperationsHealth, type HealthInputs, type ClientHealth } from "@/lib/operations-health";
+import { buildOperationsV2 } from "@/lib/operations-readiness";
+import { ControlCenterV2 } from "@/components/operations/control-center-v2";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +83,7 @@ export default async function OperationsHealthPage() {
   const [
     clientsQ, keywordsQ, sitesQ, gscQ, ga4Q, gbpQ, draftsQ,
     publicationsQ, liteQ, notificationsQ, backlinksQ, socialQ,
-    subscriptionsQ, portalQ,
+    subscriptionsQ, portalQ, measuredQ, brandsQ, boardsQ, intakeQ, detailedDraftsQ, detailedReleasesQ,
   ] = await Promise.all([
     db.from("clients").select("id,name,status").in("status", ["active", "launching"]).order("name"),
     db.from("keywords").select("client_id,is_active,is_tracked").limit(3000),
@@ -97,6 +99,12 @@ export default async function OperationsHealthPage() {
     db.from("social_accounts").select("client_id,publish_enabled").limit(3000),
     db.from("subscriptions").select("client_id,livemode,status").limit(3000),
     db.from("portal_users").select("client_id,is_active").limit(3000),
+    db.from("report_measurements").select("client_id,source,window_end,created_at").eq("status", "measured").limit(3000),
+    db.from("client_brand_workspaces").select("id,client_id,status,blog_site_id").limit(3000),
+    db.from("brand_boards").select("client_id,status").limit(3000),
+    db.from("inquiry_sources").select("client_id,enabled").limit(3000),
+    db.from("content_drafts").select("id,client_id,status,title,topic,request_task_id,created_at").limit(3000),
+    db.from("blog_publications").select("id,client_id,draft_id,status,last_error,released_at").limit(3000),
   ]);
   if (clientsQ.error) {
     return <section className="surface p-5" role="alert">The client roster could not be loaded. No health conclusions were drawn. Please retry.</section>;
@@ -131,6 +139,31 @@ export default async function OperationsHealthPage() {
   const attention = summary.clients.filter((c) => (c.publicationProblems ?? 0) > 0 || (c.inReview ?? 0) > 0);
   const smsOff = summary.clients.filter((c) => c.crmLite === "sms_off");
   const noLiveBilling = summary.clients.filter((c) => c.liveSubscriptions === 0);
+  // A limit reached is not a complete dataset. Fail closed rather than
+  // present truncated source totals as if all clients were accounted for.
+  const sourceCap = 3000;
+  const cap = (rows: unknown[] | null): boolean => (rows?.length ?? 0) >= sourceCap;
+  const v2SourceErrors = [
+    ...failedSources,
+    ...(measuredQ.error || cap(measuredQ.data) ? ["Measurement freshness"] : []),
+    ...(brandsQ.error || cap(brandsQ.data) ? ["Brand workspaces"] : []),
+    ...(boardsQ.error || cap(boardsQ.data) ? ["Brand boards"] : []),
+    ...(intakeQ.error || cap(intakeQ.data) ? ["Inquiry intake sources"] : []),
+    ...(detailedDraftsQ.error || cap(detailedDraftsQ.data) ? ["Draft action queue"] : []),
+    ...(detailedReleasesQ.error || cap(detailedReleasesQ.data) ? ["Publisher action queue"] : []),
+  ];
+  const v2 = buildOperationsV2({
+    clients: summary.clients,
+    measured: measuredQ.error || cap(measuredQ.data) ? null : measuredQ.data ?? [],
+    brands: brandsQ.error || cap(brandsQ.data) ? null : brandsQ.data ?? [],
+    boards: boardsQ.error || cap(boardsQ.data) ? null : boardsQ.data ?? [],
+    intake: intakeQ.error || cap(intakeQ.data) ? null : intakeQ.data ?? [],
+    drafts: detailedDraftsQ.error || cap(detailedDraftsQ.data) ? null : detailedDraftsQ.data ?? [],
+    releases: detailedReleasesQ.error || cap(detailedReleasesQ.data) ? null : detailedReleasesQ.data ?? [],
+    sourceErrors: v2SourceErrors,
+    now: new Date().toISOString(),
+  });
+
 
   return <div className="space-y-7" data-operations-health>
     <header className="relative overflow-hidden rounded-3xl bg-navy-900 p-6 text-white shadow-lg sm:p-8">
@@ -161,6 +194,12 @@ export default async function OperationsHealthPage() {
       <CircleAlert className="mt-0.5 size-5 shrink-0" />
       <p><strong>Partial visibility:</strong> {failedSources.join(", ")} could not be read. Affected values show Unavailable or Unknown rather than zero.</p>
     </div>}
+    <ControlCenterV2 data={v2} />
+    <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4" data-legacy-health>
+      <summary className="cursor-pointer text-sm font-semibold text-navy-900">
+        Classic five-layer counts and detailed operations table
+      </summary>
+      <div className="mt-5 space-y-6">
     <section aria-labelledby="layers-heading" className="space-y-3">
       <div className="flex items-center gap-2">
         <Layers3 className="size-5 text-orange-600" />
@@ -211,6 +250,8 @@ export default async function OperationsHealthPage() {
         </table>
       </div>
     </section>
+      </div>
+    </details>
     <footer className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
       <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-blue-700" />
       <p><strong>Read-only first release.</strong> Counts come from team-authorized production CRM records.
