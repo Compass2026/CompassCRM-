@@ -14,10 +14,10 @@ test('launch months and settled month-to-date are separated and never predate pr
  assert.equal(reportingPeriods(1,new Date('2026-10-03T00:00Z'),'America/Chicago','2025-01-01')[0].end,'2026-08-31');
  assert.equal(websiteHost('https://www.example.test'),'example.test');assert.throws(()=>websiteHost('https://user:pass@example.test'));
 });
-function setup({role='admin',website='https://example.test',status=200,empty=false,dbError=false}={}) {
+function setup({role='admin',website='https://example.test',status=200,empty=false,dbError=false,missingCredentials=false,created='2025-01-01T10:00Z',brand=null}={}) {
  const calls=[],writes=[],logs=[];
- const supabase={auth:{getUser:async()=>({data:{user:role?{id:'user'}:null}})},rpc:async(name,args)=>{if(name==='get_secret')return {data:args.secret_name==='SYNC_CRON_SECRET'?'cron':'secret'};writes.push(args);return dbError?{error:{}}:{data:{status:'imported'}};},from(name){const q={select(){return q;},eq(){return q;},maybeSingle:async()=>({data:name==='clients'?{id,status:'active',ga4_property:property,website_url:'https://example.test'}:{role}}),insert:async v=>{logs.push(v);return {};},update(v){logs.push(v);return {eq:async()=>({})};}};return q;}};
- const request=async(url,options)=>{calls.push({url:String(url),options});if(String(url).endsWith('/token'))return Response.json({access_token:'secret token'});if(String(url).includes('/dataStreams'))return Response.json({dataStreams:[{webStreamData:{defaultUri:website}}]});if(!String(url).endsWith(':runReport'))return Response.json({name:property,timeZone:'America/Chicago',createTime:'2025-01-01T10:00Z'});return status===200?Response.json(empty?{rows:[]}:fixture()):Response.json({error:'private payload'},{status});};
+ const supabase={auth:{getUser:async()=>({data:{user:role?{id:'user'}:null}})},rpc:async(name,args)=>{if(name==='get_secret')return {data:args.secret_name==='SYNC_CRON_SECRET'?'cron':missingCredentials?null:'secret'};writes.push(args);return dbError?{error:{}}:{data:{status:'imported'}};},from(name){const q={select(){return q;},eq(){return q;},maybeSingle:async()=>({data:name==='clients'?{id,status:'active',ga4_property:property,website_url:'https://example.test'}:name==='client_brand_workspaces'?brand:{role}}),insert:async v=>{logs.push(v);return {};},update(v){logs.push(v);return {eq:async()=>({})};}};return q;}};
+ const request=async(url,options)=>{calls.push({url:String(url),options});if(String(url).endsWith('/token'))return Response.json({access_token:'secret token'});if(String(url).includes('/dataStreams'))return Response.json({dataStreams:[{webStreamData:{defaultUri:website}}]});if(!String(url).endsWith(':runReport'))return Response.json({name:property,timeZone:'America/Chicago',createTime:created});return status===200?Response.json(empty?{rows:[]}:fixture()):Response.json({error:'private payload'},{status});};
  return {calls,writes,logs,run:(body={client_id:id,months:2},headers={Authorization:'Bearer user'})=>createGa4Performance({supabase,fetch:request,now:()=>new Date('2026-10-12T20:00Z')})(new Request('https://test',{method:'POST',headers,body:JSON.stringify(body)}))};
 }
 test('GA4 importer verifies stream, uses exact hostname filters and oldest-first idempotent boundary',async()=>{
@@ -30,4 +30,17 @@ test('auth, wrong stream, empty responses and provider failures never write synt
  for(const options of [{website:'https://example.test.evil.test'},{status:403},{status:429},{empty:true}]){const x=setup(options);const r=await(await x.run()).json();assert.equal(x.writes.length,0);assert.doesNotMatch(JSON.stringify(r),/private payload|secret token/);}
  const x=setup({dbError:true});assert.equal((await(await x.run()).json()).results[0].code,'import_write_failed');assert.equal(x.writes.length,1);
  const cron=setup({role:null});assert.equal((await cron.run(undefined,{'x-cron-secret':'cron'})).status,200);
+});
+
+test('GA4 records exact brand scope from running through safe preflight failures',async()=>{
+ const brandId='00000000-0000-4000-8000-000000000099';
+ const x=setup({brand:{id:brandId,client_id:id,website_url:'https://example.test',ga4_property:property}});
+ await x.run({client_id:id,brand_workspace_id:brandId,months:1});
+ for(const log of x.logs)for(const result of log.results){assert.equal(result.scope_version,1);assert.equal(result.property,property);assert.equal(result.website_host,'example.test');assert.equal(result.brand_workspace_id,brandId);}
+ const missing=setup({missingCredentials:true});await missing.run();assert.equal(missing.calls.length,0);assert.equal(missing.logs.at(-1).status,'partial');assert.equal(missing.logs.at(-1).results[0].code,'google_connection_missing');
+ const foreign=setup();assert.equal((await foreign.run({client_id:id,brand_workspace_id:brandId})).status,404);assert.equal(foreign.logs.length,0);assert.equal(foreign.calls.length,0);
+});
+
+test('new GA4 property records a processing wait without a report or synthetic measurement',async()=>{
+ const x=setup({created:'2026-10-11T10:00Z'});const r=await(await x.run()).json();assert.equal(x.writes.length,0);assert.ok(!x.calls.some(c=>c.url.endsWith(':runReport')));assert.equal(r.results[0].status,'waiting');assert.equal(r.results[0].code,'property_processing_delay');assert.equal(x.logs.at(-1).status,'partial');
 });

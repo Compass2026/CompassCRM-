@@ -52,3 +52,33 @@ and future evidence, client/property isolation and three-brand coverage.
 read-only synthetic API, checks filters, alert links, missing/failed/truncated
 sources, onboarding and mobile layout. CI runs it alongside the full application,
 native database/RLS, billing, blog review and client growth browser gates.
+
+## Scoped Google outcomes (October 13 follow-on)
+
+GA4/GSC now write `scope_version: 1`, exact property, normalized website host and
+optional brand workspace ID into every run result, starting with the running
+marker. No new schema or grants are needed. Auth and client/brand ownership are
+checked first. Binding and missing-credential failures after that point produce
+safe durable outcomes. Raw Google errors, tokens and secret values are never saved.
+
+The dashboard evaluates each configured website independently. Parent schedules
+may verify a brand only when property and host match exactly; explicitly named
+brands must also match. GA4 imports must match their saved host. Unchanged runs
+must match both period start and end, and a receipt cannot postdate a retrieval.
+Legacy multi-brand runs remain unattributed. No historical scope is invented.
+One brand's newer success cannot hide another brand's failure. Aggregate verified
+requires all properties verified, and the aggregate success date is the oldest
+confirmed retrieval among them. Shared GBP remains parent scoped.
+
+A GA4 property with no dates eligible after the existing four-day processing
+allowance produces `waiting / property_processing_delay`, not an empty success.
+This means property/stream access was checked; it does not prove traffic collection.
+The state maps to waiting onboarding and a setup reminder, and becomes stale if
+no new check arrives within 48 hours. Reported empty windows still remain missing
+provider data. No new credentials, accounts, schedules or consent are configured.
+
+Release checks include importer tests for scoped starts, missing credentials,
+foreign brand refusal and processing waits; independent brand recovery and exact
+receipt/host matching; and browser checks showing a verified property alongside
+another property's wait. Deploy both importer functions from the merged reviewed
+commit, then run bounded read-only provider refreshes to obtain scoped evidence.

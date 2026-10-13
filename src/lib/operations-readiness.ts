@@ -133,7 +133,7 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
         const evidence=input.integrations.find(e=>e.clientId===c.id && e.source===sourceKey);
         const check: ReadinessCheck={key,label,href:base+"/growth",state:
           !evidence || evidence.state === "unknown" ? "unknown" : evidence.state === "verified" ? "recorded" :
-          evidence.state === "running" ? "waiting" : evidence.state === "unconfigured" || evidence.state === "missing" ? "missing" : "blocked"};
+          (evidence.state === "running" || evidence.state === "waiting") ? "waiting" : evidence.state === "unconfigured" || evidence.state === "missing" ? "missing" : "blocked"};
         const index=checks.findIndex(r=>r.key===key);
         if(index<0) checks.push(check); else checks[index]=check;
       }
@@ -204,7 +204,7 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
     const client=input.clients.find(c=>c.id===entry.clientId);
     if (!client || entry.state === "verified" || entry.state === "running") continue;
     alerts.push({id:`${entry.clientId}:integration:${entry.source}`,clientId:client.id,clientName:client.name,
-      severity:entry.state === "failed" ? "critical" : entry.state === "unconfigured" ? "setup" : "attention",
+      severity:entry.state === "failed" ? "critical" : (entry.state === "unconfigured" || entry.state === "waiting") ? "setup" : "attention",
       title:SOURCE_POLICY[entry.source].label+" · "+entry.state,
       detail:entry.evidence+" Next: "+entry.nextAction,
       href:entry.state === "unconfigured" ? `/clients/${client.id}${entry.source === "gbp" ? "/social" : ""}` : entry.href});

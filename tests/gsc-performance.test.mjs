@@ -13,9 +13,9 @@ test('exact domain binding prevents substring and foreign path matches',()=>{
  for(const p of [property,'https://www.example.test/'])assert.equal(propertyMatchesWebsite(p,'https://example.test'),true);
  for(const p of ['sc-domain:other.test','sc-domain:example.test.evil.test','https://example.test/sub/','https://example.test/?q=x','https://user:pass@example.test/','javascript:example.test'])assert.equal(propertyMatchesWebsite(p,'https://example.test'),false);
 });
-function setup({role='admin',inventory=property,status=200,dbError=false}={}) {
+function setup({role='admin',inventory=property,status=200,dbError=false,missingCredentials=false,brand=null}={}) {
  const calls=[],writes=[],logs=[];
- const supabase={auth:{getUser:async()=>({data:{user:role?{id:'user'}:null}})},rpc:async(name,args)=>{if(name==='get_secret')return {data:args.secret_name==='SYNC_CRON_SECRET'?'cron':'secret'};writes.push(args);return dbError?{error:{}}:{data:{status:'imported'}};},from(name){const q={select(){return q;},eq(){return q;},maybeSingle:async()=>({data:name==='clients'?{id,status:'active',gsc_property:property,website_url:'https://example.test'}:{role}}),insert:async v=>{logs.push(v);return {};},update(v){logs.push(v);return {eq:async()=>({})};}};return q;}};
+ const supabase={auth:{getUser:async()=>({data:{user:role?{id:'user'}:null}})},rpc:async(name,args)=>{if(name==='get_secret')return {data:args.secret_name==='SYNC_CRON_SECRET'?'cron':missingCredentials?null:'secret'};writes.push(args);return dbError?{error:{}}:{data:{status:'imported'}};},from(name){const q={select(){return q;},eq(){return q;},maybeSingle:async()=>({data:name==='clients'?{id,status:'active',gsc_property:property,website_url:'https://example.test'}:name==='client_brand_workspaces'?brand:{role}}),insert:async v=>{logs.push(v);return {};},update(v){logs.push(v);return {eq:async()=>({})};}};return q;}};
  const request=async(url,options)=>{calls.push({url:String(url),options});if(String(url).endsWith('/token'))return Response.json({access_token:'secret token'});if(String(url).endsWith('/sites'))return Response.json({siteEntry:[{siteUrl:inventory,permissionLevel:'siteOwner'}]});return status===200?Response.json(fixture()):Response.json({error:'private provider payload'},{status});};
  const handle=createGscPerformance({supabase,fetch:request,now:()=>new Date('2026-10-12')});
  return {calls,writes,logs,run:(body={client_id:id,months:2},headers={Authorization:'Bearer user'})=>handle(new Request('https://test',{method:'POST',headers,body:JSON.stringify(body)}))};
@@ -31,4 +31,13 @@ test('auth, inventory, provider and write failures cannot produce success or fab
  const db=setup({dbError:true});assert.equal((await(await db.run()).json()).results[0].code,'import_write_failed');assert.equal(db.writes.length,1);
  const bad=setup();assert.equal((await bad.run({client_id:id,months:7})).status,400);assert.equal(bad.calls.length,0);
  const cron=setup({role:null});assert.equal((await cron.run(undefined,{'x-cron-secret':'cron'})).status,200);
+});
+
+test('GSC records exact brand scope from running through safe preflight failures',async()=>{
+ const brandId='00000000-0000-4000-8000-000000000099';
+ const x=setup({brand:{id:brandId,client_id:id,website_url:'https://example.test',gsc_property:property}});
+ await x.run({client_id:id,brand_workspace_id:brandId,months:1});
+ for(const log of x.logs)for(const result of log.results){assert.equal(result.scope_version,1);assert.equal(result.property,property);assert.equal(result.website_host,'example.test');assert.equal(result.brand_workspace_id,brandId);}
+ const missing=setup({missingCredentials:true});await missing.run();assert.equal(missing.calls.length,0);assert.equal(missing.logs.at(-1).status,'partial');assert.equal(missing.logs.at(-1).results[0].code,'google_connection_missing');
+ const foreign=setup();assert.equal((await foreign.run({client_id:id,brand_workspace_id:brandId})).status,404);assert.equal(foreign.logs.length,0);assert.equal(foreign.calls.length,0);
 });

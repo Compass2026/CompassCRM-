@@ -1,3 +1,4 @@
+import {websiteHost} from "../ga4-performance/metrics.ts";
 import {completeMonths,normalizeGsc,propertyMatchesWebsite} from "./metrics.ts";
 // deno-lint-ignore no-explicit-any
 type Client=any;
@@ -21,11 +22,13 @@ export function createGscPerformance({supabase,fetch:request=fetch,now=()=>new D
    if(brandError||!brand)return Response.json({error:"brand_unavailable"},{status:404});
    client.website_url=brand.website_url;client.gsc_property=brand.gsc_property;
   }
-  if(!["active","launching"].includes(client.status)||!propertyMatchesWebsite(client.gsc_property??"",client.website_url??""))return Response.json({error:"property_binding_required"},{status:422});
-  const credentials=await Promise.all([secret("GSC_CLIENT_ID"),secret("GSC_CLIENT_SECRET"),secret("GSC_REFRESH_TOKEN")]);
-  if(credentials.some(v=>!v))return Response.json({error:"google_connection_missing"},{status:424});
+  if(!["active","launching"].includes(client.status))return Response.json({error:"client_inactive"},{status:422});
+  // Scope is recorded before preflight and copied to every outcome, including
+  // waits and failures. Existing JSON receipts avoid a schema/rollout dependency.
+  let host:string|null=null;try{host=websiteHost(client.website_url);}catch{/* Invalid binding is recorded safely below. */}
+  const scope={website_host:host,scope_version:1,property:client.gsc_property??null,brand_workspace_id:body.brand_workspace_id??null};
   const runId=crypto.randomUUID();
-  const started=await supabase.from("gsc_performance_sync_runs").insert({id:runId,client_id:client.id,status:"running",results:[]});
+  const started=await supabase.from("gsc_performance_sync_runs").insert({id:runId,client_id:client.id,status:"running",results:[{...scope,status:"running"}]});
   if(started.error)return Response.json({error:"sync_log_failed"},{status:503});
   const results:Record<string,unknown>[]=[];
   const read=async(url:string,init:RequestInit)=>{
@@ -35,6 +38,9 @@ export function createGscPerformance({supabase,fetch:request=fetch,now=()=>new D
   };
   const execute=async()=>{
    try {
+    if(!propertyMatchesWebsite(client.gsc_property??"",client.website_url??""))throw new Error("property_binding_required");
+    const credentials=await Promise.all([secret("GSC_CLIENT_ID"),secret("GSC_CLIENT_SECRET"),secret("GSC_REFRESH_TOKEN")]);
+    if(credentials.some(v=>!v))throw new Error("google_connection_missing");
     const token=await read("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:credentials[0],client_secret:credentials[1],refresh_token:credentials[2],grant_type:"refresh_token"})});
     if(typeof token.access_token!=="string"||!token.access_token)throw new Error("google_token_failed");
     const headers={Authorization:`Bearer ${token.access_token}`,"Content-Type":"application/json"};
@@ -46,14 +52,15 @@ export function createGscPerformance({supabase,fetch:request=fetch,now=()=>new D
       const data=normalizeGsc(raw);
       const saved=await supabase.rpc("gsc_performance_record",{p_client_id:client.id,p_property:client.gsc_property,p_start:period.start,p_end:period.end,p_data:body.brand_workspace_id?{...data,brand_workspace_id:body.brand_workspace_id}:data});
       if(saved.error)throw new Error("import_write_failed");
-      results.push({month:period.start,...saved.data});
+      if(!["imported","unchanged"].includes(saved.data?.status))throw new Error("import_write_failed");
+      results.push({...saved.data,...scope,month:period.start,period_end:period.end});
      }catch(e){fail(period.start,e);if(e instanceof Error&&/^(import_write_failed|google_http_(401|403|429))$/.test(e.message))break;}
     }
    }catch(e){fail(null,e);}
-   const log=await supabase.from("gsc_performance_sync_runs").update({status:results.some(r=>r.status==="failed")?"partial":"completed",results,finished_at:now().toISOString()}).eq("id",runId);
+   const log=await supabase.from("gsc_performance_sync_runs").update({status:results.some(r=>r.status==="failed"||r.status==="no_data"||r.status==="waiting")?"partial":"completed",results,finished_at:now().toISOString()}).eq("id",runId);
    if(log.error)console.error("gsc_performance_sync_log_failed",runId);
   };
-  function fail(month:string|null,e:unknown){const message=e instanceof Error?e.message:"import_failed";results.push({month,status:"failed",code:/^(google_http_\d{3}|google_token_failed|property_access_missing|aggregation_mismatch|no_reported_data|unexpected_dimensions|invalid_metrics|import_write_failed)$/.test(message)?message:"import_failed"});}
+  function fail(month:string|null,e:unknown){const message=e instanceof Error?e.message:"import_failed";results.push({...scope,month,status:"failed",code:/^(property_binding_required|google_connection_missing|google_http_\d{3}|google_token_failed|property_access_missing|aggregation_mismatch|no_reported_data|unexpected_dimensions|invalid_metrics|import_write_failed)$/.test(message)?message:"import_failed"});}
   if(waitUntil){waitUntil(execute());return Response.json({status:"started",run_id:runId},{status:202});}
   await execute();return Response.json({run_id:runId,results});
  };

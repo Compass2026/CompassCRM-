@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { ArrowRight, Database, ShieldCheck } from "lucide-react";
 import { SOURCE_POLICY, type IntegrationEvidence, type IntegrationState } from "@/lib/integration-health";
-const labels: Record<IntegrationState,string>={verified:"Verified retrieval",failed:"Failed / interrupted",partial:"Partial results",missing:"Missing data",stale:"Stale evidence",unknown:"Unverified",running:"Sync in progress",unconfigured:"Setup needed"};
-const tones: Record<IntegrationState,string>={verified:"bg-emerald-50 text-emerald-800",failed:"bg-red-50 text-red-800",partial:"bg-amber-50 text-amber-900",missing:"bg-amber-50 text-amber-900",stale:"bg-amber-50 text-amber-900",unknown:"bg-slate-100 text-slate-700",running:"bg-blue-50 text-blue-800",unconfigured:"bg-blue-50 text-blue-800"};
+const labels: Record<IntegrationState,string>={verified:"Verified retrieval",failed:"Failed / interrupted",partial:"Partial results",missing:"Missing data",stale:"Stale evidence",unknown:"Unverified",waiting:"Awaiting reporting dates",running:"Sync in progress",unconfigured:"Setup needed"};
+const tones: Record<IntegrationState,string>={verified:"bg-emerald-50 text-emerald-800",failed:"bg-red-50 text-red-800",partial:"bg-amber-50 text-amber-900",missing:"bg-amber-50 text-amber-900",stale:"bg-amber-50 text-amber-900",unknown:"bg-slate-100 text-slate-700",waiting:"bg-blue-50 text-blue-800",running:"bg-blue-50 text-blue-800",unconfigured:"bg-blue-50 text-blue-800"};
 const date=(value:string|null)=>value ? new Date(value).toLocaleString("en-US",{timeZone:"America/Chicago",dateStyle:"medium",timeStyle:"short"})+" CT" : "Not recorded";
 export function IntegrationHealthPanel({entries,clients}:{entries:IntegrationEvidence[];clients:{id:string;name:string}[]}) {
   const ids=new Set(clients.map(c=>c.id));
   const filtered=entries.filter(e=>ids.has(e.clientId));
-  const groups=[{label:"Verified",states:["verified"],color:"bg-emerald-500"},{label:"Needs attention",states:["failed","partial","missing","stale"],color:"bg-orange-500"},{label:"Setup / unverified",states:["unconfigured","unknown","running"],color:"bg-slate-400"}];
+  const groups=[{label:"Verified",states:["verified"],color:"bg-emerald-500"},{label:"Needs attention",states:["failed","partial","missing","stale"],color:"bg-orange-500"},{label:"Setup / unverified",states:["unconfigured","unknown","running","waiting"],color:"bg-slate-400"}];
   return <section className="space-y-4" aria-label="Integration health and data freshness">
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <h3 className="flex items-center gap-2 font-semibold text-navy-900"><Database className="size-5 text-blue-700"/>Integration health & data freshness</h3>
@@ -28,6 +28,7 @@ export function IntegrationHealthPanel({entries,clients}:{entries:IntegrationEvi
         <ul className="mt-3 space-y-2 border-t border-slate-100 pt-3">{e.scopes.map((s,i)=><li key={`${s.property}:${i}`} className="rounded-lg bg-slate-50 p-2 text-xs">
           <p className="font-medium text-slate-800">{s.label}</p><p className="mt-1 break-all text-slate-500">{s.property || "No property recorded"}</p>
           <p className="mt-1 text-slate-700">{s.windowEnd ? `Data through ${s.windowEnd}` : "No validated data window"} · {s.state}</p>
+          {s.health && <><p className="mt-2 font-medium text-slate-800">{labels[s.health]}</p><p className="mt-1 text-slate-600">Attempt: {date(s.lastAttempt ?? null)}<br/>Confirmed retrieval: {date(s.lastSuccess ?? null)}</p><p className="mt-1 leading-5 text-slate-600">{s.evidence}</p></>}
         </li>)}</ul>
         <p className="mt-3 text-xs leading-5 text-slate-600">{e.evidence}</p>
         <Link href={e.state === "unconfigured" ? `/clients/${e.clientId}${e.source === "gbp" ? "/social" : ""}` : e.href} className="mt-3 flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-xs font-medium leading-5 text-blue-900"><ArrowRight className="mt-0.5 size-4 shrink-0"/>{e.nextAction}</Link>
@@ -35,6 +36,6 @@ export function IntegrationHealthPanel({entries,clients}:{entries:IntegrationEvi
       </article>)}</div>
     </section>)}
     {!clients.length && <p className="rounded-xl bg-white p-5 text-sm text-slate-600">No clients match this filter.</p>}
-    <p className="flex items-start gap-2 rounded-xl bg-slate-100 p-3 text-xs leading-5 text-slate-600"><ShieldCheck className="mt-0.5 size-4 shrink-0"/>Failures before an importer starts may have no run record. Missing credentials and live provider permissions are not inferred. This screen does not run syncs or change account access.</p>
+    <p className="flex items-start gap-2 rounded-xl bg-slate-100 p-3 text-xs leading-5 text-slate-600"><ShieldCheck className="mt-0.5 size-4 shrink-0"/>New Google runs record scoped preflight failures and processing waits. Older unattributed runs remain unverified; configuration alone does not prove provider access. This screen does not run syncs or change account access.</p>
   </section>;
 }

@@ -28,7 +28,7 @@ test('GA4 has a seven-day data threshold, complete-month GSC and GBP use 45 days
  const f=fixture();f.imports.ga4=[{...receipt,period_end:'2026-09-30'}];assert.equal(evaluate(f).state,'stale');
  f.bindings.gsc=f.bindings.ga4;f.imports.gsc=f.imports.ga4;f.runs.gsc=f.runs.ga4;
  assert.equal(integrationEvidence(f,'a','gsc',now).state,'verified');
- f.runs.gsc=[{...run,created_at:'2026-10-09T10:00:00Z',finished_at:'2026-10-10T10:00:00Z'}];assert.equal(integrationEvidence(f,'a','gsc',now).state,'stale');
+ f.imports.gsc=[{...f.imports.gsc[0],created_at:'2026-10-09T10:00:00Z'}];f.runs.gsc=[{...run,created_at:'2026-10-09T10:00:00Z',finished_at:'2026-10-10T10:00:00Z'}];assert.equal(integrationEvidence(f,'a','gsc',now).state,'stale');
 });
 test('failed or truncated reads, malformed results and future timestamps never verify',()=>{
  assert.equal(completeRead({data:[],count:0,error:null})?.length,0);
@@ -58,4 +58,33 @@ test('interrupted runs and safe error codes have actionable states without arbit
  const f=fixture();f.runs.ga4=[{...run,status:'running',finished_at:null,results:[]}];assert.equal(evaluate(f).state,'failed');
  f.runs.ga4=[{...run,status:'partial',results:[{status:'failed',code:'secret raw provider response'}]}];
  assert.doesNotMatch(JSON.stringify(evaluate(f)),/secret raw/);assert.match(evaluate(f).evidence,/provider_result_unverified/);
+});
+function scopedFixture(){
+ const f=fixture();f.bindings.ga4=[{clientId:'a',label:'Safety',property:'properties/123',brandId:'safety',host:'safety.test'},{clientId:'a',label:'Forklift',property:'properties/456',brandId:'forklift',host:'forklift.test'}];
+ f.imports.ga4=[{...receipt,host:'safety.test'},{...receipt,id:'r2',property:'properties/456',host:'forklift.test'}];
+ f.runs.ga4=f.bindings.ga4.map((b,i)=>({...run,id:'run'+i,results:[{scope_version:1,property:b.property,brand_workspace_id:b.brandId,website_host:b.host,status:'imported',receipt_id:i?'r2':'receipt'}]}));return f;
+}
+test('each brand requires an independent scoped outcome, exact host and matching receipt',()=>{
+ const f=scopedFixture();assert.equal(evaluate(f).state,'verified');assert.equal(evaluate(f).scopes.length,2);
+ f.runs.ga4.pop();assert.equal(evaluate(f).state,'unknown');assert.equal(evaluate(f).lastSuccess,null);
+ f.runs.ga4[0].results[0].property='properties/456';assert.notEqual(evaluate(f).state,'verified');
+ const cross=scopedFixture();cross.runs.ga4[1].results[0].brand_workspace_id='other';assert.notEqual(evaluate(cross).state,'verified');
+ const host=scopedFixture();host.runs.ga4[1].results[0].website_host='other.test';assert.notEqual(evaluate(host).state,'verified');
+ const receiptHost=scopedFixture();receiptHost.imports.ga4[1].host='other.test';assert.equal(evaluate(receiptHost).state,'missing');
+});
+test('recovery is property-specific and unrelated later runs cannot hide failures',()=>{
+ const f=scopedFixture();f.runs.ga4[0].results[0]={...f.runs.ga4[0].results[0],status:'failed',code:'google_connection_missing'};
+ assert.equal(evaluate(f).state,'failed');assert.match(evaluate(f).scopes[0].evidence,/google_connection_missing/);assert.equal(evaluate(f).scopes[1].health,'verified');
+ f.runs.ga4.push({...run,id:'recovery',created_at:'2026-10-13T02:00Z',finished_at:'2026-10-13T02:01Z',results:[{...f.runs.ga4[0].results[0],status:'unchanged',month:receipt.period,period_end:receipt.period_end}]});
+ assert.equal(evaluate(f).state,'verified');
+ f.runs.ga4.at(-1).results[0].period_end='2026-10-09';assert.equal(evaluate(f).state,'unknown');
+});
+test('processing waits are explicit, never healthy, and expire without a new check',()=>{
+ const f=scopedFixture();f.runs.ga4[1].results=[{...f.runs.ga4[1].results[0],status:'waiting',code:'property_processing_delay'}];
+ assert.equal(evaluate(f).state,'waiting');assert.equal(evaluate(f).lastSuccess,null);
+ f.runs.ga4[1].created_at='2026-10-09T10:00Z';f.runs.ga4[1].finished_at='2026-10-09T10:01Z';assert.equal(evaluate(f).state,'stale');
+});
+test('parent schedule can verify matching brand property and host, never another brand',()=>{
+ const f=scopedFixture();f.runs.ga4[0].results[0].brand_workspace_id=null;assert.equal(evaluate(f).state,'verified');
+ f.runs.ga4[0].results[0].receipt_id='r2';assert.equal(evaluate(f).state,'unknown');
 });

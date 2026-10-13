@@ -53,6 +53,14 @@ try{
  await page.screenshot({path:'docs/screenshots/control-center/integrations-mobile.png',fullPage:true});
  await page.getByRole('tab',{name:'Client onboarding'}).click();await page.locator('[data-readiness-client] summary').click();assert.ok(await page.getByText('Approved brand foundation',{exact:true}).isVisible());
  await page.getByRole('tab',{name:'Source freshness'}).click();
+ // A second brand's processing wait must remain visible beside a verified property.
+ rows.client_brand_workspaces=[{id:'brand1',client_id:b,name:'South Safety',website_url:'https://safety.test',ga4_property:'properties/456',gsc_property:null,status:'approved'}, {id:'brand2',client_id:b,name:'South Forklift',website_url:'https://forklift.test',ga4_property:'properties/789',gsc_property:null,status:'approved'}];
+ rows.ga4_performance_imports.push({...receipt,id:'south-receipt',client_id:b,property:'properties/456',host:'safety.test'});
+ rows.ga4_performance_sync_runs.push({...run,id:'south1',client_id:b,results:[{scope_version:1,brand_workspace_id:'brand1',website_host:'safety.test',property:'properties/456',status:'imported',receipt_id:'south-receipt'}]}, {...run,id:'south2',client_id:b,status:'partial',results:[{scope_version:1,brand_workspace_id:'brand2',website_host:'forklift.test',property:'properties/789',status:'waiting',code:'property_processing_delay'}]});
+ await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();
+ const south=page.locator(`[data-integration-client="${b}"] [data-integration-source="ga4"]`);
+ assert.match(await south.innerText(),/1 of 2 website properties verified/);assert.match(await south.innerText(),/South Safety/);assert.match(await south.innerText(),/South Forklift/);assert.match(await south.innerText(),/Awaiting reporting dates/);
+ assert.equal(await south.getByText('Verified retrieval',{exact:true}).count(),1);
  ga4Failure=true;await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();
  assert.ok(await ga4.getByText('Unverified',{exact:true}).isVisible());assert.equal(await ga4.getByText('Verified retrieval',{exact:true}).count(),0);
  ga4Failure=false;truncated=true;await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();assert.ok(await ga4.getByText('Unverified',{exact:true}).isVisible());
