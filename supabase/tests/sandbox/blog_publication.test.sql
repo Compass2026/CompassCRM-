@@ -42,6 +42,21 @@ begin
     and (select status='queued' and released_by is not null and snapshot=(select snapshot from blog_publications where id=p) from blog_publications where id=q));
   perform cd.ok('PUB4b requeue remains idempotent',
     q=blog_publication_queue(d.id,d.version,now()+interval '1 hour'));
+  -- Regression: a previously safe pre-write CTA lint refusal was from
+  -- the publisher running an older validator, not from website I/O.
+  -- Recover it only through the same human queue RPC; no direct release edits.
+  perform set_config('role','service_role',true);
+  perform set_config('compass.blog_publication_write','on',true);
+  update blog_publications set status='blocked',
+    last_error='"Free" is pricing, a discount or a free offer, which this brief does not support.',
+    evidence='{}'::jsonb where id=q;
+  perform set_config('compass.blog_publication_write','',true);
+  perform set_config('role','authenticated',true);
+  p := q;
+  q := blog_publication_queue(d.id,d.version,now()+interval '1 hour');
+  perform cd.ok('PUB4c known pre-write CTA failure is recoverable with original record intact',
+    q<>p and (select status='cancelled' and last_error like '"Free" is pricing%' from blog_publications where id=p)
+    and (select status='queued' and snapshot=(select snapshot from blog_publications where id=p) from blog_publications where id=q));
   perform blog_publication_cancel(q);
   update content_drafts set status='draft' where id=d.id;
   perform cd.ok('PUB5a approval history survives reopening',
