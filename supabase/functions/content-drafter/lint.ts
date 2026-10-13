@@ -146,7 +146,12 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   if (draft.cta?.url) checkInternal(draft.cta.url, "The CTA");
 
   // ── Facts: everything a reader sees ──
-  const text = [draft.title, draft.meta_title, draft.meta_description, draft.h1, ...outline.map((o) => o.heading), visibleBody(body), draft.cta?.text]
+  // An exact, human-approved standing CTA is already authorized by the
+  // brand board. Don't reinterpret its approved wording ("Get a Free Quote")
+  // as an unsupported price claim. The same words in article prose, titles
+  // or a non-matching CTA remain subject to every detector.
+  const approvedCta = !!brief.cta.text && draft.cta?.text?.trim().toLowerCase() === brief.cta.text.trim().toLowerCase();
+  const text = [draft.title, draft.meta_title, draft.meta_description, draft.h1, ...outline.map((o) => o.heading), visibleBody(body), ...(approvedCta ? [] : [draft.cta?.text])]
     .filter(Boolean).join("\n");
   const spans: [number, number][] = [];
   for (const c of linked) {
