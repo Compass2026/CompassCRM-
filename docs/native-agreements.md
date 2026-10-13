@@ -15,6 +15,13 @@ email are invented. Import the existing Compass contract before issuing.
    to sign for Compass. Issue locks the document and creates a 14-day link.
 4. Copy the link or explicitly click **Email signing link**. A successful mail
    response means accepted by Resend, not proof of inbox delivery.
+   **Preview signing email** shows the saved recipient, subject, and branded
+   HTML in desktop/mobile views, plus its plain-text fallback. Previewing is
+   read-only, disables links, and never requests a verification code or sends
+   mail. The same renderer supplies delivery, using the agreement snapshot's
+   client, fee and term. After a page reload, an admin can paste an already
+   copied signing link to send it without rotation; the existing delivery
+   guard checks that it belongs to this agreement and remains valid.
 5. The recipient requests a code sent to the stored recipient email, verifies
    it, reads the document, and signs with explicit electronic-record consent.
    They can decline or contact Compass for changes or a paper alternative.
