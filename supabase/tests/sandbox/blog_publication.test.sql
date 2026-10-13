@@ -56,7 +56,7 @@ begin
   q := blog_publication_queue(d.id,d.version,now()+interval '1 hour');
   perform cd.ok('PUB4c known pre-write CTA failure is recoverable with original record intact',
     q<>p and (select status='cancelled' and last_error like '"Free" is pricing%' from blog_publications where id=p)
-    and (select status='queued' and snapshot=d.approved_snapshot from blog_publications where id=q));
+    and (select status='queued' and snapshot=(select snapshot from blog_publications where id=p) from blog_publications where id=q));
   perform blog_publication_cancel(q);
   update content_drafts set status='draft' where id=d.id;
   perform cd.ok('PUB5a approval history survives reopening',
