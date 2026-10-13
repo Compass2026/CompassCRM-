@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Activity, ArrowRight, ChartNoAxesCombined, CircleAlert, Database, Layers3, ShieldCheck, Workflow } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { buildOperationsHealth, type HealthInputs, type ClientHealth } from "@/lib/operations-health";
+import { loadIntegrationHealth } from "@/lib/integration-health-loader";
+import { completeRead } from "@/lib/integration-health";
 import { buildOperationsV2 } from "@/lib/operations-readiness";
 import { ControlCenterV2 } from "@/components/operations/control-center-v2";
 
@@ -85,33 +87,31 @@ export default async function OperationsHealthPage() {
     publicationsQ, liteQ, notificationsQ, backlinksQ, socialQ,
     subscriptionsQ, portalQ, measuredQ, brandsQ, boardsQ, intakeQ, detailedDraftsQ, detailedReleasesQ,
   ] = await Promise.all([
-    db.from("clients").select("id,name,status").in("status", ["active", "launching"]).order("name"),
-    db.from("keywords").select("client_id,is_active,is_tracked").limit(3000),
-    db.from("sites").select("client_id,controlled_by_compass,vercel_project").limit(1000),
-    db.from("report_measurements").select("client_id").eq("status", "measured").eq("source", "Google Search Console property totals").limit(3000),
-    db.from("report_measurements").select("client_id").eq("status", "measured").eq("source", "Google Analytics 4").limit(3000),
-    db.from("report_measurements").select("client_id").eq("status", "measured").eq("source", "Google Business Profile via Zernio").limit(3000),
-    db.from("content_drafts").select("client_id,status").limit(3000),
-    db.from("blog_publications").select("id,client_id,status").limit(3000),
-    db.from("crm_lite_settings").select("client_id,enabled,sms_alerts_enabled").limit(3000),
-    db.from("notification_jobs").select("client_id,status,block_reason").limit(3000),
-    db.from("backlink_opportunities").select("client_id,stage").limit(3000),
-    db.from("social_accounts").select("client_id,publish_enabled").limit(3000),
-    db.from("subscriptions").select("client_id,livemode,status").limit(3000),
-    db.from("portal_users").select("client_id,is_active").limit(3000),
-    db.from("report_measurements").select("client_id,source,window_end,created_at").eq("status", "measured").limit(3000),
-    db.from("client_brand_workspaces").select("id,client_id,status,blog_site_id").limit(3000),
-    db.from("brand_boards").select("client_id,status").limit(3000),
-    db.from("inquiry_sources").select("client_id,enabled").limit(3000),
-    db.from("content_drafts").select("id,client_id,status,title,topic,request_task_id,created_at").limit(3000),
-    db.from("blog_publications").select("id,client_id,draft_id,status,last_error,released_at").limit(3000),
+    db.from("clients").select("id,name,status", {count:"exact"}).in("status", ["active", "launching"]).order("name"),
+    db.from("keywords").select("client_id,is_active,is_tracked", {count:"exact"}).limit(3000),
+    db.from("sites").select("client_id,controlled_by_compass,vercel_project", {count:"exact"}).limit(1000),
+    db.from("report_measurements").select("client_id", {count:"exact"}).eq("status", "measured").eq("source", "Google Search Console property totals").limit(3000),
+    db.from("report_measurements").select("client_id", {count:"exact"}).eq("status", "measured").eq("source", "Google Analytics 4").limit(3000),
+    db.from("report_measurements").select("client_id", {count:"exact"}).eq("status", "measured").eq("source", "Google Business Profile via Zernio").limit(3000),
+    db.from("content_drafts").select("client_id,status", {count:"exact"}).limit(3000),
+    db.from("blog_publications").select("id,client_id,status", {count:"exact"}).limit(3000),
+    db.from("crm_lite_settings").select("client_id,enabled,sms_alerts_enabled", {count:"exact"}).limit(3000),
+    db.from("notification_jobs").select("client_id,status,block_reason", {count:"exact"}).limit(3000),
+    db.from("backlink_opportunities").select("client_id,stage", {count:"exact"}).limit(3000),
+    db.from("social_accounts").select("client_id,publish_enabled", {count:"exact"}).limit(3000),
+    db.from("subscriptions").select("client_id,livemode,status", {count:"exact"}).limit(3000),
+    db.from("portal_users").select("client_id,is_active", {count:"exact"}).limit(3000),
+    db.from("report_measurements").select("client_id,source,window_end,created_at", {count:"exact"}).eq("status", "measured").limit(3000),
+    db.from("client_brand_workspaces").select("id,client_id,status,blog_site_id", {count:"exact"}).limit(3000),
+    db.from("brand_boards").select("client_id,status", {count:"exact"}).limit(3000),
+    db.from("inquiry_sources").select("client_id,enabled", {count:"exact"}).limit(3000),
+    db.from("content_drafts").select("id,client_id,status,title,topic,request_task_id,created_at", {count:"exact"}).limit(3000),
+    db.from("blog_publications").select("id,client_id,draft_id,status,last_error,released_at", {count:"exact"}).limit(3000),
   ]);
-  if (clientsQ.error) {
+  if (completeRead(clientsQ) === null) {
     return <section className="surface p-5" role="alert">The client roster could not be loaded. No health conclusions were drawn. Please retry.</section>;
   }
   // A full page is an ambiguous truncated result, never a complete count.
-  const sourceCap = 3000;
-  const cap = (rows: unknown[] | null): boolean => (rows?.length ?? 0) >= sourceCap;
   const sourceResults = [
     ["Keywords", keywordsQ], ["Websites", sitesQ], ["Search Console", gscQ],
     ["Analytics", ga4Q], ["Business Profile", gbpQ], ["Drafts", draftsQ],
@@ -119,23 +119,23 @@ export default async function OperationsHealthPage() {
     ["SMS alerts", notificationsQ], ["Backlinks", backlinksQ],
     ["Social accounts", socialQ], ["Subscriptions", subscriptionsQ], ["Client portal", portalQ],
   ] as const;
-  const failedSources = sourceResults.filter(([, query]) => !!query.error || cap(query.data)).map(([name]) => name);
+  const failedSources = sourceResults.filter(([, query]) => completeRead<unknown>(query) === null).map(([name]) => name);
   // null: read failed; []: successful empty read.
   const inputs: HealthInputs = {
     clients: clientsQ.data ?? [],
-    keywords: keywordsQ.error || cap(keywordsQ.data) ? null : keywordsQ.data ?? [],
-    sites: sitesQ.error || cap(sitesQ.data) ? null : sitesQ.data ?? [],
-    gsc: gscQ.error || cap(gscQ.data) ? null : gscQ.data ?? [],
-    ga4: ga4Q.error || cap(ga4Q.data) ? null : ga4Q.data ?? [],
-    gbp: gbpQ.error || cap(gbpQ.data) ? null : gbpQ.data ?? [],
-    drafts: draftsQ.error || cap(draftsQ.data) ? null : draftsQ.data ?? [],
-    publications: publicationsQ.error || cap(publicationsQ.data) ? null : publicationsQ.data ?? [],
-    lite: liteQ.error || cap(liteQ.data) ? null : liteQ.data ?? [],
-    notifications: notificationsQ.error || cap(notificationsQ.data) ? null : notificationsQ.data ?? [],
-    backlinks: backlinksQ.error || cap(backlinksQ.data) ? null : backlinksQ.data ?? [],
-    social: socialQ.error || cap(socialQ.data) ? null : socialQ.data ?? [],
-    subscriptions: subscriptionsQ.error || cap(subscriptionsQ.data) ? null : subscriptionsQ.data ?? [],
-    portal: portalQ.error || cap(portalQ.data) ? null : portalQ.data ?? [],
+    keywords: completeRead(keywordsQ),
+    sites: completeRead(sitesQ),
+    gsc: completeRead(gscQ),
+    ga4: completeRead(ga4Q),
+    gbp: completeRead(gbpQ),
+    drafts: completeRead(draftsQ),
+    publications: completeRead(publicationsQ),
+    lite: completeRead(liteQ),
+    notifications: completeRead(notificationsQ),
+    backlinks: completeRead(backlinksQ),
+    social: completeRead(socialQ),
+    subscriptions: completeRead(subscriptionsQ),
+    portal: completeRead(portalQ),
   };
   const summary = buildOperationsHealth(inputs);
   const { counts, coverage } = summary;
@@ -146,23 +146,26 @@ export default async function OperationsHealthPage() {
   // present truncated source totals as if all clients were accounted for.
   const v2SourceErrors = [
     ...failedSources,
-    ...(measuredQ.error || cap(measuredQ.data) ? ["Measurement freshness"] : []),
-    ...(brandsQ.error || cap(brandsQ.data) ? ["Brand workspaces"] : []),
-    ...(boardsQ.error || cap(boardsQ.data) ? ["Brand boards"] : []),
-    ...(intakeQ.error || cap(intakeQ.data) ? ["Inquiry intake sources"] : []),
-    ...(detailedDraftsQ.error || cap(detailedDraftsQ.data) ? ["Draft action queue"] : []),
-    ...(detailedReleasesQ.error || cap(detailedReleasesQ.data) ? ["Publisher action queue"] : []),
+    ...(completeRead(measuredQ) === null ? ["Measurement freshness"] : []),
+    ...(completeRead(brandsQ) === null ? ["Brand workspaces"] : []),
+    ...(completeRead(boardsQ) === null ? ["Brand boards"] : []),
+    ...(completeRead(intakeQ) === null ? ["Inquiry intake sources"] : []),
+    ...(completeRead(detailedDraftsQ) === null ? ["Draft action queue"] : []),
+    ...(completeRead(detailedReleasesQ) === null ? ["Publisher action queue"] : []),
   ];
+  const generatedAt = new Date().toISOString();
+  const integrations = await loadIntegrationHealth(db, summary.clients.map(c=>c.id), generatedAt);
   const v2 = buildOperationsV2({
+    integrations,
     clients: summary.clients,
-    measured: measuredQ.error || cap(measuredQ.data) ? null : measuredQ.data ?? [],
-    brands: brandsQ.error || cap(brandsQ.data) ? null : brandsQ.data ?? [],
-    boards: boardsQ.error || cap(boardsQ.data) ? null : boardsQ.data ?? [],
-    intake: intakeQ.error || cap(intakeQ.data) ? null : intakeQ.data ?? [],
-    drafts: detailedDraftsQ.error || cap(detailedDraftsQ.data) ? null : detailedDraftsQ.data ?? [],
-    releases: detailedReleasesQ.error || cap(detailedReleasesQ.data) ? null : detailedReleasesQ.data ?? [],
+    measured: completeRead(measuredQ),
+    brands: completeRead(brandsQ),
+    boards: completeRead(boardsQ),
+    intake: completeRead(intakeQ),
+    drafts: completeRead(detailedDraftsQ),
+    releases: completeRead(detailedReleasesQ),
     sourceErrors: v2SourceErrors,
-    now: new Date().toISOString(),
+    now: generatedAt,
   });
 
 
