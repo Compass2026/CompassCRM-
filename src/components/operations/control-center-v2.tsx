@@ -1,4 +1,5 @@
 "use client";
+import { IntegrationHealthPanel } from "./integration-health-panel";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Clock3, Filter, Search, ShieldCheck, SlidersHorizontal, WifiOff } from "lucide-react";
@@ -38,7 +39,7 @@ function CheckRow({ check }: { check: ReadinessCheck }) {
       <Circle className="size-4 shrink-0 text-amber-500"/>}
     <Link href={check.href} className="flex-1 font-medium text-slate-700 hover:underline">{check.label}</Link>
     <span className={"text-[11px] " + (ok ? "text-emerald-700" : unknown ? "text-red-700" : "text-slate-500")}>
-      {ok ? "Recorded" : unknown ? "Unknown" : "Not recorded"}
+      {ok ? "Recorded" : unknown ? "Unknown" : check.state === "blocked" ? "Blocked" : check.state === "waiting" ? "Waiting" : "Not recorded"}
     </span>
   </li>;
 }
@@ -74,7 +75,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
   const [focus,setFocus]=useState<"all"|"critical"|"attention"|"setup">("all");
   const query=term.trim().toLowerCase();
   const clients=useMemo(()=>data.clients.filter(c=>c.name.toLowerCase().includes(query)),[data.clients,query]);
-  const names=new Set(clients.map(c=>c.id));
+  const names=useMemo(()=>new Set(clients.map(c=>c.id)),[clients]);
   const alerts=useMemo(()=>data.alerts.filter(a=>names.has(a.clientId) && (focus==="all"||a.severity===focus)),
     [data.alerts,names,focus]);
   const urgent=data.alerts.filter(a=>a.severity==="critical").length;
@@ -150,7 +151,8 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
         </div>}
       </div>
     </div>}
-    {tab==="freshness" && <section className="space-y-3" role="tabpanel">
+    {tab==="freshness" && data.integrations.length > 0 && <IntegrationHealthPanel entries={data.integrations} clients={clients}/>}
+    {tab==="freshness" && data.integrations.length === 0 && <section className="space-y-3" role="tabpanel">
       <h3 className="font-semibold text-navy-900">Measurement freshness</h3>
       <p className="text-xs leading-5 text-slate-600">Last recorded measurement-window end. Older than 45 days is flagged. This is <strong>not</strong> an API permission or sync-delivery check. No measurement is never shown as zero.</p>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white" data-overflow-ok>
@@ -166,7 +168,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
     </section>}
     {tab==="onboarding" && <section className="space-y-3" role="tabpanel">
       <h3 className="font-semibold text-navy-900">Client onboarding evidence</h3>
-      <p className="text-xs leading-5 text-slate-600">Expand a client to see nine evidence checks. Recorded means verified CRM evidence exists, not that the service is included in the contract. Missing means no record; Unknown means a source could not be read.</p>
+      <p className="text-xs leading-5 text-slate-600">Expand a client to see its evidence checks. Recorded means verified CRM evidence exists, not that the service is included in the contract. Missing means required evidence is absent; Unknown means it could not be verified. Blocked means stale, partial or failed reporting.</p>
       <div className="grid gap-3 lg:grid-cols-2">{clients.map(c=><ClientChecklist key={c.id} client={c}/>)}</div>
     </section>}
     <footer className="rounded-xl bg-slate-100 px-4 py-3 text-xs leading-5 text-slate-600">

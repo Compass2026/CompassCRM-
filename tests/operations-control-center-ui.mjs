@@ -1,0 +1,59 @@
+// Actual Next.js route against a read-only synthetic PostgREST boundary.
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import {spawn} from 'node:child_process';
+import {mkdirSync,existsSync} from 'node:fs';
+import {chromium} from 'playwright-core';
+const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002',team='00000000-0000-4000-8000-000000000011';
+const now=new Date(),recent=new Date(now.getTime()-3600000).toISOString(),through=new Date(now.getTime()-5*86400000).toISOString().slice(0,10),period=through.slice(0,7)+'-01';
+const clients=[{id:a,name:'Fictional North',status:'active',gsc_property:'sc-domain:north.test',ga4_property:'properties/123'},{id:b,name:'Fictional South',status:'active',gsc_property:null,ga4_property:'properties/456'}];
+const receipt={id:'r1',client_id:a,property:'properties/123',period,period_end:through,created_at:recent};
+const run={id:'run1',client_id:a,created_at:recent,finished_at:recent,status:'completed',results:[{month:period,status:'imported',receipt_id:'r1'}]};
+let ga4Failure=false,truncated=false;const writes=[],requests=[];
+const rows={clients,keywords:[{client_id:a,is_active:true,is_tracked:true}],sites:[],report_measurements:[],content_drafts:[{id:'review1',client_id:a,status:'in_review',title:'Review this fictional article',topic:null,request_task_id:'task',created_at:recent}],blog_publications:[],crm_lite_settings:[],notification_jobs:[],backlink_opportunities:[],social_accounts:[],subscriptions:[],portal_users:[],client_brand_workspaces:[],brand_boards:[],inquiry_sources:[],gsc_performance_imports:[],gbp_performance_imports:[],gsc_performance_sync_runs:[],gbp_performance_sync_runs:[],ga4_performance_imports:[receipt],ga4_performance_sync_runs:[run,{...run,id:'run2',client_id:b,results:[]}]};
+const upstream=http.createServer(async(req,res)=>{
+ const url=new URL(req.url,'http://localhost');requests.push(url.pathname);
+ const reply=(body,status=200,count)=>{res.writeHead(status,{'content-type':'application/json',...(count!==undefined?{'content-range':`0-${Math.max(0,count-1)}/${count}`}:{})});res.end(JSON.stringify(body));};
+ if(req.method!=='GET'){writes.push(req.method+' '+url.pathname);return reply({message:'No writes allowed'},405);}
+ if(url.pathname==='/auth/v1/user')return reply({id:team,email:'team@example.test',aud:'authenticated',role:'authenticated'});
+ if(url.pathname==='/rest/v1/team_members')return reply({id:team});
+ const table=url.pathname.split('/').at(-1);
+ if(!(table in rows))return reply({message:'Unexpected table '+table},500);
+ if(ga4Failure&&table==='ga4_performance_imports')return reply({message:'Simulated unavailable source'},503);
+ let data=rows[table];
+ if(url.searchParams.has('source'))data=data.filter(r=>r.source===url.searchParams.get('source').slice(3));
+ return reply(data,200,truncated&&table==='ga4_performance_imports'?1001:data.length);
+});
+await new Promise(r=>upstream.listen(0,'127.0.0.1',r));
+const port=3445;
+const app=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--webpack','--hostname','127.0.0.1','--port',String(port)],{env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:`http://127.0.0.1:${upstream.address().port}`,NEXT_PUBLIC_SUPABASE_ANON_KEY:'synthetic-test-key',NEXT_TELEMETRY_DISABLED:'1'},stdio:['ignore','pipe','pipe']});
+let logs='',browser;app.stdout.on('data',c=>logs=(logs+c).slice(-9000));app.stderr.on('data',c=>logs=(logs+c).slice(-9000));
+try{
+ for(let i=0;i<120;i++){if(app.exitCode!==null)throw Error(logs);try{await fetch(`http://127.0.0.1:${port}/login`);break;}catch{await new Promise(r=>setTimeout(r,500));}}
+ const executable=process.env.CHROME_PATH??['/usr/bin/google-chrome','/usr/bin/chromium'].find(existsSync);
+ browser=await chromium.launch({headless:true,...(executable?{executablePath:executable}:{}),args:['--no-sandbox','--disable-dev-shm-usage']});
+ const context=await browser.newContext({viewport:{width:1440,height:1000}}),part=v=>Buffer.from(JSON.stringify(v)).toString('base64url'),expiry=Math.floor(Date.now()/1000)+3600;
+ const user={id:team,email:'team@example.test',aud:'authenticated',role:'authenticated'};
+ const session={access_token:`${part({alg:'HS256',typ:'JWT'})}.${part({sub:team,exp:expiry})}.fixture`,refresh_token:'fixture',expires_at:expiry,expires_in:3600,token_type:'bearer',user};
+ await context.addCookies([{name:'sb-127-auth-token',value:`base64-${part(session)}`,domain:'127.0.0.1',path:'/'}]);
+ const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(`http://127.0.0.1:${port}/production/health`,{waitUntil:'networkidle'});
+ await page.getByRole('heading',{name:'From visibility to action'}).waitFor();
+ assert.ok(await page.getByText('Analytics 4 · missing',{exact:true}).isVisible());
+ const review=page.locator('[data-action-list] a').filter({hasText:'Article waiting for approval'});assert.match(await review.getAttribute('href'),/drafts\/review1$/);
+ await page.getByRole('tab',{name:'Source freshness',exact:true}).click();
+ const ga4=page.locator(`[data-integration-client="${a}"] [data-integration-source="ga4"]`);
+ assert.ok(await ga4.getByText('Verified retrieval',{exact:true}).isVisible());
+ assert.match(await page.locator(`[data-integration-client="${b}"] [data-integration-source="ga4"]`).innerText(),/No provider results/);
+ await page.getByLabel('Filter Control Center clients').fill('North');assert.equal(await page.locator('[data-integration-client]').count(),1);
+ mkdirSync('docs/screenshots/control-center',{recursive:true});await page.screenshot({path:'docs/screenshots/control-center/integrations-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ await page.screenshot({path:'docs/screenshots/control-center/integrations-mobile.png',fullPage:true});
+ await page.getByRole('tab',{name:'Client onboarding'}).click();await page.locator('[data-readiness-client] summary').click();assert.ok(await page.getByText('Approved brand foundation',{exact:true}).isVisible());
+ await page.getByRole('tab',{name:'Source freshness'}).click();
+ ga4Failure=true;await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();
+ assert.ok(await ga4.getByText('Unverified',{exact:true}).isVisible());assert.equal(await ga4.getByText('Verified retrieval',{exact:true}).count(),0);
+ ga4Failure=false;truncated=true;await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();assert.ok(await ga4.getByText('Unverified',{exact:true}).isVisible());
+ assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);assert.ok(requests.includes('/rest/v1/ga4_performance_sync_runs'));
+ console.log('Control Center browser passed: server reads, exact-count failure, provider evidence, linked alerts, client filtering, onboarding, responsive layout, no writes.');
+}catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}

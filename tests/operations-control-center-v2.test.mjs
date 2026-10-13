@@ -96,3 +96,15 @@ test("Control Center 2.0 is interactive but read-only, with source-aware server 
      "Health view must not send, publish, bill or mutate clients");
  }
 });
+test("integration failures drive linked alerts and onboarding; recovery removes current incident",()=>{
+ const m=mock();m.integrations=[{clientId:'a',source:'ga4',state:'partial',evidence:'One period failed',nextAction:'Review reporting',href:'/clients/a/growth'}];
+ let v=buildOperationsV2(m);
+ assert.equal(v.clients[0].readiness.find(c=>c.key==='analytics').state,'blocked');
+ assert.ok(v.alerts.some(a=>a.id==='a:integration:ga4'&&a.href==='/clients/a/growth'));
+ assert.equal(v.clients[1].readiness.find(c=>c.key==='analytics').state,'unknown');
+ m.integrations[0].state='verified';v=buildOperationsV2(m);
+ assert.equal(v.clients[0].readiness.find(c=>c.key==='analytics').state,'recorded');
+ assert.ok(!v.alerts.some(a=>a.id==='a:integration:ga4'));
+ m.integrations[0].state='running';v=buildOperationsV2(m);
+ assert.equal(v.clients[0].readiness.find(c=>c.key==='analytics').state,'waiting');
+});

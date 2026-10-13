@@ -1,5 +1,6 @@
 // Pure source-freshness and action/readiness rules for Control Center 2.0.
 // Read-only: labels distinguish verified records, missing evidence and failed reads.
+import { SOURCE_POLICY, type IntegrationEvidence } from "./integration-health.ts";
 import type { ClientHealth } from "./operations-health";
 
 export type SourceKey = "gsc" | "ga4" | "gbp";
@@ -33,7 +34,7 @@ export type Alert = {
 };
 export type ReadinessCheck = {
   key: string; label: string;
-  state: "recorded" | "missing" | "unknown";
+  state: "recorded" | "missing" | "unknown" | "blocked" | "waiting";
   href: string;
 };
 export type ClientReadiness = {
@@ -47,6 +48,7 @@ export type OperationsV2 = {
   alerts: Alert[];
   sourceErrors: string[];
   generatedAt: string;
+  integrations: IntegrationEvidence[];
 };
 export type OperationsV2Input = {
   clients: ClientHealth[];
@@ -58,6 +60,7 @@ export type OperationsV2Input = {
   releases: ReleaseRow[] | null;
   sourceErrors: string[];
   now: string;
+  integrations?: IntegrationEvidence[];
 };
 const PROVIDERS: Record<SourceKey, string> = {
   gsc: "Google Search Console property totals",
@@ -125,6 +128,16 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
       makeCheck("billing", "LIVE subscription recorded in CRM", c.liveSubscriptions === null ? null : c.liveSubscriptions > 0, base + "/billing"),
       makeCheck("portal", "Client portal user enrolled", c.portalMembers === null ? null : c.portalMembers > 0, base),
     ];
+    if (input.integrations) {
+      for (const [key, sourceKey, label] of [["search","gsc","Search Console reporting verified"],["analytics","ga4","GA4 reporting verified"],["gbp","gbp","GBP reporting verified"]] as const) {
+        const evidence=input.integrations.find(e=>e.clientId===c.id && e.source===sourceKey);
+        const check: ReadinessCheck={key,label,href:base+"/growth",state:
+          !evidence || evidence.state === "unknown" ? "unknown" : evidence.state === "verified" ? "recorded" :
+          evidence.state === "running" ? "waiting" : evidence.state === "unconfigured" || evidence.state === "missing" ? "missing" : "blocked"};
+        const index=checks.findIndex(r=>r.key===key);
+        if(index<0) checks.push(check); else checks[index]=check;
+      }
+    }
     const warn = (
       type: Alert["severity"], key: string, title: string, detail: string, href: string,
     ) => alerts.push({ id: c.id + ":" + key, clientId: c.id, clientName: c.name, severity: type, title, detail, href });
@@ -187,8 +200,17 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
       freshness: source, multiBrand,
     };
   });
+  for (const entry of input.integrations ?? []) {
+    const client=input.clients.find(c=>c.id===entry.clientId);
+    if (!client || entry.state === "verified" || entry.state === "running") continue;
+    alerts.push({id:`${entry.clientId}:integration:${entry.source}`,clientId:client.id,clientName:client.name,
+      severity:entry.state === "failed" ? "critical" : entry.state === "unconfigured" ? "setup" : "attention",
+      title:SOURCE_POLICY[entry.source].label+" · "+entry.state,
+      detail:entry.evidence+" Next: "+entry.nextAction,
+      href:entry.state === "unconfigured" ? `/clients/${client.id}${entry.source === "gbp" ? "/social" : ""}` : entry.href});
+  }
   const order: Record<Alert["severity"], number> = { critical: 0, attention: 1, setup: 2 };
   alerts.sort((a, b) => order[a.severity] - order[b.severity] ||
     a.clientName.localeCompare(b.clientName) || a.title.localeCompare(b.title));
-  return { clients, alerts, sourceErrors: input.sourceErrors, generatedAt: input.now };
+  return { clients, alerts, sourceErrors: input.sourceErrors, generatedAt: input.now, integrations: input.integrations ?? [] };
 }

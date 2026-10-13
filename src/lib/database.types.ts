@@ -18,6 +18,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      ga4_performance_imports: {
+        Row: { id: string; client_id: string; property: string; period: string; period_end: string; data: Json; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ga4_performance_sync_runs: {
+        Row: { id: string; client_id: string; created_at: string; finished_at: string | null; status: string; results: Json }
+        Insert: { id?: string; client_id: string; status: string; results: Json }
+        Update: { finished_at?: string | null; status?: string; results?: Json }
+        Relationships: []
+      }
       gsc_performance_imports: {
         Row: { id: string; client_id: string; property: string; period: string; period_end: string; data: Json; created_at: string }
         Insert: never
@@ -60,7 +72,7 @@ export type Database = {
           client_id: string
           slug: string
           name: string
-          website_url: string
+          ga4_property: string | null; gsc_property: string | null; website_url: string
           phone: string
           positioning: string
           voice_tone: string
