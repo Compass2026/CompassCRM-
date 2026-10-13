@@ -80,14 +80,14 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
     [data.alerts,names,focus]);
   const urgent=data.alerts.filter(a=>a.severity==="critical").length;
   const needsReview=data.alerts.filter(a=>a.title==="Article waiting for approval").length;
-  const stale=data.clients.reduce((n,c)=>n+Object.values(c.freshness).filter(r=>r.state==="stale").length,0);
+  const gaps=data.integrations.length ? data.integrations.filter(e=>e.state!=="verified" && e.state!=="running").length : data.clients.reduce((n,c)=>n+Object.values(c.freshness).filter(r=>r.state!=="current").length,0);
   const tabs:[Tab,string][]=[["attention","Action queue"],["freshness","Source freshness"],["onboarding","Client onboarding"]];
   return <section className="space-y-5" data-control-center-v2>
     <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-950 to-blue-900 p-6 text-white shadow-lg sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[.2em] text-orange-300">Control Center · Phase 2</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">From visibility to action</h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">From visibility to action</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100/80">Prioritized work, measurement freshness, and client setup evidence across the Five Layers.</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-blue-100">
@@ -98,7 +98,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
         {[
           ["Critical",urgent,"Production exceptions"],
           ["Reviews",needsReview,"Waiting for human approval"],
-          ["Old windows",stale,"Source measurement periods"],
+          ["Reporting gaps",gaps,"Sources needing verification"],
           ["Clients",data.clients.length,"Active or launching"],
         ].map(([title,note,desc])=><div key={title} className="rounded-xl bg-white/5 px-3 py-3">
           <p className="text-[11px] font-medium uppercase tracking-wider text-blue-200">{title}</p>

@@ -39,6 +39,8 @@ try{
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`http://127.0.0.1:${port}/production/health`,{waitUntil:'networkidle'});
  await page.getByRole('heading',{name:'From visibility to action'}).waitFor();
+ assert.equal(await page.getByRole('heading',{name:'From visibility to action'}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
+ assert.ok(await page.getByText('Reporting gaps',{exact:true}).isVisible());
  assert.ok(await page.getByText('Analytics 4 · missing',{exact:true}).isVisible());
  const review=page.locator('[data-action-list] a').filter({hasText:'Article waiting for approval'});assert.match(await review.getAttribute('href'),/drafts\/review1$/);
  await page.getByRole('tab',{name:'Source freshness',exact:true}).click();
