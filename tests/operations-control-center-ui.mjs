@@ -41,6 +41,21 @@ try{
  await page.getByRole('heading',{name:'From visibility to action'}).waitFor();
  assert.equal(await page.getByRole('heading',{name:'From visibility to action'}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
  assert.ok(await page.getByText('Reporting gaps',{exact:true}).isVisible());
+ assert.equal(await page.getByRole('tab',{name:'Five-layer overview',exact:true}).getAttribute('aria-selected'),'true');
+ assert.equal(await page.locator('[data-overview-layer]').count(),5);
+ assert.match(await page.locator('[data-overview-support]').innerText(),/CRM Lite, billing and client portal/);
+ assert.equal(await page.locator('[data-layer-next="4"]').getAttribute('href'),`/clients/${a}/social/social-review`);
+ await page.getByLabel('Filter Control Center clients').fill('South');
+ assert.match(await page.locator('[data-five-layer-overview]').innerText(),/1 selected clients/);
+ assert.equal(await page.locator('[data-layer-next="4"]').count(),0);
+ await page.getByLabel('Filter Control Center clients').fill('');
+ mkdirSync('docs/screenshots/control-center',{recursive:true});
+ await page.screenshot({path:'docs/screenshots/control-center/overview-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ await page.screenshot({path:'docs/screenshots/control-center/overview-mobile.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('tab',{name:'Action queue',exact:true}).click();
  assert.ok(await page.getByText('Analytics 4 · missing',{exact:true}).isVisible());
  const socialReview=page.locator('[data-action-list] a').filter({hasText:'Social post waiting for approval'});assert.equal(await socialReview.getAttribute('href'),`/clients/${a}/social/social-review`);
  const review=page.locator('[data-action-list] a').filter({hasText:'Article waiting for approval'});assert.match(await review.getAttribute('href'),/drafts\/review1$/);
@@ -72,3 +87,4 @@ try{
  assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);assert.ok(requests.includes('/rest/v1/ga4_performance_sync_runs'));
  console.log('Control Center browser passed: server reads, exact-count failure, provider evidence, linked alerts, client filtering, onboarding, responsive layout, no writes.');
 }catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}
+

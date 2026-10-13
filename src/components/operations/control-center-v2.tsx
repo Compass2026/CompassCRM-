@@ -1,4 +1,6 @@
 "use client";
+import { FiveLayerOverview } from "./five-layer-overview";
+import { buildFiveLayerOverview } from "@/lib/operations-overview";
 import { OperationalEvidencePanel } from "./operational-evidence-panel";
 import { IntegrationHealthPanel } from "./integration-health-panel";
 import { useMemo, useState } from "react";
@@ -6,7 +8,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Clock3, Filter, Search, ShieldCheck, SlidersHorizontal, WifiOff } from "lucide-react";
 import type { Alert, ClientReadiness, Freshness, OperationsV2, ReadinessCheck, SourceReading } from "@/lib/operations-readiness";
 
-type Tab = "attention" | "freshness" | "delivery" | "onboarding";
+type Tab = "overview" | "attention" | "freshness" | "delivery" | "onboarding";
 const tone: Record<Alert["severity"], string> = {
   critical: "border-red-200 bg-red-50 text-red-800",
   attention: "border-amber-200 bg-amber-50 text-amber-800",
@@ -71,7 +73,7 @@ function ClientChecklist({ client }: { client: ClientReadiness }) {
 }
 
 export function ControlCenterV2({data}:{data:OperationsV2}) {
-  const [tab,setTab]=useState<Tab>("attention");
+  const [tab,setTab]=useState<Tab>("overview");
   const [term,setTerm]=useState("");
   const [focus,setFocus]=useState<"all"|"critical"|"attention"|"setup">("all");
   const query=term.trim().toLowerCase();
@@ -79,10 +81,12 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
   const names=useMemo(()=>new Set(clients.map(c=>c.id)),[clients]);
   const alerts=useMemo(()=>data.alerts.filter(a=>names.has(a.clientId) && (focus==="all"||a.severity===focus)),
     [data.alerts,names,focus]);
-  const urgent=data.alerts.filter(a=>a.severity==="critical").length;
-  const needsReview=data.alerts.filter(a=>a.title==="Article waiting for approval" || a.title==="Social post waiting for approval").length;
-  const gaps=data.integrations.length ? data.integrations.filter(e=>e.state!=="verified" && e.state!=="running").length : data.clients.reduce((n,c)=>n+Object.values(c.freshness).filter(r=>r.state!=="current").length,0);
-  const tabs:[Tab,string][]=[["attention","Action queue"],["freshness","Source freshness"],["delivery","Delivery & work"],["onboarding","Client onboarding"]];
+  const scopedAlerts=data.alerts.filter(a=>names.has(a.clientId));
+  const urgent=scopedAlerts.filter(a=>a.severity==="critical").length;
+  const needsReview=scopedAlerts.filter(a=>a.title==="Article waiting for approval" || a.title==="Social post waiting for approval").length;
+  const gaps=data.integrations.length ? data.integrations.filter(e=>names.has(e.clientId) && e.state!=="verified" && e.state!=="running").length : clients.reduce((n,c)=>n+Object.values(c.freshness).filter(r=>r.state!=="current").length,0);
+  const overview=useMemo(()=>buildFiveLayerOverview(data,clients.map(c=>c.id)),[data,clients]);
+  const tabs:[Tab,string][]=[["overview","Five-layer overview"],["attention","Action queue"],["freshness","Source freshness"],["delivery","Delivery & work"],["onboarding","Client onboarding"]];
   return <section className="space-y-5" data-control-center-v2>
     <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-950 to-blue-900 p-6 text-white shadow-lg sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -100,7 +104,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
           ["Critical",urgent,"Production exceptions"],
           ["Reviews",needsReview,"Waiting for human approval"],
           ["Reporting gaps",gaps,"Sources needing verification"],
-          ["Clients",data.clients.length,"Active or launching"],
+          ["Clients",clients.length,"Selected active or launching"],
         ].map(([title,note,desc])=><div key={title} className="rounded-xl bg-white/5 px-3 py-3">
           <p className="text-[11px] font-medium uppercase tracking-wider text-blue-200">{title}</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums text-white">{note}</p>
@@ -125,6 +129,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
     {data.sourceErrors.length>0 && <p role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" data-v2-source-warning>
       <WifiOff className="mr-2 inline size-4"/> Source read failures: {data.sourceErrors.join(", ")}. Unavailable sources never count as healthy or complete.
     </p>}
+    {tab==="overview" && <FiveLayerOverview overview={overview}/>}
     {tab==="attention" && <div className="space-y-4" role="tabpanel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -180,3 +185,4 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
     </footer>
   </section>;
 }
+
