@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Activity, ArrowRight, ChartNoAxesCombined, CircleAlert, Database, Layers3, ShieldCheck, Workflow } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { buildOperationsHealth, type HealthInputs, type ClientHealth } from "@/lib/operations-health";
+import { loadOperationalEvidence } from "@/lib/operations-evidence-loader";
 import { loadIntegrationHealth } from "@/lib/integration-health-loader";
 import { completeRead } from "@/lib/integration-health";
 import { buildOperationsV2 } from "@/lib/operations-readiness";
@@ -106,7 +107,7 @@ export default async function OperationsHealthPage() {
     db.from("brand_boards").select("client_id,status", {count:"exact"}).limit(3000),
     db.from("inquiry_sources").select("client_id,enabled", {count:"exact"}).limit(3000),
     db.from("content_drafts").select("id,client_id,status,title,topic,request_task_id,created_at", {count:"exact"}).limit(3000),
-    db.from("blog_publications").select("id,client_id,draft_id,status,last_error,released_at", {count:"exact"}).limit(3000),
+    db.from("blog_publications").select("id,client_id,draft_id,draft_version,status,last_error,released_at,scheduled_at", {count:"exact"}).limit(3000),
   ]);
   if (completeRead(clientsQ) === null) {
     return <section className="surface p-5" role="alert">The client roster could not be loaded. No health conclusions were drawn. Please retry.</section>;
@@ -154,9 +155,14 @@ export default async function OperationsHealthPage() {
     ...(completeRead(detailedReleasesQ) === null ? ["Publisher action queue"] : []),
   ];
   const generatedAt = new Date().toISOString();
-  const integrations = await loadIntegrationHealth(db, summary.clients.map(c=>c.id), generatedAt);
+  const [integrations,operational] = await Promise.all([
+    loadIntegrationHealth(db, summary.clients.map(c=>c.id), generatedAt),
+    loadOperationalEvidence(db, summary.clients.map(c=>c.id), generatedAt).catch(()=>null),
+  ]);
+  if(!operational)v2SourceErrors.push("Operational evidence");
   const v2 = buildOperationsV2({
     integrations,
+    operational: operational ?? undefined,
     clients: summary.clients,
     measured: completeRead(measuredQ),
     brands: completeRead(brandsQ),

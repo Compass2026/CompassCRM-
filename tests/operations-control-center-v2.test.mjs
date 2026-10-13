@@ -109,3 +109,7 @@ test("integration failures drive linked alerts and onboarding; recovery removes 
  m.integrations[0].state='running';v=buildOperationsV2(m);
  assert.equal(v.clients[0].readiness.find(c=>c.key==='analytics').state,'waiting');
 });
+test('future scheduled blog releases and superseded failures do not create active incidents',()=>{
+ const m=mock();m.releases=[{id:'old',client_id:'a',draft_id:'draft',draft_version:1,status:'blocked',released_at:'2026-10-01',last_error:'old error'},{id:'new',client_id:'a',draft_id:'draft',draft_version:2,status:'published',released_at:'2026-10-10'},{id:'future',client_id:'a',draft_id:'other',draft_version:1,status:'queued',released_at:'2026-10-01',scheduled_at:'2027-01-01'}];
+ const v=buildOperationsV2(m);assert.ok(!v.alerts.some(a=>a.id==='a:release:old'||a.id==='a:queued:future'));
+});

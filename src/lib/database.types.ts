@@ -18,6 +18,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      backlink_profile_sync_runs: {
+        Row: { id:string; client_id:string; host:string; week:string; status:string; created_at:string; finished_at:string|null; results:Json }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       ga4_performance_imports: {
         Row: { id: string; client_id: string; property: string; period: string; period_end: string; data: Json; created_at: string }
         Insert: never

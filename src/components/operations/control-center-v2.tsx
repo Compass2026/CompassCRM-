@@ -1,11 +1,12 @@
 "use client";
+import { OperationalEvidencePanel } from "./operational-evidence-panel";
 import { IntegrationHealthPanel } from "./integration-health-panel";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Clock3, Filter, Search, ShieldCheck, SlidersHorizontal, WifiOff } from "lucide-react";
 import type { Alert, ClientReadiness, Freshness, OperationsV2, ReadinessCheck, SourceReading } from "@/lib/operations-readiness";
 
-type Tab = "attention" | "freshness" | "onboarding";
+type Tab = "attention" | "freshness" | "delivery" | "onboarding";
 const tone: Record<Alert["severity"], string> = {
   critical: "border-red-200 bg-red-50 text-red-800",
   attention: "border-amber-200 bg-amber-50 text-amber-800",
@@ -37,7 +38,7 @@ function CheckRow({ check }: { check: ReadinessCheck }) {
     {ok ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600"/> :
       unknown ? <AlertTriangle className="size-4 shrink-0 text-red-500"/> :
       <Circle className="size-4 shrink-0 text-amber-500"/>}
-    <Link href={check.href} className="flex-1 font-medium text-slate-700 hover:underline">{check.label}</Link>
+    <div className="min-w-0 flex-1"><Link href={check.href} className="font-medium text-slate-700 hover:underline">{check.label}</Link>{check.detail && <p className="mt-1 text-xs leading-5 text-slate-500">{check.detail}</p>}</div>
     <span className={"text-[11px] " + (ok ? "text-emerald-700" : unknown ? "text-red-700" : "text-slate-500")}>
       {ok ? "Recorded" : unknown ? "Unknown" : check.state === "blocked" ? "Blocked" : check.state === "waiting" ? "Waiting" : "Not recorded"}
     </span>
@@ -79,9 +80,9 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
   const alerts=useMemo(()=>data.alerts.filter(a=>names.has(a.clientId) && (focus==="all"||a.severity===focus)),
     [data.alerts,names,focus]);
   const urgent=data.alerts.filter(a=>a.severity==="critical").length;
-  const needsReview=data.alerts.filter(a=>a.title==="Article waiting for approval").length;
+  const needsReview=data.alerts.filter(a=>a.title==="Article waiting for approval" || a.title==="Social post waiting for approval").length;
   const gaps=data.integrations.length ? data.integrations.filter(e=>e.state!=="verified" && e.state!=="running").length : data.clients.reduce((n,c)=>n+Object.values(c.freshness).filter(r=>r.state!=="current").length,0);
-  const tabs:[Tab,string][]=[["attention","Action queue"],["freshness","Source freshness"],["onboarding","Client onboarding"]];
+  const tabs:[Tab,string][]=[["attention","Action queue"],["freshness","Source freshness"],["delivery","Delivery & work"],["onboarding","Client onboarding"]];
   return <section className="space-y-5" data-control-center-v2>
     <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-950 to-blue-900 p-6 text-white shadow-lg sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -166,6 +167,8 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
         </table>
       </div>
     </section>}
+    {tab==="delivery" && !!data.operationalCards?.length && <OperationalEvidencePanel cards={data.operationalCards} clients={clients}/>}
+    {tab==="delivery" && !data.operationalCards?.length && <p role="alert" className="rounded-2xl bg-white p-5 text-sm text-slate-600">Operational evidence is unavailable. Reload to retry; no health conclusion was drawn.</p>}
     {tab==="onboarding" && <section className="space-y-3" role="tabpanel">
       <h3 className="font-semibold text-navy-900">Client onboarding evidence</h3>
       <p className="text-xs leading-5 text-slate-600">Expand a client to see its evidence checks. Recorded means verified CRM evidence exists, not that the service is included in the contract. Missing means required evidence is absent; Unknown means it could not be verified. Blocked means stale, partial or failed reporting.</p>

@@ -1,6 +1,7 @@
 // Pure source-freshness and action/readiness rules for Control Center 2.0.
 // Read-only: labels distinguish verified records, missing evidence and failed reads.
 import { SOURCE_POLICY, type IntegrationEvidence } from "./integration-health.ts";
+import type { OperationalEvidence, OperationalCard } from "./operations-evidence";
 import type { ClientHealth } from "./operations-health";
 
 export type SourceKey = "gsc" | "ga4" | "gbp";
@@ -25,7 +26,7 @@ export type DraftRow = {
 };
 export type ReleaseRow = {
   id: string; client_id: string; draft_id: string; status: string;
-  last_error: string | null; released_at: string;
+  last_error: string | null; released_at: string; scheduled_at?: string; draft_version?: number;
 };
 export type Alert = {
   id: string; clientId: string; clientName: string;
@@ -33,7 +34,7 @@ export type Alert = {
   title: string; detail: string; href: string;
 };
 export type ReadinessCheck = {
-  key: string; label: string;
+  key: string; label: string; detail?: string;
   state: "recorded" | "missing" | "unknown" | "blocked" | "waiting";
   href: string;
 };
@@ -49,6 +50,7 @@ export type OperationsV2 = {
   sourceErrors: string[];
   generatedAt: string;
   integrations: IntegrationEvidence[];
+  operationalCards?: OperationalCard[];
 };
 export type OperationsV2Input = {
   clients: ClientHealth[];
@@ -61,6 +63,7 @@ export type OperationsV2Input = {
   sourceErrors: string[];
   now: string;
   integrations?: IntegrationEvidence[];
+  operational?: OperationalEvidence;
 };
 const PROVIDERS: Record<SourceKey, string> = {
   gsc: "Google Search Console property totals",
@@ -138,22 +141,27 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
         if(index<0) checks.push(check); else checks[index]=check;
       }
     }
+    checks.push(...(input.operational?.checks[c.id] ?? []));
     const warn = (
       type: Alert["severity"], key: string, title: string, detail: string, href: string,
     ) => alerts.push({ id: c.id + ":" + key, clientId: c.id, clientName: c.name, severity: type, title, detail, href });
 
     const releases = input.releases?.filter((r) => r.client_id === c.id) ?? [];
     for (const rel of releases) {
+      const recovered=releases.some(other=>other.id!==rel.id && other.draft_id===rel.draft_id && other.status==='published' &&
+        other.draft_version!==undefined && rel.draft_version!==undefined && other.draft_version>=rel.draft_version &&
+        (parseTime(other.released_at)??0)>(parseTime(rel.released_at)??Infinity));
+      if (recovered) continue;
       if (rel.status === "blocked" || rel.status === "uncertain") {
         warn("critical", "release:" + rel.id,
           rel.status === "uncertain" ? "Publication needs reconciliation" : "Publication blocked",
           rel.last_error || "Review the release receipt before taking action. Never blindly requeue an uncertain publish.",
           base + "/drafts/" + rel.draft_id);
       } else if (rel.status === "queued" && now !== null) {
-        const at = parseTime(rel.released_at);
+        const at = parseTime(rel.scheduled_at ?? rel.released_at);
         if (at !== null && now - at > 35 * 60000) {
           warn("attention", "queued:" + rel.id, "Publication queued over 35 minutes",
-            "Check the scheduled release and publisher status; it may have a future publish time.",
+            "The scheduled release is overdue. Inspect the publisher receipt before retrying.",
             base + "/drafts/" + rel.draft_id);
         }
       }
@@ -209,8 +217,9 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
       detail:entry.evidence+" Next: "+entry.nextAction,
       href:entry.state === "unconfigured" ? `/clients/${client.id}${entry.source === "gbp" ? "/social" : ""}` : entry.href});
   }
+  alerts.push(...(input.operational?.alerts ?? []));
   const order: Record<Alert["severity"], number> = { critical: 0, attention: 1, setup: 2 };
   alerts.sort((a, b) => order[a.severity] - order[b.severity] ||
     a.clientName.localeCompare(b.clientName) || a.title.localeCompare(b.title));
-  return { clients, alerts, sourceErrors: input.sourceErrors, generatedAt: input.now, integrations: input.integrations ?? [] };
+  return { clients, alerts, sourceErrors: input.sourceErrors, generatedAt: input.now, integrations: input.integrations ?? [], operationalCards: input.operational?.cards ?? [] };
 }
