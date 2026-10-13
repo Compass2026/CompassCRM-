@@ -17,8 +17,22 @@ const STATE_SUFFIX = /\b(mo|missouri)\b/i;
 
 export function assessIntent(query: string, stored: string | null, ctx: { clientName: string; places: PlaceIndex }): IntentCheck {
   const q = query.toLowerCase().trim();
-  const brandWords = (ctx.clientName.toLowerCase().match(/[a-z']{4,}/g) ?? []).filter((w) => !["construction", "roofing", "company", "services"].includes(w));
-  const brand = q.includes(ctx.clientName.toLowerCase()) || brandWords.some((w) => new RegExp(`\\b${w}\\b`).test(q));
+  // Industry and service nouns in business names are not brand identifiers.
+  // "BHG Forklift Training" should not make "forklift training course" a
+  // navigational search. Keep distinctive names and literal acronyms instead.
+  const generic = new Set([
+    "construction", "roofing", "company", "services", "service", "partners", "partner",
+    "llc", "inc", "group", "solutions", "training", "equipment", "forklift",
+    "safety", "heavy", "operator", "operators", "industrial", "consulting",
+    "consultants", "consultant", "compliance", "audits", "audit", "contractors",
+    "contractor", "interiors", "design", "build", "electrical", "marketing",
+  ]);
+  const brandWords = (ctx.clientName.toLowerCase().match(/[a-z']{4,}/g) ?? [])
+    .filter((w) => !generic.has(w));
+  const initialism = ctx.clientName.match(/^\s*([A-Z]{2,5})\b/)?.[1]?.toLowerCase();
+  const brand = q.includes(ctx.clientName.toLowerCase())
+    || brandWords.some((w) => new RegExp(`\\b${w}\\b`).test(q))
+    || !!(initialism && new RegExp(`\\b${initialism}\\b`).test(q));
   const local = placesIn(q, ctx.places).length > 0 || STATE_SUFFIX.test(q);
   let assessed: AssessedIntent;
   let reason: string;
