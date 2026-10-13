@@ -65,9 +65,15 @@ export const NUMBER_RE = /\d/g;
 // Which categories a claim's own text falls into.
 export function claimCategories(text: string): string[] {
   const out = new Set<string>();
+  // CFR numbers such as OSHA 29 CFR 1910.178 and 1926.20 are regulatory
+  // citations, NOT a business founding year. Neutralize only these citation
+  // spans for the tenure detector; all other categories see the full text.
+  const withoutCfr = text
+    .replace(/\b(?:29\s+CFR\s+)?(?:19|20)\d{2}\.\d+(?:\([^)]*\))*/gi, " ")
+    .replace(/\b29\s+CFR\s+(?:19|20)\d{2}\b/gi, " ");
   for (const d of DETECTORS) {
     d.re.lastIndex = 0;
-    if (d.re.test(text)) out.add(d.category);
+    if (d.re.test(d.category === "tenure" ? withoutCfr : text)) out.add(d.category);
   }
   PHONE_RE.lastIndex = 0;
   if (PHONE_RE.test(text) || /\bphone\b/i.test(text)) out.add("phone");
