@@ -1,5 +1,32 @@
 # Native Compass Agreements
 
+## Payment handoff fix (October 14, 2026)
+
+Apply `20261014225000_agreement_payment_preparation.sql`, then deploy the CRM.
+The agreement runtime can attach only an existing live, unrevoked seven-day
+billing capability for the same client, linked customer and unchanged price.
+It rechecks the complete agreement scope and the authorizing admin. Contract
+terms, content hashes and signatures remain immutable.
+
+Issuing and emailing a Stripe-collected agreement now prepare payment first.
+For an already issued agreement, use **Prepare secure payment**. Preparation
+is idempotent while its existing capability remains valid; it creates no Stripe
+customer, Checkout Session, subscription or charge. After signing, the existing
+recipient page shows **Continue to secure payment**, leading through `/pay/`
+to the dedicated billing runtime. That runtime reuses or refreshes Checkout,
+and retains its duplicate-subscription and ACH-processing protections.
+
+Signing links last fourteen days; payment capabilities last seven days.
+The admin page shows the payment expiry. Refresh payment preparation if an
+agreement has been waiting longer. Revoking/replacing a payment capability
+still invalidates the old one. The legacy signed-only Checkout attachment is
+retained in SQL for compatibility, but the CRM uses preparation going forward.
+
+Checks: `tests/agreement-payment-handoff.test.mjs` exercises a fictional
+issued agreement through verification and signing, without creating a checkout,
+and checks unchanged terms, idempotency, role boundaries, scope, client,
+customer, mode, expiry, revocation and allowed URLs.
+
 Compass can draft, review, issue and electronically sign its own agreements.
 The initial customer is BHG Safety Partners, whose existing operational plan
 is $500/month, month-to-month from October 1, 2026. No legal terms or recipient
@@ -28,10 +55,10 @@ email are invented. Import the existing Compass contract before issuing.
 6. The final PDF includes the frozen scope, terms, both typed signatures,
    timestamps, verified email, consent and observed request context. Both
    parties can download it. Final bytes and SHA-256 are retained immutably.
-7. Create the exact approved live payment link through the existing Billing
-   tab. **Attach live payment link** checks the signed scope still matches the
-   operational plan and exposes that existing link on the signing page.
-   Signing and attaching a URL never create a charge or authorize ACH.
+7. The prepared payment button appears after signing. The recipient follows
+   it to Stripe and separately authorizes the recurring subscription. Existing
+   issued agreements can be prepared using **Prepare secure payment** before
+   the recipient signs. Refresh expired preparation before sending an old link.
 
 Service start dates are disclosed in the document. They do not instruct Stripe
 to backdate a subscription, collect arrears, or silently change billing anchors.
@@ -42,7 +69,7 @@ Those choices remain part of the existing reviewed billing setup.
 `AGREEMENTS_DATABASE_URL` is a server-only connection using `agreement_service`
 through the Supavisor transaction pooler. This role has no table grants, Stripe
 credentials, Vault access or general database write access. It can execute only
-three validating functions in the unexposed `agreement_private` schema.
+the validating staff, signer, artifact and payment-preparation functions in the unexposed `agreement_private` schema.
 TLS always verifies the server certificate and hostname. Set
 `AGREEMENTS_DATABASE_CA` to the Supabase server root certificate PEM from
 Database settings for poolers using Supabase's private certificate authority.
@@ -110,3 +137,4 @@ Before BHG can sign and pay: import the existing contract; confirm Brad’s
 signer email; configure the verified email sender; finish dedicated-runtime
 Stripe live setup and map the approved $500 monthly price. The software does
 not bypass those missing inputs or mark a client paid without Stripe evidence.
+

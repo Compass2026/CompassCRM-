@@ -10,6 +10,7 @@ import {
   newAgreementToken,
   sha256,
   validAgreementToken,
+  prepareContractPayment,
 } from "@/lib/agreements-server";
 import type { Contract } from "@/lib/agreements";
 import { buildAgreementPdf } from "@/lib/agreement-pdf";
@@ -25,7 +26,9 @@ async function admin() {
   } = await supabase.auth.getUser();
   if (!user || me?.role !== "admin")
     throw new Error("Only a Compass admin can issue or change agreements.");
-  return { supabase, actor: user.id };
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Sign in again to prepare secure payment.");
+  return { supabase, actor: user.id, jwt: session.access_token };
 }
 function friendly(error: unknown) {
   const message =
@@ -44,6 +47,10 @@ function friendly(error: unknown) {
       "Only a draft can be edited or issued. Create a new agreement for changes.",
     agreement_live_signed_only:
       "A signed agreement and live billing are required. Billing is currently in test mode.",
+    agreement_live_issued_required:
+      "An issued or signed agreement and live billing are required to prepare payment.",
+    agreement_payment_link_required:
+      "Prepare a current payment link for this agreement before sending it.",
     agreement_signed_scope_changed:
       "The current plan differs from the signed agreement. Review an amendment before requesting payment.",
     agreement_live_checkout_required:
@@ -54,7 +61,7 @@ function friendly(error: unknown) {
   };
   return (
     known[message] ??
-    (message.includes("configured") || message.startsWith("Only a Compass")
+    (message.includes("configured") || message.startsWith("Only a Compass") || message.startsWith("Payment setup could not")
       ? message
       : "The agreement action could not be completed. Try again or check the client’s plan.")
   );
@@ -125,7 +132,7 @@ export async function sendContractLinkAction(
   token: string,
 ): Promise<IssueResult> {
   try {
-    const { actor } = await admin();
+    const { actor, jwt } = await admin();
     if (!validAgreementToken(token) || !agreementMailReady())
       return { error: "Signing email is not available." };
     const c = await agreementStaff<Contract>(actor, "read", { id });
@@ -136,6 +143,7 @@ export async function sendContractLinkAction(
       title: string;
       issuer: string;
     }>(actor, "delivery", { id, token_hash: sha256(token) });
+    if (c.snapshot.scope.plan.collection === "stripe") await prepareContractPayment(actor, id, jwt);
     const url = `${agreementOrigin()}/sign/${token}`;
     const email = buildAgreementEmail(c, agreementOrigin(), url);
     const response = await fetch("https://api.resend.com/emails", {
@@ -174,7 +182,7 @@ export async function issueContractAction(
   form: FormData,
 ): Promise<IssueResult> {
   try {
-    const { actor } = await admin();
+    const { actor, jwt } = await admin();
     if (!agreementMailReady())
       return {
         error:
@@ -201,11 +209,12 @@ export async function issueContractAction(
         provider_name: field(form, "provider_name"),
       },
     );
+    if (current.snapshot.scope.plan.collection === "stripe") await prepareContractPayment(actor, id, jwt);
     revalidatePath(base(clientId));
     return {
       url: `${agreementOrigin()}/sign/${token}`,
       notice:
-        "Signing link ready. Copy it to your message to the recipient. The link expires 14 days after issue.",
+        "Signing link ready. Signing expires 14 days after issue; prepared payment links last seven days. Refresh payment preparation before sending an older agreement.",
     };
   } catch (e) {
     return { error: friendly(e) };
@@ -227,17 +236,16 @@ export async function attachContractPaymentAction(
   id: string,
 ) {
   try {
-    const { actor } = await admin();
+    const { actor, jwt } = await admin();
     const c = await agreementStaff<Contract>(actor, "read", { id });
     if (c.client_id !== clientId) throw new Error("Not found");
-    // Attach only a live Checkout URL already created by the authorized billing
-    // workflow. This action never creates a customer, subscription, or charge.
-    await agreementStaff(actor, "payment", { id });
+    await prepareContractPayment(actor, id, jwt);
   } catch (e) {
     back(clientId, friendly(e));
   }
   revalidatePath(base(clientId));
   redirect(
-    `${base(clientId)}/${id}?notice=Live%20payment%20link%20attached.%20Payment%20authorization%20remains%20separate%20from%20signing.`,
+    `${base(clientId)}/${id}?notice=Payment%20ready.%20After%20signing%2C%20the%20recipient%20can%20continue%20to%20Stripe.%20The%20payment%20link%20is%20valid%20for%20seven%20days%20from%20preparation.`,
   );
 }
+
