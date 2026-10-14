@@ -11,6 +11,8 @@
 # The same harness runs the posts review check (0045):
 #   UI_SPEC=tests/posts-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh
 # (npm run test:posts-ui). CHROME_PATH picks a Chromium binary instead of Chrome.
+# PG_LISTEN=127.0.0.1 also opens the cluster on TCP port 54329 (the auth
+# flows check, npm run test:auth-ui, runs Supabase Auth against it).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,7 +38,7 @@ cleanup() {
 trap cleanup EXIT
 
 ${RUN_AS[@]+"${RUN_AS[@]}"} "$PG_BIN/initdb" -D "$WORK/data" -U supabase_admin --auth=trust >/dev/null
-${RUN_AS[@]+"${RUN_AS[@]}"} "$PG_BIN/pg_ctl" -D "$WORK/data" -o "-c listen_addresses='' -k $WORK -p 54329" -l "$WORK/log" -w start >/dev/null
+${RUN_AS[@]+"${RUN_AS[@]}"} "$PG_BIN/pg_ctl" -D "$WORK/data" -o "-c listen_addresses='${PG_LISTEN:-}' -k $WORK -p 54329" -l "$WORK/log" -w start >/dev/null
 psql_as() { local role="$1"; shift; "$PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -h "$WORK" -p 54329 -U "$role" "$@"; }
 
 psql_as supabase_admin -d postgres -c "create database sandbox"
@@ -66,7 +68,7 @@ PGRST_PID=$!
 for _ in $(seq 1 50); do curl -sf "http://127.0.0.1:$PGRST_PORT/" >/dev/null && break; sleep 0.2; done
 
 cd "$ROOT"
-JWT_SECRET="$JWT_SECRET" PGRST_URL="http://127.0.0.1:$PGRST_PORT" \
+JWT_SECRET="$JWT_SECRET" PGRST_URL="http://127.0.0.1:$PGRST_PORT" PG_BIN="$PG_BIN" PG_PORT=54329 \
   PSQL="$PG_BIN/psql -X -q -t -A -h $WORK -p 54329 -U postgres -d sandbox" \
   PSQL_ADMIN="$PG_BIN/psql -X -q -t -A -h $WORK -p 54329 -U supabase_admin -d sandbox" \
   node --no-warnings "${UI_SPEC:-tests/tasks-ui.mjs}"
