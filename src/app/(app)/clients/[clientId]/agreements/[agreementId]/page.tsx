@@ -5,7 +5,7 @@ import { getCurrentTeamRole } from "@/lib/team";
 import { agreementStaff, agreementMailReady, agreementOrigin } from "@/lib/agreements-server";
 import { buildAgreementEmail } from "@/lib/agreement-email";
 import { AgreementEmailPreview } from "@/components/agreements/agreement-email-preview";
-import { agreementStatus, type Contract } from "@/lib/agreements";
+import { activeAgreementPayment, agreementStatus, type Contract } from "@/lib/agreements";
 import {
   saveContractAction,
   voidContractAction,
@@ -41,6 +41,7 @@ export default async function AgreementPage({
   if (c.client_id !== clientId) notFound();
   const admin = me.role === "admin";
   const state = agreementStatus(c);
+  const paymentReady = !!activeAgreementPayment(c);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -73,6 +74,23 @@ export default async function AgreementPage({
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <AgreementDocument contract={c} />
         <div className="space-y-5">
+          {admin && ["issued", "signed"].includes(state) && c.snapshot.scope.plan.collection === "stripe" && (
+            <Card>
+              <CardHeader><CardTitle>Payment handoff</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm">
+                  {paymentReady
+                    ? "Payment is prepared. After signing, the recipient can continue to Stripe."
+                    : "Prepare payment so the recipient can continue to Stripe immediately after signing."}
+                </p>
+                {c.payment_expires_at && <p className="text-xs text-muted-foreground">Payment link expires {new Date(c.payment_expires_at).toLocaleString("en-US", { timeZone: "America/Chicago" })} Central.</p>}
+                <form action={attachContractPaymentAction.bind(null, clientId, c.id)}>
+                  <Button type="submit" variant="outline" loadingLabel="Preparing payment…">Prepare secure payment</Button>
+                </form>
+                <p className="text-xs text-muted-foreground">Uses the exact agreed price. Signing and payment authorization remain separate. Preparation creates no subscription or charge.</p>
+              </CardContent>
+            </Card>
+          )}
           {c.status === "draft" && admin && (
             <Card>
               <CardHeader>
@@ -195,27 +213,8 @@ export default async function AgreementPage({
                 >
                   Open billing setup
                 </Link>
-                {admin && (
-                  <form
-                    action={attachContractPaymentAction.bind(
-                      null,
-                      clientId,
-                      c.id,
-                    )}
-                  >
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      loadingLabel="Attaching payment link…"
-                    >
-                      Attach live payment link
-                    </Button>
-                  </form>
-                )}
                 <p className="text-xs text-muted-foreground">
-                  Create the exact approved price and payment link in Billing
-                  first. Attaching it requires live mode and the signed scope to
-                  match the plan.
+                  Payment preparation requires live billing and the agreement’s scope to match the current plan.
                 </p>
                 {c.payment_url && (
                   <p className="text-sm text-green-800">
@@ -263,3 +262,4 @@ export default async function AgreementPage({
     </div>
   );
 }
+

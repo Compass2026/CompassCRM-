@@ -91,6 +91,8 @@ export function serviceLine(s: AgreementScope["services"][number]): string {
 }
 export function safePaymentUrl(url: string | null): string | null {
   if (!url) return null;
+  // Only a server-attached, same-origin payment capability may be relative.
+  if (/^\/pay\/[A-Za-z0-9_-]{43}$/.test(url)) return url;
   try {
     const u = new URL(url);
     return u.protocol === "https:" && u.hostname === "checkout.stripe.com"
@@ -120,3 +122,4 @@ export const agreementErrors: Record<string, string> = {
   version_changed:
     "The agreement version did not match. Reload and review it again.",
 };
+

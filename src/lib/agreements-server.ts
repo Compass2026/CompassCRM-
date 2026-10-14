@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { Contract } from "./agreements";
 import { buildAgreementPdf } from "./agreement-pdf";
+import { paymentLinkCall } from "./payment-links";
 
 let pool: Pool | undefined;
 function database() {
@@ -55,6 +56,27 @@ export async function agreementSigner<T>(
     ],
   );
   return r.rows[0].result as T;
+}
+// Reuse the existing billing delegation. Signing itself never calls Stripe.
+export async function prepareContractPayment(actor: string, id: string, jwt: string) {
+  const prepare = async (token: string | null) => {
+    const result = await database().query(
+      "select agreement_private.prepare_payment($1::uuid,$2::uuid,$3::text) as result",
+      [actor, id, token],
+    );
+    return result.rows[0].result as Contract;
+  };
+  const current = await prepare(null);
+  const existing = current.payment_url?.match(/^\/pay\/([A-Za-z0-9_-]{43})$/)?.[1];
+  if (existing && current.payment_expires_at && Date.parse(current.payment_expires_at) > Date.now()) {
+    const answer = await paymentLinkCall({ action: "read", token: existing });
+    if (!answer.error && answer.livemode) return prepare(existing);
+  }
+  const token = newAgreementToken();
+  const answer = await paymentLinkCall({ action: "issue", client_id: current.client_id, token }, jwt);
+  if (answer.error || !answer.id || !answer.expires_at)
+    throw new Error("Payment setup could not be prepared. Check the client's Billing tab and try again.");
+  return prepare(token);
 }
 export function agreementOrigin(): string {
   const origin =
@@ -122,3 +144,4 @@ export async function sealedAgreementPdf(
   }
   return Buffer.from(r.rows[0].result.pdf, "base64");
 }
+
