@@ -5,7 +5,7 @@ import { getCurrentTeamRole } from "@/lib/team";
 import { agreementStaff, agreementMailReady, agreementOrigin } from "@/lib/agreements-server";
 import { buildAgreementEmail } from "@/lib/agreement-email";
 import { AgreementEmailPreview } from "@/components/agreements/agreement-email-preview";
-import { agreementStatus, type Contract } from "@/lib/agreements";
+import { activeAgreementPayment, agreementStatus, type Contract } from "@/lib/agreements";
 import {
   saveContractAction,
   voidContractAction,
@@ -41,6 +41,7 @@ export default async function AgreementPage({
   if (c.client_id !== clientId) notFound();
   const admin = me.role === "admin";
   const state = agreementStatus(c);
+  const paymentReady = !!activeAgreementPayment(c);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -78,7 +79,7 @@ export default async function AgreementPage({
               <CardHeader><CardTitle>Payment handoff</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm">
-                  {c.payment_url && c.payment_expires_at && Date.parse(c.payment_expires_at) > Date.now()
+                  {paymentReady
                     ? "Payment is prepared. After signing, the recipient can continue to Stripe."
                     : "Prepare payment so the recipient can continue to Stripe immediately after signing."}
                 </p>
