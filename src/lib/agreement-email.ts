@@ -1,6 +1,6 @@
 import { agreementPrice, type Contract } from "./agreements.ts";
 
-export type AgreementEmail = { subject: string; html: string; text: string };
+export type AgreementEmail = { subject: string; html: string; text: string; reply_to: string };
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -63,5 +63,5 @@ ${[["Client", scope.client_name], ["Recurring fee", price], ["Agreement term", t
 <p style="margin:20px 12px 0;font-size:12px;line-height:20px;color:#52627a;">Clear Direction, Relentless Execution.</p>
 </td></tr></table></body></html>`;
   const text = `Hello ${name},\n\nYour ${contract.title} for ${scope.client_name} is ready for review and signature.\n\nClient: ${scope.client_name}\nRecurring fee: ${price}\nAgreement term: ${term}\n\nReview & Sign Agreement:\n${signingUrl ?? "[Personal signing link appears in the sent email]"}\n\n${explanation}\n\n${payment}\n\nNeed changes or a paper copy? Contact your Compass representative before signing.\n\nThank you for trusting Compass.\n${issuer}\n\nClear Direction, Relentless Execution.`;
-  return { subject, html, text };
+  return { subject, html, text, reply_to: "thomas@compassmarketing.ai" };
 }
