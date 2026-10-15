@@ -26,6 +26,7 @@
 //
 // Callers: the worker (x-cron-secret) or a signed-in team member (JWT on
 // team_members). Nothing else.
+import { heroProblems, parseHero } from "./hero.ts";
 import { blogBriefHash, buildBlogBrief, CONTENT_DRAFTER_VERSION, type BlogBrief } from "./brief.ts";
 import { lintBlog, type BlogDraft } from "./lint.ts";
 import { claimedByOther } from "../post-drafter/claims.ts";

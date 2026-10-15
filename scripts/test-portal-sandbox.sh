@@ -261,12 +261,12 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_draft_cla
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.test.sql"
 # New GBP drafts pin the existing client binding before human review.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_gbp_destination.test.sql"
-# 20261015210000: blog hero images — same-client stored assets only, a hero
-# change bumps the version and clears approval, releases re-check the file.
-psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_hero.test.sql"
 
 # Agency review ledger: human actor, versions, stage gates and portal isolation.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollout.test.sql"
+# 20261015210000: blog hero images — same-client stored assets only, a hero
+# change bumps the version and clears approval, releases re-check the file.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_hero.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).
