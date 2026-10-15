@@ -161,7 +161,7 @@ export default async function OperationsHealthPage() {
     loadIntegrationHealth(db, summary.clients.map(c=>c.id), generatedAt),
     loadOperationalEvidence(db, summary.clients.map(c=>c.id), generatedAt).catch(()=>null),
     loadRolloutReviews(db,summary.clients.map(c=>c.id)).catch(()=>null),
-    loadMapGridWeekly(db, summary.clients.map(c=>c.id), generatedAt).catch(()=>null),
+    loadMapGridWeekly(db, generatedAt).catch(()=>null),
   ]);
   if(!operational)v2SourceErrors.push("Operational evidence");
   if(!mapGrid)v2SourceErrors.push("Map grid weekly scans");

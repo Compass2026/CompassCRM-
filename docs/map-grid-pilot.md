@@ -66,13 +66,14 @@ Previously the weekly scheduler swallowed start errors, and nothing noticed a mi
 - **Where it shows:**
   - The client **Map rankings** tab has a banner above the map with the week's state, the last complete scan and the recent weekly start attempts. It is hidden for profiles that are not weekly.
   - **Control Center → Source freshness** has a *Map grid weekly scans* table.
-  - **Action queue** gets one linked alert for each missed profile.
+  - **Action queue** gets one linked alert for each missed profile. The alert names the grid and links to `?profile=<id>`.
   - A failed read shows as a source error. It never shows as healthy.
+- **Map-tracking-only clients count.** `loadMapGridWeekly` reads every weekly-enabled profile and its client's name directly. It does not use the active/launching health roster. So a paused `map_tracking` client (Silverback, MADHAIRLAB, Premier) still gets its table row and Action-queue alert. It gets no readiness, freshness, billing or onboarding rows. The client filter matches these grids by client name.
 - **Clearing an alert:** fix the cause, then run a manual scan. A complete manual scan in the expected week clears it. A profile switched to weekly after Thursday's slot shows as missed until its first Thursday scan, or until a manual scan clears it.
 
 ## Viewer
 
-Team-only client **Map rankings** tab. Keyword selector, 30-scan history, interactive Leaflet/OSM map, point competitor details, CSV download (with distance from the business, for the radius shown), recorded API cost. Original BrightLocal baseline has its actual source date. No cross-provider movement score is calculated.
+Team-only client **Map rankings** tab. **Several grids per client.** A client can have one grid per location, for example Logic Overland Park and Logic Wichita. A *Location* selector appears when there are two or more. The URL carries `?profile=<id>`. History, checks, BrightLocal baseline, weekly notice and **Run scan** are all scoped to that grid. The selection survives reloads and refreshes. A `?run=` link without a profile opens the run's own grid. A grid or run belonging to another client is refused. Switching location never starts a scan. Keyword selector, 30-scan history, interactive Leaflet/OSM map, point competitor details, CSV download (with distance from the business, for the radius shown), recorded API cost. Original BrightLocal baseline has its actual source date. No cross-provider movement score is calculated.
 
 Top 3 coverage divides by completed checks, including not-found checks. Average rank includes found points only and says so. Gray means pending/unavailable, never a ranking loss. Not found is labeled 100+ and can include cases where Google returned fewer than 100 listings. Provider errors and empty/malformed result envelopes are not treated as rank losses.
 

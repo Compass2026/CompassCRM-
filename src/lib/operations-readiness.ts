@@ -46,8 +46,10 @@ export type ClientReadiness = {
   multiBrand: boolean;
 };
 export type MapGridWeekly = {
-  clientId: string; profileId: string; label: string; status: WeeklyScanStatus;
+  clientId: string; clientName: string; profileId: string; label: string; status: WeeklyScanStatus;
 };
+export const mapGridHref = (g: { clientId: string; profileId: string }) =>
+  `/clients/${g.clientId}/maps?profile=${g.profileId}`;
 export type OperationsV2 = {
   clients: ClientReadiness[];
   alerts: Alert[];
@@ -224,14 +226,15 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
       href:entry.state === "unconfigured" ? `/clients/${client.id}${entry.source === "gbp" ? "/social" : ""}` : entry.href});
   }
   // A weekly-scheduled Maps grid with no successful scan for its due ISO week.
+  // Not limited to the full-service roster: map-tracking-only clients are
+  // paused by design but still scanned weekly.
   for (const grid of input.mapGrid ?? []) {
-    const client=input.clients.find(c=>c.id===grid.clientId);
-    if (!client || grid.status.state !== "missed") continue;
-    alerts.push({id:`${grid.clientId}:map-grid:${grid.profileId}`,clientId:client.id,clientName:client.name,
+    if (grid.status.state !== "missed") continue;
+    alerts.push({id:`${grid.clientId}:map-grid:${grid.profileId}`,clientId:grid.clientId,clientName:grid.clientName,
       severity:grid.status.severity ?? "attention",
-      title:"Map rankings · "+grid.status.title,
+      title:`Map rankings · ${grid.label} · `+grid.status.title,
       detail:grid.status.detail+" Missing checks are not ranking losses.",
-      href:`/clients/${client.id}/maps`});
+      href:mapGridHref(grid)});
   }
   alerts.push(...(input.operational?.alerts ?? []));
   const order: Record<Alert["severity"], number> = { critical: 0, attention: 1, setup: 2 };

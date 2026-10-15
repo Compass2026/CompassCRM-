@@ -8,7 +8,7 @@ import { IntegrationHealthPanel } from "./integration-health-panel";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Clock3, Filter, Search, ShieldCheck, SlidersHorizontal, WifiOff } from "lucide-react";
-import type { Alert, ClientReadiness, Freshness, MapGridWeekly, OperationsV2, ReadinessCheck, SourceReading } from "@/lib/operations-readiness";
+import { mapGridHref, type Alert, type ClientReadiness, type Freshness, type MapGridWeekly, type OperationsV2, type ReadinessCheck, type SourceReading } from "@/lib/operations-readiness";
 
 type Tab = "rollout" | "overview" | "attention" | "freshness" | "delivery" | "onboarding";
 const tone: Record<Alert["severity"], string> = {
@@ -78,9 +78,8 @@ const gridTone: Record<MapGridWeekly["status"]["state"], string> = {
   ok: "bg-emerald-50 text-emerald-800", scanning: "bg-blue-50 text-blue-800", due: "bg-slate-100 text-slate-600",
   missed: "bg-red-50 text-red-800", off: "bg-slate-100 text-slate-600",
 };
-function MapGridWeeklyPanel({ rows, clients }: { rows: MapGridWeekly[]; clients: ClientReadiness[] }) {
+function MapGridWeeklyPanel({ rows }: { rows: MapGridWeekly[] }) {
   if (!rows.length) return null;
-  const name = (id: string) => clients.find(c => c.id === id)?.name ?? "Client";
   return <section className="space-y-3" aria-label="Map grid weekly scans" data-map-grid-weekly>
     <h3 className="font-semibold text-navy-900">Map grid weekly scans</h3>
     <p className="text-xs leading-5 text-slate-600">Weekly-scheduled Maps grids (Thursdays 14:00 UTC). Before Thursday&apos;s slot the previous ISO week is judged. Missed means no complete scan for that week; partial scans and missing checks are not ranking losses.</p>
@@ -88,7 +87,7 @@ function MapGridWeeklyPanel({ rows, clients }: { rows: MapGridWeekly[]; clients:
       <table className="w-full min-w-[630px] text-left text-sm">
         <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-3">Client</th><th className="p-3">Grid</th><th className="p-3">Week status</th><th className="p-3">Last complete scan</th></tr></thead>
         <tbody>{rows.map(g => <tr key={g.profileId} className="border-b border-slate-100 align-top last:border-0" data-map-grid-profile={g.profileId}>
-          <td className="p-3 font-semibold text-navy-900"><Link href={"/clients/" + g.clientId + "/maps"} className="hover:underline">{name(g.clientId)}</Link></td>
+          <td className="p-3 font-semibold text-navy-900"><Link href={mapGridHref(g)} className="hover:underline">{g.clientName}</Link></td>
           <td className="p-3 text-xs text-slate-600">{g.label}</td>
           <td className="p-3"><span className={"inline-flex rounded-full px-2 py-1 text-[11px] font-semibold " + gridTone[g.status.state]}>{g.status.title}</span>
             {g.status.state === "missed" && <p className="mt-1 max-w-sm break-words text-xs leading-5 text-slate-600">{g.status.detail}</p>}</td>
@@ -105,7 +104,12 @@ export function ControlCenterV2({data,reviews=null,brands=null}:{data:Operations
   const [focus,setFocus]=useState<"all"|"critical"|"attention"|"setup">("all");
   const query=term.trim().toLowerCase();
   const clients=useMemo(()=>data.clients.filter(c=>c.name.toLowerCase().includes(query)),[data.clients,query]);
-  const names=useMemo(()=>new Set(clients.map(c=>c.id)),[clients]);
+  // Clients outside the full-service roster (map-tracking-only, paused by
+  // design) still surface through their Maps grid alerts, filtered by name.
+  const names=useMemo(()=>{
+    const roster=new Set(data.clients.map(c=>c.id));
+    return new Set([...clients.map(c=>c.id),...(data.mapGrid ?? []).filter(g=>!roster.has(g.clientId) && g.clientName.toLowerCase().includes(query)).map(g=>g.clientId)]);
+  },[clients,data.clients,data.mapGrid,query]);
   const alerts=useMemo(()=>data.alerts.filter(a=>names.has(a.clientId) && (focus==="all"||a.severity===focus)),
     [data.alerts,names,focus]);
   const scopedAlerts=data.alerts.filter(a=>names.has(a.clientId));
@@ -200,7 +204,7 @@ export function ControlCenterV2({data,reviews=null,brands=null}:{data:Operations
         </table>
       </div>
     </section>}
-    {tab==="freshness" && <MapGridWeeklyPanel rows={(data.mapGrid ?? []).filter(g=>names.has(g.clientId))} clients={clients}/>}
+    {tab==="freshness" && <MapGridWeeklyPanel rows={(data.mapGrid ?? []).filter(g=>names.has(g.clientId))}/>}
     {tab==="delivery" && !!data.operationalCards?.length && <OperationalEvidencePanel cards={data.operationalCards} clients={clients}/>}
     {tab==="delivery" && !data.operationalCards?.length && <p role="alert" className="rounded-2xl bg-white p-5 text-sm text-slate-600">Operational evidence is unavailable. Reload to retry; no health conclusion was drawn.</p>}
     {tab==="onboarding" && <section className="space-y-3" role="tabpanel">

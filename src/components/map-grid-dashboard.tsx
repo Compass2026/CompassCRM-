@@ -172,7 +172,9 @@ export function MapGridDashboard({
       const result = await startMapGridAction(clientId, profile.id, requestKey);
       if (result.error) setError(result.error);
       else if (result.runId)
-        router.push(`/clients/${clientId}/maps?run=${result.runId}`);
+        router.push(
+          `/clients/${clientId}/maps?profile=${profile.id}&run=${result.runId}`,
+        );
       router.refresh();
     });
   function download() {
@@ -361,7 +363,9 @@ export function MapGridDashboard({
             className="field-sm mt-1 block text-foreground"
             value={run?.id ?? ""}
             onChange={(e) =>
-              router.push(`/clients/${clientId}/maps?run=${e.target.value}`)
+              router.push(
+                `/clients/${clientId}/maps?profile=${profile.id}&run=${e.target.value}`,
+              )
             }
           >
             {!runs.length && <option value="">No scans yet</option>}

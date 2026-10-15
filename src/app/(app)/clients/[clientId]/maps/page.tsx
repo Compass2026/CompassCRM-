@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import {
   MapGridDashboard,
@@ -12,26 +13,52 @@ export default async function MapsPage({
   searchParams,
 }: {
   params: Promise<{ clientId: string }>;
-  searchParams: Promise<{ run?: string }>;
+  searchParams: Promise<{ run?: string; profile?: string }>;
 }) {
   const { clientId } = await params;
-  const { run: runId } = await searchParams;
+  const { run: runId, profile: profileParam } = await searchParams;
   const db = await createClient();
-  const { data: profile, error } = await db
+  // A client can have several grids (one per location). Everything below is
+  // scoped to the one selected here, and only this client's grids are eligible.
+  const { data: profiles, error } = await db
     .from("map_grid_profiles")
     .select("*")
     .eq("client_id", clientId)
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
+    .order("created_at");
   if (error) throw Error("Map grid configuration could not be loaded");
-  if (!profile)
+  if (!profiles?.length)
     return (
       <div className="rounded-2xl border bg-card p-8">
         <h2 className="text-xl font-semibold">Map rankings</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           This client is not enrolled in the grid pilot yet. Existing keyword
           tracking continues in Keywords.
+        </p>
+      </div>
+    );
+  let profileId = profileParam;
+  if (!profileId && runId) {
+    // An older run link without ?profile= still opens its own grid.
+    const { data: owner } = await db
+      .from("map_grid_runs")
+      .select("profile_id")
+      .eq("id", runId)
+      .maybeSingle();
+    profileId = owner?.profile_id;
+  }
+  const profile = profileId
+    ? profiles.find((p) => p.id === profileId)
+    : profiles[0];
+  if (!profile)
+    return (
+      <div role="alert" className="rounded-2xl border bg-card p-8">
+        <h2 className="text-xl font-semibold">Map rankings</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          That map grid is not one of this client&apos;s locations.{" "}
+          <Link href={`/clients/${clientId}/maps`} className="underline">
+            Show this client&apos;s grids
+          </Link>
+          .
         </p>
       </div>
     );
@@ -93,6 +120,33 @@ export default async function MapsPage({
   }
   return (
     <div className="space-y-4">
+      {profiles.length > 1 && (
+        <nav
+          aria-label="Map grid location"
+          className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3 text-sm"
+        >
+          <span className="px-1 text-xs font-medium text-muted-foreground">
+            Location
+          </span>
+          {profiles.map((p) => (
+            <Link
+              key={p.id}
+              href={`/clients/${clientId}/maps?profile=${p.id}`}
+              aria-current={p.id === profile.id ? "page" : undefined}
+              data-map-grid-profile-link={p.id}
+              className={
+                "rounded-full px-3 py-1.5 font-medium " +
+                (p.id === profile.id
+                  ? "bg-navy-900 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200")
+              }
+            >
+              {p.label}
+              {p.weekly_enabled ? " · weekly" : ""}
+            </Link>
+          ))}
+        </nav>
+      )}
       {attemptsResult.error ? (
         <p
           role="alert"
