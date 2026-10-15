@@ -253,6 +253,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_publication.te
 # 20261015175146: binding claims — a fresh foreign claim blocks the drafter's
 # write, an expired one does not, an unclaimed task writes as before.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_draft_claims.test.sql"
+# 20261015175410: the same for Authority Draft with AI requests — a fresh
+# foreign claim blocks drafter_write, an expired one does not, an unclaimed
+# request writes as before.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_draft_claims.test.sql"
 # Multi-brand isolation, human approvals, shared GBP and per-brand website destinations.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.test.sql"
 # New GBP drafts pin the existing client binding before human review.

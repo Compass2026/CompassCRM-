@@ -32,6 +32,13 @@ import { workspaceAccounts } from "./workspace.ts";
 // rebuilt itself. The model runtime is the caller's business: it sends a
 // label (`runtime`), never a vendor-specific payload.
 //
+// v8, claims (20261015175410): brief / check / submit take a `claimant`
+// label. When an Authority request's task is claimed (authority_draft_claim)
+// by someone else within the hour, they answer 409 claimed_by_other before
+// any other check and nothing is written or recorded; drafter_write enforces
+// the same rule under its lock (CD409). An unclaimed request, and every draft
+// without an opportunity, works exactly as before.
+//
 // Callers: the worker (x-cron-secret) or a signed-in team member (JWT on
 // team_members). Nothing else.
 import {
@@ -46,14 +53,15 @@ import {
   type AuthorityState,
 } from "./authority.ts";
 import { buildBrief, briefHash } from "./brief.ts";
+import { claimedByOther, parseClaimant } from "./claims.ts";
 import { lintDraft } from "./lint.ts";
 import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 7;
+export const HANDLER_VERSION = 8;
 export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims"] as const;
 
 export type Deps = {
   store: Store;
@@ -149,6 +157,9 @@ export function createPostDrafter(deps: Deps) {
       message: conflicts.map((c) => c.message).join(" "),
     });
 
+  const claimedReply = (opportunityId: string, message: string, holder: Json = {}) =>
+    reply(409, { error: "claimed_by_other", authority_opportunity_id: opportunityId, message, ...holder });
+
   async function handle(req: Request): Promise<Response> {
     if (req.method !== "POST") return reply(405, { error: "POST only" });
     const who = await caller(req);
@@ -165,6 +176,9 @@ export function createPostDrafter(deps: Deps) {
     }
     const clientId = body.client_id;
     if (typeof clientId !== "string" || !UUID.test(clientId)) return reply(400, { error: "client_id must be a uuid" });
+    const parsedClaimant = parseClaimant(body.claimant);
+    if ("error" in parsedClaimant) return reply(400, { error: parsedClaimant.error });
+    const { claimant } = parsedClaimant;
 
     // ── Authority mode: the target comes from the opportunity, never the caller ──
     const opportunityId = body.authority_opportunity_id;
@@ -179,6 +193,9 @@ export function createPostDrafter(deps: Deps) {
       if (expected != null && (typeof expected !== "string" || !UUID.test(expected))) return reply(400, { error: "expected_run_id must be a uuid" });
       const now = deps.now?.() ?? new Date();
       const state = await store.authority(clientId, opportunityId, now);
+      // Someone else holds the request: touch nothing, not even to block it.
+      const other = claimedByOther(state.request, claimant, now.getTime());
+      if (other) return claimedReply(opportunityId, `${other.claimed_by} holds this Draft with AI request until ${other.expires_at}; do not draft it.`, other);
       const conflicts = opportunityConflicts(state, clientId, { expectedRunId: (expected as string | undefined) ?? null, today: chicagoDay(now), now });
       if (conflicts.length) return conflictReply(opportunityId, conflicts);
       authority = { id: opportunityId, state, now };
@@ -268,7 +285,7 @@ export function createPostDrafter(deps: Deps) {
     }
 
     const written = await store.write({
-      client_id: clientId, requested_via: who.via, requested_by: who.memberId, runtime, attempt,
+      client_id: clientId, requested_via: who.via, requested_by: who.memberId, runtime, claimant, attempt,
       brief_version: brief.version, brief_hash: hash, brief, lint: result,
       copy: draft.copy, claim_ids: draft.claim_ids, asset_ids: draft.asset_ids ?? brief.target.assets.map((a) => a.id),
       ...(authority ? { authority_opportunity_id: authority.id, authority_run_id: (brief as AuthorityBrief).authority.run_id } : {}),
@@ -282,6 +299,8 @@ export function createPostDrafter(deps: Deps) {
         const m = /authority_conflict (\w+): (.*)/.exec(e.message);
         return conflictReply(authority.id, [{ code: m?.[1] ?? "conflict", message: m?.[2] ?? e.message }]);
       }
+      // Claimed by someone else under the lock: theirs to write, no run recorded.
+      if (authority && e.code === "CD409") return claimedReply(authority.id, e.message);
       await record("refused", `${e.code ?? ""} ${e.message}`.trim().slice(0, 500), result);
       return reply(e.code === "23505" ? 409 : 422, { error: "refused", code: e.code, message: e.message, brief_hash: hash, attempt });
     }

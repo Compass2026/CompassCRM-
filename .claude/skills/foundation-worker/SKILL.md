@@ -1903,26 +1903,34 @@ your initiative). The Authority opportunity decides *what* the post is for;
 `post-drafter` rebuilds its own brief, decides whether it can be written and
 writes it. You pass the opportunity id and nothing else about the target.
 
-**Claim** the task so a second session does not draft the same thing (a
-session that died leaves `in_progress`; after an hour it is yours again):
+**Claim** the request through the function — never by updating `tasks`
+yourself. The claim is binding, as for blog drafts (the old `update tasks …
+set status` claim was advisory, and `drafter_write` never checked it). A
+claim lasts an hour; a session that died frees the task after that:
 
 ```sql
-update tasks set status = 'in_progress'
-where id = '<task_id>'
-  and (status = 'open' or (status = 'in_progress' and updated_at < now() - interval '1 hour'))
-returning id;
+select authority_draft_claim('<task_id>', 'worker-routine');
 ```
 
-No row → skip it. Never mark the task done yourself: the successful submit
-closes it in the same transaction that writes and links the post.
+`claimed: true` → yours; the task is `in_progress`. `claimed: false` →
+**stop without drafting or touching the task**: `reason` `claimed_by_other`
+means `claimed_by` holds it until `expires_at` (say so in the report; do not
+set it `blocked`); `request_not_open` means it was drafted, blocked or
+closed meanwhile — skip it. A missing `authority_draft_claim` function means
+the claims migration is not applied: stop and say so. A Claude operator
+session working a request by hand claims the same way with its own label
+(e.g. `operator-<initials>`) and passes that label as `claimant`. Never mark
+the task done yourself: the successful submit closes it in the same
+transaction that writes and links the post.
 
-**Preflight:** `{"mode": "version"}` must answer `version` ≥ 2 with
-`features` containing `authority_mode`. Anything else → stop, leave the task
-`in_progress`, say so.
+**Preflight:** `{"mode": "version"}` must answer `version` ≥ 8 with
+`features` containing `authority_mode` and `claims`. Anything else → stop,
+leave the task `in_progress`, say so.
 
-**Every request** carries `client_id`, `authority_opportunity_id` and
-`expected_run_id` (the analysis run named in the task's notes) and **no
-`target`** (the function refuses one). Then the same loop as drafter v1:
+**Every request** carries `client_id`, `authority_opportunity_id`,
+`expected_run_id` (the analysis run named in the task's notes) and
+`"claimant": "worker-routine"` (your claim's label), and **no `target`** (the
+function refuses one). Then the same loop as drafter v1:
 
 1. **Brief** `{"mode": "brief", …}`. `200` → keep `brief_hash` and
    `model_request`; `brief.authority` carries the objective, the preferred
@@ -1932,10 +1940,14 @@ closes it in the same transaction that writes and links the post.
    `revision_request` until `ok`; `duplicate_recent_post` means write
    something genuinely new.
 4. **Submit** `{"mode": "submit", …, "brief_hash", "draft", "runtime":
-   "claude-worker-skill"}`. `201` → done: the post is in review, linked to the
-   opportunity, the request closed.
+   "claude-worker-skill", "claimant": "worker-routine"}`. `201` → done: the
+   post is in review, linked to the opportunity, the request closed.
 
 **Stop, never work around:**
+- `409 claimed_by_other` (any mode, checked before everything else) →
+  someone else holds the request (your claim lapsed after an hour, or you
+  skipped it): stop, write nothing, leave the task as it is — never set it
+  `blocked`, never re-claim to get past it; report who holds it.
 - `409 authority_conflict` (any `code`: `authority_stale`,
   `opportunity_not_current`, `not_ready`, `dismissed`, `cadence_active`,
   `already_in_progress`, `target_mismatch`, `evidence_ineligible`,

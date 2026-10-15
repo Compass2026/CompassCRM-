@@ -13028,6 +13028,10 @@ export type Database = {
         Args: { p_opportunity_id: string; p_payload?: Json; p_verb: string }
         Returns: Json
       }
+      authority_draft_claim: {
+        Args: { p_claimant: string; p_task_id: string }
+        Returns: Json
+      }
       authority_draft_start: { Args: { p_task_id: string }; Returns: Json }
       authority_fingerprint: { Args: { p_client_id: string }; Returns: Json }
       authority_input: { Args: { p_client_id: string }; Returns: Json }

@@ -64,10 +64,10 @@ async function hashOf(d) {
   return r.body.brief_hash;
 }
 
-test("version: v7 with keyword-first campaigns, Authority mode, duplicate rule, Facebook drafts and Business Profile graphics", async () => {
+test("version: v8 with keyword-first campaigns, Authority mode, duplicate rule, Facebook drafts, Business Profile graphics and claims", async () => {
   const v = await call(drafter(fakeStore().store), { mode: "version" });
-  assert.equal(v.body.version, 7);
-  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics"]);
+  assert.equal(v.body.version, 8);
+  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims"]);
   assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version"]);
 });
 
@@ -319,4 +319,83 @@ test("a newer analysis changes the brief hash: a draft against the old run is st
   const r = await call(d, A("check", { brief_hash: hash, draft }));
   assert.equal(r.status, 409);
   assert.equal(r.body.error, "stale_brief");
+});
+
+// ── Binding claims (20261015175410) ──────────────────────────────────────────
+// The blog drafts' Logic Solar incident, on the Authority path: a session
+// claims the Draft with AI request; another (the Routine) must not draft it.
+const minutesAgo = (n) => new Date(NOW.getTime() - n * 60_000).toISOString();
+const held = (by, mins, over = {}) => state({ request: { task_id: TASK, status: "in_progress", requested_by_team: true, claimed_by: by, claimed_at: minutesAgo(mins) }, ...over });
+
+test("claims: a foreign live claim stops brief, check and submit before anything else; nothing written or recorded", async () => {
+  for (const s of [held("operator-session", 3), held("operator-session", 3, { opportunity: { status: "dismissed" } })]) {
+    const { store, calls } = fakeStore(s);
+    const d = drafter(store);
+    for (const mode of ["brief", "check", "submit"]) {
+      for (const claimant of ["worker-routine", undefined]) {
+        const r = await call(d, A(mode, { claimant, brief_hash: "sha256:" + "0".repeat(64), draft, runtime: "claude-worker-skill" }));
+        assert.equal(r.status, 409, `${mode} ${claimant}: ${JSON.stringify(r.body)}`);
+        assert.equal(r.body.error, "claimed_by_other", "the claim wins over an Authority conflict: the holder's to block, not ours");
+        assert.equal(r.body.claimed_by, "operator-session");
+        assert.equal(r.body.expires_at, "2026-09-27T18:57:00.000Z");
+        assert.equal(r.body.authority_opportunity_id, OPP);
+      }
+    }
+    assert.equal(calls.runs.length + calls.writes.length, 0);
+  }
+});
+
+test("claims: the holder drafts and its claimant reaches drafter_write", async () => {
+  const { store, calls } = fakeStore(held("operator-session", 3));
+  const d = drafter(store);
+  const b = await call(d, A("brief", { claimant: "operator-session" }));
+  assert.equal(b.status, 200, JSON.stringify(b.body));
+  const c = await call(d, A("check", { claimant: "operator-session", brief_hash: b.body.brief_hash, draft }));
+  assert.equal(c.status, 200, JSON.stringify(c.body));
+  const r = await call(d, A("submit", { claimant: " operator-session ", brief_hash: b.body.brief_hash, draft, runtime: "claude-operator" }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(calls.writes[0].claimant, "operator-session", "trimmed, and passed to the SQL gate");
+});
+
+test("claims: an unclaimed, stale or own request drafts as today", async () => {
+  const cases = [
+    [state(), undefined, null],
+    [state(), "worker-routine", "worker-routine"],
+    [held(null, 3), "worker-routine", "worker-routine"],
+    [held("operator-session", 61), "worker-routine", "worker-routine"],
+    [held("worker-routine", 3), "worker-routine", "worker-routine"],
+  ];
+  for (const [s, claimant, sent] of cases) {
+    const { store, calls } = fakeStore(s);
+    const d = drafter(store);
+    const b = await call(d, A("brief", { claimant }));
+    assert.equal(b.status, 200, JSON.stringify(b.body));
+    const r = await call(d, A("submit", { claimant, brief_hash: b.body.brief_hash, draft, runtime: "m" }));
+    assert.equal(r.status, 201, `${JSON.stringify(s.request)} ${claimant}: ${JSON.stringify(r.body)}`);
+    assert.equal(calls.writes[0].claimant, sent);
+  }
+});
+
+test("claims: drafter_write's CD409 is claimed_by_other with no run recorded; a bad claimant is a 400", async () => {
+  const f = fakeStore();
+  f.store.write = async (p) => { f.calls.writes.push(p); return { error: { code: "CD409", message: "claimed_by_other: operator-session holds this Draft with AI request until 2026-09-27 18:57:00+00" } }; };
+  const d = drafter(f.store);
+  const hash = await hashOf(d);
+  const r = await call(d, A("submit", { claimant: "worker-routine", brief_hash: hash, draft, runtime: "m" }));
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "claimed_by_other");
+  assert.match(r.body.message, /operator-session/);
+  assert.equal(f.calls.runs.length, 0, "the holder's attempts are not spent by someone else's write");
+
+  for (const claimant of [" ", "x".repeat(81), 7]) {
+    assert.equal((await call(d, A("brief", { claimant }))).status, 400, JSON.stringify(claimant));
+  }
+});
+
+test("claims: a draft without an opportunity takes a claimant and ignores it (v1 unchanged)", async () => {
+  const { store, calls } = fakeStore();
+  const d = drafter(store);
+  const b = await call(d, { mode: "brief", client_id: CLIENT, target: TARGET, claimant: "worker-routine" });
+  assert.equal(b.status, 200, JSON.stringify(b.body));
+  assert.equal(calls.authority, 0);
 });
