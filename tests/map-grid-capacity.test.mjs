@@ -28,24 +28,35 @@ const COLLECT_TOTAL = constant("COLLECT_TOTAL");
 const WORK_MS = constant("WORK_MS");
 const EXPIRY_MS = constant("EXPIRY_MS");
 const LEASE_MS = constant("LEASE_MS");
+const POST_LANES = constant("POST_LANES");
+const READ_LANES = constant("READ_LANES");
+const COLLECT_PER_RUN = constant("COLLECT_PER_RUN");
+// The five-minute collector tick (pg_cron map-grid-collect).
+const TICK = 5 * 60000;
 
 // Lucas's dense layout: 153 points x 5 keywords = 765 checks per run.
 const POINTS = 153,
   KEYWORDS = 5;
 function fleet({
-  runs = 7,
+  runs = 10,
   failPostRun = null,
   pendingGets = 0,
   leasedRun = null,
   startErrors = {},
   postClockStep = 0,
+  // Simulated provider latency (ms, including the check-row writes). Each call
+  // advances the clock by its latency divided by its lane count: the
+  // throughput of the bounded concurrency, deterministically.
+  latency = null,
 } = {}) {
   let handler,
     clock = Date.parse("2026-10-15T14:00:00Z");
   const posts = new Map(),
     gets = new Map(),
     getsPerInvocation = [],
-    pendingLeft = new Map();
+    pendingLeft = new Map(),
+    inflight = { post: 0, get: 0 },
+    maxInflight = { post: 0, get: 0 };
   class FakeDate extends Date {
     constructor(...a) {
       super(...(a.length ? a : [clock]));
@@ -214,6 +225,14 @@ function fleet({
     Deno: { env: { get: () => "" }, serve: (fn) => (handler = fn) },
     EdgeRuntime: { waitUntil: () => {} },
     fetch: async (url, init) => {
+      const kind = url.endsWith("/task_post") ? "post" : "get";
+      inflight[kind]++;
+      maxInflight[kind] = Math.max(maxInflight[kind], inflight[kind]);
+      // Yield so concurrent lanes genuinely overlap.
+      await new Promise((r) => setImmediate(r));
+      inflight[kind]--;
+      if (latency)
+        clock += latency[kind] / (kind === "post" ? POST_LANES : READ_LANES);
       if (url.endsWith("/task_post")) {
         clock += postClockStep;
         const payload = JSON.parse(init.body);
@@ -283,7 +302,9 @@ function fleet({
     posts,
     gets,
     getsPerInvocation,
+    maxInflight,
     advance: (ms) => (clock += ms),
+    setClock: (t) => (clock = t),
     now: () => clock,
     invoke: async (mode = "collect") => {
       getsPerInvocation.push([]);
@@ -301,8 +322,8 @@ function fleet({
 const totalPosts = (h) => [...h.posts.values()].reduce((a, b) => a + b, 0);
 const batchesPerRun = Math.ceil((POINTS * KEYWORDS) / 100);
 
-test("seven 765-check runs due together all post in the first invocation and complete well before expiry", async () => {
-  const h = fleet({ runs: 7 });
+test("ten 765-check runs due together all post in the first invocation, share reads evenly and complete well before expiry", async () => {
+  const h = fleet({ runs: 10 });
   let invocations = 0;
   while (h.tables.map_grid_runs.some((r) => r.status === "running")) {
     const r = await h.invoke();
@@ -310,37 +331,86 @@ test("seven 765-check runs due together all post in the first invocation and com
     invocations++;
     if (invocations === 1) {
       // Every run is fully submitted at once; nothing waits behind the oldest run.
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < 10; i++) {
         assert.equal(h.posts.get(`run${i}`), batchesPerRun);
         assert.equal(h.states(`run${i}`).planned, undefined);
-        // Fair share: every run collected in the first pass, none starved.
-        assert.ok(
-          h.getsPerInvocation[0].filter((x) => x === `run${i}`).length >=
-            Math.floor(COLLECT_TOTAL / 7),
+        // Fair share: every run gets its full 60-read share in the same pass.
+        assert.equal(
+          h.getsPerInvocation[0].filter((x) => x === `run${i}`).length,
+          COLLECT_PER_RUN,
         );
       }
     }
-    h.advance(5 * 60000);
+    h.advance(TICK);
     assert.ok(invocations < 100, "collector did not converge");
   }
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 10; i++) {
     assert.equal(h.run(`run${i}`).status, "complete");
     assert.equal(h.states(`run${i}`).complete, POINTS * KEYWORDS);
     assert.ok(h.run(`run${i}`).lease_until <= new Date(h.now()).toISOString());
   }
   // One POST per 100 checks, one result read per check: no extra paid tasks.
-  assert.equal(totalPosts(h), 7 * batchesPerRun);
+  assert.equal(totalPosts(h), 10 * batchesPerRun);
   assert.equal(
     [...h.gets.values()].reduce((a, b) => a + b, 0),
-    7 * POINTS * KEYWORDS,
+    10 * POINTS * KEYWORDS,
   );
   for (const perInvocation of h.getsPerInvocation)
     assert.ok(perInvocation.length <= COLLECT_TOTAL);
-  // 5,355 checks at the five-minute cadence: about 1.3 hours, far inside six.
-  assert.ok(invocations * 5 * 60000 < EXPIRY_MS / 2, `${invocations} invocations`);
+  // Provider concurrency is bounded, and posting really runs in parallel lanes.
+  assert.ok(h.maxInflight.post <= POST_LANES && h.maxInflight.post > 1, `posts in flight ${h.maxInflight.post}`);
+  assert.ok(h.maxInflight.get <= READ_LANES && h.maxInflight.get > 1, `reads in flight ${h.maxInflight.get}`);
+  // 7,650 checks at 600 reads per tick: 13 ticks, about 1.1 hours.
+  assert.ok(invocations * TICK <= 1.25 * 3600000, `${invocations} invocations`);
   // Re-running the collector after completion never posts again.
   await h.invoke();
-  assert.equal(totalPosts(h), 7 * batchesPerRun);
+  assert.equal(totalPosts(h), 10 * batchesPerRun);
+});
+
+test("with realistic provider latency every invocation stays inside the wall clock and all ten runs finish well before expiry", async () => {
+  // Pessimistic: 5 s per 100-task POST including its 100 binding writes,
+  // 1.5 s per result read, and every result still pending on its first read.
+  const h = fleet({ runs: 10, latency: { post: 5000, get: 1500 }, pendingGets: 1 });
+  const slot = h.now();
+  let ticks = 0,
+    longest = 0;
+  while (h.tables.map_grid_runs.some((r) => r.status === "running")) {
+    const start = slot + ticks * TICK;
+    h.setClock(start);
+    await h.invoke();
+    longest = Math.max(longest, h.now() - start);
+    assert.ok(++ticks < 100);
+  }
+  // No new call starts after WORK_MS; the last in-flight one may finish.
+  assert.ok(longest <= WORK_MS + 5000, `longest invocation ${longest} ms`);
+  assert.ok(longest < 150000, "inside the 150 s Edge wall clock");
+  for (let i = 0; i < 10; i++) assert.equal(h.run(`run${i}`).status, "complete");
+  assert.equal(totalPosts(h), 10 * batchesPerRun);
+  assert.ok(ticks * TICK <= 2.5 * 3600000, `${ticks} ticks`);
+});
+
+test("slow provider queues (three reads per check) still finish all ten runs well inside six hours", async () => {
+  const h = fleet({ runs: 10, pendingGets: 2 });
+  let invocations = 0;
+  while (h.tables.map_grid_runs.some((r) => r.status === "running")) {
+    await h.invoke();
+    h.advance(TICK);
+    assert.ok(++invocations < 200);
+  }
+  for (let i = 0; i < 10; i++) assert.equal(h.run(`run${i}`).status, "complete");
+  assert.equal(totalPosts(h), 10 * batchesPerRun);
+  // 22,950 reads at 600 per tick: 39 ticks, about 3.25 hours.
+  assert.ok(invocations * TICK <= 3.5 * 3600000, `${invocations} invocations`);
+});
+
+test("more runs than the read budget share it round-robin, never starving any run", async () => {
+  const h = fleet({ runs: 12 });
+  await h.invoke();
+  const share = Array.from({ length: 12 }, (_, i) =>
+    h.getsPerInvocation[0].filter((x) => x === `run${i}`).length,
+  );
+  assert.equal(share.reduce((a, b) => a + b, 0), COLLECT_TOTAL);
+  assert.ok(Math.max(...share) - Math.min(...share) <= 1, share.join(","));
 });
 
 test("an ambiguous POST in one run leaves the other runs untouched and is never reposted", async () => {
@@ -375,19 +445,6 @@ test("a run leased by another collector is skipped without blocking the rest", a
   h.advance(LEASE_MS + 1);
   await h.invoke();
   assert.equal(h.posts.get("run0"), batchesPerRun);
-});
-
-test("slow result queues share the budget and still never create a new paid task", async () => {
-  const h = fleet({ runs: 7, pendingGets: 2 });
-  let invocations = 0;
-  while (h.tables.map_grid_runs.some((r) => r.status === "running")) {
-    await h.invoke();
-    h.advance(5 * 60000);
-    assert.ok(++invocations < 200);
-  }
-  for (let i = 0; i < 7; i++) assert.equal(h.run(`run${i}`).status, "complete");
-  assert.equal(totalPosts(h), 7 * batchesPerRun);
-  assert.ok(invocations * 5 * 60000 < EXPIRY_MS, `${invocations} invocations`);
 });
 
 test("posting stops at the invocation deadline: unposted checks stay planned and are posted once later", async () => {

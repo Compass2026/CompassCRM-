@@ -13,9 +13,12 @@ const VERSION = "map-grid-v4";
 // Per-invocation bounds (the collector runs every five minutes). Posting is
 // deferred safely: a planned check has cost nothing. Collection never creates
 // a paid task. The deadline keeps one invocation inside the Edge wall clock.
+// Sized for ten 765-check runs due at the same weekly slot (docs/map-grid-pilot.md).
 const POST_BATCH = 100;
+const POST_LANES = 4;
+const READ_LANES = 10;
 const COLLECT_PER_RUN = 60;
-const COLLECT_TOTAL = 360;
+const COLLECT_TOTAL = 600;
 const MAX_RUNS = 20;
 const WORK_MS = 100000;
 const LEASE_MS = 600000;
@@ -33,10 +36,15 @@ function must<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw Error("Grid database operation failed");
   return r.data;
 }
-async function parallel<T>(items: T[], fn: (item: T) => Promise<void>) {
+// At most `width` calls in flight; callers catch their own errors.
+async function parallel<T>(
+  items: T[],
+  width: number,
+  fn: (item: T) => Promise<void>,
+) {
   let index = 0;
   await Promise.all(
-    Array.from({ length: Math.min(6, items.length) }, async () => {
+    Array.from({ length: Math.min(width, items.length) }, async () => {
       while (index < items.length) await fn(items[index++]);
     }),
   );
@@ -364,7 +372,8 @@ Deno.serve(async (req: Request) => {
             });
           }
         }
-        for (const { run } of leased) {
+        // One run per lane, so a run's batches stay sequential while runs post side by side.
+        await parallel(leased, POST_LANES, async ({ run }) => {
           try {
             validateGrid(run.config);
             // A previous interrupted POST has an unknown outcome. Never blindly charge again.
@@ -383,7 +392,7 @@ Deno.serve(async (req: Request) => {
           } catch (e) {
             await fail(run, e);
           }
-        }
+        });
         const live = leased.map((l) => l.run).filter((r) => !outcomes.has(r.id));
         const queues: QueuedCheck[][] = [];
         for (const run of live) {
@@ -410,7 +419,7 @@ Deno.serve(async (req: Request) => {
           live.forEach((run, r) => {
             if (queues[r][i]) turns.push({ run, check: queues[r][i] });
           });
-        await parallel(turns.slice(0, COLLECT_TOTAL), async ({ run, check }) => {
+        await parallel(turns.slice(0, COLLECT_TOTAL), READ_LANES, async ({ run, check }) => {
           if (outcomes.has(run.id) || Date.now() > deadline) return;
           try {
             await collectCheck(run, check);

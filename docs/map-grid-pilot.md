@@ -25,17 +25,32 @@ Tom asked for neighborhood detail rather than a 25-mile picture. Zooming a spars
 
 ## Multi-client capacity (Oct 15 2026)
 
-Every weekly profile is due at the same Thursday 14:00 UTC slot. The pilot collector worked only the oldest running scan per invocation. With about seven 765-check profiles, the later runs would have been posted and collected too late. Their paid tasks would then have been failed at the six-hour expiry. `map-grid-sync` (version `map-grid-v4`) now works every running run in each `collect` / `weekly` invocation:
+**Target (Tom, Oct 15):** ten dense weekly profiles, one for each BrightLocal location. Each is 153 points × 5 keywords = 765 checks, so 7,650 checks are all due Thursday 14:00 UTC.
 
-1. **Lease.** Up to 20 running runs (`MAX_RUNS`, oldest first) are each leased separately for ten minutes. A run that another collector holds is skipped (`busy`) without blocking the rest. Overlapping five-minute ticks therefore split runs and never share one.
-2. **Post.** For each leased run, oldest first, every `planned` check is posted in 100-task batches (`POST_BATCH`). Any interrupted `posting` check is first marked `unknown`. Interrupted posts are still never reposted.
-3. **Collect.** The invocation takes up to 60 of each run's oldest-polled `queued` checks (`COLLECT_PER_RUN`) and interleaves them round-robin across runs. It then reads at most 360 results (`COLLECT_TOTAL`), six at a time. A large or slow run cannot starve the others. Result reads never create a paid task.
+The pilot collector worked only the oldest running scan per invocation: it posted that run's checks and read 60 results. At that rate the later runs would not have been posted or collected before the six-hour expiry, and their paid tasks would have been failed. `map-grid-sync` (version `map-grid-v4`) now works every running run in each `collect` / `weekly` invocation.
+
+**How each invocation works:**
+
+1. **Lease.** Up to 20 running runs (`MAX_RUNS`, oldest first) are each leased separately for ten minutes. A run that another collector holds is skipped (`busy`) without blocking the rest. A lease-read failure affects only that run. Overlapping ticks, including the 14:00 `collect` that fires alongside `weekly`, split runs and never share one.
+2. **Post.** Runs post side by side in up to four lanes (`POST_LANES`), one run per lane. Each run posts its `planned` checks in 100-task batches (`POST_BATCH`), so its batches stay sequential. Any interrupted `posting` check is first marked `unknown`, and interrupted posts are still never reposted. At most 4 `task_post` calls are in flight.
+3. **Collect.** The invocation takes up to 60 of each run's oldest-polled `queued` checks (`COLLECT_PER_RUN`) and interleaves them round-robin across runs. It reads at most 600 results (`COLLECT_TOTAL`) with at most 10 reads in flight (`READ_LANES`). With ten runs, each run gets its full 60. With more runs, each gets an equal share, within one read of the others. Result reads never create a paid task.
 4. **Settle and release.** Each run is completed, made partial or expired on its own. Every lease is released.
 
-- **Deadline.** No new POST batch or result read starts more than 100 s (`WORK_MS`) into an invocation. In-flight calls have a 20 s timeout, so an invocation stays inside the Edge wall clock. A batch that is not posted stays `planned`: it has cost nothing and posts on the next tick. It is never marked `unknown`.
+**Safety:**
+
+- **Deadline.** No new POST batch or result read starts more than 100 s (`WORK_MS`) into an invocation. In-flight calls have a 20 s timeout, which keeps an invocation under the 150 s Edge wall clock. A batch that is not posted stays `planned`: it has cost nothing and posts on the next tick. It is never marked `unknown`.
 - **Isolation.** An error in one run, such as invalid geometry, a database write failure or an ambiguous POST, is recorded on that run's `error`. That run is skipped for the rest of the invocation, and the other runs continue. A run that keeps erroring still expires at six hours: it becomes `failed` and keeps its error text. Before this change it stayed `running` indefinitely and blocked the profile's next start. `start` with `wait: true` still returns 503 for its own run's error.
-- **Unchanged.** Idempotent `request_key`, task-tag binding, unknown POSTs never reposted, no new paid task on retry, six-hour expiry, and the 225-point, 1,000-check and 10-keyword limits.
-- **Throughput.** Seven 765-check runs (5,355 checks, 56 POST batches) take 15 collector ticks, about 1.25 h, when each result is ready on its first read. If every check needs three reads, they take 45 ticks, about 3.75 h. Both cases are in `tests/map-grid-capacity.test.mjs`. In practice posting usually spans the first one to three ticks: each batch also writes its 100 check rows. Six hours is 72 ticks × 360 reads = 25,920 reads. That is room for about 20 runs (the `MAX_RUNS` cap) at one read per check, or about 11 runs at three reads per check. Before going past roughly ten weekly profiles at one slot, stagger the slots or move collection to DataForSEO's `tasks_ready` endpoint.
+- **Unchanged.** Idempotent `request_key`, task-tag binding, unknown POSTs never reposted, no new paid task on retry, the six-hour expiry (not extended), and the 225-point, 1,000-check and 10-keyword limits.
+
+**Throughput** for ten 765-check runs (7,650 checks, 80 POST batches), as measured in `tests/map-grid-capacity.test.mjs`:
+
+| Scenario | Collector ticks | Time from slot |
+|---|---|---|
+| Results ready on first read (typical: DataForSEO returns in 1–2 min, and the next tick is 5 min later) | 13 | ~1.1 h |
+| Pessimistic latency: 5 s per POST including its 100 row writes, 1.5 s per read, every result pending once | 27 (longest invocation 101.5 s) | ~2.25 h |
+| Slow queue: three reads per check | 39 | ~3.25 h |
+
+- **Headroom.** Six hours is 72 ticks × 600 reads = 43,200 reads. That covers the ten target runs at up to five reads per check, or about 20 runs (the `MAX_RUNS` cap) at about two reads per check. Beyond that, stagger the weekly slots or switch collection to DataForSEO's `tasks_ready` endpoint rather than extending the expiry.
 
 ## Weekly scan alerts (Oct 15 2026)
 
