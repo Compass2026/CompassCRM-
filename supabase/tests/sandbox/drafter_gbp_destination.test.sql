@@ -1,4 +1,5 @@
 -- Fictional data only; run after the existing Facebook drafter sandbox suite.
+\set team '00000000-0000-4000-a000-000000000001'
 \c - postgres
 create schema gd;
 create table gd.results(name text, passed boolean, detail text);
