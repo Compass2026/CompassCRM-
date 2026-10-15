@@ -2142,3 +2142,14 @@ go-live: `docs/blog-drafter.md`.
   promotion; the client portal. Tom's by design: client review, DNS
   records, photos, pressing send on drafted mail, and the billable
   BrightLocal work. The open list is `docs/follow-ups.md`.
+
+## Explicit GBP destinations (October 15, 2026, proposed)
+
+See `docs/explicit-gbp-destinations.md`. Migration `20261015170554` is
+preview-only until release. Distinct verified GBP profiles may share a Google
+account. Each Google location belongs to one client; post approvals pin its
+immutable social-account identity. Logic requires explicit selection even with
+one binding and excludes Austin. No silent default or fallback is permitted.
+Preserve the single-profile compatibility path for other clients, all human
+review gates, illustrative image provenance, and client-level monthly totals.
+The map-grid workstream is separate.

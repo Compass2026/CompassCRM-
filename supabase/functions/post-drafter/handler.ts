@@ -51,9 +51,9 @@ import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 6;
+export const HANDLER_VERSION = 7;
 export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "explicit_gbp_destinations"] as const;
 
 export type Deps = {
   store: Store;
@@ -136,7 +136,7 @@ export function createPostDrafter(deps: Deps) {
     }
     if (!input?.client) return { ok: false, status: 404, body: { error: "client_not_found" } };
     // A Facebook brief also reads the client's Facebook Pages (v3).
-    const result = target.channel === "facebook"
+    const result = target.channel === "facebook" || (target.channel === "google_business" && target.socialAccountId)
       ? buildBrief(input, target, { socialAccounts: workspaceAccounts(input, await store.socialAccounts(clientId)) })
       : buildBrief(input, target);
     if (!result.ok) return { ok: false, status: 422, body: { eligible: false, refusals: result.refusals } };

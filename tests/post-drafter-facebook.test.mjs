@@ -73,7 +73,7 @@ test("Business Profile unchanged: no social_account key, its own rules, a graphi
   const graphic = buildBrief(withAssets(lucas()), { ...TARGET, assetIds: [GRAPHIC] });
   assert.ok(graphic.refusals.some((f) => f.code === "asset_unusable"));
   const named = buildBrief(withAssets(lucas()), { ...TARGET, socialAccountId: PAGE_ACCOUNT });
-  assert.ok(named.refusals.some((f) => f.code === "social_account_not_applicable"));
+  assert.ok(named.refusals.some((f) => f.code === "social_account_unknown"));
 });
 
 test("the linter judges a Facebook draft by the same fact rules, plus Facebook's channel rules", () => {
@@ -148,4 +148,16 @@ test("every new campaign requires a governed keyword, including brand/community 
   const legacyMode = fbBrief({ ...FB, campaignMode: "non_search" });
   assert.equal(legacyMode.ok, false);
   assert.ok(legacyMode.refusals.some((f) => f.code === "campaign_mode_retired"));
+});
+
+test('GBP brief records the explicit verified profile and refuses stale or mismatched accounts', async () => {
+ const target={...TARGET,socialAccountId:PAGE_ACCOUNT};
+ const profile={...ACCOUNTS[0],platform:'google_business',external_account_id:'locations/6226831491529440170',display_name:'Logic Solar · Wichita',publish_provider:'zernio',publish_verified_at:'2026-10-15T17:00:00Z'};
+ const result=buildBrief(withAssets(lucas()),target,{socialAccounts:[profile]});
+ assert.equal(result.ok,true,JSON.stringify(result.refusals));
+ assert.equal(result.brief.target.social_account.page_id,profile.external_account_id);
+ for(const accounts of [[],[ACCOUNTS[0]],[{...profile,publish_verified_at:null}],[{...profile,id:'another-id'}]]) {
+  const r=buildBrief(withAssets(lucas()),target,{socialAccounts:accounts});
+  assert.equal(r.ok,false);assert.ok(r.refusals.some(p=>p.code==='social_account_unknown'));
+ }
 });

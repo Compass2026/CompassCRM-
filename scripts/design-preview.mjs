@@ -172,6 +172,10 @@ const tables = {
   monthly_cycles: monthlyCycles,
 };
 
+const scenario = process.env.GBP_DESTINATION_PREVIEW === "1"
+  ? (await import("../tests/fixtures/gbp-destination-preview.mjs")).fixture({clients,uid}) : null;
+if (scenario) Object.assign(tables, scenario.tables);
+
 // ---- a PostgREST-shaped stand-in ------------------------------------------
 const RESERVED = new Set(["select", "order", "limit", "offset", "or", "and", "on_conflict", "columns"]);
 function applyFilters(rows, params) {
@@ -207,6 +211,11 @@ const gateway = http.createServer(async (req, res) => {
   if (url.pathname === "/auth/v1/user") return send(200, USER);
   if (url.pathname.startsWith("/rest/v1/rpc/")) {
     const fn = url.pathname.slice("/rest/v1/rpc/".length);
+    if (scenario?.rpc) {
+      let body = ""; for await (const chunk of req) body += chunk;
+      const result = scenario.rpc(fn, body ? JSON.parse(body) : {});
+      if (result !== undefined) return send(200, result);
+    }
     return send(200, fn === "is_team" ? true : fn === "secret_present" ? false : null);
   }
   if (url.pathname.startsWith("/rest/v1/")) {
@@ -235,7 +244,7 @@ let logs = "";
 app.stdout.on("data", (c) => { logs = (logs + c).slice(-8000); });
 app.stderr.on("data", (c) => { logs = (logs + c).slice(-8000); });
 
-const pages = [
+const pages = scenario?.pages ?? [
   ["dashboard", "/"],
   ["clients", "/clients"],
   ["tasks", "/tasks"],
@@ -262,8 +271,9 @@ try {
     if (app.exitCode !== null) throw new Error(`next dev stopped:\n${logs}`);
     try { await fetch(`${base}/login`); break; } catch { await new Promise((r) => setTimeout(r, 500)); }
   }
-  browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : { channel: "chrome" }) });
+
   for (const [vpName, viewport] of viewports) {
+  browser = await chromium.launch({ headless: true, args: process.env.CHROME_SINGLE_PROCESS === "1" ? ["--single-process", "--no-zygote", "--disable-dev-shm-usage", "--disable-gpu", "--disable-software-rasterizer"] : [], ...(executablePath ? { executablePath } : { channel: "chrome" }) });
     const context = await browser.newContext({ viewport, deviceScaleFactor: vpName === "phone" ? 1.5 : 1 });
     const session = { access_token: "preview", refresh_token: "preview", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer", user: USER };
     const signIn = () => context.addCookies([{ name: "sb-127-auth-token", value: `base64-${b64(session)}`, domain: "127.0.0.1", path: "/" }]);
@@ -279,6 +289,7 @@ try {
       // The dev-mode badge is not part of the design.
       await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
       await page.waitForTimeout(700);
+      if (scenario) await scenario.check(page, name);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
       await page.screenshot({ path: `${OUT}/${name}-${vpName}.jpg`, fullPage: true, type: "jpeg", quality: 85 });
       const note = [resp?.status() !== 200 && `HTTP ${resp?.status()}`, wide && "horizontal scroll"].filter(Boolean);
@@ -288,6 +299,7 @@ try {
     }
     if (errors.length) { failed = true; console.log("page errors:", errors); }
     await context.close();
+    await browser.close();
   }
 } catch (e) {
   failed = true;

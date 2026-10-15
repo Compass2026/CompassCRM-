@@ -27,8 +27,8 @@ do $$ declare r jsonb; e text; n bigint; begin
   and (select social_account_id=(select id from gd.ids where k='bound') from social_posts where id=(r->>'post_id')::uuid));
  perform gd.ok('draft stops at human review without scheduling',(select review_status='in_review' and publish_status='not_scheduled' and approved_hash is null from social_posts where id=(r->>'post_id')::uuid));
  perform gd.ok('drafting never enables publishing',(select not publish_enabled from social_accounts where id=(select id from gd.ids where k='bound')));
- e:=fd.try(format('select drafter_write(%L::jsonb)',jsonb_set(gd.req('Forged account test'),'{brief,target,social_account}',jsonb_build_object('id',(select id from gd.ids where k='bound')))));
- perform gd.ok('caller cannot supply a GBP social account',e like '23514:%Only a Facebook%',e);
+ e:=fd.try(format('select drafter_write(%L::jsonb)',jsonb_set(gd.req('Forged account test'),'{brief,target,social_account}',jsonb_build_object('id','00000000-0000-4000-8000-000000000099'))));
+ perform gd.ok('caller cannot forge a GBP social account',e like '23514:%verified Business Profile%',e);
 end $$;
 reset role;
 
@@ -52,10 +52,12 @@ do $$ declare e text; n bigint; begin
 end $$;
 select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b',
  'ddddddddddddddddddddddd1','locations/987654321','Client B','Client B','{"status":"healthy"}');
-do $$ declare e text; begin
- e:=fd.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b',
- 'ddddddddddddddddddddddd3','locations/7654322','Another B','Another B','{"status":"healthy"}')$q$);
- perform gd.ok('the database refuses a second bound location before it can become ambiguous',e like '23505:%',e);
+do $$ begin
+ begin
+  perform publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b','ddddddddddddddddddddddd1','locations/7654322','Another B','Another B','{"status":"healthy"}');
+  if (select count(*) from social_accounts where client_id='00000000-0000-4000-b000-00000000000b' and publish_provider='zernio' and platform='google_business')<>2 then raise exception 'second binding missing'; end if;
+  raise exception 'multi verified' using errcode='P9999';
+ exception when sqlstate 'P9999' then perform gd.ok('multiple distinct destinations are supported',true); end;
 end $$;
 reset role;
 set role authenticated;

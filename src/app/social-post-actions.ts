@@ -33,15 +33,23 @@ async function start(): Promise<Supabase> {
 
 // A draft names its destination so the approval binds it (the approved
 // snapshot includes social_account_id): a Facebook draft the client's Facebook
-// Page when the client has exactly one; a Business Profile draft the client's
-// Business Profile location bound for publishing through Zernio (at most one
-// per client). Never guessed between several.
-async function destinationFor(supabase: Supabase, clientId: string, platform: string | null | undefined): Promise<{ social_account_id?: string | null }> {
-  if (platform !== "facebook" && platform !== "google_business") return {};
-  let q = supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", platform);
-  if (platform === "google_business") q = q.not("publish_provider", "is", null);
-  const { data } = await q.limit(2);
-  return data?.length === 1 ? { social_account_id: data[0].id } : {};
+// Page when the client has exactly one. A Business Profile draft stores the
+// explicit verified destination submitted by the form. Never guess between profiles.
+async function destinationFor(supabase: Supabase, clientId: string, platform: string | null | undefined, form: FormData): Promise<{ social_account_id?: string | null; error?: string }> {
+  if (platform === "google_business") {
+    const id = String(form.get("social_account_id") ?? "").trim();
+    if (!id) return { social_account_id: null }; // stays draft until a required destination is selected
+    if (!isUuid(id)) return { error: "Choose a verified Business Profile destination." };
+    const { data, error } = await supabase.from("social_accounts").select("id")
+      .eq("id", id).eq("client_id", clientId).eq("platform", "google_business")
+      .eq("publish_provider", "zernio").not("publish_verified_at", "is", null).maybeSingle();
+    if (error || !data) return { error: "The destination is not a verified Business Profile of this client." };
+    return { social_account_id: data.id };
+  }
+  if (platform !== "facebook") return { social_account_id: null };
+  const { data, error } = await supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", "facebook").limit(2);
+  if (error) return { error: "Could not load destinations. Try again." };
+  return data?.length === 1 ? { social_account_id: data[0].id } : { social_account_id: null };
 }
 
 export async function createPostAction(clientId: string, _prev: PostFormState, form: FormData): Promise<PostFormState> {
@@ -49,10 +57,12 @@ export async function createPostAction(clientId: string, _prev: PostFormState, f
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
-  const page = await destinationFor(supabase, clientId, parsed.value.platform);
+  const page = await destinationFor(supabase, clientId, parsed.value.platform, form);
+  if (page.error) return { error: page.error };
+  const destination = { social_account_id: page.social_account_id };
   const { data, error } = await supabase
     .from("social_posts")
-    .insert({ client_id: clientId, ...parsed.value, ...page })
+    .insert({ client_id: clientId, ...parsed.value, ...destination })
     .select("id")
     .single();
   if (error) return { error: postErrorMessage(error.message) };
@@ -70,10 +80,12 @@ export async function updatePostAction(
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
-  const page = await destinationFor(supabase, clientId, parsed.value.platform);
+  const page = await destinationFor(supabase, clientId, parsed.value.platform, form);
+  if (page.error) return { error: page.error };
+  const destination = { social_account_id: page.social_account_id };
   const { data, error } = await supabase
     .from("social_posts")
-    .update({ ...parsed.value, ...page })
+    .update({ ...parsed.value, ...destination })
     .eq("id", postId)
     .eq("client_id", clientId)
     .eq("review_status", "draft")

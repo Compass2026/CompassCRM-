@@ -91,19 +91,17 @@ export default async function SettingsPage({
 
   // Business Profile through Zernio: piloted clients and any client with a
   // bound location.
-  const gbpRows: ZernioGbpRow[] = (clients ?? [])
-    .filter((c) => publisher.clients.includes(c.id) || (gbpLocations ?? []).some((l) => l.client_id === c.id)
-      || (gbpTransports ?? []).some((t) => t.client_id === c.id && t.gbp_transport === "zernio"))
-    .map((c) => {
-      const l = (gbpLocations ?? []).find((x) => x.client_id === c.id) ?? null;
-      const transport: "google" | "zernio" = (gbpTransports ?? []).find((t) => t.client_id === c.id)?.gbp_transport === "zernio" ? "zernio" : "google";
-      return {
-        transport,
-        client_id: c.id, client: c.name, social_account_id: l?.id ?? null, location_id: l?.external_account_id ?? null, location_name: l?.display_name ?? null,
-        account_id: l?.publish_account_id ?? null, account_name: l?.publish_account_name ?? null, enabled: l?.publish_enabled ?? false,
-        verified_at: l?.publish_verified_at ?? null, health: (l?.publish_health as { status?: string } | null)?.status ?? null,
-      };
-    });
+  const gbpRows: ZernioGbpRow[] = (clients ?? []).flatMap((c) => {
+    const locations = (gbpLocations ?? []).filter(x => x.client_id === c.id);
+    const transport: "google" | "zernio" = (gbpTransports ?? []).find(t => t.client_id === c.id)?.gbp_transport === "zernio" ? "zernio" : "google";
+    return [...locations, null].map(l => ({
+      transport, client_id: c.id, client: c.name, social_account_id: l?.id ?? null,
+      location_id: l?.external_account_id ?? null, location_name: l?.display_name ?? null,
+      account_id: l?.publish_account_id ?? null, account_name: l?.publish_account_name ?? null,
+      enabled: l?.publish_enabled ?? false, verified_at: l?.publish_verified_at ?? null,
+      health: (l?.publish_health as { status?: string } | null)?.status ?? null,
+    }));
+  });
 
   const settingValue = (key: string) =>
     (googleSettings ?? []).find((s) => s.key === key)?.value ?? null;

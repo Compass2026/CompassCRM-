@@ -362,7 +362,7 @@ export function createStore(supabase: Client) {
 
     // The piloted clients and every client with a Business Profile location
     // row, for the read-only accounts report.
-    async clientsForGbp(piloted: string[]): Promise<{ id: string; name: string; website_url: string | null; location: import("./facebook.ts").Binding | null }[]> {
+    async clientsForGbp(piloted: string[]): Promise<{ id: string; name: string; website_url: string | null; location: import("./facebook.ts").Binding | null; locations: import("./facebook.ts").Binding[] }[]> {
       const rows = (await one<import("./facebook.ts").Binding[]>(
         supabase.from("social_accounts").select(BINDING_COLS).eq("platform", "google_business")
       )) ?? [];
@@ -371,9 +371,18 @@ export function createStore(supabase: Client) {
       const clients = (await one<{ id: string; name: string; website_url: string | null }[]>(
         supabase.from("clients").select("id, name, website_url").in("id", ids).order("name")
       )) ?? [];
-      return clients.map((c) => ({ ...c, location: rows.find((r) => r.client_id === c.id && r.publish_provider) ?? null }));
+      return clients.map(c => {
+        const locations = rows.filter(r => r.client_id === c.id && r.publish_provider);
+        return { ...c, locations, location: locations.length === 1 ? locations[0] : null };
+      });
     },
 
+    async gbpClientIdentity(clientId: string) {
+      return one<{ id: string; name: string; website_url: string | null }>(supabase.from("clients").select("id,name,website_url").eq("id",clientId).maybeSingle());
+    },
+    async gbpPolicy(clientId: string) {
+      return one<{ require_explicit: boolean; excluded_locations: string[] }>(supabase.from("publisher_gbp_policies").select("require_explicit,excluded_locations").eq("client_id",clientId).maybeSingle());
+    },
     async bindGbpLocation(v: { client_id: string; account_id: string; location_id: string; location_name: string | null; account_name: string | null; health: unknown }): Promise<Record<string, unknown>> {
       const { data, error } = await supabase.rpc("publisher_bind_gbp_location", {
         p_client_id: v.client_id, p_account_id: v.account_id, p_location_id: v.location_id,

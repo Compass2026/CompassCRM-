@@ -19,7 +19,7 @@
 
 import { summarizeHealth, ZERNIO_ACCOUNT_RE, ZERNIO_PUBLISH_KEY_SECRET, type Binding } from "./facebook.ts";
 import {
-  buildGbpCreateBody, gbpBindingProblems, gbpImageProblem, gbpProblems, gbpRoute, locationResource, GBP_ZERNIO_PLATFORM,
+  buildGbpCreateBody, gbpBindingProblems, gbpImageProblem, gbpProblems, gbpRoute, gbpLocationLabel, locationResource, GBP_ZERNIO_PLATFORM,
   type GbpRoute, type GbpSnapshot, type ZernioLocation,
 } from "./gbp.ts";
 import type { PostRow } from "./store.ts";
@@ -55,12 +55,18 @@ export function createGbpPath(ctx: ZernioCtx) {
     return transports.get(clientId)!;
   };
   async function route(p: PostRow): Promise<GbpRoute> {
-    if (await namesLocation(p)) return "zernio";
+    if (await namesLocation(p) || (await store.gbpPolicy(p.client_id))?.require_explicit) return "zernio";
     return gbpRoute(null, (await transportOf(p.client_id)) === "zernio" || !!(await zernioLocationOf(p.client_id)));
   }
 
-  // An earlier direct-Google attempt still without a settled answer.
+  // Destination policy and earlier direct-Google attempts, before every send.
   async function priorExecution(p: PostRow): Promise<string | null> {
+    const policy = await store.gbpPolicy(p.client_id);
+    const id = (p.approved_snapshot as GbpSnapshot | null)?.social_account_id;
+    const binding = id ? await path.accountOf(id) : null;
+    if (binding?.publish_page_id && policy?.excluded_locations.includes(binding.publish_page_id)) {
+      return "This Business Profile destination is excluded for this client. Reopen the post and select a permitted profile.";
+    }
     const google = (await store.postRuns(p.id)).filter((r) => r.transport === "google"
       && ["published", "reconciled", "uncertain", "ambiguous", "failed"].includes(r.outcome));
     const last = google.at(-1);
@@ -74,7 +80,7 @@ export function createGbpPath(ctx: ZernioCtx) {
     const r = await z.gbpLocations(accountId);
     const j = (r.json ?? {}) as ZernioGbpLocations;
     const locations = r.ok ? (j.locations ?? []).map((l: ZernioLocation) => ({
-      location_id: locationResource(l.id), name: l.name ?? null, address: l.address ?? null, website: l.websiteUrl ?? null,
+      location_id: locationResource(l.id), name: l.name ?? null, address: null, website: l.websiteUrl ?? null,
       google_account: l.accountId ?? null, google_account_name: l.accountName ?? null, store_code: l.storeCode ?? null,
     })) : [];
     return { read: r.ok ? "ok" : r.message, locations, selected_location_id: r.ok ? locationResource(j.selectedLocationId ?? null) : null, has_more: r.ok ? j.hasMore === true : null };
@@ -128,6 +134,8 @@ export function createGbpPath(ctx: ZernioCtx) {
       zernio_account_id: b.publish_account_id, zernio_account_name: b.publish_account_name, zernio_platform: GBP_ZERNIO_PLATFORM,
     }),
     async live(z, binding, check) {
+      const policy = await store.gbpPolicy(binding.client_id);
+      check("destination permitted for this client", !policy?.excluded_locations.includes(binding.publish_page_id ?? ""), "Excluded profiles cannot receive posts.");
       const listed = await z.gbpAccounts();
       const a = listed.accounts.find((x) => x._id === binding.publish_account_id);
       if (!listed.answer.ok) { check("Zernio account listed", false, listed.answer.message); return null; }
@@ -136,7 +144,7 @@ export function createGbpPath(ctx: ZernioCtx) {
       check("Zernio account listed and active", v.active);
       const loc = v.locations.find((l) => l.location_id === binding.publish_page_id);
       check("the bound location is one the account manages", !!loc,
-        v.read !== "ok" ? v.read : loc ? `${loc.name ?? ""} ${loc.address ?? ""}`.trim() : `not among ${v.locations.length} location(s)${v.has_more ? " (list truncated)" : ""}`);
+        v.read !== "ok" ? v.read : loc ? loc.name ?? "Verified profile" : `not among ${v.locations.length} location(s)${v.has_more ? " (list truncated)" : ""}`);
       check("Zernio posts to exactly this location (pinned by locationId)", binding.publish_page_id === binding.external_account_id,
         `pinned ${binding.publish_page_id}; account default ${v.selected_location_id ?? "(none)"}`);
       const h = v.health as { status: string; postingGranted?: boolean | null; tokenValid?: boolean | null };
@@ -166,6 +174,7 @@ export function createGbpPath(ctx: ZernioCtx) {
       const site = host(c.website_url);
       return {
         client_id: c.id, name: c.name, website: c.website_url, piloted: ctx.settings.clients.includes(c.id),
+        locations: c.locations,
         bound: c.location ? {
           social_account_id: c.location.id, location_id: c.location.publish_page_id, location_name: c.location.display_name,
           zernio_account_id: c.location.publish_account_id, enabled: c.location.publish_enabled, verified_at: c.location.publish_verified_at,
@@ -198,6 +207,12 @@ export function createGbpPath(ctx: ZernioCtx) {
     const v = await verifyAccount(z, a);
     const loc = v.locations.find((l) => l.location_id === location);
     const refuse: string[] = [];
+    const client = await store.gbpClientIdentity(clientId);
+    const policy = await store.gbpPolicy(clientId);
+    if (!client || !host(client.website_url) || host(loc?.website) !== host(client.website_url)) {
+      refuse.push("The profile website does not verify ownership for this client. Resolve the business identity before binding.");
+    }
+    if (policy?.excluded_locations.includes(location)) refuse.push("This profile is excluded for this client.");
     if (!v.active) refuse.push("The Zernio account is not active or needs reconnecting.");
     if (v.read !== "ok") refuse.push(`Could not read the account's locations: ${v.read}`);
     else if (!loc) refuse.push(`Location ${location} is not among the account's locations${v.has_more ? " (the list was truncated)" : ""}.`);
@@ -206,7 +221,7 @@ export function createGbpPath(ctx: ZernioCtx) {
     if (refuse.length) return { ok: false, status: 409, error: refuse.join(" "), verified: v };
     try {
       const result = await store.bindGbpLocation({
-        client_id: clientId, account_id: accountId, location_id: location, location_name: loc!.name, account_name: v.name, health: v.health,
+        client_id: clientId, account_id: accountId, location_id: location, location_name: gbpLocationLabel(loc!.name, loc!.website), account_name: v.name, health: v.health,
       });
       return { ok: true, status: 200, result, verified: { ...v, bound_location: loc } };
     } catch (e) {

@@ -75,8 +75,8 @@ export function createStore(supabase: Client) {
 
     // The client's Facebook Pages (v3, Facebook briefs). Read-only.
     async socialAccounts(clientId: string): Promise<SocialAccountRow[]> {
-      const { data, error } = await supabase.from("social_accounts").select("id, platform, external_account_id, display_name")
-        .eq("client_id", clientId).eq("platform", "facebook");
+      const { data, error } = await supabase.from("social_accounts").select("id, platform, external_account_id, display_name, publish_provider, publish_verified_at")
+        .eq("client_id", clientId).in("platform", ["facebook", "google_business"]);
       if (error) throw new Error(error.message);
       return (data ?? []) as SocialAccountRow[];
     },
