@@ -34,6 +34,8 @@ reset role;
 \c - authenticator
 set role authenticated;
 select fd.as_user('authenticated', :'team');
+update social_posts set review_status='rejected',review_note='Fictional destination test complete'
+ where id=(select id from gd.ids where k='post');
 select publisher_unbind_account((select id from gd.ids where k='bound'));
 reset role;
 set role service_role;
