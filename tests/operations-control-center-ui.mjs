@@ -101,6 +101,11 @@ assert.match(await grid.innerText(),/CRITICAL[\s\S]*(No weekly start was recorde
  rows.ga4_performance_imports.push({...receipt,id:'south-receipt',client_id:b,property:'properties/456',host:'safety.test'});
  rows.ga4_performance_sync_runs.push({...run,id:'south1',client_id:b,results:[{scope_version:1,brand_workspace_id:'brand1',website_host:'safety.test',property:'properties/456',status:'imported',receipt_id:'south-receipt'}]}, {...run,id:'south2',client_id:b,status:'partial',results:[{scope_version:1,brand_workspace_id:'brand2',website_host:'forklift.test',property:'properties/789',status:'waiting',code:'property_processing_delay'}]});
  await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();
+ // After a reload the paused map-tracking client's grid and its exact-profile alert are still there.
+ assert.match(await page.locator('[data-map-grid-profile="grid2"]').innerText(),/Fictional Map-only Plumbing/);
+ await page.getByRole('tab',{name:'Action queue'}).click();
+ assert.equal(await page.locator('[data-action-list] a').filter({hasText:'Fictional Map-only Plumbing'}).getAttribute('href'),`/clients/${mapOnly}/maps?profile=grid2`);
+ await page.getByRole('tab',{name:'Source freshness'}).click();
  const south=page.locator(`[data-integration-client="${b}"] [data-integration-source="ga4"]`);
  assert.match(await south.innerText(),/1 of 2 website properties verified/);assert.match(await south.innerText(),/South Safety/);assert.match(await south.innerText(),/South Forklift/);assert.match(await south.innerText(),/Awaiting reporting dates/);
  assert.equal(await south.getByText('Verified retrieval',{exact:true}).count(),1);
