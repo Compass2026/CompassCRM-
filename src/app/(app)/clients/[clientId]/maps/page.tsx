@@ -120,7 +120,7 @@ export default async function MapsPage({
         <MapGridWeeklyNotice status={weekly} attempts={attempts} />
       )}
       <MapGridDashboard
-        key={run?.id ?? profile.id}
+        key={`${profile.id}:${run?.id ?? "latest"}`}
         clientId={clientId}
         profiles={profiles.map((p) => ({ id: p.id, label: p.label }))}
         profile={{

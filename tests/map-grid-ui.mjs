@@ -13,36 +13,31 @@ const config={target_place_id:'ChIJfixture',zoom:13,search_this_area:false,point
 const broad={target_place_id:'ChIJfixture',zoom:13,points:Array.from({length:25},(_,i)=>({lat:38.805+(Math.floor(i/5)-2)*.1449,lng:-90.815+((i%5)-2)*.1859})),keywords};
 const profile={...config,id:'profile',client_id:clientId,grid_config_id:'grid',label:'Fictional pilot',enabled:true,weekly_enabled:false};
 const runs=[{id:'dense',profile_id:'profile',started_at:'2026-10-16T01:00:00Z',status:'running',config,error:null},{id:'broad',profile_id:'profile',started_at:'2026-10-15T01:00:00Z',status:'complete',config:broad,error:null}];
-const make=(cfg,pending)=>cfg.keywords.flatMap(k=>cfg.points.map((p,i)=>{const d=distanceMiles(center,p),queued=pending&&i%17===5;return{...p,id:`${k.id}-${i}`,keyword_id:k.id,keyword:k.keyword,point_index:i,state:queued?'queued':'complete',position:queued?null:d>4.5&&i%3===0?null:1+Math.floor(d*2),results:queued?null:[{place_id:'ChIJfixture',position:1+Math.floor(d*2),title:'Fixture Roofing',domain:'example.test'}],cost:.0006,error:null,checked_at:'2026-10-16T01:01:00Z'};}));
-const checks={dense:make(config,true),broad:make(broad,false)};
-const baseline=keywords.map(k=>({grid_config_id:'grid',keyword_id:k.id,recorded_at:'2026-09-24T14:00:00Z',points:broad.points.map(p=>({...p,position:2}))}));
-// A second location for the same client (e.g. Logic Overland Park + Wichita), and another client's grid.
-const wichitaCenter={lat:37.6922361,lng:-97.3375448},wGrid=localGrid(wichitaCenter);
-const wConfig={target_place_id:'ChIJwichita',zoom:13,search_this_area:false,points:wGrid.points,geometry:wGrid.geometry,keywords:[keywords[0]]};
-const profiles=[profile,{...wConfig,id:'wichita',client_id:clientId,grid_config_id:'grid2',label:'Wichita',enabled:true,weekly_enabled:true},
- {...config,id:'other',client_id:'00000000-0000-4000-8000-000000000099',grid_config_id:'grid9',label:'Another client',enabled:true,weekly_enabled:false}];
-runs.push({id:'w1',profile_id:'wichita',started_at:'2026-10-08T14:00:05Z',status:'complete',config:wConfig,error:null},{id:'o1',profile_id:'other',started_at:'2026-10-14T01:00:00Z',status:'complete',config,error:null});
-checks.w1=wConfig.keywords.flatMap(k=>wConfig.points.map((p,i)=>({...p,id:`w-${i}`,keyword_id:k.id,keyword:k.keyword,point_index:i,state:'complete',position:3,results:[{place_id:'ChIJwichita',position:3,title:'Fixture Solar',domain:'example.test'}],cost:.0006,error:null,checked_at:'2026-10-08T14:05:00Z'})));
-const attempts=[{profile_id:'wichita',outcome:'error',message:'Grid keyword mismatch',attempted_at:new Date().toISOString(),run_id:null}];
-const configs=[{id:'grid',center_lat:center.lat,center_lng:center.lng},{id:'grid2',center_lat:wichitaCenter.lat,center_lng:wichitaCenter.lng}];
+const wichita={lat:37.6922361,lng:-97.3375448},marketGrid=localGrid(wichita,undefined,{label:'Wichita, KS market center'});
+const market={target_place_id:'ChIJfixture',zoom:13,search_this_area:false,points:marketGrid.points,geometry:marketGrid.geometry,keywords};
+const profile2={...market,id:'profile2',client_id:clientId,grid_config_id:'grid2',label:'Fictional pilot — Wichita, KS',enabled:true,weekly_enabled:true};
+// Another client's run (profile 'other'): never reachable under this client.
+const attempts=[{profile_id:'profile2',outcome:'error',message:'Grid keyword mismatch',attempted_at:new Date().toISOString(),run_id:null}];
 const scanned=[];
+runs.push({id:'market',profile_id:'profile2',started_at:'2026-10-14T01:00:00Z',status:'complete',config:market,error:null},{id:'o1',profile_id:'other',started_at:'2026-10-14T01:00:00Z',status:'complete',config,error:null});
+const make=(cfg,pending,c=center)=>cfg.keywords.flatMap(k=>cfg.points.map((p,i)=>{const d=distanceMiles(c,p),queued=pending&&i%17===5;return{...p,id:`${k.id}-${i}`,keyword_id:k.id,keyword:k.keyword,point_index:i,state:queued?'queued':'complete',position:queued?null:d>4.5&&i%3===0?null:1+Math.floor(d*2),results:queued?null:[{place_id:'ChIJfixture',position:1+Math.floor(d*2),title:'Fixture Roofing',domain:'example.test'}],cost:.0006,error:null,checked_at:'2026-10-16T01:01:00Z'};}));
+const checks={dense:make(config,true),broad:make(broad,false),market:make(market,false,wichita)};
+const baseline=keywords.map(k=>({grid_config_id:'grid',keyword_id:k.id,recorded_at:'2026-09-24T14:00:00Z',points:broad.points.map(p=>({...p,position:2}))}));
 const unexpected=[];let starts=0;
 const user={id:teamId,email:'fixture@example.test',aud:'authenticated',role:'authenticated'};
 const upstream=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');const reply=(v,s=200)=>{res.writeHead(s,{'content-type':'application/json'});res.end(JSON.stringify(v));};
- // PostgREST eq. filters, so every read is scoped the way the page asks for it.
- const eq=rows=>rows.filter(r=>[...url.searchParams].every(([k,v])=>!v.startsWith('eq.')||String(r[k])===v.slice(3)));
  let body='';for await(const c of req)body+=c;
  if(url.pathname==='/auth/v1/user')return reply(user);
  if(url.pathname==='/rest/v1/team_members')return reply([{id:teamId}]);
  if(url.pathname==='/rest/v1/rpc/is_team')return reply(true);
  if(url.pathname==='/rest/v1/clients')return reply({id:clientId,name:'Fictional grid client',status:'active',website_url:'https://example.test'});
- if(url.pathname==='/rest/v1/map_grid_profiles')return reply(eq(profiles));
- if(url.pathname==='/rest/v1/map_grid_runs')return reply(eq(runs));
+ if(url.pathname==='/rest/v1/map_grid_profiles'){const id=url.searchParams.get('id');return reply(url.searchParams.get('client_id')==='eq.'+clientId?[profile,profile2].filter(p=>!id||'eq.'+p.id===id):[]);}
+ if(url.pathname==='/rest/v1/map_grid_runs')return reply(runs.filter(r=>[...url.searchParams].every(([k,v])=>!v.startsWith('eq.')||'eq.'+r[k]===v)));
  if(url.pathname==='/rest/v1/map_grid_checks')return reply(checks[url.searchParams.get('run_id')?.replace('eq.','')]??[]);
- if(url.pathname==='/rest/v1/grid_snapshots')return reply(eq(baseline));
- if(url.pathname==='/rest/v1/map_grid_weekly_attempts')return reply(eq(attempts));
- if(url.pathname==='/rest/v1/grid_configs')return reply(eq(configs));
+ if(url.pathname==='/rest/v1/grid_snapshots')return reply(baseline.filter(b=>'eq.'+b.grid_config_id===url.searchParams.get('grid_config_id')));
+ if(url.pathname==='/rest/v1/map_grid_weekly_attempts')return reply(attempts.filter(a=>'eq.'+a.profile_id===url.searchParams.get('profile_id')));
+ if(url.pathname==='/rest/v1/grid_configs')return reply([{center_lat:center.lat,center_lng:center.lng}]);
  if(url.pathname==='/functions/v1/map-grid-sync'){starts++;scanned.push(JSON.parse(body).profile_id);return reply({error:'Wait one hour before another scan'},503);}
  unexpected.push(url.pathname);return reply({error:'Unexpected fixture request'},500);
 });
@@ -60,7 +55,7 @@ try{
  const markers=page.locator('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]'),map=page.getByTestId('map-grid-map');
  const radius=label=>page.getByRole('group',{name:'Radius from business'}).getByRole('button',{name:new RegExp(`^${label}`)});
  const card=label=>page.locator('div.rounded-2xl',{has:page.getByText(label,{exact:true})}).first();
- const count=async n=>{await page.waitForFunction(n=>document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]').length===n,n);};
+ const count=async n=>{try{await page.waitForFunction(n=>document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]').length===n,n);}catch(e){const seen=await page.evaluate(()=>({markers:document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]').length,maps:document.querySelectorAll('[data-testid=map-grid-map]').length,url:location.href,radius:[...document.querySelectorAll('[role=group] button[aria-pressed=true]')].map(b=>b.textContent)}));throw Error(`expected ${n} markers, saw ${JSON.stringify(seen)}: ${e.message}`);}};
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});
  await page.getByRole('heading',{name:'Your rankings, across the map.'}).waitFor();
  // Dense scan opens at the 5-mile default with the business center and three rings.
@@ -152,44 +147,55 @@ try{
  await dialog.getByRole('button',{name:'Cancel'}).click();assert.equal(starts,0);
  await page.getByRole('button',{name:'Run scan',exact:true}).click();await dialog.getByRole('button',{name:'Start paid scan'}).click();
  await page.getByRole('alert').filter({hasText:'Wait one hour'}).waitFor();assert.equal(starts,1);
- // Two grids for one client: an explicit location selector, everything scoped to the chosen grid.
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
- const location=page.getByLabel('Map location');
- assert.deepEqual(await location.locator('option').allTextContents(),['Fictional pilot','Wichita'],'only this client\'s grids are offered');
- assert.equal(await location.inputValue(),'profile');
- assert.equal(await page.locator('[data-weekly-scan-state]').count(),0,'the manual grid has no weekly notice');
- await location.selectOption('wichita');await page.waitForURL(/profile=wichita/);await count(153);
- assert.match(await page.locator('main').innerText(),/Wichita · Dense local scan/);
- const history=await page.getByLabel('Scan history').locator('option').allInnerTexts();
- assert.equal(history.length,1,`Wichita history only: ${history}`);
- // Its own weekly notice (the start error recorded for this grid), its own keywords.
- assert.equal(await page.locator('[data-weekly-scan-state]').getAttribute('data-weekly-scan-state'),'missed');
- assert.match(await page.locator('[data-weekly-scan-state]').innerText(),/Grid keyword mismatch/);
- assert.equal(await page.getByLabel('Map keyword').locator('option').count(),1);
- // Selection survives a reload and the Refresh button.
- await page.reload({waitUntil:'networkidle'});await count(153);
- assert.equal(await location.inputValue(),'wichita');
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(500);await page.screenshot({path:`${shots}/mobile.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ // A market-centered run (service-area business, no public address) measures from the scan center, never from the business.
+ // Two profiles for one client: the location selector switches to Wichita without any scan request.
+ await page.setViewportSize({width:1440,height:1000});
+ const startsBeforeLocations=starts;
+ assert.deepEqual(await page.getByLabel('Map location').locator('option').allTextContents(),['Fictional pilot','Fictional pilot — Wichita, KS']);
+ await page.getByLabel('Map location').selectOption('profile2');await page.waitForURL(/profile=profile2/);
+ assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
+ assert.deepEqual(await page.getByLabel('Scan history').locator('option').allTextContents(),['2026-10-14 01:00 UTC · complete · dense 1/2/5 mi']);
+ // Refresh keeps the selected location; the first profile's history is not mixed in.
+ await page.reload({waitUntil:'networkidle'});assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
+ assert.equal(starts,startsBeforeLocations);
+ // The selected grid's own weekly notice: its complete scan this week, and the start error recorded for it.
+ assert.equal(await page.locator('[data-weekly-scan-state]').getAttribute('data-weekly-scan-state'),'ok');
+ assert.match(await page.locator('[data-weekly-scan-state]').textContent(),/Failed to start — Grid keyword mismatch/);
+ // The Refresh button keeps the selection.
  await page.getByRole('button',{name:'Refresh'}).click();await page.waitForTimeout(800);
- assert.match(page.url(),/profile=wichita/);assert.equal(await location.inputValue(),'wichita');
- assert.equal(starts,1,'switching and refreshing never start a scan');
- // A run link without ?profile= (an older link) still opens its own grid.
- await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?run=w1`,{waitUntil:'networkidle'});
- assert.equal(await location.inputValue(),'wichita');
- await page.screenshot({path:`${shots}/second-location.png`,fullPage:true});
- // A scan started here is for the selected grid only.
+ assert.match(page.url(),/profile=profile2/);assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
+ // An older ?run= link without ?profile= opens its run's own grid, not the first one.
+ await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?run=market`,{waitUntil:'networkidle'});
+ assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
+ // The first grid has no weekly notice: notices never leak across grids.
+ await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?profile=profile`,{waitUntil:'networkidle'});
+ assert.equal(await page.locator('[data-weekly-scan-state]').count(),0);
+ // Another client's grid or run is a 404 here too.
+ for(const q of ['profile=other','run=o1']){const r=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?${q}`);assert.equal(r.status(),404,q);assert.doesNotMatch(await page.locator('body').innerText(),/Another client/);}
+ assert.equal(starts,startsBeforeLocations);
+ // A profile id that is not this client's is a 404, never another client's data.
+ const foreign=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?profile=00000000-0000-4000-8000-0000000000ff`);assert.equal(foreign.status(),404);
+ await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?profile=profile2`,{waitUntil:'networkidle'});
+ await page.getByTestId('market-center-note').filter({hasText:'This scan is centred on Wichita, KS market center, not on a business address'}).waitFor();
+ const marketRadius=label=>page.getByRole('group',{name:'Radius from scan center'}).getByRole('button',{name:new RegExp(`^${label}`)});
+ assert.equal(await marketRadius('5 mi').getAttribute('aria-pressed'),'true');await count(153);
+ await page.getByText(/Dense local scan, 1 \/ 2 \/ 5 mi around Wichita, KS market center/).waitFor();
+ assert.match(await card('Sampled points').innerText(),/Within 5 mi of the scan center/);
+ await marketRadius('1 mi').click();await count(49);
+ await markers.first().click();await page.getByText(/mi from the scan center/).waitFor();
+ assert.equal(await page.locator('[title="Wichita, KS market center (scan center)"]').count()+await page.getByText('Wichita, KS market center',{exact:true}).count()>=1,true);
+ const marketText=await page.locator('main').innerText();
+ assert.doesNotMatch(marketText,/(of|from) the business/);
+ assert.doesNotMatch(marketText,/Radius from business/);
+ await page.screenshot({path:`${shots}/market-center-1mi.png`,fullPage:true});
+ assert.equal(starts,1);
+ // A scan started on the Wichita grid targets that grid only.
  await page.getByRole('button',{name:'Run scan',exact:true}).click();
  await page.getByRole('dialog',{name:'Confirm paid scan'}).getByRole('button',{name:'Start paid scan'}).click();
  await page.getByRole('alert').filter({hasText:'Wait one hour'}).waitFor();
- assert.deepEqual(scanned,['profile','wichita']);
- // Another client's grid or run is a 404 under this client, never its data.
- for(const q of ['profile=other','run=o1']){
-  const r=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?${q}`,{waitUntil:'networkidle'});
-  assert.equal(r.status(),404,q);
-  assert.equal(await page.getByTestId('map-grid-map').count(),0);
-  assert.doesNotMatch(await page.locator('body').innerText(),/Another client/);
- }
- await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
- await page.setViewportSize({width:390,height:844});await page.waitForTimeout(500);await page.screenshot({path:`${shots}/mobile.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ assert.deepEqual(scanned,['profile','profile2']);
  assert.equal(starts,2);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
- console.log('Grid browser checks passed: two grids for one client (explicit selector, scoped history/checks/keywords/weekly notice, selection kept through reload and refresh, run links open their own grid, scan targets the selected grid, other clients\' grids refused), 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
+ console.log('Grid browser checks passed: two profiles for one client (location selector, reload and Refresh keep it, separate history, per-grid weekly notice, ?run= opens its own grid, other clients\' grid/run 404, scan targets the selected grid, no scan request on switching), market-centered run labelled from the scan center (never the business), 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
 }catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}

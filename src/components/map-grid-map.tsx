@@ -34,6 +34,7 @@ export default function MapGridMap({
   radiusMiles,
   rings,
   datasetKey,
+  centerLabel = "Business location",
 }: {
   checks: GridCheck[];
   onSelect: (check: GridCheck) => void;
@@ -41,6 +42,8 @@ export default function MapGridMap({
   // null = the scan's full extent.
   radiusMiles: number | null;
   rings: number[];
+  // What the center is: the business, or a named market center.
+  centerLabel?: string;
   // Changes only on a deliberate source switch; refits to that dataset's extent.
   datasetKey: string;
 }) {
@@ -82,12 +85,17 @@ export default function MapGridMap({
         setZoom(map.getZoom());
       };
       map.on("zoomend moveend", sync);
-      const resize = new ResizeObserver(() => map.invalidateSize());
+      // Instant re-centering: an animated pan still running when the map is
+      // removed (a location switch during a layout shift) throws in Leaflet.
+      const resize = new ResizeObserver(() =>
+        map.invalidateSize({ animate: false }),
+      );
       resize.observe(el);
       leaflet.current = { L, map, markers, overlay };
       setReady(true);
       cleanup = () => {
         resize.disconnect();
+        map.stop();
         map.remove();
         leaflet.current = null;
       };
@@ -172,13 +180,13 @@ export default function MapGridMap({
         iconSize: [halo, halo],
         iconAnchor: [halo / 2, halo / 2],
       }),
-      title: "Business location (scan center)",
-      alt: "Business location",
+      title: `${centerLabel} (scan center)`,
+      alt: centerLabel,
       interactive: false,
       keyboard: false,
       zIndexOffset: -1000,
     }).addTo(l.overlay);
-  }, [ready, center, rings, minSpacing, zoom]);
+  }, [ready, center, rings, minSpacing, zoom, centerLabel]);
 
   useEffect(() => {
     const l = leaflet.current;

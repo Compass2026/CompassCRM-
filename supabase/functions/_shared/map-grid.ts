@@ -1,7 +1,10 @@
 export type GridPoint = { lat: number; lng: number };
 export type GridKeyword = { id: string; keyword: string };
-// Radius is distance from the business center, never diameter.
+// Radius is distance from the scan center, never diameter. The center is the
+// business itself unless the geometry says it is a market center (a
+// service-area business with no public address is sampled around its market).
 export type GridTier = { max_miles: number; spacing_miles: number };
+export type GridCenterKind = "business" | "market";
 export type GridGeometry = {
   version: typeof LOCAL_GEOMETRY_VERSION;
   center: GridPoint;
@@ -9,6 +12,10 @@ export type GridGeometry = {
   radii_miles: number[];
   default_radius_miles: number;
   point_count: number;
+  // Absent means "business" (every geometry written before Oct 15 2026).
+  center_kind?: GridCenterKind;
+  // Required for a market center, e.g. "Wichita, KS market center".
+  center_label?: string;
 };
 export type GridConfig = {
   target_place_id: string;
@@ -62,7 +69,11 @@ function destination(center: GridPoint, north: number, east: number) {
 }
 // One deterministic, deduplicated nested scan: each tier fills the ring between
 // the previous tier's radius and its own, so the center is charged once.
-export function localGrid(center: GridPoint, tiers: GridTier[] = LOCAL_TIERS) {
+export function localGrid(
+  center: GridPoint,
+  tiers: GridTier[] = LOCAL_TIERS,
+  market?: { label: string },
+) {
   if (!Number.isFinite(center.lat) || !Number.isFinite(center.lng))
     throw Error("Invalid center");
   const points: GridPoint[] = [],
@@ -102,6 +113,7 @@ export function localGrid(center: GridPoint, tiers: GridTier[] = LOCAL_TIERS) {
     radii_miles: tiers.map((t) => t.max_miles),
     default_radius_miles: tiers[tiers.length - 1].max_miles,
     point_count: points.length,
+    ...(market ? { center_kind: "market" as const, center_label: market.label } : {}),
   };
   return { points, geometry };
 }
@@ -171,6 +183,15 @@ export function geometryProblem(
     return "Grid geometry default radius is not one of its radii";
   if (x.point_count !== points.length)
     return "Grid geometry point count does not match its points";
+  if (x.center_kind !== undefined && x.center_kind !== "business" && x.center_kind !== "market")
+    return "Unknown grid center kind";
+  if (
+    x.center_label !== undefined &&
+    (typeof x.center_label !== "string" || !x.center_label.trim() || x.center_label.length > 80)
+  )
+    return "Invalid grid center label";
+  if (x.center_kind === "market" && x.center_label === undefined)
+    return "A market-centered grid needs a center label";
   for (const p of points)
     if (distanceMiles(c as GridPoint, p) > previous + RADIUS_TOLERANCE_MILES)
       return "Grid point outside declared radius";
@@ -336,4 +357,10 @@ export function rankColor(state: string, position: number | null) {
   if (position <= 3) return "#15803d";
   if (position <= 10) return "#b45309";
   return "#dc2626";
+}
+// How the viewer should speak about distances for a geometry.
+export function centerDescription(g: GridGeometry | null) {
+  return g?.center_kind === "market"
+    ? { isBusiness: false, noun: "scan center", label: g.center_label ?? "Market center" }
+    : { isBusiness: true, noun: "business", label: "Business location" };
 }
