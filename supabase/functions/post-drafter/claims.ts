@@ -1,5 +1,5 @@
-// Binding claims on a drafter's task (20261015180000 for blog drafts,
-// 20261015190000 for Authority draft requests): tasks.claimed_by /
+// Binding claims on a drafter's task (20261015175146 for blog drafts,
+// 20261015175410 for Authority draft requests): tasks.claimed_by /
 // claimed_at, set only by the claim functions. A claim lasts an hour, the
 // worker skill's stale rule; the SQL write enforces the same rule.
 export const CLAIM_TTL_MS = 60 * 60 * 1000;

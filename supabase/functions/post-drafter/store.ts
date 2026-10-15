@@ -36,7 +36,7 @@ export type WritePayload = {
   requested_by: string | null;
   runtime: string;
   // v8: who holds the Authority request (authority_draft_claim); drafter_write
-  // refuses another claimant's live claim (20261015190000).
+  // refuses another claimant's live claim (20261015175410).
   claimant: string | null;
   attempt: number;
   brief_version: string;

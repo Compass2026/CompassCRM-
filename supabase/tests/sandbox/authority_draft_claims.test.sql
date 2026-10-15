@@ -1,4 +1,4 @@
--- Tests for 20261015190000 (binding claims on Authority draft requests), run
+-- Tests for 20261015175410 (binding claims on Authority draft requests), run
 -- by scripts/test-portal-sandbox.sh on the same replay. Own harness schema
 -- (adc) and a fictional client with three services, so each scenario has its
 -- own Ready Business Profile opportunity and Draft with AI request.

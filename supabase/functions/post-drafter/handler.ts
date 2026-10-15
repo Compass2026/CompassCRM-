@@ -32,7 +32,7 @@ import { workspaceAccounts } from "./workspace.ts";
 // rebuilt itself. The model runtime is the caller's business: it sends a
 // label (`runtime`), never a vendor-specific payload.
 //
-// v8, claims (20261015190000): brief / check / submit take a `claimant`
+// v8, claims (20261015175410): brief / check / submit take a `claimant`
 // label. When an Authority request's task is claimed (authority_draft_claim)
 // by someone else within the hour, they answer 409 claimed_by_other before
 // any other check and nothing is written or recorded; drafter_write enforces

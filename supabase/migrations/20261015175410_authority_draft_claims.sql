@@ -1,8 +1,8 @@
 -- Binding claims on Authority draft requests (Oct 15 2026).
--- NOT APPLIED — written with its sandbox test (authority_draft_claims.test.sql).
--- Needs 20261015180000 (tasks.claimed_by / claimed_at and their guard).
+-- Written with its sandbox test (authority_draft_claims.test.sql).
+-- Needs 20261015175146_content_draft_claims (tasks.claimed_by / claimed_at and their guard).
 --
--- 20261015180000 made blog draft claims binding after the Logic Solar
+-- 20261015175146_content_draft_claims made blog draft claims binding after the Logic Solar
 -- incident. The Authority draft request path (Draft with AI → post-drafter v2
 -- → drafter_write) still had the advisory claim: the worker skill's
 -- `update tasks set status = 'in_progress' … returning id`, which
@@ -25,7 +25,7 @@
 -- drafter_write is patched in place, as 20261015010350 did, so the Facebook
 -- and GBP destination changes it carries stay verbatim.
 -- Rollback: remove the authority_draft_claims_v1 block from drafter_write,
--- drop authority_draft_claim, restore 20261015180000's tasks_claim_guard.
+-- drop authority_draft_claim, restore 20261015175146's tasks_claim_guard.
 
 -- ── 1. The claim guard names both doors ─────────────────────────────────────
 create or replace function tasks_claim_guard() returns trigger

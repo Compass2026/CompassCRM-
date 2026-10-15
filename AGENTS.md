@@ -1269,8 +1269,8 @@ scheduled or published by any of it.
   runs brief → check → submit with the opportunity id, and on any conflict or
   refusal sets the task `blocked` with the code in its notes; it never
   drafts another target and never refreshes Authority.
-- **Binding claims (20261015190000, written, not applied; Oct 15 2026).**
-  The Authority twin of the blog drafts' binding claims (20261015180000,
+- **Binding claims (20261015175410, applied Oct 15 2026).**
+  The Authority twin of the blog drafts' binding claims (20261015175146,
   which it needs). The worker's old `update tasks … set status` claim was
   advisory and `drafter_write` never checked it.
   - `authority_draft_claim(task_id, claimant)` records `tasks.claimed_by` /
@@ -1283,7 +1283,7 @@ scheduled or published by any of it.
     with CD409, mapped the same way.
   - An unclaimed request, and every draft without an opportunity, writes as
     before. The Routine claims as `worker-routine`.
-  - Ship in this order: 20261015180000 (with its PR), this migration, merge
+  - Ship in this order: 20261015175146 (with its PR), this migration, merge
     (the skill goes live with it), then deploy `post-drafter` from main at
     once. Until it answers v8 with `claims`, the worker's preflight stops
     without drafting. Tests: `tests/post-drafter-authority.test.mjs`,

@@ -321,7 +321,7 @@ test("a newer analysis changes the brief hash: a draft against the old run is st
   assert.equal(r.body.error, "stale_brief");
 });
 
-// ── Binding claims (20261015190000) ──────────────────────────────────────────
+// ── Binding claims (20261015175410) ──────────────────────────────────────────
 // The blog drafts' Logic Solar incident, on the Authority path: a session
 // claims the Draft with AI request; another (the Routine) must not draft it.
 const minutesAgo = (n) => new Date(NOW.getTime() - n * 60_000).toISOString();
