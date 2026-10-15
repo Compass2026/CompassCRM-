@@ -28,10 +28,10 @@
 // team_members). Nothing else.
 import { blogBriefHash, buildBlogBrief, CONTENT_DRAFTER_VERSION, type BlogBrief } from "./brief.ts";
 import { lintBlog, type BlogDraft } from "./lint.ts";
-import type { ClaimHolder, Store } from "./store.ts";
+import { claimedByOther } from "../post-drafter/claims.ts";
+import type { Store } from "./store.ts";
 
 export const HANDLER_VERSION = 5;
-export const CLAIM_TTL_MS = 60 * 60 * 1000;
 export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
@@ -66,13 +66,8 @@ export function parseBlogDraft(d: unknown): BlogDraft | string {
   };
 }
 
-// A live claim by someone else: the holder's label and when it lapses.
-export function claimedByOther(holder: ClaimHolder | null, claimant: string | null, now = Date.now()):
-  { claimed_by: string; expires_at: string } | null {
-  if (!holder?.claimed_by || !holder.claimed_at || holder.claimed_by === claimant) return null;
-  const expires = Date.parse(holder.claimed_at) + CLAIM_TTL_MS;
-  return expires > now ? { claimed_by: holder.claimed_by, expires_at: new Date(expires).toISOString() } : null;
-}
+// The claim rule is shared with post-drafter's Authority requests.
+export { CLAIM_TTL_MS, claimedByOther } from "../post-drafter/claims.ts";
 
 export function createContentDrafter(deps: Deps) {
   const { store } = deps;

@@ -1269,6 +1269,25 @@ scheduled or published by any of it.
   runs brief → check → submit with the opportunity id, and on any conflict or
   refusal sets the task `blocked` with the code in its notes; it never
   drafts another target and never refreshes Authority.
+- **Binding claims (20261015190000, written, not applied; Oct 15 2026).**
+  The Authority twin of the blog drafts' binding claims (20261015180000,
+  which it needs). The worker's old `update tasks … set status` claim was
+  advisory and `drafter_write` never checked it.
+  - `authority_draft_claim(task_id, claimant)` records `tasks.claimed_by` /
+    `claimed_at` on an open `authority_draft:` request. Only service_role
+    and the worker can call it. The claim holds for an hour.
+  - `post-drafter` v8 (`features` adds `claims`): brief / check / submit
+    take a `claimant`. Another claimant's live claim answers
+    `409 claimed_by_other` before any other check, and records no run.
+  - `drafter_write` (patched in place) refuses it under the request lock
+    with CD409, mapped the same way.
+  - An unclaimed request, and every draft without an opportunity, writes as
+    before. The Routine claims as `worker-routine`.
+  - Ship in this order: 20261015180000 (with its PR), this migration, merge
+    (the skill goes live with it), then deploy `post-drafter` from main at
+    once. Until it answers v8 with `claims`, the worker's preflight stops
+    without drafting. Tests: `tests/post-drafter-authority.test.mjs`,
+    sandbox `authority_draft_claims.test.sql`.
 - **Authority tab:** **Draft with AI** on a Ready, due Business Profile post
   (`src/lib/authority-draft.ts`, `src/app/authority-draft-actions.ts`,
   `opportunity-draft.tsx`): requested (with Restart), blocked (the worker's

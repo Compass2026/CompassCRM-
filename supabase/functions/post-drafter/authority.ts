@@ -69,7 +69,8 @@ export type AuthorityState = {
   post_links: { created_at: string; review_status: string | null; publish_status: string | null }[];
   // The open Draft with AI request (a tasks row keyed authority_draft:<id>)
   // and whether a teammate's request_draft decision names it.
-  request: { task_id: string; status: string; requested_by_team: boolean } | null;
+  // claimed_by / claimed_at: who holds it (authority_draft_claim, 20261015190000).
+  request: { task_id: string; status: string; requested_by_team: boolean; claimed_by?: string | null; claimed_at?: string | null } | null;
   // The client's Business Profile posts of the last DUPLICATE_WINDOW_DAYS.
   recent_posts: RecentPost[];
 };

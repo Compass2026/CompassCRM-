@@ -35,6 +35,9 @@ export type WritePayload = {
   requested_via: "worker" | "team";
   requested_by: string | null;
   runtime: string;
+  // v8: who holds the Authority request (authority_draft_claim); drafter_write
+  // refuses another claimant's live claim (20261015190000).
+  claimant: string | null;
   attempt: number;
   brief_version: string;
   brief_hash: string;
@@ -115,7 +118,7 @@ export function createStore(supabase: Client) {
       const links = must(await supabase.from("authority_opportunity_links")
         .select("created_at, social_posts(review_status, publish_status)")
         .eq("opportunity_id", opportunityId).eq("kind", "social_post"));
-      const task = must(await supabase.from("tasks").select("id, status")
+      const task = must(await supabase.from("tasks").select("id, status, claimed_by, claimed_at")
         .eq("client_id", clientId).eq("key", `authority_draft:${opportunityId}`).in("status", ["open", "in_progress"])
         .order("created_at", { ascending: false }).limit(1));
       let request: AuthorityState["request"] = null;
@@ -123,7 +126,10 @@ export function createStore(supabase: Client) {
         const ev = must(await supabase.from("authority_opportunity_events").select("id")
           .eq("opportunity_id", opportunityId).eq("kind", "decision").eq("actor_kind", "team")
           .eq("detail->>action", "request_draft").eq("detail->>task_id", task[0].id).limit(1));
-        request = { task_id: task[0].id, status: task[0].status, requested_by_team: (ev ?? []).length > 0 };
+        request = {
+          task_id: task[0].id, status: task[0].status, requested_by_team: (ev ?? []).length > 0,
+          claimed_by: task[0].claimed_by ?? null, claimed_at: task[0].claimed_at ?? null,
+        };
       }
       return {
         opportunity,
