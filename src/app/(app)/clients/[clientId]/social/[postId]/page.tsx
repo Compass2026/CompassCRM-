@@ -486,6 +486,9 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
                     <span className="min-w-0 flex-1">
                       {a.brand_assets?.label ?? a.brand_asset_id}
                       {a.brand_assets?.kind && <span className="text-xs text-muted-foreground"> · {a.brand_assets.kind}</span>}
+                      {a.brand_assets?.kind === "social_post" && (
+                        <span className="text-xs text-muted-foreground" data-illustrative> · Illustrative graphic, not a photo of the client&apos;s work</span>
+                      )}
                       {a.brand_assets?.width && a.brand_assets?.height
                         ? <span className="text-xs text-muted-foreground"> · {a.brand_assets.width}×{a.brand_assets.height}</span>
                         : null}
