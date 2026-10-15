@@ -25,6 +25,8 @@ import {
 } from "@/components/planner/plan-forms";
 import { GenerateDraftForm } from "@/components/drafts/draft-forms";
 import { draftStatusLabels, isDraftStatus } from "@/lib/content-drafts";
+import { getDeliveryTargets, monthOf } from "@/lib/delivery-standard";
+import { DeliveryStandardCard } from "@/components/planner/delivery-standard-card";
 
 export const dynamic = "force-dynamic";
 
@@ -38,8 +40,10 @@ export default async function PlannerPage({ params, searchParams }: {
   if (!isUuid(clientId)) notFound();
   const week = parseWeek((await searchParams).week);
   const supabase = await createClient();
+  const month = monthOf(week);
 
-  const [clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ, brandsQ] = await Promise.all([
+  const [delivery, clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ, brandsQ] = await Promise.all([
+    getDeliveryTargets(supabase, clientId, month),
     supabase.from("clients").select("id, name, status").eq("id", clientId).maybeSingle(),
     supabase.from("content_plan_board").select("*").eq("client_id", clientId).eq("week_start", week)
       .order("planned_date", { ascending: true, nullsFirst: false }).order("created_at"),
@@ -96,6 +100,8 @@ export default async function PlannerPage({ params, searchParams }: {
           slot empty rather than fill it with weak work. Counts show approved or delivered pieces against the target.
         </p>
       </div>
+
+      <DeliveryStandardCard month={month} delivery={delivery.clients[0] ?? null} error={delivery.error} />
 
       <SlotStrip summaries={summaries} />
 

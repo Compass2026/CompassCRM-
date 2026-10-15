@@ -13403,6 +13403,25 @@ export type Database = {
       drafter_copy_hash: { Args: { p_copy: string }; Returns: string }
       drafter_session_active: { Args: never; Returns: boolean }
       drafter_write: { Args: { p: Json }; Returns: Json }
+      delivery_targets: {
+        Args: { p_client_id?: string; p_month?: string }
+        Returns: {
+          brand_workspace_id: string | null
+          client_id: string
+          completed: number
+          deliverable: string
+          month: string
+          over_target: number
+          planned: number
+          remaining: number
+          source_ref: string
+          standard_version: number
+          target: number
+          unit_kind: string
+          unit_name: string
+          used: number
+        }[]
+      }
       fire_foundation_worker: {
         Args: { p_client_id: string; p_reason: string }
         Returns: undefined

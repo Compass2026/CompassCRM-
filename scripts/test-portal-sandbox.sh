@@ -258,4 +258,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_gbp_destina
 # Agency review ledger: human actor, versions, stage gates and portal isolation.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollout.test.sql"
 
+# Monthly delivery standard: per-brand targets, month boundaries, no double
+# counting, the per-brand blog gate and its access boundary (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_standard.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"

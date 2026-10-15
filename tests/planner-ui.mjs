@@ -131,6 +131,19 @@ try {
   // 2. The client's planner: plan a Business Profile service post.
   await rowA.getByRole("link", { name: "Planner Roofing" }).click();
   await page.waitForURL(new RegExp(`/clients/${A}/planner\\?week=${W}`));
+  // The monthly delivery standard: absent until the client adopts it, then
+  // 8 blogs / 8 Facebook / 8 GBP / 1 refresh for the week's calendar month.
+  const card = page.locator('[data-card="delivery-standard"]');
+  assert.equal(await card.getAttribute("data-standard"), "none");
+  sql(`insert into client_delivery_standards (client_id, standard_id, effective_month, source_ref)
+       select '${A}', id, date_trunc('month', date '${W}')::date, 'planner-ui' from delivery_standards where version = 1`);
+  await page.reload({ waitUntil: "networkidle" });
+  assert.equal(await card.getAttribute("data-standard"), "1");
+  assert.deepEqual(await card.locator('[data-unit="client"] [data-deliverable]').evaluateAll((els) =>
+    els.map((e) => `${e.getAttribute("data-deliverable")}:${e.getAttribute("data-target")}`)),
+    ["blog_posts:8", "facebook_posts:8", "gbp_posts:8", "page_refreshes:1"]);
+  assert.match(await card.innerText(), /Facebook only[\s\S]*new pages are not part of the standard/);
+  ok("The planner shows the client's monthly delivery standard once adopted: 8 / 8 / 8 / 1, Facebook only");
   const gbp = page.locator('[data-planner-section="gbp"]');
   await gbp.locator("summary").filter({ hasText: "Plan 2 more" }).click();
   await gbp.getByLabel("Topic or target keyword").fill("Roof replacement before winter");
