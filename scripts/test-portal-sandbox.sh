@@ -265,3 +265,6 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
 
 # Map-tracking-only clients skip every onboarding trigger; full clients keep them.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_service_scope.test.sql"
+
+# Market-centered map grids: labelled market centers only; legacy geometry still means business.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid_market_center.test.sql"

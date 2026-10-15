@@ -13,8 +13,11 @@ const config={target_place_id:'ChIJfixture',zoom:13,search_this_area:false,point
 const broad={target_place_id:'ChIJfixture',zoom:13,points:Array.from({length:25},(_,i)=>({lat:38.805+(Math.floor(i/5)-2)*.1449,lng:-90.815+((i%5)-2)*.1859})),keywords};
 const profile={...config,id:'profile',client_id:clientId,grid_config_id:'grid',label:'Fictional pilot',enabled:true,weekly_enabled:false};
 const runs=[{id:'dense',profile_id:'profile',started_at:'2026-10-16T01:00:00Z',status:'running',config,error:null},{id:'broad',profile_id:'profile',started_at:'2026-10-15T01:00:00Z',status:'complete',config:broad,error:null}];
-const make=(cfg,pending)=>cfg.keywords.flatMap(k=>cfg.points.map((p,i)=>{const d=distanceMiles(center,p),queued=pending&&i%17===5;return{...p,id:`${k.id}-${i}`,keyword_id:k.id,keyword:k.keyword,point_index:i,state:queued?'queued':'complete',position:queued?null:d>4.5&&i%3===0?null:1+Math.floor(d*2),results:queued?null:[{place_id:'ChIJfixture',position:1+Math.floor(d*2),title:'Fixture Roofing',domain:'example.test'}],cost:.0006,error:null,checked_at:'2026-10-16T01:01:00Z'};}));
-const checks={dense:make(config,true),broad:make(broad,false)};
+const wichita={lat:37.6922361,lng:-97.3375448},marketGrid=localGrid(wichita,undefined,{label:'Wichita, KS market center'});
+const market={target_place_id:'ChIJfixture',zoom:13,search_this_area:false,points:marketGrid.points,geometry:marketGrid.geometry,keywords};
+runs.push({id:'market',profile_id:'profile',started_at:'2026-10-14T01:00:00Z',status:'complete',config:market,error:null});
+const make=(cfg,pending,c=center)=>cfg.keywords.flatMap(k=>cfg.points.map((p,i)=>{const d=distanceMiles(c,p),queued=pending&&i%17===5;return{...p,id:`${k.id}-${i}`,keyword_id:k.id,keyword:k.keyword,point_index:i,state:queued?'queued':'complete',position:queued?null:d>4.5&&i%3===0?null:1+Math.floor(d*2),results:queued?null:[{place_id:'ChIJfixture',position:1+Math.floor(d*2),title:'Fixture Roofing',domain:'example.test'}],cost:.0006,error:null,checked_at:'2026-10-16T01:01:00Z'};}));
+const checks={dense:make(config,true),broad:make(broad,false),market:make(market,false,wichita)};
 const baseline=keywords.map(k=>({keyword_id:k.id,recorded_at:'2026-09-24T14:00:00Z',points:broad.points.map(p=>({...p,position:2}))}));
 const unexpected=[];let starts=0;
 const user={id:teamId,email:'fixture@example.test',aud:'authenticated',role:'authenticated'};
@@ -141,6 +144,21 @@ try{
  await page.getByRole('alert').filter({hasText:'Wait one hour'}).waitFor();assert.equal(starts,1);
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(500);await page.screenshot({path:`${shots}/mobile.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ // A market-centered run (service-area business, no public address) measures from the scan center, never from the business.
+ await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?run=market`,{waitUntil:'networkidle'});
+ await page.getByTestId('market-center-note').filter({hasText:'This scan is centred on Wichita, KS market center, not on a business address'}).waitFor();
+ const marketRadius=label=>page.getByRole('group',{name:'Radius from scan center'}).getByRole('button',{name:new RegExp(`^${label}`)});
+ assert.equal(await marketRadius('5 mi').getAttribute('aria-pressed'),'true');await count(153);
+ await page.getByText(/Dense local scan, 1 \/ 2 \/ 5 mi around Wichita, KS market center/).waitFor();
+ assert.match(await card('Sampled points').innerText(),/Within 5 mi of the scan center/);
+ await marketRadius('1 mi').click();await count(49);
+ await markers.first().click();await page.getByText(/mi from the scan center/).waitFor();
+ assert.equal(await page.locator('[title="Wichita, KS market center (scan center)"]').count()+await page.getByText('Wichita, KS market center',{exact:true}).count()>=1,true);
+ const marketText=await page.locator('main').innerText();
+ assert.doesNotMatch(marketText,/(of|from) the business/);
+ assert.doesNotMatch(marketText,/Radius from business/);
+ await page.screenshot({path:`${shots}/market-center-1mi.png`,fullPage:true});
+ assert.equal(starts,1);
  assert.equal(starts,1);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
- console.log('Grid browser checks passed: 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
+ console.log('Grid browser checks passed: market-centered run labelled from the scan center (never the business), 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
 }catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}
