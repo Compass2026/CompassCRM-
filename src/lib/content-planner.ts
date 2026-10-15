@@ -102,15 +102,27 @@ export type SlotSummary = {
   byStatus: Partial<Record<PlanStatus, number>>;
 };
 
-export function summarize(items: { deliverable: string; status: string | null }[]): Record<Deliverable, SlotSummary> {
+// targets: the weekly cadence by default. A client on the monthly delivery
+// standard passes standardWeekTargets() instead: the week's share of its
+// monthly plan, so a week is never measured against 2/2/2/1.
+export function summarize(items: { deliverable: string; status: string | null }[],
+  targets: Record<Deliverable, number> = WEEKLY_TARGETS): Record<Deliverable, SlotSummary> {
   const out = {} as Record<Deliverable, SlotSummary>;
   for (const d of DELIVERABLES) {
     const mine = items.filter((i) => i.deliverable === d);
     const byStatus: Partial<Record<PlanStatus, number>> = {};
     for (const i of mine) if (isPlanStatus(i.status)) byStatus[i.status] = (byStatus[i.status] ?? 0) + 1;
     const done = (byStatus.approved ?? 0) + (byStatus.delivered ?? 0);
-    out[d] = { deliverable: d, target: WEEKLY_TARGETS[d], planned: mine.length, done, unplanned: Math.max(0, WEEKLY_TARGETS[d] - mine.length), byStatus };
+    out[d] = { deliverable: d, target: targets[d], planned: mine.length, done, unplanned: Math.max(0, targets[d] - mine.length), byStatus };
   }
+  return out;
+}
+
+// The week's share of a monthly delivery standard: the standard slots dated
+// in the week (Facebook only for social; refresh slots for web pages).
+export function standardWeekTargets(items: { deliverable: string; standard_key: string | null }[]): Record<Deliverable, number> {
+  const out = { social: 0, gbp: 0, blog: 0, web_page: 0 } as Record<Deliverable, number>;
+  for (const i of items) if (i.standard_key && isDeliverable(i.deliverable)) out[i.deliverable] += 1;
   return out;
 }
 

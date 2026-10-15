@@ -131,6 +131,35 @@ try {
   // 2. The client's planner: plan a Business Profile service post.
   await rowA.getByRole("link", { name: "Planner Roofing" }).click();
   await page.waitForURL(new RegExp(`/clients/${A}/planner\\?week=${W}`));
+  // The monthly delivery standard: absent until the client adopts it, then
+  // 8 blogs / 8 Facebook / 8 GBP / 1 refresh for the week's calendar month.
+  const card = page.locator('[data-card="delivery-standard"]').first();
+  assert.equal(await card.getAttribute("data-standard"), "none");
+  sql(`insert into client_delivery_standards (client_id, standard_id, effective_month, source_ref)
+       select '${A}', id, date_trunc('month', date '${W}')::date, 'planner-ui' from delivery_standards where version = 1`);
+  await page.reload({ waitUntil: "networkidle" });
+  assert.equal(await card.getAttribute("data-standard"), "1");
+  assert.deepEqual(await card.locator('[data-unit="client"] [data-deliverable]').evaluateAll((els) =>
+    els.map((e) => `${e.getAttribute("data-deliverable")}:${e.getAttribute("data-target")}`)),
+    ["blog_posts:8", "facebook_posts:8", "gbp_posts:8", "page_refreshes:1"]);
+  assert.match(await card.innerText(), /Facebook only[\s\S]*New pages are not part of the standard/);
+  assert.match(await card.innerText(), /No verified Business Profile location is recorded/);
+  assert.equal(await page.locator('[data-planner-section="social"] [data-add-plan-item]').count(), 1);
+  // A refresh slot explains the existing-page refresh and the live-check rule,
+  // also when it is marked delivered here.
+  sql(`insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, standard_key, hold)
+       values ('00000000-0000-4000-c5ff-000000000001', '${A}', '${W}', 'web_page', 'service', 'Refresh the roofing page', 'page_refreshes', 'delivered')`);
+  await page.reload({ waitUntil: "networkidle" });
+  const note = page.locator('[data-plan-item="00000000-0000-4000-c5ff-000000000001"] [data-refresh-note]');
+  assert.match(await note.innerText(), /existing page[\s\S]*live check is recorded[\s\S]*still counts as planned/);
+  assert.equal(await page.locator('[data-planner-section="web_page"] h2').innerText().then((t) => t.startsWith("Page refresh")), true);
+  ok("The planner shows the client's monthly delivery standard once adopted: 8 / 8 / 8 / 1, Facebook only");
+  // Back to the weekly cadence for the rest of this run (the ledger is
+  // append-only, so the fixture is removed with its guard bypassed).
+  admin(`set session_replication_role = replica; delete from client_delivery_standards where source_ref = 'planner-ui';
+         delete from content_plan_items where id = '00000000-0000-4000-c5ff-000000000001'`);
+  await page.reload({ waitUntil: "networkidle" });
+  assert.equal(await card.getAttribute("data-standard"), "none");
   const gbp = page.locator('[data-planner-section="gbp"]');
   await gbp.locator("summary").filter({ hasText: "Plan 2 more" }).click();
   await gbp.getByLabel("Topic or target keyword").fill("Roof replacement before winter");

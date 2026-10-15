@@ -10,6 +10,8 @@ import {
   OPPORTUNITY_DELIVERABLE,
   parseWeek,
   purposeLabels,
+  addDays,
+  standardWeekTargets,
   summarize,
   type Deliverable,
 } from "@/lib/content-planner";
@@ -25,6 +27,8 @@ import {
 } from "@/components/planner/plan-forms";
 import { GenerateDraftForm } from "@/components/drafts/draft-forms";
 import { draftStatusLabels, isDraftStatus } from "@/lib/content-drafts";
+import { getDeliveryTargets, monthOf, remainingFor, type DeliveryKey } from "@/lib/delivery-standard";
+import { DeliveryStandardCard } from "@/components/planner/delivery-standard-card";
 
 export const dynamic = "force-dynamic";
 
@@ -38,8 +42,13 @@ export default async function PlannerPage({ params, searchParams }: {
   if (!isUuid(clientId)) notFound();
   const week = parseWeek((await searchParams).week);
   const supabase = await createClient();
+  // A week that crosses a month shows both months: each item counts in the
+  // month of its own date.
+  const months = [...new Set([monthOf(week), monthOf(addDays(week, 6))])];
 
-  const [clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ, brandsQ] = await Promise.all([
+  const [deliveries, standardQ, clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ, brandsQ] = await Promise.all([
+    Promise.all(months.map((m) => getDeliveryTargets(supabase, clientId, m))),
+    supabase.from("content_plan_items").select("id, deliverable, standard_key, brand_workspace_id, planned_date").eq("client_id", clientId).eq("week_start", week),
     supabase.from("clients").select("id, name, status").eq("id", clientId).maybeSingle(),
     supabase.from("content_plan_board").select("*").eq("client_id", clientId).eq("week_start", week)
       .order("planned_date", { ascending: true, nullsFirst: false }).order("created_at"),
@@ -57,7 +66,7 @@ export default async function PlannerPage({ params, searchParams }: {
   ]);
   const client = clientQ.data;
   if (!client) notFound();
-  const failure = boardQ.error ?? linkedQ.error ?? brandsQ.error;
+  const failure = boardQ.error ?? linkedQ.error ?? brandsQ.error ?? standardQ.error;
   if (failure) {
     return <p className="surface p-4 text-sm text-red-700">The planner could not be read: {failure.message}</p>;
   }
@@ -65,7 +74,17 @@ export default async function PlannerPage({ params, searchParams }: {
   // View rows are typed nullable; the columns below are not null in the table.
   const items = (boardQ.data ?? []).flatMap((r) =>
     r.id && r.deliverable && r.topic && r.purpose ? [{ ...r, id: r.id, deliverable: r.deliverable, topic: r.topic, purpose: r.purpose }] : []);
-  const summaries = summarize(items);
+  const delivery = deliveries.map((d, i) => ({ month: months[i], error: d.error, client: d.clients[0] ?? null }));
+  // On the standard for this week's month(s): the week is measured against
+  // its share of the monthly plan, social is Facebook only, a web page slot
+  // is a refresh, and "plan more" offers the month's remaining room.
+  const onStandard = delivery.some((d) => d.client);
+  const standardRows = standardQ.data ?? [];
+  const summaries = summarize(items, onStandard ? standardWeekTargets(standardRows) : undefined);
+  const slotBrand = new Map(standardRows.map((r) => [r.id, r.brand_workspace_id]));
+  const keyFor: Record<Deliverable, DeliveryKey> = { blog: "blog_posts", social: "facebook_posts", gbp: "gbp_posts", web_page: "page_refreshes" };
+  // The month of the week's Monday, or the later month once the earlier is full.
+  const roomFor = (d: Deliverable) => Math.max(...delivery.map((x) => remainingFor(x.client, keyFor[d])), 0);
   const linkedPosts = new Set((linkedQ.data ?? []).flatMap((r) => (r.social_post_id ? [r.social_post_id] : [])));
   const linkedBlogs = new Set((linkedQ.data ?? []).flatMap((r) => (r.content_post_id ? [r.content_post_id] : [])));
   const plannedOpps = new Set((linkedQ.data ?? []).flatMap((r) => (r.authority_opportunity_id && r.week_start === week ? [r.authority_opportunity_id] : [])));
@@ -91,11 +110,23 @@ export default async function PlannerPage({ params, searchParams }: {
           <Link href={`/production?week=${week}`} className="text-xs underline underline-offset-2">All clients this week</Link>
         </div>
         <WeekNav basePath={`${base}/planner`} week={week} />
-        <p className="text-xs text-muted-foreground">
-          The weekly target is 2 Social, 2 Business Profile, 2 Blogs and 1 Web page. It is a cadence, not a quota: leave a
-          slot empty rather than fill it with weak work. Counts show approved or delivered pieces against the target.
-        </p>
+        {onStandard ? (
+          <p className="text-xs text-muted-foreground" data-planner-standard>
+            This client is on the monthly delivery standard: each week shows its share of the month&apos;s plan, and the cards
+            below count the whole month. Social is Facebook only; a web page slot is a refresh of an existing page. Counts show
+            approved or delivered pieces against the week&apos;s planned slots.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            The weekly target is 2 Social, 2 Business Profile, 2 Blogs and 1 Web page. It is a cadence, not a quota: leave a
+            slot empty rather than fill it with weak work. Counts show approved or delivered pieces against the target.
+          </p>
+        )}
       </div>
+
+      {delivery.map((d) => (
+        <DeliveryStandardCard key={d.month} clientId={clientId} month={d.month} delivery={d.client} error={d.error} canPlan />
+      ))}
 
       <SlotStrip summaries={summaries} />
 
@@ -104,7 +135,7 @@ export default async function PlannerPage({ params, searchParams }: {
         return (
           <section key={d} className="surface space-y-3 p-4" data-planner-section={d}>
             <h2 className="text-sm font-semibold">
-              {deliverableLabels[d].label}{" "}
+              {onStandard && d === "web_page" ? "Page refresh" : onStandard && d === "social" ? "Social (Facebook)" : deliverableLabels[d].label}{" "}
               <span className="font-normal text-muted-foreground">· {summaries[d].done}/{summaries[d].target} ready</span>
             </h2>
             {mine.length === 0 && <p className="text-sm text-muted-foreground">Nothing planned yet.</p>}
@@ -131,7 +162,7 @@ export default async function PlannerPage({ params, searchParams }: {
                     </div>
                     <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-0.5 text-xs [&>dd]:[overflow-wrap:anywhere]">
                       {i.search_intent && (<><dt className="text-muted-foreground">Intent</dt><dd>{i.search_intent}</dd></>)}
-                      {!!brandsQ.data?.length && <><dt className="text-muted-foreground">Brand</dt><dd>{i.service_id&&brandByService.has(i.service_id)?<Link className="underline" href={`${base}/brand?brand=${brandByService.get(i.service_id)!.slug}`}>{brandByService.get(i.service_id)!.name}</Link>:'Assign a brand service'}</dd></>}
+                      {!!brandsQ.data?.length && <><dt className="text-muted-foreground">Brand</dt><dd>{i.service_id&&brandByService.has(i.service_id)?<Link className="underline" href={`${base}/brand?brand=${brandByService.get(i.service_id)!.slug}`}>{brandByService.get(i.service_id)!.name}</Link>:slotBrand.get(i.id)?`${brandsQ.data!.find(b=>b.id===slotBrand.get(i.id))?.name ?? 'Brand'} (choose its service)`:'Assign a brand service'}</dd></>}
                       {i.service_id && (<><dt className="text-muted-foreground">Service</dt><dd>{serviceName.get(i.service_id) ?? "—"}</dd></>)}
                       {i.keyword_id && (<><dt className="text-muted-foreground">Keyword</dt><dd>{keywordName.get(i.keyword_id) ?? "—"}</dd></>)}
                       {i.target_url && (<><dt className="text-muted-foreground">Destination</dt><dd>{i.target_url}</dd></>)}
@@ -142,6 +173,13 @@ export default async function PlannerPage({ params, searchParams }: {
                       {i.hold_reason && (<><dt className="text-muted-foreground">{i.hold === "blocked" ? "Waiting on" : "Note"}</dt><dd>{i.hold_reason}</dd></>)}
                       {i.notes && (<><dt className="text-muted-foreground">Notes</dt><dd>{i.notes}</dd></>)}
                     </dl>
+                    {onStandard && d === "web_page" && (
+                      <p className="text-xs text-muted-foreground" data-refresh-note>
+                        A refresh updates an existing page on the site; new pages are not part of the standard. It counts as done
+                        on the monthly card only once its live check is recorded (URL, commit, check time, HTTP 200).
+                        {i.hold === "delivered" ? " Marked delivered here, it still counts as planned until that check is recorded." : " Marking it delivered here does not count it."}
+                      </p>
+                    )}
                     {d === "blog" && i.draft_id && (
                       <p className="text-sm" data-plan-draft>
                         <Link href={`${base}/drafts/${i.draft_id}`} className="font-medium underline">Open the draft</Link>
@@ -159,7 +197,9 @@ export default async function PlannerPage({ params, searchParams }: {
                           ? <>Next: <Link href={`${base}/authority`} className="underline">Draft with AI</Link> on the Authority tab, then link the draft here.</>
                           : d === "social" || d === "gbp"
                             ? <>Next: <Link href={`${base}/social?view=new`} className="underline">write the post</Link>, then link it here.</>
-                            : "Next: draft the page, then mark it delivered with its link."}
+                            : onStandard
+                              ? "Next: refresh the existing page (see below)."
+                              : "Next: draft the page, then mark it delivered with its link."}
                       </p>
                     )}
                     <div className="flex flex-wrap items-start gap-2">
@@ -175,7 +215,8 @@ export default async function PlannerPage({ params, searchParams }: {
                 );
               })}
             </ul>
-            <AddPlanItemForm clientId={clientId} week={week} deliverable={d} services={services} keywords={keywords} remaining={summaries[d].unplanned} />
+            <AddPlanItemForm clientId={clientId} week={week} deliverable={d} services={services} keywords={keywords}
+              remaining={onStandard ? roomFor(d) : summaries[d].unplanned} standard={onStandard} />
           </section>
         );
       })}

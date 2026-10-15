@@ -1762,19 +1762,28 @@ outside `content_paths` and `services_dir`.
 on `sites.url` (else `staging_url`): expect 200, exactly one H1, the
 canonical, and the JSON-LD block. A page that fails → `site-push {revert:
 true}` then `{deploy: true}` at once, then fix and re-push, or leave it out
-and say so. For every change one `change_log` row: `object_type = 'site'`,
-`change_type` in `page_added` / `page_rewrite` / `faq_added` /
-`pull_request`, `before` (old entry or `{}`), `after` `{url, title,
-keyword, commit, pull_request_url}`, `reasoning` (the evidence: rank,
+and say so; record the revert as a `change_log` row `change_type =
+'revert'` with `after.reverted` = the response's `reverted` sha. For every
+change one `change_log` row: `object_type = 'site'`, `object_id` = the
+`sites.id` you pushed to, `change_type` in `page_added` / `page_rewrite` /
+`faq_added` / `pull_request`, `before` (old entry or `{}`), `after` `{url,
+title, keyword, commit, pull_request_url}`, `reasoning` (the evidence: rank,
 impressions, missing page), `status = 'approved'` for a published change,
-`'proposed'` for a PR or a Doc. `keywords.target_url` for the keyword the
+`'proposed'` for a PR or a Doc. A published refresh (`page_rewrite`) also
+carries its live receipt in `after`: `verified_at` (ISO time of the check
+above), `http_status: 200`, and `plan_item_id` when it fills a refresh slot.
+Without that receipt the monthly delivery standard counts the refresh as
+planned, not done; never write `verified_at` for a check that did not pass. `keywords.target_url` for the keyword the
 page serves. Close `site_updates`: done, `flagged_for_review = true`,
 `recommendation` = "`+<n> pages, <m> refreshes on <host> (of <allocation>); PR open for <x>`" or
 "`Docs filed for <n> pages (site not on the contract)`" — that is what the
 Brief shows Tom.
 
 Caps are caps: the agreement's remaining pages and refreshes, then stop,
-even if the list is longer. What is left waits for next month and goes in
+even if the list is longer. A client on the monthly delivery standard
+(`delivery_targets('<client_id>')` returns rows) refreshes up to each site's
+`page_refreshes` remaining instead — one existing page per site per month,
+in that site's own repo; new pages stay within the agreement as before. What is left waits for next month and goes in
 the notes.
 
 ### Weekly blog post (PB7, weekly — the `blog_post` task)
@@ -1793,7 +1802,12 @@ the brand voice (`get_brand_profile`), sourced facts only.
    (`content_posts.keyword_id`), preferring Search Console queries with
    impressions and a `gsc_snapshots` position past 10, then volume. Note
    the service page it supports (`service_id` → the service's page group
-   `target_url`).
+   `target_url`). When the task's notes name a `plan_item:<id>` and a brand
+   (the monthly delivery standard), choose the keyword and service from
+   that brand; the draft is refused for a service of another brand. The
+   task is bound to that slot: if the open is refused because the slot is
+   blocked, delivered or linked, already drafted or gone, do not retry with
+   another slot — set the task `blocked` with the refusal as its note.
 2. **Open the draft** (Tom, Oct 4 2026: the weekly blog goes through review;
    nothing is filed or published by you). Call `content-drafter`
    `{"mode": "open", "task_id": "<blog_post task id>", "topic": "<the
