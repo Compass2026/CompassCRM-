@@ -1804,7 +1804,10 @@ the brand voice (`get_brand_profile`), sourced facts only.
    the service page it supports (`service_id` → the service's page group
    `target_url`). When the task's notes name a `plan_item:<id>` and a brand
    (the monthly delivery standard), choose the keyword and service from
-   that brand; the draft is refused for a service of another brand.
+   that brand; the draft is refused for a service of another brand. The
+   task is bound to that slot: if the open is refused because the slot is
+   blocked, delivered or linked, already drafted or gone, do not retry with
+   another slot — set the task `blocked` with the refusal as its note.
 2. **Open the draft** (Tom, Oct 4 2026: the weekly blog goes through review;
    nothing is filed or published by you). Call `content-drafter`
    `{"mode": "open", "task_id": "<blog_post task id>", "topic": "<the

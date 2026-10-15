@@ -7,6 +7,8 @@ create function ds_test.ok(label text, cond boolean) returns void language plpgs
 begin if not coalesce(cond, false) then raise exception 'FAILED %', label; end if; raise notice 'ok %', label; end $$;
 create function ds_test.err(statement text) returns text language plpgsql as $$
 begin execute statement; return 'accepted'; exception when others then return sqlstate; end $$;
+create function ds_test.why(statement text) returns text language plpgsql as $$
+begin execute statement; return 'accepted'; exception when others then return sqlstate || ': ' || sqlerrm; end $$;
 create function ds_test.v(c uuid, m date, unit text, d text, f text) returns int
 language sql as $$ select case f when 'target' then x.target when 'completed' then x.completed when 'planned' then x.planned
   when 'used' then x.used when 'unverified' then x.unverified else x.remaining end from delivery_targets(c, m) x where x.unit_name = unit and x.deliverable = d $$;
@@ -335,6 +337,127 @@ begin
 end $$;
 reset role;
 reset session authorization;
+
+-- ── Queueing never skips a slot (fixed dates; October 2026 starts on a Thursday) ──
+-- Q: one site. Weekly runs are simulated by queue_standard_blog_tasks(Q, Sunday).
+set local session_replication_role = replica;
+insert into clients (id, name, status) values ('00000000-0000-4000-d500-00000000000e', 'DS Queue', 'active');
+insert into services (id, client_id, name) values ('00000000-0000-4000-d501-000000000010', '00000000-0000-4000-d500-00000000000e', 'Service Q');
+insert into keywords (id, client_id, keyword, service_id, is_active) values
+  ('00000000-0000-4000-d502-000000000010', '00000000-0000-4000-d500-00000000000e', 'kw q', '00000000-0000-4000-d501-000000000010', true);
+insert into content_posts (id, client_id, title, status, origin, keyword_id) values
+  ('00000000-0000-4000-d508-000000000001', '00000000-0000-4000-d500-00000000000e', 'linked', 'draft', 'compass', '00000000-0000-4000-d502-000000000010');
+set local session_replication_role = origin;
+create function ds_test.slot(id uuid, d date, hold text default null) returns void language sql as $$
+  insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, service_id, planned_date, standard_key, hold, hold_reason)
+  values (id, '00000000-0000-4000-d500-00000000000e', d - (extract(isodow from d)::int - 1), 'blog', 'educational', 'q slot',
+          '00000000-0000-4000-d501-000000000010', d, 'blog_posts', hold, case when hold = 'blocked' then 'waiting on photos' end) $$;
+create function ds_test.task_for(slot uuid) returns uuid language sql as
+  $$ select id from tasks where client_id = '00000000-0000-4000-d500-00000000000e' and key = 'blog_post' and notes like '%plan_item:' || slot || '%' $$;
+-- Opened on Thu Oct 1, after the Wed Sep 30 run: the month's first two days.
+select ds_test.slot('00000000-0000-4000-d509-000000000001', '2026-10-01');
+select ds_test.slot('00000000-0000-4000-d509-000000000002', '2026-10-02');
+select ds_test.slot('00000000-0000-4000-d509-000000000006', '2026-10-06', 'blocked');
+do $$
+declare n int;
+begin
+  n := queue_standard_blog_tasks('00000000-0000-4000-d500-00000000000e', '2026-10-11');   -- Wed Oct 7 run
+  perform ds_test.ok('QU1 a month that starts after Wednesday: Oct 1 and 2 are queued on the next run, due on their own dates, still October slots',
+    n = 2 and (select due_date from tasks where id = ds_test.task_for('00000000-0000-4000-d509-000000000001')) = '2026-10-01'
+    and (select due_date from tasks where id = ds_test.task_for('00000000-0000-4000-d509-000000000002')) = '2026-10-02'
+    and (select bool_and(standard_month = '2026-10-01' and planned_date in ('2026-10-01', '2026-10-02')) from content_plan_items
+         where id in ('00000000-0000-4000-d509-000000000001', '00000000-0000-4000-d509-000000000002'))
+    and ds_test.task_for('00000000-0000-4000-d509-000000000006') is null);
+end $$;
+-- The blocked Oct 6 slot is released after its week.
+update content_plan_items set hold = null, hold_reason = null where id = '00000000-0000-4000-d509-000000000006';
+do $$
+declare n int;
+begin
+  n := queue_standard_blog_tasks('00000000-0000-4000-d500-00000000000e', '2026-10-18');   -- Wed Oct 14 run
+  perform ds_test.ok('QU2 a slot unblocked after its week is queued, due on its own date',
+    n = 1 and (select due_date from tasks where id = ds_test.task_for('00000000-0000-4000-d509-000000000006')) = '2026-10-06');
+end $$;
+-- Opened on Thu Oct 15, after the Wed Oct 14 run (the reviewer's case), plus
+-- a delivered slot and one that already has a draft.
+select ds_test.slot('00000000-0000-4000-d509-000000000016', '2026-10-16');
+select ds_test.slot('00000000-0000-4000-d509-000000000020', '2026-10-20');
+select ds_test.slot('00000000-0000-4000-d509-000000000022', '2026-10-22');
+select ds_test.slot('00000000-0000-4000-d509-000000000021', '2026-10-21', 'delivered');
+select ds_test.slot('00000000-0000-4000-d509-000000000023', '2026-10-23');
+set local session_replication_role = replica;
+insert into content_drafts (client_id, deliverable, topic, plan_item_id) values
+  ('00000000-0000-4000-d500-00000000000e', 'blog', 'drafted already', '00000000-0000-4000-d509-000000000023');
+set local session_replication_role = origin;
+do $$
+declare n int; again int;
+begin
+  n := queue_standard_blog_tasks('00000000-0000-4000-d500-00000000000e', '2026-10-25');   -- Wed Oct 21 run
+  perform ds_test.ok('QU3 a slot opened after the weekly run (Fri Oct 16) is queued next run, not skipped; this week''s slots too',
+    n = 3 and ds_test.task_for('00000000-0000-4000-d509-000000000016') is not null
+    and ds_test.task_for('00000000-0000-4000-d509-000000000020') is not null and ds_test.task_for('00000000-0000-4000-d509-000000000022') is not null);
+  perform ds_test.ok('QU4 delivered and already-drafted slots get no task',
+    ds_test.task_for('00000000-0000-4000-d509-000000000021') is null and ds_test.task_for('00000000-0000-4000-d509-000000000023') is null);
+  again := queue_standard_blog_tasks('00000000-0000-4000-d500-00000000000e', '2026-10-25');
+  perform ds_test.ok('QU5 reruns add nothing: one task per slot',
+    again = 0 and (select count(*) from tasks where client_id = '00000000-0000-4000-d500-00000000000e' and key = 'blog_post') = 6
+    and (select count(distinct notes) from tasks where client_id = '00000000-0000-4000-d500-00000000000e' and key = 'blog_post') = 6);
+end $$;
+
+-- ── A named slot is used or refused, never substituted ──────────────────────
+-- Tasks naming: a blocked slot, a delivered slot, a slot linked to a post, a
+-- deleted slot, a slot already drafted (Oct 23), and two tasks naming one
+-- free slot (Oct 20 has its task; a second task names it too).
+select ds_test.slot('00000000-0000-4000-d509-000000000030', '2026-10-26', 'blocked');
+select ds_test.slot('00000000-0000-4000-d509-000000000031', '2026-10-27', 'delivered');
+select ds_test.slot('00000000-0000-4000-d509-000000000032', '2026-10-28');
+update content_plan_items set content_post_id = '00000000-0000-4000-d508-000000000001' where id = '00000000-0000-4000-d509-000000000032';
+select ds_test.slot('00000000-0000-4000-d509-000000000033', '2026-10-29');
+insert into tasks (id, client_id, title, owner, status, key, due_date, notes)
+select ('00000000-0000-4000-d50a-0000000000' || x.n)::uuid, '00000000-0000-4000-d500-00000000000e', 'named', 'CLAUDE', 'open', 'blog_post', '2026-10-26',
+       'plan_item:' || x.slot
+from (values ('30', '00000000-0000-4000-d509-000000000030'), ('31', '00000000-0000-4000-d509-000000000031'),
+             ('32', '00000000-0000-4000-d509-000000000032'), ('33', '00000000-0000-4000-d509-000000000033'),
+             ('23', '00000000-0000-4000-d509-000000000023'), ('20', '00000000-0000-4000-d509-000000000020')) x(n, slot);
+delete from content_plan_items where id = '00000000-0000-4000-d509-000000000033';
+select set_config('ds_test.drafts', (select count(*)::text from content_drafts where client_id = '00000000-0000-4000-d500-00000000000e'), true);
+select set_config('ds_test.items', (select count(*)::text from content_plan_items where client_id = '00000000-0000-4000-d500-00000000000e'), true);
+set local session authorization authenticator;
+set local role service_role;
+create temp table ds_open_result (label text, outcome text) on commit drop;
+do $$
+declare k text; r jsonb;
+  args jsonb := jsonb_build_object('topic', 'Topic', 'search_intent', 'informational',
+    'keyword_id', '00000000-0000-4000-d502-000000000010', 'service_id', '00000000-0000-4000-d501-000000000010');
+begin
+  foreach k in array array['30', '31', '32', '33', '23'] loop
+    insert into ds_open_result values (k, ds_test.why(format('select content_draft_open_weekly(%L::jsonb)',
+      args || jsonb_build_object('task_id', '00000000-0000-4000-d50a-0000000000' || k))));
+  end loop;
+  -- Two tasks for the Oct 20 slot: the slot's own task, then the second one.
+  r := content_draft_open_weekly(args || jsonb_build_object('task_id', ds_test.task_for('00000000-0000-4000-d509-000000000020')));
+  insert into ds_open_result values ('first', (r->>'plan_item_id'));
+  insert into ds_open_result values ('second', ds_test.why(format('select content_draft_open_weekly(%L::jsonb)',
+    args || jsonb_build_object('task_id', '00000000-0000-4000-d50a-000000000020'))));
+end $$;
+reset role;
+reset session authorization;
+do $$
+begin
+  perform ds_test.ok('NS1 blocked, delivered, linked, deleted and already-drafted named slots are each refused (22023) with their own reason',
+    (select outcome from ds_open_result where label = '30') like '22023: %is blocked (waiting on photos)%'
+    and (select outcome from ds_open_result where label = '31') like '22023: %already delivered or linked%'
+    and (select outcome from ds_open_result where label = '32') like '22023: %already delivered or linked%'
+    and (select outcome from ds_open_result where label = '33') like '22023: %no longer exists%'
+    and (select outcome from ds_open_result where label = '23') like '22023: %already has a draft%');
+  perform ds_test.ok('NS2 of two tasks naming one slot, the first fills it and the second is refused',
+    (select outcome from ds_open_result where label = 'first') = '00000000-0000-4000-d509-000000000020'
+    and (select outcome from ds_open_result where label = 'second') like '22023: %already has a draft%');
+  perform ds_test.ok('NS3 refusals leave no extra draft or slot: one new draft in total, no new slot',
+    (select count(*) from content_drafts where client_id = '00000000-0000-4000-d500-00000000000e') = current_setting('ds_test.drafts')::int + 1
+    and (select count(*) from content_plan_items where client_id = '00000000-0000-4000-d500-00000000000e') = current_setting('ds_test.items')::int
+    and (select count(*) from content_drafts where plan_item_id = '00000000-0000-4000-d509-000000000020') = 1);
+end $$;
 
 -- Permission boundary: anon cannot call it; a signed-in stranger sees nothing.
 set local role anon;

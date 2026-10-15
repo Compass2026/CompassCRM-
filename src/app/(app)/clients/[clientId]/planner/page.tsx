@@ -173,6 +173,13 @@ export default async function PlannerPage({ params, searchParams }: {
                       {i.hold_reason && (<><dt className="text-muted-foreground">{i.hold === "blocked" ? "Waiting on" : "Note"}</dt><dd>{i.hold_reason}</dd></>)}
                       {i.notes && (<><dt className="text-muted-foreground">Notes</dt><dd>{i.notes}</dd></>)}
                     </dl>
+                    {onStandard && d === "web_page" && (
+                      <p className="text-xs text-muted-foreground" data-refresh-note>
+                        A refresh updates an existing page on the site; new pages are not part of the standard. It counts as done
+                        on the monthly card only once its live check is recorded (URL, commit, check time, HTTP 200).
+                        {i.hold === "delivered" ? " Marked delivered here, it still counts as planned until that check is recorded." : " Marking it delivered here does not count it."}
+                      </p>
+                    )}
                     {d === "blog" && i.draft_id && (
                       <p className="text-sm" data-plan-draft>
                         <Link href={`${base}/drafts/${i.draft_id}`} className="font-medium underline">Open the draft</Link>
@@ -190,7 +197,9 @@ export default async function PlannerPage({ params, searchParams }: {
                           ? <>Next: <Link href={`${base}/authority`} className="underline">Draft with AI</Link> on the Authority tab, then link the draft here.</>
                           : d === "social" || d === "gbp"
                             ? <>Next: <Link href={`${base}/social?view=new`} className="underline">write the post</Link>, then link it here.</>
-                            : "Next: draft the page, then mark it delivered with its link."}
+                            : onStandard
+                              ? "Next: refresh the existing page (see below)."
+                              : "Next: draft the page, then mark it delivered with its link."}
                       </p>
                     )}
                     <div className="flex flex-wrap items-start gap-2">

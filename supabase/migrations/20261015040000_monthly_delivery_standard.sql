@@ -497,14 +497,45 @@ begin
   return to_jsonb(p);
 end $$;
 
+-- One blog_post task per standard blog slot dated on or before p_through
+-- that is still unclaimed: no hold, no linked post, no draft, no task naming
+-- it. Overdue slots are included, so a slot opened after a weekly run, a
+-- month that starts after Wednesday, or a slot unblocked after its week is
+-- queued on the next run rather than skipped. The task keeps the slot's own
+-- date as its due date (the slot's month is unchanged); nothing is drafted,
+-- scheduled or published here. Rerun-safe: a slot never gets a second task.
+-- Not logged in automation_entitlement_log: that log records agreement
+-- (entitlement) decisions; the task's notes name the slot it came from.
+create function queue_standard_blog_tasks(p_client_id uuid, p_through date) returns integer
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare s record; made int := 0;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('blog:'||p_client_id::text,0));
+  for s in select i.id, i.planned_date, coalesce(w.name, 'the client') as unit
+    from content_plan_items i left join client_brand_workspaces w on w.id = i.brand_workspace_id
+    where i.client_id = p_client_id and i.standard_key = 'blog_posts' and i.planned_date <= p_through
+      and i.content_post_id is null and i.hold is null
+      and not exists (select 1 from content_drafts d where d.plan_item_id = i.id)
+      and not exists (select 1 from tasks t where t.client_id = p_client_id and t.key = 'blog_post' and t.notes like '%plan_item:' || i.id::text || '%')
+    order by i.planned_date, i.id loop
+    insert into tasks(client_id,title,owner,status,playbook_step,autonomy_level,key,due_date,notes)
+      values(p_client_id, left('Blog slot for '||s.unit||': governed keyword, sourced article, team review',200),
+        'CLAUDE','open','PB7','run_flag','blog_post',s.planned_date,
+        'plan_item:'||s.id||' (monthly delivery standard). Choose a keyword and service of '||s.unit||'.');
+    made := made + 1;
+  end loop;
+  return made;
+end $$;
+revoke all on function queue_standard_blog_tasks(uuid, date) from public, anon, authenticated, service_role;
+
 -- The weekly blog beat (Wednesdays). Clients on a standard: open the
--- month's slots (both months when the week crosses one), then one blog_post
--- task per blog slot dated this week that has no draft or task yet, naming
--- the slot and its brand; the worker is fired for active clients as before.
--- Every other client runs exactly the 20261012025951 body.
+-- month's slots (both months when the week crosses one), then queue a task
+-- for every unclaimed blog slot dated up to Sunday, overdue ones included
+-- (queue_standard_blog_tasks); the worker is fired for active clients as
+-- before. Every other client runs exactly the 20261012025951 body.
 create or replace function create_weekly_blog_tasks() returns integer
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare c record; u record; s record; made int:=0; existing int; slots int; n int; opened int;
+declare c record; u record; made int:=0; existing int; slots int; n int; opened int;
   week date:=date_trunc('week',now() at time zone 'America/Chicago')::date;
 begin
   for c in select cl.id, cl.status from clients cl where cl.status in ('active','launching')
@@ -514,22 +545,8 @@ begin
     perform plan_delivery_month(c.id, week);
     if date_trunc('month', week+6) <> date_trunc('month', week) then perform plan_delivery_month(c.id, week+6); end if;
     if c.status <> 'active' then continue; end if;
-    opened := 0;
-    for s in select i.id, i.planned_date, coalesce(w.name, 'the client') as unit
-      from content_plan_items i left join client_brand_workspaces w on w.id = i.brand_workspace_id
-      where i.client_id = c.id and i.standard_key = 'blog_posts' and i.planned_date between week and week+6
-        and i.content_post_id is null and i.hold is null
-        and not exists (select 1 from content_drafts d where d.plan_item_id = i.id)
-        and not exists (select 1 from tasks t where t.client_id = c.id and t.key = 'blog_post' and t.notes like '%plan_item:' || i.id::text || '%')
-      order by i.planned_date, i.id loop
-      insert into tasks(client_id,title,owner,status,playbook_step,autonomy_level,key,due_date,notes)
-        values(c.id, left('Blog slot for '||s.unit||': governed keyword, sourced article, team review',200),
-          'CLAUDE','open','PB7','run_flag','blog_post',s.planned_date,
-          'plan_item:'||s.id||' (monthly delivery standard). Choose a keyword and service of '||s.unit||'.');
-      insert into automation_entitlement_log(client_id,automation,service_key,decision,reason)
-        values(c.id,'weekly_blog_post','blog_posts','created','within_allocation');
-      opened := opened+1; made := made+1;
-    end loop;
+    opened := queue_standard_blog_tasks(c.id, week+6);
+    made := made + opened;
     if opened > 0 then
       perform fire_foundation_worker(c.id,'Weekly blog drafts: fill this week''s standard blog slots for their brand and stop for team review');
     end if;
@@ -590,10 +607,11 @@ end $$;
 revoke all on function plan_delivery_months() from public, anon, authenticated, service_role;
 select cron.schedule('delivery-standard-month', '0 11 1 * *', 'select public.plan_delivery_months()');
 
--- The weekly draft fills the slot its task names (and refuses a service of
--- another brand for it); otherwise this week's empty blog slot of the
--- service's brand (or one without a brand), or a new one. Unchanged from
--- 20261012033430 otherwise.
+-- The weekly draft fills exactly the slot its task names, or refuses
+-- (missing, not a blog slot, blocked, delivered or linked, already drafted,
+-- another brand's service). A task with no named slot keeps the previous
+-- choice: this week's empty blog slot of the service's brand (or one
+-- without a brand), or a new one. Unchanged from 20261012033430 otherwise.
 create or replace function content_draft_open_weekly(p jsonb) returns jsonb
 language plpgsql security invoker set search_path = public as $$
 declare
@@ -639,29 +657,40 @@ begin
    where client_id = t.client_id and nullif(p->>'service_id', '')::uuid = any(service_ids);
   v_slot := substring(coalesce(t.notes, '') from 'plan_item:([0-9a-f-]{36})')::uuid;
   if v_slot is not null then
-    select * into i from content_plan_items x
-     where x.id = v_slot and x.client_id = t.client_id and x.deliverable = 'blog'
-       and x.content_post_id is null and x.hold is null
-       and not exists (select 1 from content_drafts y where y.plan_item_id = x.id)
-     for update;
-    if i.id is not null and i.brand_workspace_id is not null and i.brand_workspace_id is distinct from v_brand then
+    -- A task that names its slot is bound to it: lock that exact slot, then
+    -- use it or refuse with the reason. No other or new slot is substituted,
+    -- so a hold, a delivery or another task's draft is never worked around.
+    -- The lock also serialises two tasks naming the same slot.
+    select * into i from content_plan_items x where x.id = v_slot and x.client_id = t.client_id for update;
+    if i.id is null then
+      raise exception 'The blog slot this task names no longer exists; replan it before drafting' using errcode = '22023';
+    elsif i.deliverable <> 'blog' then
+      raise exception 'The slot this task names is not a blog slot' using errcode = '22023';
+    elsif i.hold = 'blocked' then
+      raise exception 'The blog slot this task names is blocked (%); clear the hold before drafting', coalesce(i.hold_reason, 'no reason given')
+        using errcode = '22023';
+    elsif i.hold = 'delivered' or i.content_post_id is not null then
+      raise exception 'The blog slot this task names is already delivered or linked to a post' using errcode = '22023';
+    elsif exists (select 1 from content_drafts y where y.plan_item_id = i.id) then
+      raise exception 'The blog slot this task names already has a draft; continue that draft instead' using errcode = '22023';
+    elsif i.brand_workspace_id is not null and i.brand_workspace_id is distinct from v_brand then
       raise exception 'This blog slot is for another brand site; choose a keyword and service of that brand' using errcode = '22023';
     end if;
-  end if;
-  -- This week's empty blog slot of the same brand (or none), or a new one.
-  if i.id is null then
+  else
+    -- A task without a named slot (every task before the standard): this
+    -- week's empty blog slot of the same brand (or none), or a new one.
     select * into i from content_plan_items x
      where x.client_id = t.client_id and x.week_start = v_week and x.deliverable = 'blog'
        and x.content_post_id is null and x.hold is null
        and (x.brand_workspace_id is null or x.brand_workspace_id is not distinct from v_brand)
        and not exists (select 1 from content_drafts y where y.plan_item_id = x.id)
      order by (x.brand_workspace_id is not distinct from v_brand) desc, x.created_at limit 1 for update;
-  end if;
-  if i.id is null then
-    insert into content_plan_items (client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, planned_date, notes)
-    values (t.client_id, v_week, 'blog', 'educational', left(p->>'topic', 200), p->>'search_intent',
-            nullif(p->>'keyword_id', '')::uuid, nullif(p->>'service_id', '')::uuid, coalesce(t.due_date, v_week+2), 'The weekly blog (opened by the worker).')
-    returning * into i;
+    if i.id is null then
+      insert into content_plan_items (client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, planned_date, notes)
+      values (t.client_id, v_week, 'blog', 'educational', left(p->>'topic', 200), p->>'search_intent',
+              nullif(p->>'keyword_id', '')::uuid, nullif(p->>'service_id', '')::uuid, coalesce(t.due_date, v_week+2), 'The weekly blog (opened by the worker).')
+      returning * into i;
+    end if;
   end if;
   select keyword into v_kw from keywords where id = nullif(p->>'keyword_id', '')::uuid and client_id = t.client_id;
 
