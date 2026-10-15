@@ -50,7 +50,10 @@ export default function MapGridMap({
           .addTo(map)
           .on("click", () => onSelect(c));
       }
-      const resize = new ResizeObserver(() => map.invalidateSize());
+      const resize = new ResizeObserver(() => {
+        map.invalidateSize();
+        map.fitBounds(bounds, { padding: [35, 35], maxZoom: 13, animate: false });
+      });
       resize.observe(container.current);
       cleanup = () => {
         resize.disconnect();
