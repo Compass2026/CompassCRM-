@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildBlogBrief, blogBriefHash, BLOG_RULES } from "../supabase/functions/content-drafter/brief.ts";
 import { lintBlog, wordCount } from "../supabase/functions/content-drafter/lint.ts";
-import { createContentDrafter, parseBlogDraft } from "../supabase/functions/content-drafter/handler.ts";
+import { createContentDrafter, parseBlogDraft, claimedByOther } from "../supabase/functions/content-drafter/handler.ts";
 import { toMarkdown } from "../supabase/functions/content-drafter/markdown.ts";
 import { lucas, GAZETTEER, OC, REVIEWS, FREE_QUOTES, PAGE, SITE } from "./fixtures/drafter-lucas.mjs";
 import { GOOD_BLOG, draftRow, DRAFT_ID } from "./fixtures/blog-lucas.mjs";
@@ -109,7 +109,7 @@ test("lint: structure, links and the CTA", () => {
   assert.ok(codes(stuffed).includes("keyword_stuffing"));
 });
 
-function fakeStore({ row = draftRow(), writeResult = null } = {}) {
+function fakeStore({ row = draftRow(), writeResult = null, holder = null } = {}) {
   const calls = [];
   return {
     calls,
@@ -118,6 +118,7 @@ function fakeStore({ row = draftRow(), writeResult = null } = {}) {
     async draft(id) { return id === row.id ? row : null; },
     async input() { return lucas(); },
     async sitePages() { return []; },
+    async claimHolder() { return holder; },
     async write(p) { calls.push(p); return writeResult ?? { draft_id: p.draft_id, status: "in_review", version: 1, word_count: 820 }; },
     async openWeekly(p) { calls.push(["open", p]); return { draft_id: DRAFT_ID, plan_item_id: "pi", status: "requested", reused: false }; },
   };
@@ -229,4 +230,60 @@ test('external citations: exact eligible sources and a stated linked claim, neve
   const input = lucas(); input.claims.find((c)=>c.id===OC).source='https://www.owenscorning.com/profile and client intake';
   const result=buildBlogBrief(input,draftRow()).brief;
   assert.ok(!result.links.external.some((e)=>e.claim_ids.includes(OC)), 'source prose never grants a domain allowlist');
+});
+
+// The Oct 15 2026 Logic Solar incident: an operator claimed the request task,
+// the Routine wrote over it anyway. A live foreign claim now stops the write.
+test("claims: a live claim by someone else blocks; an expired, own or absent claim does not", () => {
+  const now = Date.parse("2026-10-15T15:00:00Z");
+  const held = (by, minutesAgo) => ({ claimed_by: by, claimed_at: new Date(now - minutesAgo * 60_000).toISOString() });
+  assert.deepEqual(claimedByOther(held("operator-session", 3), "worker-routine", now),
+    { claimed_by: "operator-session", expires_at: "2026-10-15T15:57:00.000Z" });
+  assert.deepEqual(claimedByOther(held("operator-session", 3), null, now)?.claimed_by, "operator-session", "an unlabelled writer is someone else");
+  assert.equal(claimedByOther(held("operator-session", 61), "worker-routine", now), null, "over an hour old: stale");
+  assert.equal(claimedByOther(held("worker-routine", 3), "worker-routine", now), null, "the holder itself");
+  assert.equal(claimedByOther({ claimed_by: null, claimed_at: null }, "worker-routine", now), null, "unclaimed");
+  assert.equal(claimedByOther(null, null, now), null, "no task");
+});
+
+test("handler: claimant — a foreign live claim stops brief, check and submit before any write", async () => {
+  const holder = { claimed_by: "operator-session", claimed_at: new Date(Date.now() - 3 * 60_000).toISOString() };
+  const store = fakeStore({ holder });
+  const fn = createContentDrafter({ store, gazetteer: { MO: GAZETTEER } });
+  for (const mode of ["brief", "check", "submit"]) {
+    const r = await call(fn, { mode, draft_id: DRAFT_ID, claimant: "worker-routine", brief_hash: "x", runtime: "claude-worker-skill", draft: GOOD_BLOG });
+    assert.equal(r.status, 409, mode);
+    assert.equal(r.body.error, "claimed_by_other");
+    assert.equal(r.body.claimed_by, "operator-session");
+  }
+  const anon = await call(fn, { mode: "brief", draft_id: DRAFT_ID });
+  assert.equal(anon.status, 409, "no claimant is not the holder");
+  assert.equal(store.calls.length, 0, "nothing written");
+  assert.equal((await call(fn, { mode: "brief", draft_id: DRAFT_ID, claimant: " " })).status, 400);
+  assert.equal((await call(fn, { mode: "brief", draft_id: DRAFT_ID, claimant: "x".repeat(81) })).status, 400);
+
+  const b = await call(fn, { mode: "brief", draft_id: DRAFT_ID, claimant: "operator-session" });
+  assert.equal(b.status, 200, "the holder works as before");
+  const ok = await call(fn, { mode: "submit", draft_id: DRAFT_ID, brief_hash: b.body.brief_hash, runtime: "claude-operator", claimant: "operator-session", draft: GOOD_BLOG });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.equal(store.calls[0].claimant, "operator-session", "the claimant reaches content_draft_write");
+});
+
+test("handler: an unclaimed or stale task writes as today; the database's CD409 is claimed_by_other", async () => {
+  for (const holder of [null, { claimed_by: null, claimed_at: null }, { claimed_by: "operator-session", claimed_at: new Date(Date.now() - 61 * 60_000).toISOString() }]) {
+    const store = fakeStore({ holder });
+    const fn = createContentDrafter({ store, gazetteer: { MO: GAZETTEER } });
+    const b = await call(fn, { mode: "brief", draft_id: DRAFT_ID });
+    const ok = await call(fn, { mode: "submit", draft_id: DRAFT_ID, brief_hash: b.body.brief_hash, runtime: "claude-worker-skill", draft: GOOD_BLOG });
+    assert.equal(ok.status, 201, JSON.stringify({ holder, body: ok.body }));
+    assert.equal(store.calls[0].claimant, null);
+  }
+  // A claim that lands between the handler's check and the write: the database refuses.
+  const store = fakeStore({ writeResult: { error: { code: "CD409", message: "claimed_by_other: operator-session holds this draft's task until …" } } });
+  const fn = createContentDrafter({ store, gazetteer: { MO: GAZETTEER } });
+  const b = await call(fn, { mode: "brief", draft_id: DRAFT_ID, claimant: "worker-routine" });
+  const r = await call(fn, { mode: "submit", draft_id: DRAFT_ID, brief_hash: b.body.brief_hash, runtime: "claude-worker-skill", claimant: "worker-routine", draft: GOOD_BLOG });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, "claimed_by_other");
+  assert.ok((await call(fn, { mode: "version" })).body.features.includes("claims"));
 });

@@ -2,7 +2,8 @@
 // service role, so every call reaches Postgres through PostgREST as
 // authenticator + service_role — the session 0067's content_draft_write
 // admits. It reads the draft, the canonical Client Intelligence input (0047)
-// and the client's published articles; its one write is content_draft_write.
+// and the client's published articles and who holds the draft's task; its
+// one write is content_draft_write.
 import type { DrafterInput } from "../post-drafter/types.ts";
 import type { DraftRow, SitePage } from "./brief.ts";
 
@@ -12,6 +13,7 @@ type Client = any;
 type WriteResult = { draft_id: string; status: string; version: number; word_count: number };
 type OpenResult = { draft_id: string; plan_item_id: string; status: string; reused: boolean };
 export type WriteError = { code: string | null; message: string };
+export type ClaimHolder = { claimed_by: string | null; claimed_at: string | null };
 
 export function createStore(supabase: Client) {
   return {
@@ -44,6 +46,17 @@ export function createStore(supabase: Client) {
         .eq("client_id", clientId).eq("status", "published").not("url", "is", null).order("title");
       if (error) throw new Error(error.message);
       return (data ?? []) as SitePage[];
+    },
+    // Who holds the draft's task (its request task, else the weekly blog_post
+    // task), from content_draft_claim (20261015180000). null: no task.
+    async claimHolder(draftId: string): Promise<ClaimHolder | null> {
+      const { data: d, error } = await supabase.from("content_drafts").select("request_task_id, source_task_id").eq("id", draftId).maybeSingle();
+      if (error) throw new Error(error.message);
+      const taskId = d?.request_task_id ?? d?.source_task_id;
+      if (!taskId) return null;
+      const { data: t, error: e2 } = await supabase.from("tasks").select("claimed_by, claimed_at").eq("id", taskId).maybeSingle();
+      if (e2) throw new Error(e2.message);
+      return (t as ClaimHolder | null) ?? null;
     },
     // The weekly blog (0068): open the draft for a blog_post task.
     async openWeekly(p: Record<string, unknown>): Promise<OpenResult | { error: WriteError }> {

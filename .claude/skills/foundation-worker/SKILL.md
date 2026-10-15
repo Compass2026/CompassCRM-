@@ -1817,8 +1817,13 @@ the brand voice (`get_brand_profile`), sourced facts only.
    week's blog slot on the Planner). The task moves to `in_progress` and
    **stays open until a teammate approves the draft**: approval closes it
    and records the final article in the same step. Never close it yourself.
+   Then **claim** it: `select content_draft_claim('<draft_id>',
+   'worker-routine');` — `claimed: false` (`claimed_by_other`: someone else
+   is writing this week's post; `draft_not_open`: it is already written)
+   → stop without writing and report it.
 3. **Write it** exactly as the *Content draft request* playbook below does
-   (brief → write → check → submit, the same rules and stops), for this
+   (brief → write → check → submit with `"claimant": "worker-routine"`, the
+   same rules and stops, `409 claimed_by_other` included), for this
    `draft_id`. The submit puts it in review.
 4. **Report:** the client, the keyword, `draft_id` and its status. Filing
    to the site is a person's step after approval (Copy / Download Markdown
@@ -1960,21 +1965,32 @@ from live data, decides whether it can be written and writes it. You pass
 the draft id and nothing else about the target. Call it like `post-drafter`
 (`x-cron-secret`, the same base URL, `/functions/v1/content-drafter`).
 
-**Claim** the task (a session that died leaves `in_progress`; after an hour
-it is yours again):
+**Claim** the draft through the function — never by updating `tasks`
+yourself. The claim is binding (Oct 15 2026: the Routine overwrote an
+operator's claimed Logic Solar draft because the old `update tasks … set
+status` claim was advisory). A claim lasts an hour; a session that died
+frees the task after that:
 
 ```sql
-update tasks set status = 'in_progress'
-where id = '<task_id>'
-  and (status = 'open' or (status = 'in_progress' and updated_at < now() - interval '1 hour'))
-returning id;
+select content_draft_claim('<draft_id>', 'worker-routine');
 ```
 
-No row → skip it. Never mark the task done yourself: the successful submit
-closes it in the same transaction that writes the draft.
+`claimed: true` → yours; the task is `in_progress`. `claimed: false` →
+**stop without writing anything**: `reason` `claimed_by_other` means
+`claimed_by` holds it until `expires_at` (say so in the report and leave the
+task alone); `draft_not_open` means it was written, withdrawn or approved —
+skip it. A missing `content_draft_claim` function means the claims migration
+is not applied: stop and say so. A Claude operator session working a draft by
+hand claims the same way with its own label (e.g. `operator-<initials>`) and
+passes that label as `claimant`. Never mark the task done yourself: the
+successful submit closes it in the same transaction that writes the draft.
 
-**Preflight:** `{"mode": "version"}` must answer `version` ≥ 1 with `kinds`
-containing `blog`. Anything else → stop, leave the task `in_progress`, say so.
+**Preflight:** `{"mode": "version"}` must answer `version` ≥ 5 with `kinds`
+containing `blog` and `features` containing `claims`. Anything else → stop,
+leave the task `in_progress`, say so.
+
+Every `brief`, `check` and `submit` call below carries
+`"claimant": "worker-routine"` (your claim's label).
 
 1. **Brief** `{"mode": "brief", "draft_id"}`. `200` → keep `brief_hash` and
    the brief: the topic, primary keyword, intent, the service and its page,
@@ -1999,7 +2015,7 @@ containing `blog`. Anything else → stop, leave the task `in_progress`, say so.
 3. **Check** `{"mode": "check", "draft_id", "brief_hash", "draft"}` → fix
    every `problems` entry and check again until `ok`.
 4. **Submit** `{"mode": "submit", "draft_id", "brief_hash", "draft",
-   "runtime": "claude-worker-skill"}`. `201` → done: the draft is in review,
+   "runtime": "claude-worker-skill", "claimant": "worker-routine"}`. `201` → done: the draft is in review,
    the request closed. Approval is a teammate's; it alone makes the final
    article.
 
@@ -2008,6 +2024,9 @@ containing `blog`. Anything else → stop, leave the task `in_progress`, say so.
   usable claim, no intent): set the task `blocked` with the refusals in its
   notes, word for word.
 - `409 draft_not_open` → someone withdrew or approved it; skip.
+- `409 claimed_by_other` (any mode) → someone else holds the task (your
+  claim lapsed after an hour, or you skipped it): stop, write nothing, never
+  re-claim to get past it; report who holds it.
 - `409 stale_brief` → back to step 1.
 - Three failed checks against one brief → `blocked` with the last problems.
 

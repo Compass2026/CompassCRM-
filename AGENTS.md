@@ -2098,6 +2098,21 @@ go-live: `docs/blog-drafter.md`.
     until approval closes it with the final row.
   - Reopening returns the final row to `draft`: the slot stops counting, and
     Billing's count is unchanged.
+- **Binding claims (20261015180000, written, not applied; Oct 15 2026).**
+  After the Logic Solar incident (the Routine overwrote an operator's
+  claimed draft), a writer claims a draft with
+  `content_draft_claim(draft_id, claimant)`. Only service_role and the
+  worker can call it.
+  - It records `tasks.claimed_by` / `claimed_at` on the draft's request task
+    (or its weekly `blog_post` task). The claim holds for an hour.
+  - `content-drafter` brief / check / submit take a `claimant`.
+    `content_draft_write` refuses another claimant's live claim with CD409,
+    which the function returns as `409 claimed_by_other`.
+  - Unclaimed tasks write as before. The Routine claims as
+    `worker-routine`.
+  - Ship in this order: apply the migration, merge (the skill goes live
+    with it), then deploy `content-drafter` from main at once. Until it
+    answers v5 with `claims`, the worker's preflight stops without writing.
 - **Not yet:** the Web Page Drafter.
 
 ## Known state / open items (as of Sept 13 2026)

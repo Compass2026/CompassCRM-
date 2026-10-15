@@ -13,6 +13,12 @@
 //             repeat). The task closes only when the draft is approved.
 //   version → what this deployment is, for the worker's preflight.
 //
+// Claims (20261015180000): brief, check and submit take a `claimant` label.
+// When the draft's task is claimed (content_draft_claim) by someone else
+// within the hour, they answer 409 claimed_by_other and nothing is written;
+// content_draft_write enforces the same rule in the transaction. An
+// unclaimed task works exactly as before.
+//
 // Nothing here approves, finalizes or publishes: approval is a teammate's
 // (content_draft_approve), and that is the only way a blog becomes a
 // content_posts row. The model runtime is the caller's business: it sends a
@@ -22,9 +28,10 @@
 // team_members). Nothing else.
 import { blogBriefHash, buildBlogBrief, CONTENT_DRAFTER_VERSION, type BlogBrief } from "./brief.ts";
 import { lintBlog, type BlogDraft } from "./lint.ts";
-import type { Store } from "./store.ts";
+import type { ClaimHolder, Store } from "./store.ts";
 
-export const HANDLER_VERSION = 4;
+export const HANDLER_VERSION = 5;
+export const CLAIM_TTL_MS = 60 * 60 * 1000;
 export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
@@ -57,6 +64,14 @@ export function parseBlogDraft(d: unknown): BlogDraft | string {
     cta: { text: cta.text as string, url: (cta.url as string | null) ?? null },
     claim_ids: o.claim_ids as string[],
   };
+}
+
+// A live claim by someone else: the holder's label and when it lapses.
+export function claimedByOther(holder: ClaimHolder | null, claimant: string | null, now = Date.now()):
+  { claimed_by: string; expires_at: string } | null {
+  if (!holder?.claimed_by || !holder.claimed_at || holder.claimed_by === claimant) return null;
+  const expires = Date.parse(holder.claimed_at) + CLAIM_TTL_MS;
+  return expires > now ? { claimed_by: holder.claimed_by, expires_at: new Date(expires).toISOString() } : null;
 }
 
 export function createContentDrafter(deps: Deps) {
@@ -95,7 +110,7 @@ export function createContentDrafter(deps: Deps) {
     const body = (await req.json().catch(() => null)) as Json | null;
     if (!body || typeof body !== "object") return reply(400, { error: "JSON body required" });
     const mode = body.mode;
-    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations"] });
+    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations", "claims"] });
     if (mode === "open") {
       if (who.via !== "worker") return reply(403, { error: "open is the worker's (the weekly blog task)" });
       const taskId = body.task_id;
@@ -118,9 +133,17 @@ export function createContentDrafter(deps: Deps) {
     if (mode !== "brief" && mode !== "check" && mode !== "submit") return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
     const draftId = body.draft_id;
     if (!isStr(draftId) || !UUID.test(draftId)) return reply(400, { error: "draft_id must be a uuid" });
+    if (body.claimant != null && (!isStr(body.claimant) || !body.claimant.trim() || body.claimant.length > 80)) {
+      return reply(400, { error: "claimant is a short label for who holds the task" });
+    }
+    const claimant = isStr(body.claimant) ? body.claimant.trim() : null;
 
     const built = await rebuild(draftId);
     if (!built.ok) return reply(built.status, built.body);
+    const other = claimedByOther(await store.claimHolder(draftId), claimant);
+    if (other) {
+      return reply(409, { error: "claimed_by_other", message: `${other.claimed_by} holds this draft's task until ${other.expires_at}; do not write it.`, ...other });
+    }
     if (mode === "brief") return reply(200, { eligible: true, brief: built.brief, brief_hash: built.hash });
 
     if (body.brief_hash !== built.hash && (mode === "submit" || body.brief_hash != null)) {
@@ -136,9 +159,10 @@ export function createContentDrafter(deps: Deps) {
     if (!lint.ok) return reply(422, { error: "lint_failed", ...lint });
     const { claim_ids, ...content } = draft;
     const written = await store.write({
-      draft_id: draftId, brief: built.brief, brief_hash: built.hash, runtime: runtime.trim(), lint, claim_ids, content, submit: true,
+      draft_id: draftId, brief: built.brief, brief_hash: built.hash, runtime: runtime.trim(), claimant, lint, claim_ids, content, submit: true,
     });
     if ("error" in written) {
+      if (written.error.code === "CD409") return reply(409, { error: "claimed_by_other", message: written.error.message });
       const status = written.error.code === "42501" ? 403 : written.error.code === "23514" || written.error.code === "P0002" ? 409 : 500;
       return reply(status, { error: "write_refused", message: written.error.message });
     }
