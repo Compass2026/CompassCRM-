@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   MapGridDashboard,
@@ -18,8 +18,9 @@ export default async function MapsPage({
   const { clientId } = await params;
   const { run: runId, profile: profileParam } = await searchParams;
   const db = await createClient();
-  // A client can have several grids (one per location). Everything below is
-  // scoped to the one selected here, and only this client's grids are eligible.
+  // A client can have one profile per location (Logic Solar: Overland Park
+  // and Wichita). Only this client's profiles are candidates, so a profile or
+  // run from another client is a 404, never a silent switch to other data.
   const { data: profiles, error } = await db
     .from("map_grid_profiles")
     .select("*")
@@ -49,19 +50,7 @@ export default async function MapsPage({
   const profile = profileId
     ? profiles.find((p) => p.id === profileId)
     : profiles[0];
-  if (!profile)
-    return (
-      <div role="alert" className="rounded-2xl border bg-card p-8">
-        <h2 className="text-xl font-semibold">Map rankings</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          That map grid is not one of this client&apos;s locations.{" "}
-          <Link href={`/clients/${clientId}/maps`} className="underline">
-            Show this client&apos;s grids
-          </Link>
-          .
-        </p>
-      </div>
-    );
+  if (!profile) notFound();
   const { data: runs, error: runsError } = await db
     .from("map_grid_runs")
     .select("id,started_at,status,error,config")
@@ -120,33 +109,6 @@ export default async function MapsPage({
   }
   return (
     <div className="space-y-4">
-      {profiles.length > 1 && (
-        <nav
-          aria-label="Map grid location"
-          className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3 text-sm"
-        >
-          <span className="px-1 text-xs font-medium text-muted-foreground">
-            Location
-          </span>
-          {profiles.map((p) => (
-            <Link
-              key={p.id}
-              href={`/clients/${clientId}/maps?profile=${p.id}`}
-              aria-current={p.id === profile.id ? "page" : undefined}
-              data-map-grid-profile-link={p.id}
-              className={
-                "rounded-full px-3 py-1.5 font-medium " +
-                (p.id === profile.id
-                  ? "bg-navy-900 text-white"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200")
-              }
-            >
-              {p.label}
-              {p.weekly_enabled ? " · weekly" : ""}
-            </Link>
-          ))}
-        </nav>
-      )}
       {attemptsResult.error ? (
         <p
           role="alert"
@@ -160,6 +122,7 @@ export default async function MapsPage({
       <MapGridDashboard
         key={run?.id ?? profile.id}
         clientId={clientId}
+        profiles={profiles.map((p) => ({ id: p.id, label: p.label }))}
         profile={{
           id: profile.id,
           label: profile.label,

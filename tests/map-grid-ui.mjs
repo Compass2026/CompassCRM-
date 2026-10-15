@@ -152,17 +152,13 @@ try{
  await dialog.getByRole('button',{name:'Cancel'}).click();assert.equal(starts,0);
  await page.getByRole('button',{name:'Run scan',exact:true}).click();await dialog.getByRole('button',{name:'Start paid scan'}).click();
  await page.getByRole('alert').filter({hasText:'Wait one hour'}).waitFor();assert.equal(starts,1);
- await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
- await page.setViewportSize({width:390,height:844});await page.waitForTimeout(500);await page.screenshot({path:`${shots}/mobile.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  // Two grids for one client: an explicit location selector, everything scoped to the chosen grid.
- await page.setViewportSize({width:1440,height:1000});
- await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});
- const nav=page.getByRole('navigation',{name:'Map grid location'});
- assert.equal(await nav.getByRole('link').count(),2,'only this client\'s grids are offered');
- assert.equal(await nav.getByRole('link',{name:/Fictional pilot/}).getAttribute('aria-current'),'page');
+ await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
+ const location=page.getByLabel('Map location');
+ assert.deepEqual(await location.locator('option').allTextContents(),['Fictional pilot','Wichita'],'only this client\'s grids are offered');
+ assert.equal(await location.inputValue(),'profile');
  assert.equal(await page.locator('[data-weekly-scan-state]').count(),0,'the manual grid has no weekly notice');
- await nav.getByRole('link',{name:/Wichita/}).click();await page.waitForURL(/profile=wichita/);await count(153);
- assert.equal(await nav.getByRole('link',{name:/Wichita/}).getAttribute('aria-current'),'page');
+ await location.selectOption('wichita');await page.waitForURL(/profile=wichita/);await count(153);
  assert.match(await page.locator('main').innerText(),/Wichita · Dense local scan/);
  const history=await page.getByLabel('Scan history').locator('option').allInnerTexts();
  assert.equal(history.length,1,`Wichita history only: ${history}`);
@@ -172,26 +168,28 @@ try{
  assert.equal(await page.getByLabel('Map keyword').locator('option').count(),1);
  // Selection survives a reload and the Refresh button.
  await page.reload({waitUntil:'networkidle'});await count(153);
- assert.equal(await nav.getByRole('link',{name:/Wichita/}).getAttribute('aria-current'),'page');
+ assert.equal(await location.inputValue(),'wichita');
  await page.getByRole('button',{name:'Refresh'}).click();await page.waitForTimeout(800);
- assert.match(page.url(),/profile=wichita/);
+ assert.match(page.url(),/profile=wichita/);assert.equal(await location.inputValue(),'wichita');
  assert.equal(starts,1,'switching and refreshing never start a scan');
- // A run link without ?profile= still opens its own grid.
+ // A run link without ?profile= (an older link) still opens its own grid.
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?run=w1`,{waitUntil:'networkidle'});
- assert.equal(await nav.getByRole('link',{name:/Wichita/}).getAttribute('aria-current'),'page');
+ assert.equal(await location.inputValue(),'wichita');
  await page.screenshot({path:`${shots}/second-location.png`,fullPage:true});
  // A scan started here is for the selected grid only.
  await page.getByRole('button',{name:'Run scan',exact:true}).click();
  await page.getByRole('dialog',{name:'Confirm paid scan'}).getByRole('button',{name:'Start paid scan'}).click();
  await page.getByRole('alert').filter({hasText:'Wait one hour'}).waitFor();
  assert.deepEqual(scanned,['profile','wichita']);
- // Another client's grid or run never opens under this client.
+ // Another client's grid or run is a 404 under this client, never its data.
  for(const q of ['profile=other','run=o1']){
-  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?${q}`,{waitUntil:'networkidle'});
-  await page.getByRole('alert').filter({hasText:"That map grid is not one of this client's locations"}).waitFor();
+  const r=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?${q}`,{waitUntil:'networkidle'});
+  assert.equal(r.status(),404,q);
   assert.equal(await page.getByTestId('map-grid-map').count(),0);
-  assert.doesNotMatch(await page.locator('main').innerText(),/Another client/);
+  assert.doesNotMatch(await page.locator('body').innerText(),/Another client/);
  }
+ await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(500);await page.screenshot({path:`${shots}/mobile.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  assert.equal(starts,2);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
  console.log('Grid browser checks passed: two grids for one client (explicit selector, scoped history/checks/keywords/weekly notice, selection kept through reload and refresh, run links open their own grid, scan targets the selected grid, other clients\' grids refused), 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
 }catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}
