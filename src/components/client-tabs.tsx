@@ -22,6 +22,7 @@ const tabs = [
   { label: "Backlinks", segment: "backlinks" },
   { label: "Services", segment: "services" },
   { label: "Keywords", segment: "keywords" },
+  { label: "Map rankings", segment: "maps" },
   { label: "Planner", segment: "planner" },
   { label: "Content", segment: "content" },
   { label: "Social", segment: "social" },

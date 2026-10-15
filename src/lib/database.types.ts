@@ -19,6 +19,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      map_grid_profiles: {
+        Row: { id:string; client_id:string; grid_config_id:string; label:string; target_place_id:string; points:Json; keywords:Json; zoom:number; enabled:boolean; weekly_enabled:boolean; created_at:string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      map_grid_runs: {
+        Row: { id:string; profile_id:string; request_key:string; config:Json; status:string; expected_checks:number; started_at:string; completed_at:string|null; lease_until:string; error:string|null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      map_grid_checks: {
+        Row: { id:string; run_id:string; keyword_id:string; keyword:string; point_index:number; lat:number; lng:number; state:string; task_id:string|null; position:number|null; results:Json|null; cost:number; error:string|null; checked_at:string|null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       agency_rollout_reviews: {
         Row: RolloutReview
         Insert: RolloutWrite

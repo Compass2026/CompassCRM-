@@ -101,3 +101,20 @@ jobs:
         with:
           name: control-center-screenshots
           path: docs/screenshots/control-center/
+
+  map-grid-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: CHROME_PATH=/usr/bin/google-chrome node --no-warnings tests/map-grid-ui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: map-grid-screenshots
+          path: docs/screenshots/map-grid/
