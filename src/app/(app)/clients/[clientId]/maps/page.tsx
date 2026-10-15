@@ -41,7 +41,7 @@ export default async function MapsPage({
     .limit(30);
   if (runsError) throw Error("Scan history could not be loaded");
   const run = (runs ?? []).find((r) => r.id === runId) ?? runs?.[0] ?? null;
-  const [checksResult, baselineResult] = await Promise.all([
+  const [checksResult, baselineResult, gridResult] = await Promise.all([
     run
       ? db
           .from("map_grid_checks")
@@ -58,8 +58,13 @@ export default async function MapsPage({
       .eq("grid_config_id", profile.grid_config_id)
       .order("recorded_at", { ascending: false })
       .limit(100),
+    db
+      .from("grid_configs")
+      .select("center_lat,center_lng")
+      .eq("id", profile.grid_config_id)
+      .maybeSingle(),
   ]);
-  if (checksResult.error || baselineResult.error)
+  if (checksResult.error || baselineResult.error || gridResult.error)
     throw Error("Grid results could not be loaded");
   const baselines: GridBaseline[] = [];
   const seen = new Set<string>();
@@ -84,6 +89,15 @@ export default async function MapsPage({
       run={run as unknown as GridRunView | null}
       checks={(checksResult.data ?? []) as unknown as GridCheck[]}
       baselines={baselines}
+      homeCenter={
+        gridResult.data?.center_lat != null &&
+        gridResult.data?.center_lng != null
+          ? {
+              lat: Number(gridResult.data.center_lat),
+              lng: Number(gridResult.data.center_lng),
+            }
+          : null
+      }
     />
   );
 }

@@ -1,12 +1,146 @@
 export type GridPoint = { lat: number; lng: number };
 export type GridKeyword = { id: string; keyword: string };
+// Radius is distance from the business center, never diameter.
+export type GridTier = { max_miles: number; spacing_miles: number };
+export type GridGeometry = {
+  version: typeof LOCAL_GEOMETRY_VERSION;
+  center: GridPoint;
+  tiers: GridTier[];
+  radii_miles: number[];
+  default_radius_miles: number;
+  point_count: number;
+};
 export type GridConfig = {
   target_place_id: string;
   points: GridPoint[];
   keywords: GridKeyword[];
   zoom: number;
   search_this_area?: boolean;
+  // Absent or null on runs frozen before the local layout existed.
+  geometry?: GridGeometry | null;
 };
+export const LOCAL_GEOMETRY_VERSION = "local-multiscale-v1";
+export const LOCAL_TIERS: GridTier[] = [
+  { max_miles: 1, spacing_miles: 0.25 },
+  { max_miles: 2, spacing_miles: 0.5 },
+  { max_miles: 5, spacing_miles: 1 },
+];
+export const COST_PER_CHECK = 0.0006;
+const EARTH_MILES = 3958.7613;
+// Absorbs 7-decimal coordinate rounding (~1 cm), never a whole lattice step.
+export const RADIUS_TOLERANCE_MILES = 0.001;
+const rad = (d: number) => (d * Math.PI) / 180;
+export function distanceMiles(a: GridPoint, b: GridPoint) {
+  const h =
+    Math.sin(rad(b.lat - a.lat) / 2) ** 2 +
+    Math.cos(rad(a.lat)) *
+      Math.cos(rad(b.lat)) *
+      Math.sin(rad(b.lng - a.lng) / 2) ** 2;
+  return 2 * EARTH_MILES * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// Great-circle destination, so a lattice offset of d miles is d miles away.
+function destination(center: GridPoint, north: number, east: number) {
+  const d = Math.hypot(north, east) / EARTH_MILES;
+  if (d === 0) return { lat: center.lat, lng: center.lng };
+  const bearing = Math.atan2(east, north),
+    lat1 = rad(center.lat),
+    lng1 = rad(center.lng);
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(d) +
+      Math.cos(lat1) * Math.sin(d) * Math.cos(bearing),
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(d) * Math.cos(lat1),
+      Math.cos(d) - Math.sin(lat1) * Math.sin(lat2),
+    );
+  return {
+    lat: Number(((lat2 * 180) / Math.PI).toFixed(7)),
+    lng: Number(((lng2 * 180) / Math.PI).toFixed(7)),
+  };
+}
+// One deterministic, deduplicated nested scan: each tier fills the ring between
+// the previous tier's radius and its own, so the center is charged once.
+export function localGrid(center: GridPoint, tiers: GridTier[] = LOCAL_TIERS) {
+  if (!Number.isFinite(center.lat) || !Number.isFinite(center.lng))
+    throw Error("Invalid center");
+  const points: GridPoint[] = [],
+    seen = new Set<string>();
+  let inner = -1;
+  for (const tier of tiers) {
+    const steps = Math.round(tier.max_miles / tier.spacing_miles);
+    if (steps * tier.spacing_miles !== tier.max_miles || tier.max_miles <= inner)
+      throw Error("Tier radius must be a whole number of steps and increase");
+    const ring: { i: number; j: number; d2: number }[] = [];
+    for (let i = -steps; i <= steps; i++)
+      for (let j = -steps; j <= steps; j++) {
+        // Integer lattice arithmetic keeps boundary membership exact.
+        const d2 = i * i + j * j;
+        if (d2 <= steps * steps && Math.sqrt(d2) * tier.spacing_miles > inner)
+          ring.push({ i, j, d2 });
+      }
+    ring.sort((a, b) => a.d2 - b.d2 || b.i - a.i || a.j - b.j);
+    for (const { i, j } of ring) {
+      const p = destination(
+        center,
+        i * tier.spacing_miles,
+        j * tier.spacing_miles,
+      );
+      const key = `${p.lat},${p.lng}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        points.push(p);
+      }
+    }
+    inner = tier.max_miles;
+  }
+  const geometry: GridGeometry = {
+    version: LOCAL_GEOMETRY_VERSION,
+    center: { lat: center.lat, lng: center.lng },
+    tiers: tiers.map((t) => ({ ...t })),
+    radii_miles: tiers.map((t) => t.max_miles),
+    default_radius_miles: tiers[tiers.length - 1].max_miles,
+    point_count: points.length,
+  };
+  return { points, geometry };
+}
+export function withinRadius<T extends GridPoint>(
+  points: T[],
+  center: GridPoint,
+  miles: number | null,
+) {
+  if (miles === null) return points;
+  return points.filter(
+    (p) => distanceMiles(center, p) <= miles + RADIUS_TOLERANCE_MILES,
+  );
+}
+export function scanPreview(config: Pick<GridConfig, "points" | "keywords">) {
+  const checks = config.points.length * config.keywords.length;
+  return {
+    points: config.points.length,
+    keywords: config.keywords.length,
+    checks,
+    estimatedCost: checks * COST_PER_CHECK,
+  };
+}
+function validateGeometry(config: GridConfig) {
+  const g = config.geometry;
+  if (g === undefined || g === null) return;
+  if (
+    g.version !== LOCAL_GEOMETRY_VERSION ||
+    !Number.isFinite(g.center?.lat) ||
+    !Number.isFinite(g.center?.lng) ||
+    !Array.isArray(g.tiers) ||
+    !g.tiers.length ||
+    g.point_count !== config.points.length
+  )
+    throw Error("Invalid grid geometry");
+  const max = g.tiers[g.tiers.length - 1].max_miles;
+  for (const p of config.points)
+    if (distanceMiles(g.center, p) > max + RADIUS_TOLERANCE_MILES)
+      throw Error("Grid point outside declared radius");
+}
 export type MapResult = {
   place_id: string | null;
   title: string;
@@ -69,6 +203,7 @@ export function validateGrid(config: GridConfig) {
       throw Error("Invalid or duplicate keyword");
     ids.add(k.id);
   }
+  validateGeometry(config);
 }
 export function mapTask(
   check: Pick<GridCheck, "id" | "keyword" | "lat" | "lng">,

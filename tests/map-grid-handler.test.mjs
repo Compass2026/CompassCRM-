@@ -21,7 +21,7 @@ const source = ts.transpileModule(
   },
 ).outputText;
 const uuid = "00000000-0000-4000-a000-000000000001";
-function harness({ member = true, user = true, postFailure = false } = {}) {
+function harness({ member = true, user = true, postFailure = false, geometry } = {}) {
   let handler,
     posts = 0,
     gets = 0;
@@ -32,6 +32,7 @@ function harness({ member = true, user = true, postFailure = false } = {}) {
     search_this_area: false,
     points: [{ lat: 38, lng: -90 }],
     keywords: [{ id: uuid, keyword: "roof" }],
+    ...(geometry ? { geometry } : {}),
   };
   const run = {
     id: "run",
@@ -225,4 +226,20 @@ test("ambiguous paid submission is never automatically reposted", async () => {
   await h.request();
   assert.equal(h.counts().posts, 1);
   assert.equal(h.counts().gets, 0);
+});
+test("a frozen run whose declared geometry does not match its points never spends", async () => {
+  const h = harness({
+    geometry: {
+      version: "local-multiscale-v1",
+      center: { lat: 38, lng: -90 },
+      tiers: [{ max_miles: 5, spacing_miles: 1 }],
+      radii_miles: [5],
+      default_radius_miles: 5,
+      point_count: 153,
+    },
+  });
+  await h.request("collect");
+  assert.equal(h.counts().posts, 0);
+  assert.equal(h.check.state, "planned");
+  assert.match(h.run.error, /Invalid grid geometry/);
 });

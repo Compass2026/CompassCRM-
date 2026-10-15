@@ -9,7 +9,7 @@ import {
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 const BASE = "https://api.dataforseo.com/v3/serp/google/maps";
-const VERSION = "map-grid-v2";
+const VERSION = "map-grid-v3";
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
