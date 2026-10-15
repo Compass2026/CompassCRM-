@@ -30,4 +30,9 @@ Deno.serve(createBlogPublisher({
     return push(new Request("https://internal/site-push",{method:"POST",headers:{"content-type":"application/json","x-cron-secret":secret},body:JSON.stringify(body)}));
   },
   fetchLive: (url) => fetch(url,{redirect:"error",headers:{"cache-control":"no-cache"},signal:AbortSignal.timeout(15000)}),
+  async heroImage(path) {
+    const {data,error} = await supabase.storage.from("brand-assets").download(path);
+    if (error || !data) throw new Error("The approved hero image could not be loaded");
+    return new Uint8Array(await data.arrayBuffer());
+  },
 }));

@@ -28,6 +28,8 @@ export interface ContentPaths {
   blog_dir?: string;
   city_route?: string;
   blog_route?: string;
+  /** Repository folder a blog's approved hero image is committed to (JSON blogs; default public/blog/images). */
+  blog_images?: string;
   services_dir?: string;
   content_dir?: string;
   verify?: string[];
@@ -65,6 +67,13 @@ const DOC_ONLY: Record<ChangeKind, MutationMode> = {
   faq_addition: "proposed_document",
 };
 
+/** The folder approved blog hero images are committed to on a JSON blog. */
+export const DEFAULT_BLOG_IMAGES = "public/blog/images";
+const blogImagesDir = (paths: ContentPaths) => (paths.blog_images ?? DEFAULT_BLOG_IMAGES).replace(/\/$/, "");
+/** A content-addressed hero image file directly inside the folder: <slug>-<hash12>.<ext>. */
+const isBlogImage = (path: string, paths: ContentPaths) =>
+  new RegExp(`^${escape(blogImagesDir(paths))}/[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{12}\\.(png|jpe?g|webp)$`).test(path);
+
 export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}): AdapterDescription {
   switch (key) {
     case "foundation_brand_content": {
@@ -98,9 +107,9 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
     case "json_blog":
       return {
         key, label: "Compass JSON blog",
-        writes: { blog_post: paths.blog ?? "data/blog-posts.json" },
+        writes: { blog_post: `${paths.blog ?? "data/blog-posts.json"} (+ its approved hero image in ${blogImagesDir(paths)}/)` },
         mutation: { ...DOC_ONLY, blog_post: "push" },
-        allowedPaths: [paths.blog ?? "data/blog-posts.json"],
+        allowedPaths: [paths.blog ?? "data/blog-posts.json", `${blogImagesDir(paths)}/`],
         verify: ["JSON parses; existing articles remain unchanged", "Verify complete article, canonical, SEO and release marker on the live URL"],
         routes: { blog: paths.blog_route ?? "/blog/{slug}" },
         notes: ["Only approved blog data may be pushed. Other website changes require a separate reviewed implementation."],
@@ -111,12 +120,12 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
         label: "Sept 14 content contract (JSON data files)",
         writes: {
           city_page: paths.locations ?? "data/locations.json",
-          blog_post: paths.blog ?? "data/blog-posts.json",
+          blog_post: `${paths.blog ?? "data/blog-posts.json"} (+ its approved hero image in ${blogImagesDir(paths)}/)`,
           service_page: `${paths.services_dir ?? "src/app/services"}/<slug>/page.tsx`,
           faq_addition: paths.locations ?? "data/locations.json",
         },
         mutation: { city_page: "push", blog_post: "push", service_page: "pull_request", faq_addition: "push" },
-        allowedPaths: [paths.locations ?? "data/locations.json", paths.blog ?? "data/blog-posts.json", `${paths.services_dir ?? "src/app/services"}/`],
+        allowedPaths: [paths.locations ?? "data/locations.json", paths.blog ?? "data/blog-posts.json", `${blogImagesDir(paths)}/`, `${paths.services_dir ?? "src/app/services"}/`],
         verify: ["JSON parses and keeps the neighbours' keys", "fetch each changed URL: 200, one H1, canonical, JSON-LD"],
         routes: { city: paths.city_route ?? "/service-areas/{slug}", blog: paths.blog_route ?? "/blog/{slug}", service: "/services/{slug}" },
         notes: ["Pushes go to the site's recorded branch of record, as authorised on Sept 14 2026 (publish without a look; Put it back is the safety net)."],
@@ -227,7 +236,7 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
 
   if (has(/^compass-blog\.json$/) && has(/^data\/blog-posts\.json$/)
       && has(/^src\/content\/compass-blog\.ts$/) && has(/^src\/routing\.ts$/)
-      && has(/^scripts\/prerender\.mjs$/)) {
+      && has(/^scripts\/prerender\.m?js$/)) {
     return { adapter: "json_blog", paths: { adapter: "json_blog", blog: "data/blog-posts.json", blog_format: "json", blog_route: recorded?.blog_route ?? "/blog/{slug}/" },
       reasons: ["Explicit Compass blog contract, JSON loader, routes and prerender pipeline are present"], missing_inputs: [], writable: true };
   }
@@ -336,12 +345,13 @@ export interface ContentEntryVerdict {
 /** Does `path` fall under the adapter's declared write path for `kind`? */
 function matchesWritePath(adapter: ContentAdapterKey, kind: ChangeKind, path: string, paths: ContentPaths): boolean {
   switch (adapter) {
-    case "json_blog": return kind === "blog_post" && path === (paths.blog ?? "data/blog-posts.json");
+    // A blog entry may carry its approved hero image (content-addressed file).
+    case "json_blog": return kind === "blog_post" && (path === (paths.blog ?? "data/blog-posts.json") || isBlogImage(path, paths));
     case "lucas_json": {
       const loc = paths.locations ?? "data/locations.json";
       const blog = paths.blog ?? "data/blog-posts.json";
       if (kind === "city_page" || kind === "faq_addition") return path === loc;
-      if (kind === "blog_post") return path === blog;
+      if (kind === "blog_post") return path === blog || isBlogImage(path, paths);
       return false;
     }
     case "markdown_blog": {

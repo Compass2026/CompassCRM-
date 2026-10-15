@@ -26,6 +26,8 @@ export type BlogDraft = {
   internal_links: { url: string; anchor: string; reason?: string }[];
   cta: { text: string; url: string | null };
   claim_ids: string[];
+  /** Optional hero image (hero.ts); not linted, checked against the asset at submit. */
+  hero?: { asset_id: string; alt: string } | null;
 };
 
 const MD_LINK = /\[([^\]]+)\]\(([^)\s]+)\)/g;

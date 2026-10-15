@@ -1,4 +1,4 @@
-import { preparePublication, publicationPaths, type BlogRelease, type RepositoryRead } from "../content-drafter/publication.ts";
+import { preparePublication, publicationPaths, type BlogRelease, type HeroBytes, type RepositoryRead } from "../content-drafter/publication.ts";
 import { buildBlogBrief, type DraftRow } from "../content-drafter/brief.ts";
 import { lintBlog } from "../content-drafter/lint.ts";
 import { parseBlogDraft } from "../content-drafter/handler.ts";
@@ -16,11 +16,39 @@ export type Deps = {
   pages(client: string): Promise<{ url: string; title: string }[]>;
   sitePush(body: Json): Promise<Response>;
   fetchLive(url: string): Promise<Response>;
+  /** The approved hero's bytes from the private brand-assets bucket. */
+  heroImage?(storagePath: string): Promise<Uint8Array>;
   gazetteer?: Record<string, string[]>;
 };
+const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+function base64(bytes: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+// The exact approved file or nothing: a re-uploaded or replaced asset blocks.
+export async function loadHero(deps: Deps, r: BlogRelease): Promise<HeroBytes | undefined> {
+  if (!r.hero) return undefined;
+  if (!deps.heroImage) throw new Error("The approved hero image could not be loaded");
+  const bytes = await deps.heroImage(r.hero.storage_path);
+  if (hex(await crypto.subtle.digest("SHA-256", bytes)) !== r.hero.content_hash) {
+    throw new Error("The hero image file changed since approval. Review and approve the current version.");
+  }
+  return { base64: base64(bytes) };
+}
 const plain = (s: string) => s.replace(/<\/(?:p|h[1-6]|li|div|article)>/gi," ").replace(/<[^>]*>/g,"").replace(/&(?:amp|#38);/g,"&").replace(/&(?:quot|#34);/g,'"')
   .replace(/&(?:apos|#39|#x27);/g,"'").replace(/&nbsp;/g," ").replace(/\s+/g," ").trim();
-export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, url: string): boolean {
+const attr = (tag: string, name: string) => new RegExp(`\\s${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "i").exec(tag);
+export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, url: string, heroSrc: string | null = null): boolean {
+  // The approved hero renders with its approved alt text (src may be absolute).
+  if (r.hero) {
+    if (!heroSrc) return false;
+    const shown = [...html.matchAll(/<img\b[^>]*>/gi)].some(([tag]) => {
+      const src = attr(tag, "src"); const alt = attr(tag, "alt");
+      return !!src && !!alt && (src[2] ?? src[3]).replace(/^https?:\/\/[^/]+/, "") === heroSrc && plain(alt[2] ?? alt[3]) === plain(r.hero!.alt);
+    });
+    if (!shown) return false;
+  }
   if (!html.includes(`data-compass-release="${hash}"`) || !html.includes(`href="${url}"`)
       || /<meta[^>]+(?:name|http-equiv)=["'](?:robots|x-robots-tag)["'][^>]+noindex/i.test(html)) return false;
   const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1] ?? "";
@@ -57,7 +85,7 @@ export function createBlogPublisher(deps: Deps) {
         if (!inspect.ok) throw new Error("Could not inspect the approved repository");
         const repository = await inspect.json() as RepositoryRead;
         const date = new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(p.scheduled_at));
-        const prepared = preparePublication(r,p.release_hash,repository,date);
+        const prepared = preparePublication(r,p.release_hash,repository,date,await loadHero(deps,r));
         if (prepared.already_present) {
           const prior = p.evidence ?? {};
           const vercel = ((prior.transport as Json | undefined)?.vercel ?? {}) as Json;
@@ -72,7 +100,7 @@ export function createBlogPublisher(deps: Deps) {
           }
           const live = await deps.fetchLive(prepared.url);
           if (!live.ok || /noindex/i.test(live.headers.get("x-robots-tag") ?? "")
-              || !verifyLiveArticle(await live.text(),r,p.release_hash,prepared.url)) {
+              || !verifyLiveArticle(await live.text(),r,p.release_hash,prepared.url,prepared.hero_src)) {
             throw new Error("Exact approved article not yet verified on the public domain");
           }
           await deps.authorize(p.id,p.lease_token);
@@ -111,7 +139,7 @@ export function createBlogPublisher(deps: Deps) {
       if (!readRes.ok) throw new Error("Could not read the approved website repository");
       const read = await readRes.json() as RepositoryRead;
       const date = new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(p.scheduled_at));
-      const delivery = preparePublication(r,p.release_hash,read,date);
+      const delivery = preparePublication(r,p.release_hash,read,date,await loadHero(deps,r));
       if (delivery.already_present) throw new Error("Approved release exists; reconcile the verified live page without writing another commit.");
       await deps.authorize(p.id,p.lease_token);
       externalWriteStarted = true;
@@ -127,7 +155,7 @@ export function createBlogPublisher(deps: Deps) {
       }
       const live = await deps.fetchLive(delivery.url);
       if (!live.ok || /noindex/i.test(live.headers.get("x-robots-tag") ?? "")
-          || !verifyLiveArticle(await live.text(),r,p.release_hash,delivery.url)) throw new Error("Production deployment exists; the complete live article is not yet verified.");
+          || !verifyLiveArticle(await live.text(),r,p.release_hash,delivery.url,delivery.hero_src)) throw new Error("Production deployment exists; the complete live article is not yet verified.");
       evidence.live_verified = true;
       await deps.finish(p.id,p.lease_token,"published",evidence);
       return Response.json({status:"published",url:delivery.url,commit_sha:sha});

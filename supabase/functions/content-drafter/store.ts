@@ -6,6 +6,7 @@
 // one write is content_draft_write.
 import type { DrafterInput } from "../post-drafter/types.ts";
 import type { DraftRow, SitePage } from "./brief.ts";
+import type { HeroAsset } from "./hero.ts";
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -64,10 +65,22 @@ export function createStore(supabase: Client) {
       if (error) return { error: { code: error.code ?? null, message: error.message } };
       return data as OpenResult;
     },
+    // A draft with a hero writes through content_draft_write_with_hero: the
+    // hero and the content land in one transaction (20261015210000).
     async write(p: Record<string, unknown>): Promise<WriteResult | { error: WriteError }> {
-      const { data, error } = await supabase.rpc("content_draft_write", { p });
+      const hero = (p.content as { hero?: unknown } | undefined)?.hero;
+      const { data, error } = hero
+        ? await supabase.rpc("content_draft_write_with_hero", { p })
+        : await supabase.rpc("content_draft_write", { p });
       if (error) return { error: { code: error.code ?? null, message: error.message } };
       return data as WriteResult;
+    },
+    // The brand asset a submitted draft proposes as its hero image.
+    async heroAsset(id: string): Promise<HeroAsset | null> {
+      const { data, error } = await supabase.from("brand_assets")
+        .select("id, client_id, kind, storage_path, content_hash, mime_type, width, height").eq("id", id).maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data as HeroAsset | null) ?? null;
     },
   };
 }
