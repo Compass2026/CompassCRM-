@@ -7,6 +7,7 @@ import { requireTeamMember } from "@/lib/team";
 import { isUuid } from "@/lib/tasks";
 import type { Database } from "@/lib/database.types";
 import { parsePostFields, postErrorMessage } from "@/lib/social-posts";
+import { assetEligibility } from "@/lib/post-media";
 
 // Posts and their review gate (0045). Every action checks the caller is on
 // team_members first. The database enforces the workflow again and is the
@@ -379,6 +380,15 @@ export async function linkAssetAction(clientId: string, postId: string, _prev: P
   const assetId = form.get("brand_asset_id");
   if (!isUuid(clientId) || !isUuid(postId) || !isUuid(assetId)) return { error: "Pick an asset." };
   const supabase = await start();
+  // The picker's rule, again on the server (assetEligibility): both rows are
+  // read as this teammate, scoped to the client the page is for.
+  const [{ data: post }, { data: asset }] = await Promise.all([
+    supabase.from("social_posts").select("platform").eq("id", postId).eq("client_id", clientId).maybeSingle(),
+    supabase.from("brand_assets").select("kind, storage_path, content_hash, creative_use").eq("id", assetId).eq("client_id", clientId).maybeSingle(),
+  ]);
+  if (!post || !asset) return { error: "That asset is not one of this client's." };
+  const eligible = assetEligibility(post.platform, asset);
+  if (!eligible.ok) return { error: eligible.reason };
   const { data: last } = await supabase
     .from("post_assets")
     .select("sort_order")

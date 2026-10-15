@@ -12,6 +12,14 @@ import { workspaceAccounts } from "./workspace.ts";
 //             CLAUDE_APPROVAL review task). A refused submit is recorded as
 //             a drafter_runs row (stale_brief / lint_failed / refused).
 //   version → what this deployment is, for the worker's preflight.
+//   attach_photo → (20261015060000) put one approved brand photo of the
+//             post's own client on an existing drafted post in draft or
+//             review: the stored bytes are hashed here and must equal the
+//             photo's recorded hash; then ONE call to drafter_attach_photo
+//             (withdraw, link, resubmit in one transaction; grounding on the
+//             resubmit). The caller names the post and the photo, never the
+//             client, and sends the post's updated_at as read and an
+//             operation id (a retry replays). Never approves or schedules.
 //
 // v2, Authority mode (additive; migration 0053): brief / check / submit with
 // authority_opportunity_id and no target. The target is derived from the
@@ -49,11 +57,12 @@ import { buildBrief, briefHash } from "./brief.ts";
 import { lintDraft } from "./lint.ts";
 import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
+import { attachReply, parseAttach, sha256Hex } from "./attach.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 6;
-export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces"] as const;
+export const HANDLER_VERSION = 7;
+export const MODES = ["brief", "check", "submit", "version", "attach_photo"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "attach_photo"] as const;
 
 export type Deps = {
   store: Store;
@@ -149,6 +158,26 @@ export function createPostDrafter(deps: Deps) {
       message: conflicts.map((c) => c.message).join(" "),
     });
 
+  // attach_photo: the client is the post's own; the photo must be the same
+  // client's (checked before its bytes are read, and again in the database).
+  async function attachPhoto(body: Record<string, unknown>, who: Caller): Promise<Response> {
+    const parsed = parseAttach(body);
+    if (typeof parsed === "string") return reply(400, { error: "bad_request", message: parsed });
+    const target = await store.attachTarget(parsed.post_id, parsed.brand_asset_id);
+    if (!target.post) return reply(404, { error: "post_not_found", message: "No such post." });
+    if (!target.asset || target.asset.client_id !== target.post.client_id) {
+      return reply(404, { error: "asset_not_found", message: "No such photo for this post's client." });
+    }
+    if (!target.asset.storage_path) return reply(422, { error: "asset_unstored", message: "The photo has no stored file." });
+    const bytes = await store.assetBytes(target.asset.storage_path);
+    if (!bytes || bytes.length === 0) return reply(422, { error: "asset_unstored", message: "The photo's stored file could not be read." });
+    const result = await store.attachPhoto({
+      ...parsed, verified_hash: await sha256Hex(bytes), requested_via: who.via, requested_by: who.memberId,
+    });
+    const out = attachReply(result);
+    return reply(out.status, out.body);
+  }
+
   async function handle(req: Request): Promise<Response> {
     if (req.method !== "POST") return reply(405, { error: "POST only" });
     const who = await caller(req);
@@ -160,6 +189,7 @@ export function createPostDrafter(deps: Deps) {
     if (mode === "version") {
       return reply(200, { version: HANDLER_VERSION, drafter: DRAFTER_VERSION, modes: MODES, features: FEATURES, max_attempts: MAX_ATTEMPTS });
     }
+    if (mode === "attach_photo") return attachPhoto(body, who);
     if (mode !== "brief" && mode !== "check" && mode !== "submit") {
       return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
     }
