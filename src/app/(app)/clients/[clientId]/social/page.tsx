@@ -33,6 +33,10 @@ export default async function SocialPage({
   const { clientId } = await params;
   const { view = "list", month, review } = await searchParams;
   const supabase = await createClient();
+  const { data: gbpPolicy } = await supabase.from("publisher_gbp_policies").select("require_explicit").eq("client_id", clientId).maybeSingle();
+  const { data: gbpDestinations } = await supabase.from("social_accounts")
+    .select("id, display_name, external_account_id").eq("client_id", clientId).eq("platform", "google_business")
+    .eq("publish_provider", "zernio").not("publish_verified_at", "is", null).order("display_name");
 
   const now = new Date();
   const monthStr = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -150,7 +154,8 @@ export default async function SocialPage({
               A draft stays a draft until it is submitted and a teammate approves it. Informational, commercial and
               transactional posts need a confirmed or sourced claim; link claims on the next page.
             </p>
-            <PostDraftForm
+            <PostDraftForm requireExplicitGbp={gbpPolicy?.require_explicit === true}
+            gbpDestinations={(gbpDestinations ?? []).map(d => ({ id: d.id, label: `${d.display_name ?? "Business Profile"} (${d.external_account_id})` }))}
               clientId={clientId}
               services={(services ?? []).map((s) => ({ id: s.id, label: s.name }))}
               offers={(offers ?? []).map((o) => ({ id: o.id, label: `${o.title}${o.status === "confirmed" ? "" : ` (${o.status})`}` }))}

@@ -176,6 +176,10 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     if (!target.socialAccountId) refuse("social_account_missing", "A Facebook draft names the client's Facebook Page (socialAccountId).");
     else if (!account) refuse("social_account_unknown", "The Facebook Page is not one of this client's Facebook accounts.");
     else socialAccount = { id: account.id, page_id: account.external_account_id, name: account.display_name };
+  } else if (target.channel === "google_business" && target.socialAccountId) {
+    const account = (extra.socialAccounts ?? []).find(a => a.id === target.socialAccountId && a.platform === "google_business" && a.publish_provider === "zernio" && a.publish_verified_at);
+    if (!account) refuse("social_account_unknown", "Select a verified Business Profile belonging to this client.");
+    else socialAccount = { id: account.id, page_id: account.external_account_id, name: account.display_name };
   } else if (target.socialAccountId) {
     refuse("social_account_not_applicable", "Only a Facebook draft names a social account.");
   }

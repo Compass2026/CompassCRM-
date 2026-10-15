@@ -3,7 +3,7 @@
 // scheduled post whose approval still holds is claimed) and a fake Zernio
 // that keeps posts, honours Idempotency-Key, echoes platformSpecificData and
 // can be scripted to answer anything. The database side (location binding,
-// one per client, the pinned location on runs) is the sandbox's
+// exclusive ownership, the pinned location on runs) is the sandbox's
 // zernio_gbp.test.sql; Facebook's own suite is post-publisher-zernio.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -92,6 +92,8 @@ function fakeStore({ posts = [], accounts = [location(), fbBinding()], settings 
     publishingGbpPosts: async () => list((p) => p.platform === "google_business" && p.publish_status === "publishing"),
     gbpLocationForClient: async (clientId) => [...s.accounts.values()].find((a) => a.client_id === clientId && a.platform === "google_business" && a.publish_provider) ?? null,
     postRuns: async (id) => s.runs.filter((r) => r.post_id === id),
+    gbpPolicy: async () => null,
+    gbpClientIdentity: async () => ({ name: "Lucas Construction", website_url: "https://lucasconstructionmo.com" }),
     gbpTransportForClient: async (clientId) => s.transports.get(clientId) ?? "google",
     dueHandPosts: async () => [],
     openReminders: async () => [],
@@ -685,4 +687,63 @@ test("REVIEW: an in-flight Zernio post whose binding was removed is still reconc
   assert.equal(s.posts.get("g1").publish_status, "published");
   assert.equal(s.runs.at(-1).target_location_id, LOC);
   assert.equal(z.creates.length, 1);
+});
+
+test('two destinations on one Google account publish independently to their approved profiles', async () => {
+  const second = '00000000-0000-4000-8000-0000000000b2';
+  const secondLoc = 'locations/999888777';
+  const {pub,s,z} = setup({accounts:[location(),location({id:second, external_account_id:secondLoc,publish_page_id:secondLoc})],
+    posts:[gbpPost('first'),gbpPost('second',{publish_key:'22222222-2222-4222-8222-222222222222',snapshot:{social_account_id:second,copy:'A distinct approved message for the second market.'}})]});
+  await pub.tick({mode:'tick'});
+  assert.deepEqual(z.creates.map(x=>x.body.platforms[0].platformSpecificData.locationId).sort(),[LOC,secondLoc].sort());
+  assert.equal(s.posts.get('first').publish_status,'published');
+  assert.equal(s.posts.get('second').publish_status,'published');
+});
+
+test('a retry keeps the second approved destination even if the first profile changes', async () => {
+  const second = '00000000-0000-4000-8000-0000000000b2', secondLoc = 'locations/999888777';
+  const {pub,s,z} = setup({accounts:[location(),location({id:second,external_account_id:secondLoc,publish_page_id:secondLoc})],
+    posts:[gbpPost('second',{snapshot:{social_account_id:second}})]},{script:[{throw:'timeout'}]});
+  await pub.tick({mode:'tick'});
+  s.accounts.delete(GBP_ACC);
+  s.now = new Date(NOW.getTime()+11*60_000);
+  await pub.tick({mode:'tick'});
+  assert.equal(z.creates.length,2);
+  assert.equal(z.creates[0].key,z.creates[1].key);
+  for(const request of z.creates) assert.equal(request.body.platforms[0].platformSpecificData.locationId,secondLoc);
+});
+
+test('binding refuses a profile whose website belongs to a different business', async () => {
+ const {pub,s} = setup();
+ const response=await call(pub,{mode:'zernio_gbp_bind',client_id:LUCAS,zernio_account_id:ZG,location_id:'locations/999888777'},{Authorization:'Bearer admin-jwt'});
+ assert.equal(response.status,409);
+ assert.match((await response.json()).error,/does not verify ownership/);
+ assert.equal(s.binds.length,0);
+});
+
+test('explicit policy blocks legacy destination-free posts before Google access', async () => {
+ const {store,s}=fakeStore({accounts:[],transports:{},posts:[gbpPost('missing',{snapshot:{social_account_id:null}})]});
+ store.gbpPolicy=async()=>({require_explicit:true,excluded_locations:[]});
+ const z=fakeZernio();const pub=createPostPublisher({store,fetch:z.fetch,now:()=>s.now});
+ await pub.tick({mode:'tick'});
+ assert.equal(googleCalls(z).length,0);
+ assert.equal(zernioWrites(z).length,0);
+ assert.match(s.runs.at(-1).detail,/names no Business Profile/);
+});
+
+test('excluded profile cannot bind even when the same business website and provider access match', async () => {
+ const {store,s}=fakeStore();store.gbpPolicy=async()=>({require_explicit:true,excluded_locations:[LOC]});
+ const z=fakeZernio();const pub=createPostPublisher({store,fetch:z.fetch,now:()=>s.now});
+ const response=await call(pub,{mode:'zernio_gbp_bind',client_id:LUCAS,zernio_account_id:ZG,location_id:LOC},{Authorization:'Bearer admin-jwt'});
+ assert.equal(response.status,409);assert.match((await response.json()).error,/excluded/);assert.equal(s.binds.length,0);
+});
+
+
+test('an excluded destination also blocks sending an existing approval', async () => {
+ const {store,s}=fakeStore({posts:[gbpPost('excluded')]});
+ store.gbpPolicy=async()=>({require_explicit:true,excluded_locations:[LOC]});
+ const z=fakeZernio();const pub=createPostPublisher({store,fetch:z.fetch,now:()=>s.now});
+ await pub.tick({mode:'tick'});
+ assert.equal(zernioWrites(z).length,0);
+ assert.match(s.runs.at(-1).detail,/destination is excluded/);
 });

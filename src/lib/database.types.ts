@@ -8869,6 +8869,12 @@ export type Database = {
           },
         ]
       }
+      publisher_gbp_policies: {
+        Row: { client_id: string; require_explicit: boolean; excluded_locations: string[] }
+        Insert: { client_id: string; require_explicit?: boolean; excluded_locations?: string[] }
+        Update: { client_id?: string; require_explicit?: boolean; excluded_locations?: string[] }
+        Relationships: []
+      }
       publisher_client_transports: {
         Row: {
           changed_at: string

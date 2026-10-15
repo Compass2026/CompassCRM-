@@ -51,7 +51,7 @@ function Row({ row, admin }: { row: ZernioGbpRow; admin: boolean }) {
         <span className="font-medium">{row.client}</span>
         {row.location_id
           ? <span className="text-xs text-muted-foreground">Location {row.location_name ?? "?"} (<span className="font-mono">{row.location_id}</span>)</span>
-          : <span className="text-xs text-muted-foreground">No Business Profile location bound.</span>}
+          : <span className="text-xs text-muted-foreground">Add a verified Business Profile destination.</span>}
         <Badge variant="outline" data-gbp-transport>{row.transport === "zernio" ? "Through Zernio only" : "Direct to Google"}</Badge>
         {row.account_id
           ? <Badge variant="outline" className={row.enabled ? "bg-green-100 text-green-800" : ""}>{row.enabled ? "Publishing on" : "Bound, publishing off"}</Badge>
@@ -135,7 +135,7 @@ function Seen({ state }: { state: GbpAccountsState }) {
           <ul className="mt-1 space-y-0.5">
             {a.locations.map((l) => (
               <li key={l.location_id ?? l.name ?? "?"}>
-                <span className="font-mono">{l.location_id}</span> {l.name ?? ""}{l.address ? ` · ${l.address}` : ""}{l.website ? ` · ${l.website}` : ""}
+                <span className="font-mono">{l.location_id}</span> {l.name ?? ""}{l.website ? ` · ${l.website}` : ""}
                 {l.location_id === a.selected_location_id ? " · the account's default" : ""}
               </li>
             ))}
@@ -167,7 +167,7 @@ export function ZernioGbpCard({ rows, admin, keyPresent }: { rows: ZernioGbpRow[
       <Seen state={seen} />
       {rows.length === 0
         ? <p className="text-xs text-muted-foreground">No client is on the pilot list or has a Business Profile location bound.</p>
-        : <ul className="space-y-2">{rows.map((r) => <Row key={r.client_id} row={r} admin={admin} />)}</ul>}
+        : <ul className="space-y-2">{rows.map((r) => <Row key={`${r.client_id}:${r.social_account_id ?? "add"}`} row={r} admin={admin} />)}</ul>}
       <p className="text-xs text-muted-foreground">
         Binding a location moves the client to Zernio: its Business Profile posts go through Zernio only, pinned to that
         location, never directly to Google, and only when the publisher is on, the client is piloted and the location is

@@ -45,6 +45,7 @@ function FormMessage({ state }: { state: PostFormState }) {
 }
 
 export type DraftValues = {
+  social_account_id?: string | null;
   platform: string;
   post_type: string;
   search_intent: string;
@@ -66,6 +67,8 @@ export function PostDraftForm({
   services,
   offers,
   keywords,
+  gbpDestinations = [],
+  requireExplicitGbp = false,
 }: {
   clientId: string;
   postId?: string;
@@ -73,6 +76,8 @@ export function PostDraftForm({
   services: Option[];
   offers: Option[];
   keywords: Option[];
+  gbpDestinations?: Option[];
+  requireExplicitGbp?: boolean;
 }) {
   const bound = postId
     ? updatePostAction.bind(null, clientId, postId)
@@ -140,6 +145,16 @@ export function PostDraftForm({
           </select>
         </div>
       </div>
+      {gbp && <div className="space-y-1">
+        <Label htmlFor="social_account_id">Google Business Profile destination</Label>
+        <select id="social_account_id" name="social_account_id" className={selectClass} defaultValue={post?.social_account_id ?? (!requireExplicitGbp && gbpDestinations.length === 1 ? gbpDestinations[0].id : "")}>
+          <option value="">No destination selected</option>
+          {post?.social_account_id && !gbpDestinations.some(d => d.id === post.social_account_id) &&
+            <option value={post.social_account_id}>Previously selected profile is unavailable</option>}
+          {gbpDestinations.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+        </select>
+        <p className="text-xs text-muted-foreground">Select the verified profile for this post. Unconnected destinations stay blocked. Changing a reviewed destination requires reopening and fresh approval.</p>
+      </div>}
       <p className="text-xs text-muted-foreground">{intentHelp[intent]}</p>
 
       <div className="space-y-1">

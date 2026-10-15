@@ -53,7 +53,7 @@ export function gbpProblems(s: GbpSnapshot): GbpProblem[] {
     add("cta_call", "A Call button cannot be sent through Zernio as approved (its button needs a link). Reopen the post, remove the button or pick another, and approve it again.");
   }
   if (!s.social_account_id) {
-    add("no_location", "The post names no Business Profile location. Reopen it, save the draft (Compass names the client's bound location) and approve it again.");
+    add("no_location", "The post names no Business Profile location. Reopen it, select its verified destination and approve it again.");
   }
   const media = mediaOf(s as FacebookSnapshot);
   if (media.length > 1 && !out.some((p) => p.code === "too_many_photos")) add("too_many_photos", "Business Profile posts take one photo; remove the others.");
@@ -161,3 +161,13 @@ export function gbpRoute(snapshotAccountId: string | null | undefined, clientOnZ
 
 // The ids Compass keeps for a Business Profile location as Zernio lists it.
 export type ZernioLocation = { id: string; name?: string; accountId?: string; accountName?: string; address?: string; category?: string; websiteUrl?: string; storeCode?: string };
+
+// A market label from the provider's verified website path, never an address.
+export function gbpLocationLabel(name: string | null, website: string | null): string | null {
+  try {
+    const path = new URL(website ?? "").pathname;
+    const match = /^\/locations\/[a-z-]+\/([a-z-]+)\/?$/i.exec(path);
+    if (match) return `${name ?? "Business Profile"} · ${match[1].split("-").map(word => word[0].toUpperCase() + word.slice(1)).join(" ")}`;
+  } catch { /* Missing or non-location URL: retain the provider's name. */ }
+  return name;
+}

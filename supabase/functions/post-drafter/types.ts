@@ -97,7 +97,7 @@ export type DraftTarget = {
 
 // The client's Facebook Pages, read alongside the Client Intelligence input
 // for a Facebook brief.
-export type SocialAccountRow = { id: string; platform: string; external_account_id: string | null; display_name: string | null };
+export type SocialAccountRow = { id: string; platform: string; external_account_id: string | null; display_name: string | null; publish_provider?: string | null; publish_verified_at?: string | null };
 
 export type Refusal = { code: string; message: string };
 

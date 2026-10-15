@@ -59,6 +59,10 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const { clientId, postId } = await params;
   if (!isUuid(clientId) || !isUuid(postId)) notFound();
   const supabase = await createClient();
+  const { data: gbpPolicy } = await supabase.from("publisher_gbp_policies").select("require_explicit").eq("client_id", clientId).maybeSingle();
+  const { data: gbpDestinations } = await supabase.from("social_accounts")
+    .select("id, display_name, external_account_id").eq("client_id", clientId).eq("platform", "google_business")
+    .eq("publish_provider", "zernio").not("publish_verified_at", "is", null).order("display_name");
 
   const { data: post } = await supabase
     .from("social_posts")
@@ -336,9 +340,16 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
       {/* Content: editable only as a draft. */}
       <section className="surface space-y-3 p-4 sm:p-5">
         <h3 className="text-sm font-semibold">Content</h3>
+        {isGbp && <div className="rounded-md border p-3 text-sm" data-gbp-review-destination>
+          <strong>Saved GBP destination: </strong>{fbBinding
+            ? <>{fbBinding.display_name ?? "Business Profile"} <span className="font-mono text-xs">({fbBinding.external_account_id})</span></>
+            : "No verified destination selected"}
+          <p className="text-xs text-muted-foreground">This post goes only to the selected profile. A destination change requires fresh approval.</p>
+        </div>}
         {actions.includes("edit") ? (
           <>
-          <PostDraftForm
+          <PostDraftForm requireExplicitGbp={gbpPolicy?.require_explicit === true}
+            gbpDestinations={(gbpDestinations ?? []).map(d => ({ id: d.id, label: `${d.display_name ?? "Business Profile"} (${d.external_account_id})` }))}
             clientId={clientId}
             postId={postId}
             post={post}
@@ -349,7 +360,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           {(account || post.platform === "facebook" || (isGbp && clientGbpLocation)) && (
             <p className="text-xs text-muted-foreground">
               Account: {account ? accountLabel : isGbp
-                ? "saving the draft names the client's Business Profile location (bound for publishing through Zernio)."
+                ? "choose the verified Business Profile destination above."
                 : "saving the draft names the client's Facebook Page when it has exactly one."}
             </p>
           )}

@@ -75,6 +75,8 @@ function fakeStore({ posts = [], accounts = [binding()], settings = { enabled: t
     stuckGbpPosts: async () => [],
     failedGbpPosts: async () => [],
     gbpLocationForClient: async () => null,
+    gbpPolicy: async () => null,
+    gbpClientIdentity: async () => ({ name: "Lucas Construction", website_url: "https://lucasconstructionmo.com" }),
     gbpTransportForClient: async () => "google",
     publishingGbpPosts: async () => [],
     postRuns: async (id) => s.runs.filter((r) => r.post_id === id),

@@ -132,12 +132,18 @@ begin
     r ->> 'kind' = 'verified' and (r ->> 'social_account_id')::uuid = zg.id('ga')
     and (select count(*) from social_accounts where client_id = '00000000-0000-4000-b000-00000000000a' and platform = 'google_business') = 1, r::text);
 
-  e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000a', 'eeeeeeeeeeeeeeeeeeeeeee2', 'locations/999', 'A2', 'A2', '{}')$q$);
-  perform zg.ok('B6 one bound location per client: a second location is refused', e like '23505:%already bound%', e);
-  e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b', 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/555555', 'B', 'B', '{}')$q$);
-  perform zg.ok('B7 the same Zernio account can never serve another client', e like '23505:%', e);
-  perform zg.ok('B8 ... and the refused bind left no location row behind for client B',
-    not exists (select 1 from social_accounts where client_id = '00000000-0000-4000-b000-00000000000b' and platform = 'google_business'));
+  -- Prove both new capabilities in subtransactions so later legacy checks
+  -- still run against the original single-profile fixtures.
+  begin
+    perform publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000a','eeeeeeeeeeeeeeeeeeeeeee1','locations/999','A2','Shared Google','{}');
+    raise exception 'multi verified' using errcode='P9999';
+  exception when sqlstate 'P9999' then perform zg.ok('B6 two profiles of one client may share a Google account',true); end;
+  begin
+    perform publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b','eeeeeeeeeeeeeeeeeeeeeee1','locations/555555','B','Shared Google','{}');
+    raise exception 'multi verified' using errcode='P9999';
+  exception when sqlstate 'P9999' then perform zg.ok('B7 different clients may share the login, never the destination',true); end;
+  e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b','eeeeeeeeeeeeeeeeeeeeeee1','locations/1234567890','Wrong client','Shared Google','{}')$q$);
+  perform zg.ok('B8 the exact location cannot belong to another client',e like '23514:%another client%',e);
   e := zg.try(format($q$select publisher_bind_account(%L, 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/42', 'x', '{}')$q$, zg.id('ga')));
   perform zg.ok('B9 a re-verify that names another location is refused', e like '23514:%', e);
   e := zg.try(format($q$update social_accounts set publish_enabled = true where id = %L$q$, zg.id('ga')));
@@ -159,7 +165,7 @@ do $$
 declare e text; r jsonb;
 begin
   e := zg.try(format($q$update social_accounts set external_account_id = 'locations/77' where id = %L$q$, zg.id('ga')));
-  perform zg.ok('E2 a bound location keeps its location id', e like '23514:%Unbind%', e);
+  perform zg.ok('E2 a bound location keeps its location id', e like '23514:%immutable%', e);
   r := publisher_set_account_enabled(zg.id('ga'), true, 'eeeeeeeeeeeeeeeeeeeeeee1');
   perform zg.ok('E3 the admin enables the location; recorded in the history',
     (r ->> 'changed')::boolean
