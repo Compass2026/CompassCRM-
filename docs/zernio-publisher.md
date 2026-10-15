@@ -437,8 +437,12 @@ The client's `social_accounts` row for `google_business`:
 - `publish_account_id` = the Zernio `googlebusiness` account id.
 
 Rules:
-- **One bound location per client** (unique index): no multi-location fan-out,
-  and a client's transport is unambiguous.
+- **Several locations per client, each post naming its own** (since
+  `20261015200000`; it was one location per client before). A location is
+  bound to one Compass row, so it belongs to one client. One Zernio
+  `googlebusiness` account may serve several locations, because every Zernio
+  request pins its location. There is no fan-out: a post goes only to the
+  location in its approved snapshot. See *Several locations per client* below.
 - **Recorded and bound only by the publisher** (`zernio_gbp_bind` →
   `publisher_bind_gbp_location`, service session only). It names one client,
   one Zernio account and one location, after re-reading with the publish key:
@@ -540,7 +544,8 @@ connect, edit, delete or webhook call.
 Migration `20261011050000_zernio_gbp_publisher.sql` (additive):
 - the binding check also allows `google_business` with `locations/<id>`;
 - `social_accounts_one_gbp_binding`, a unique index (one bound location per
-  client);
+  client). Replaced in `20261015200000` by `social_accounts_gbp_location_binding`
+  (one Compass row per location);
 - `publisher_bind_account` accepts `google_business` rows (Facebook unchanged);
 - `publisher_bind_gbp_location` (service role only);
 - `publisher_runs.target_location_id` (Zernio runs only).
@@ -621,3 +626,57 @@ Steps:
 4. **Check without sending** on the post. Every gate should pass.
 5. **STOP.** The live Business Profile post is Tom's: Publish now, or a
    schedule. Do not publish the other approved posts in bulk.
+
+## Several locations per client (Oct 15 2026)
+
+Logic Solar has a verified Wichita profile and an Overland Park profile that
+is not connected yet. Migration `20261015200000_gbp_location_per_post.sql`
+makes the Business Profile destination explicit per post.
+
+**Binding.**
+- `publisher_bind_gbp_location` binds one more location, or re-verifies one,
+  and leaves the client's other locations alone.
+- A location already bound to another client is refused.
+- Binding never enables publishing. Each location's publishing switch is a
+  team admin's, as before.
+- Settings shows one row per bound location, plus a row to bind another.
+
+**Drafts.**
+- A Business Profile brief may name its location (`target.socialAccountId`),
+  which must be one of the client's verified Zernio locations.
+- Unnamed, the client's only location is used.
+- With several locations and none named, the brief is refused
+  (`social_account_missing`), and so is `drafter_write`. The CRM never guesses.
+
+**Posts.**
+- With two or more bound locations, the post form asks for *Business Profile
+  location*. The server checks that the choice is one of the client's bound
+  locations.
+- Approval binds it (the snapshot includes `social_account_id`), so changing a
+  location means reopening and approving again.
+
+**Plan slots.**
+- `content_plan_items.gbp_location_id` names the location a GBP slot is for.
+  The planner shows a *Location* field when the client has two or more.
+- A slot only accepts a post for its own location.
+- A linked post can't be moved to another location, and its slot can't be
+  changed to another location either. A slot's posts are never redirected.
+- A slot with no location chosen behaves as before.
+
+**Monthly standard.**
+- `delivery_targets` reports `N verified locations (chosen per slot)` as the
+  destination, so new slots are not opened blocked as if nothing were
+  connected.
+- Targets stay per client: binding another location never adds GBP slots.
+
+**Locations that aren't connected yet.** Leave the slot's location empty and
+block the slot (planner *Blocked*) with the reason, for example "Overland Park
+Business Profile not connected in Zernio". Nothing can be drafted, linked or
+published to a location that isn't bound. A post is never sent to another
+location instead.
+
+**Addresses.** No street address is ever written into a post. The drafter
+brief leaves out `address_line1`, the prompt forbids addresses, the linter
+catches them, and the Creative Engine blocks them. Only Settings' verify list
+shows what Zernio reports for a location.
+

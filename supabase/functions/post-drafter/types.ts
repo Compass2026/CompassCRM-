@@ -97,7 +97,11 @@ export type DraftTarget = {
 
 // The client's Facebook Pages, read alongside the Client Intelligence input
 // for a Facebook brief.
-export type SocialAccountRow = { id: string; platform: string; external_account_id: string | null; display_name: string | null };
+export type SocialAccountRow = {
+  id: string; platform: string; external_account_id: string | null; display_name: string | null;
+  // Business Profile locations: the Zernio binding (20261011050000).
+  publish_provider?: string | null; publish_page_id?: string | null; publish_verified_at?: string | null;
+};
 
 export type Refusal = { code: string; message: string };
 

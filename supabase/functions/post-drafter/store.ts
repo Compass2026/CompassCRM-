@@ -73,10 +73,12 @@ export function createStore(supabase: Client) {
       return (data as DrafterInput | null) ?? null;
     },
 
-    // The client's Facebook Pages (v3, Facebook briefs). Read-only.
+    // The client's Facebook Pages and Business Profile locations (a brief
+    // names its destination; 20261015200000). Read-only.
     async socialAccounts(clientId: string): Promise<SocialAccountRow[]> {
-      const { data, error } = await supabase.from("social_accounts").select("id, platform, external_account_id, display_name")
-        .eq("client_id", clientId).eq("platform", "facebook");
+      const { data, error } = await supabase.from("social_accounts")
+        .select("id, platform, external_account_id, display_name, publish_provider, publish_page_id, publish_verified_at")
+        .eq("client_id", clientId).in("platform", ["facebook", "google_business"]);
       if (error) throw new Error(error.message);
       return (data ?? []) as SocialAccountRow[];
     },

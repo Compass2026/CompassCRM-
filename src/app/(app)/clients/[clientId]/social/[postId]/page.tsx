@@ -108,20 +108,21 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
     (fbBinding as FacebookBinding | null) ?? null,
     publisher,
   );
-  // Business Profile: the client's Zernio location (at most one) decides the
+  // Business Profile: any bound Zernio location of the client decides the
   // route with the approval's named location — Zernio or the direct path,
-  // never both (gbp.ts gbpRoute).
-  const [{ data: clientGbpLocation }, { data: clientTransport }] = isGbp
+  // never both (gbp.ts gbpRoute). A client may have several locations
+  // (20261015200000); each post names its own.
+  const [{ data: clientGbpLocations }, { data: clientTransport }] = isGbp
     ? await Promise.all([
-        supabase.from("social_accounts").select(BINDING).eq("client_id", clientId).eq("platform", "google_business")
-          .not("publish_provider", "is", null).limit(1).maybeSingle(),
+        supabase.from("social_accounts").select("id, display_name, external_account_id").eq("client_id", clientId).eq("platform", "google_business")
+          .not("publish_provider", "is", null).order("display_name"),
         supabase.from("publisher_client_transports").select("gbp_transport").eq("client_id", clientId).maybeSingle(),
       ])
     : [{ data: null }, { data: null }];
   const gbpVia = gbpPublishRoute(
     { platform: post.platform, client_id: clientId, review_status: post.review_status, social_account_id: post.social_account_id, approved_snapshot: post.approved_snapshot },
     (fbBinding as FacebookBinding | null) ?? null,
-    clientTransport?.gbp_transport === "zernio" || !!clientGbpLocation,
+    clientTransport?.gbp_transport === "zernio" || !!clientGbpLocations?.length,
     publisher,
   );
   const viaZernio = (isFacebook && zernio.ready) || gbpVia.via === "zernio";
@@ -345,8 +346,9 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
             services={(services ?? []).filter((s) => s.status === "approved" || s.id === post.service_id).map((s) => ({ id: s.id, label: s.name }))}
             offers={(offers ?? []).filter((o) => o.status !== "retired" || o.id === post.offer_id).map((o) => ({ id: o.id, label: `${o.title}${o.status === "confirmed" ? "" : ` (${o.status})`}` }))}
             keywords={(keywords ?? []).map((k) => ({ id: k.id, label: k.keyword }))}
+            locations={(clientGbpLocations ?? []).map((l) => ({ id: l.id, label: l.display_name ?? l.external_account_id ?? l.id }))}
           />
-          {(account || post.platform === "facebook" || (isGbp && clientGbpLocation)) && (
+          {(account || post.platform === "facebook" || (isGbp && !!clientGbpLocations?.length)) && (
             <p className="text-xs text-muted-foreground">
               Account: {account ? accountLabel : isGbp
                 ? "saving the draft names the client's Business Profile location (bound for publishing through Zernio)."

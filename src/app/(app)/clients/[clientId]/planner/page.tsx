@@ -46,16 +46,16 @@ export default async function PlannerPage({ params, searchParams }: {
   // month of its own date.
   const months = [...new Set([monthOf(week), monthOf(addDays(week, 6))])];
 
-  const [deliveries, standardQ, clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ, brandsQ] = await Promise.all([
+  const [deliveries, standardQ, clientQ, boardQ, linkedQ, servicesQ, keywordsQ, postsQ, blogsQ, oppsQ, brandsQ, locationsQ] = await Promise.all([
     Promise.all(months.map((m) => getDeliveryTargets(supabase, clientId, m))),
-    supabase.from("content_plan_items").select("id, deliverable, standard_key, brand_workspace_id, planned_date").eq("client_id", clientId).eq("week_start", week),
+    supabase.from("content_plan_items").select("id, deliverable, standard_key, brand_workspace_id, planned_date, gbp_location_id").eq("client_id", clientId).eq("week_start", week),
     supabase.from("clients").select("id, name, status").eq("id", clientId).maybeSingle(),
     supabase.from("content_plan_board").select("*").eq("client_id", clientId).eq("week_start", week)
       .order("planned_date", { ascending: true, nullsFirst: false }).order("created_at"),
     supabase.from("content_plan_items").select("social_post_id, content_post_id, authority_opportunity_id, week_start").eq("client_id", clientId),
     supabase.from("services").select("id, name").eq("client_id", clientId).eq("status", "approved").order("sort_order"),
     supabase.from("keywords").select("id, keyword").eq("client_id", clientId).eq("is_tracked", true).order("keyword"),
-    supabase.from("social_posts").select("id, platform, review_status, copy, created_at").eq("client_id", clientId)
+    supabase.from("social_posts").select("id, platform, review_status, copy, created_at, social_account_id").eq("client_id", clientId)
       .order("created_at", { ascending: false }).limit(60),
     supabase.from("content_posts").select("id, title, status").eq("client_id", clientId).eq("origin", "compass").order("title"),
     supabase.from("authority_opportunity_state")
@@ -63,7 +63,12 @@ export default async function PlannerPage({ params, searchParams }: {
       .eq("client_id", clientId).eq("present", true).in("effective_status", ["open", "in_progress"])
       .in("content_type", Object.keys(OPPORTUNITY_DELIVERABLE)).in("section", ["fix_now", "ready"]),
     supabase.from("client_brand_workspaces").select("id,name,slug,service_ids").eq("client_id",clientId),
+    // Bound Business Profile locations: with several, each GBP slot names one.
+    supabase.from("social_accounts").select("id, display_name, external_account_id").eq("client_id", clientId)
+      .eq("platform", "google_business").not("publish_provider", "is", null).order("display_name"),
   ]);
+  const locations = (locationsQ.data ?? []).map((l) => ({ id: l.id, label: l.display_name ?? l.external_account_id ?? l.id }));
+  const locationOf = new Map((standardQ.data ?? []).map((r) => [r.id, r.gbp_location_id ?? null]));
   const client = clientQ.data;
   if (!client) notFound();
   const failure = boardQ.error ?? linkedQ.error ?? brandsQ.error ?? standardQ.error;
@@ -146,7 +151,9 @@ export default async function PlannerPage({ params, searchParams }: {
                 const outputs = i.social_post_id || i.content_post_id ? [] : d === "blog"
                   ? (blogsQ.data ?? []).filter((b) => !linkedBlogs.has(b.id)).map((b) => ({ id: `blog:${b.id}`, label: `${b.title} (${b.status})` }))
                   : d === "social" || d === "gbp"
-                    ? posts.filter((p) => p.platform === i.channel && !linkedPosts.has(p.id))
+                    ? posts.filter((p) => p.platform === i.channel && !linkedPosts.has(p.id)
+                        // A located GBP slot takes only that location's posts.
+                        && (d !== "gbp" || !locationOf.get(i.id) || p.social_account_id === locationOf.get(i.id)))
                         .map((p) => ({ id: `post:${p.id}`, label: `${p.review_status}: ${excerpt(p.copy)}` }))
                     : [];
                 return (
@@ -161,6 +168,7 @@ export default async function PlannerPage({ params, searchParams }: {
                       </span>
                     </div>
                     <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-0.5 text-xs [&>dd]:[overflow-wrap:anywhere]">
+                      {d === "gbp" && locations.length > 1 && (<><dt className="text-muted-foreground">Location</dt><dd data-plan-location>{locations.find((l) => l.id === locationOf.get(i.id))?.label ?? "Not chosen yet"}</dd></>)}
                       {i.search_intent && (<><dt className="text-muted-foreground">Intent</dt><dd>{i.search_intent}</dd></>)}
                       {!!brandsQ.data?.length && <><dt className="text-muted-foreground">Brand</dt><dd>{i.service_id&&brandByService.has(i.service_id)?<Link className="underline" href={`${base}/brand?brand=${brandByService.get(i.service_id)!.slug}`}>{brandByService.get(i.service_id)!.name}</Link>:slotBrand.get(i.id)?`${brandsQ.data!.find(b=>b.id===slotBrand.get(i.id))?.name ?? 'Brand'} (choose its service)`:'Assign a brand service'}</dd></>}
                       {i.service_id && (<><dt className="text-muted-foreground">Service</dt><dd>{serviceName.get(i.service_id) ?? "—"}</dd></>)}
@@ -208,14 +216,15 @@ export default async function PlannerPage({ params, searchParams }: {
                       {!i.social_post_id && !i.content_post_id && <DeletePlanItemButton clientId={clientId} itemId={i.id} />}
                     </div>
                     <HoldForm clientId={clientId} itemId={i.id} hold={i.hold} />
-                    <EditPlanItemForm clientId={clientId} week={week} services={services} keywords={keywords}
+                    <EditPlanItemForm clientId={clientId} week={week} services={services} keywords={keywords} locations={locations}
                       item={{ id: i.id, deliverable: i.deliverable, purpose: i.purpose, topic: i.topic, search_intent: i.search_intent,
-                              service_id: i.service_id, keyword_id: i.keyword_id, target_url: i.target_url, planned_date: i.planned_date, notes: i.notes }} />
+                              service_id: i.service_id, keyword_id: i.keyword_id, target_url: i.target_url, planned_date: i.planned_date, notes: i.notes,
+                              gbp_location_id: locationOf.get(i.id) ?? null }} />
                   </li>
                 );
               })}
             </ul>
-            <AddPlanItemForm clientId={clientId} week={week} deliverable={d} services={services} keywords={keywords}
+            <AddPlanItemForm clientId={clientId} week={week} deliverable={d} services={services} keywords={keywords} locations={locations}
               remaining={onStandard ? roomFor(d) : summaries[d].unplanned} standard={onStandard} />
           </section>
         );
