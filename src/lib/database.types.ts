@@ -11198,6 +11198,8 @@ export type Database = {
         Row: {
           assignee_id: string | null
           autonomy_level: Database["public"]["Enums"]["autonomy_level"] | null
+          claimed_at: string | null
+          claimed_by: string | null
           client_id: string
           client_stage_id: string | null
           completed_at: string | null
@@ -11221,6 +11223,8 @@ export type Database = {
         Insert: {
           assignee_id?: string | null
           autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           client_id: string
           client_stage_id?: string | null
           completed_at?: string | null
@@ -11244,6 +11248,8 @@ export type Database = {
         Update: {
           assignee_id?: string | null
           autonomy_level?: Database["public"]["Enums"]["autonomy_level"] | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           client_id?: string
           client_stage_id?: string | null
           completed_at?: string | null
@@ -13335,6 +13341,10 @@ export type Database = {
       content_draft_problems: {
         Args: { d: Database["public"]["Tables"]["content_drafts"]["Row"] }
         Returns: string[]
+      }
+      content_draft_claim: {
+        Args: { p_claimant: string; p_draft_id: string }
+        Returns: Json
       }
       content_draft_problems_for: {
         Args: { p_draft_id: string }
