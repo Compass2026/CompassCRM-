@@ -3304,6 +3304,7 @@ export type Database = {
           phone: string | null
           renewal_at: string | null
           service_area: string | null
+          service_scope: string
           signed_at: string | null
           state: string | null
           status: Database["public"]["Enums"]["client_status"]
@@ -3335,6 +3336,7 @@ export type Database = {
           phone?: string | null
           renewal_at?: string | null
           service_area?: string | null
+          service_scope?: string
           signed_at?: string | null
           state?: string | null
           status?: Database["public"]["Enums"]["client_status"]
@@ -3366,6 +3368,7 @@ export type Database = {
           phone?: string | null
           renewal_at?: string | null
           service_area?: string | null
+          service_scope?: string
           signed_at?: string | null
           state?: string | null
           status?: Database["public"]["Enums"]["client_status"]

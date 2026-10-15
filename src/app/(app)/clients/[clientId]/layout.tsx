@@ -16,7 +16,7 @@ export default async function ClientLayout({
   const supabase = await createClient();
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, dba, status, website_url")
+    .select("id, name, dba, status, service_scope, website_url")
     .eq("id", clientId)
     .single();
 
@@ -44,6 +44,11 @@ export default async function ClientLayout({
               <Badge variant="outline" className={clientStatusStyles[client.status]}>
                 {client.status}
               </Badge>
+              {client.service_scope === "map_tracking" && (
+                <Badge variant="outline" title="Map rankings only: no onboarding, content, reporting or billing services">
+                  Map tracking only
+                </Badge>
+              )}
             </div>
             {(client.dba || client.website_url) && (
               <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-muted-foreground">

@@ -467,6 +467,16 @@ What happens on its own when a client is created, and what a person still does.
 5. The insert fires the **Foundation worker** (below); Brand Build starts
    within a couple of minutes.
 
+**Map-tracking-only clients** (Oct 15 2026, migration
+`20261015170000_client_service_scope.sql`): `clients.service_scope` is
+`full` (default) or `map_tracking`. Every onboarding insert trigger above runs
+only for `full`, so a `map_tracking` client gets no pipelines, tasks, brand
+row, worker fire or Drive/GitHub provisioning. A check keeps it `paused` (or
+`offboarded`), which keeps every status-driven job (rank sync, blog tasks,
+delivery months, monthly cycles, website updates) away from it; its map
+scans run from its `map_grid_profiles`. Changing the scope later does not
+replay onboarding. The client header shows "Map tracking only".
+
 **Sequencing gates (kept — they are data dependencies, not sign-offs):**
 
 - Foundation is strictly sequential since 0016: **Brand Build → Onboarding &

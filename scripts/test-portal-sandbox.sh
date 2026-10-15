@@ -262,3 +262,6 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollou
 # counting, the per-brand blog gate and its access boundary (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_standard.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
+
+# Map-tracking-only clients skip every onboarding trigger; full clients keep them.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_service_scope.test.sql"
