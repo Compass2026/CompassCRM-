@@ -10,6 +10,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Compass Client Platform
 
+## Agency rollout reviews (October 14, 2026)
+
+See `docs/agency-rollout.md`. The team-only append-only review ledger keeps
+accepted stage separate from current health. No client stage is inferred from
+setup counts; every brand and the parent/shared scope require their own review.
+Scope changes require renewed verification. No publisher, consent, billing,
+portal, or worker activation is part of a rollout review.
+
 ## Client progress and backlinks (October 12, 2026)
 
 See `docs/client-growth-and-backlinks.md` for the Progress dashboard and backlink

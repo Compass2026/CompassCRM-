@@ -1,4 +1,5 @@
 import type { GrowthRanking } from "./growth-rankings";
+import type { RolloutReview, RolloutWrite } from "./agency-rollout";
 import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
 import type { GrowthMeasurement, SearchHistory, GrowthWork } from "./client-growth";
 
@@ -18,6 +19,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      agency_rollout_reviews: {
+        Row: RolloutReview
+        Insert: RolloutWrite
+        Update: never
+        Relationships: []
+      }
       backlink_profile_sync_runs: {
         Row: { id:string; client_id:string; host:string; week:string; status:string; created_at:string; finished_at:string|null; results:Json }
         Insert: never

@@ -1,4 +1,6 @@
 "use client";
+import { AgencyRolloutPanel } from "./agency-rollout-panel";
+import type { RolloutReview, RolloutBrand } from "@/lib/agency-rollout";
 import { FiveLayerOverview } from "./five-layer-overview";
 import { buildFiveLayerOverview } from "@/lib/operations-overview";
 import { OperationalEvidencePanel } from "./operational-evidence-panel";
@@ -8,7 +10,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Clock3, Filter, Search, ShieldCheck, SlidersHorizontal, WifiOff } from "lucide-react";
 import type { Alert, ClientReadiness, Freshness, OperationsV2, ReadinessCheck, SourceReading } from "@/lib/operations-readiness";
 
-type Tab = "overview" | "attention" | "freshness" | "delivery" | "onboarding";
+type Tab = "rollout" | "overview" | "attention" | "freshness" | "delivery" | "onboarding";
 const tone: Record<Alert["severity"], string> = {
   critical: "border-red-200 bg-red-50 text-red-800",
   attention: "border-amber-200 bg-amber-50 text-amber-800",
@@ -72,7 +74,7 @@ function ClientChecklist({ client }: { client: ClientReadiness }) {
   </details>;
 }
 
-export function ControlCenterV2({data}:{data:OperationsV2}) {
+export function ControlCenterV2({data,reviews=null,brands=null}:{data:OperationsV2;reviews?:RolloutReview[]|null;brands?:RolloutBrand[]|null}) {
   const [tab,setTab]=useState<Tab>("overview");
   const [term,setTerm]=useState("");
   const [focus,setFocus]=useState<"all"|"critical"|"attention"|"setup">("all");
@@ -86,7 +88,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
   const needsReview=scopedAlerts.filter(a=>a.title==="Article waiting for approval" || a.title==="Social post waiting for approval").length;
   const gaps=data.integrations.length ? data.integrations.filter(e=>names.has(e.clientId) && e.state!=="verified" && e.state!=="running").length : clients.reduce((n,c)=>n+Object.values(c.freshness).filter(r=>r.state!=="current").length,0);
   const overview=useMemo(()=>buildFiveLayerOverview(data,clients.map(c=>c.id)),[data,clients]);
-  const tabs:[Tab,string][]=[["overview","Five-layer overview"],["attention","Action queue"],["freshness","Source freshness"],["delivery","Delivery & work"],["onboarding","Client onboarding"]];
+  const tabs:[Tab,string][]=[["overview","Five-layer overview"],["rollout","Agency rollout"],["attention","Action queue"],["freshness","Source freshness"],["delivery","Delivery & work"],["onboarding","Client onboarding"]];
   return <section className="space-y-5" data-control-center-v2>
     <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-950 to-blue-900 p-6 text-white shadow-lg sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -96,7 +98,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100/80">Prioritized work, measurement freshness, and client setup evidence across the Five Layers.</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-blue-100">
-          Read-only · Generated {new Date(data.generatedAt).toLocaleString("en-US",{timeZone:"America/Chicago",dateStyle:"medium",timeStyle:"short"})} CT
+          Evidence refreshed {new Date(data.generatedAt).toLocaleString("en-US",{timeZone:"America/Chicago",dateStyle:"medium",timeStyle:"short"})} CT
         </div>
       </div>
       <div className="mt-6 grid grid-cols-2 gap-3 border-t border-white/10 pt-5 sm:grid-cols-4">
@@ -129,6 +131,7 @@ export function ControlCenterV2({data}:{data:OperationsV2}) {
     {data.sourceErrors.length>0 && <p role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" data-v2-source-warning>
       <WifiOff className="mr-2 inline size-4"/> Source read failures: {data.sourceErrors.join(", ")}. Unavailable sources never count as healthy or complete.
     </p>}
+    {tab==="rollout" && <AgencyRolloutPanel data={{...data,clients}} reviews={reviews} brands={brands}/>}
     {tab==="overview" && <FiveLayerOverview overview={overview}/>}
     {tab==="attention" && <div className="space-y-4" role="tabpanel">
       <div className="flex flex-wrap items-center justify-between gap-2">
