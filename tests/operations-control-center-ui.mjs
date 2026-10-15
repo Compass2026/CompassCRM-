@@ -10,7 +10,7 @@ const clients=[{id:a,name:'Fictional North',status:'active',gsc_property:'sc-dom
 const receipt={id:'r1',client_id:a,property:'properties/123',period,period_end:through,created_at:recent};
 const run={id:'run1',client_id:a,created_at:recent,finished_at:recent,status:'completed',results:[{month:period,status:'imported',receipt_id:'r1'}]};
 let ga4Failure=false,truncated=false,rolloutFailure=false;const writes=[],requests=[];
-const rows={agency_rollout_reviews:[],client_growth_rankings:[],rank_runs:[],backlink_checks:[],backlink_profile_sync_runs:[],social_posts:[{client_id:a,id:'social-review',platform:'facebook',review_status:'in_review',publish_status:'not_scheduled'}],billing_reconciliation_results:[],services:[],claims:[],authority_latest:[],clients,keywords:[{client_id:a,is_active:true,is_tracked:true}],sites:[],report_measurements:[],content_drafts:[{id:'review1',client_id:a,status:'in_review',title:'Review this fictional article',topic:null,request_task_id:'task',created_at:recent}],blog_publications:[],crm_lite_settings:[],notification_jobs:[],backlink_opportunities:[],social_accounts:[],subscriptions:[],portal_users:[],client_brand_workspaces:[],brand_boards:[],inquiry_sources:[],gsc_performance_imports:[],gbp_performance_imports:[],gsc_performance_sync_runs:[],gbp_performance_sync_runs:[],ga4_performance_imports:[receipt],ga4_performance_sync_runs:[run,{...run,id:'run2',client_id:b,results:[]}]};
+const rows={map_grid_profiles:[{id:'grid1',client_id:a,label:'Fictional 1/2/5 mi grid',enabled:true,weekly_enabled:true}],map_grid_runs:[],map_grid_weekly_attempts:[{profile_id:'grid1',outcome:'error',message:'Grid keyword mismatch',attempted_at:now.toISOString(),run_id:null}],agency_rollout_reviews:[],client_growth_rankings:[],rank_runs:[],backlink_checks:[],backlink_profile_sync_runs:[],social_posts:[{client_id:a,id:'social-review',platform:'facebook',review_status:'in_review',publish_status:'not_scheduled'}],billing_reconciliation_results:[],services:[],claims:[],authority_latest:[],clients,keywords:[{client_id:a,is_active:true,is_tracked:true}],sites:[],report_measurements:[],content_drafts:[{id:'review1',client_id:a,status:'in_review',title:'Review this fictional article',topic:null,request_task_id:'task',created_at:recent}],blog_publications:[],crm_lite_settings:[],notification_jobs:[],backlink_opportunities:[],social_accounts:[],subscriptions:[],portal_users:[],client_brand_workspaces:[],brand_boards:[],inquiry_sources:[],gsc_performance_imports:[],gbp_performance_imports:[],gsc_performance_sync_runs:[],gbp_performance_sync_runs:[],ga4_performance_imports:[receipt],ga4_performance_sync_runs:[run,{...run,id:'run2',client_id:b,results:[]}]};
 const upstream=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');requests.push(url.pathname);
  const reply=(body,status=200,count)=>{res.writeHead(status,{'content-type':'application/json',...(count!==undefined?{'content-range':`0-${Math.max(0,count-1)}/${count}`}:{})});res.end(JSON.stringify(body));};
@@ -69,6 +69,8 @@ try{
  assert.ok(await page.getByText('Analytics 4 · missing',{exact:true}).isVisible());
  const socialReview=page.locator('[data-action-list] a').filter({hasText:'Social post waiting for approval'});assert.equal(await socialReview.getAttribute('href'),`/clients/${a}/social/social-review`);
  const review=page.locator('[data-action-list] a').filter({hasText:'Article waiting for approval'});assert.match(await review.getAttribute('href'),/drafts\/review1$/);
+ // A weekly grid with no scan for its due ISO week is a critical, linked action.
+ const grid=page.locator('[data-action-list] a').filter({hasText:'Map rankings ·'});assert.equal(await grid.getAttribute('href'),`/clients/${a}/maps`);assert.match(await grid.innerText(),/CRITICAL[\s\S]*(No weekly start was recorded|Grid keyword mismatch)/i);
  await page.getByRole('tab',{name:'Delivery & work',exact:true}).click();
  assert.equal(await page.locator('[data-operational-system]').count(),12);
  assert.match(await page.locator(`[data-operational-client="${a}"] [data-operational-system="notifications"]`).innerText(),/provider-confirmed deliveries/);
@@ -76,6 +78,7 @@ try{
  const ga4=page.locator(`[data-integration-client="${a}"] [data-integration-source="ga4"]`);
  assert.ok(await ga4.getByText('Verified retrieval',{exact:true}).isVisible());
  assert.match(await page.locator(`[data-integration-client="${b}"] [data-integration-source="ga4"]`).innerText(),/No provider results/);
+ assert.match(await page.locator('[data-map-grid-profile="grid1"]').innerText(),/Fictional North[\s\S]*(No successful weekly scan|failed to start)/);
  await page.getByLabel('Filter Control Center clients').fill('North');assert.equal(await page.locator('[data-integration-client]').count(),1);
  mkdirSync('docs/screenshots/control-center',{recursive:true});await page.screenshot({path:'docs/screenshots/control-center/integrations-desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);

@@ -47,13 +47,23 @@ do $$declare r uuid;begin
  begin update public.map_grid_profiles set geometry=null,points=(select jsonb_agg(jsonb_build_object('lat',38+g/1000.0,'lng',-90)) from generate_series(1,153) g),keywords=(select jsonb_agg(jsonb_build_object('id',gen_random_uuid(),'keyword','k'||g)) from generate_series(1,7) g) where id='90000000-0000-4000-a000-000000000005';raise exception 'check budget exceeded';exception when check_violation then null;end;
  if has_function_privilege('authenticated','public.map_grid_start(uuid,text)','execute') or has_function_privilege('anon','public.map_grid_start(uuid,text)','execute') then raise exception 'start publicly executable';end if;
  if has_table_privilege('authenticated','public.map_grid_profiles','update') then raise exception 'profile writable';end if;
+ -- Weekly start outcomes: durable, constrained, service-only writes.
+ insert into public.map_grid_weekly_attempts(profile_id,request_key,outcome,run_id) values('90000000-0000-4000-a000-000000000005','weekly:2026-10-15','started',r);
+ insert into public.map_grid_weekly_attempts(profile_id,request_key,outcome,message) values('90000000-0000-4000-a000-000000000005','weekly:2026-10-15','error','Grid keyword mismatch');
+ begin insert into public.map_grid_weekly_attempts(profile_id,request_key,outcome) values('90000000-0000-4000-a000-000000000005','weekly:x','skipped');raise exception 'unknown outcome stored';exception when check_violation then null;end;
+ begin insert into public.map_grid_weekly_attempts(profile_id,request_key,outcome,message) values('90000000-0000-4000-a000-000000000005','weekly:x','error',repeat('x',501));raise exception 'unbounded message stored';exception when check_violation then null;end;
+ if has_table_privilege('authenticated','public.map_grid_weekly_attempts','insert') or has_table_privilege('authenticated','public.map_grid_weekly_attempts','update')
+   or has_table_privilege('authenticated','public.map_grid_weekly_attempts','delete') or has_table_privilege('anon','public.map_grid_weekly_attempts','select') then raise exception 'weekly attempts writable or public';end if;
+ if not (select relrowsecurity from pg_class where oid='public.map_grid_weekly_attempts'::regclass) then raise exception 'weekly attempts without RLS';end if;
 end $$;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000001',true);
-do $$begin if (select count(*) from public.map_grid_profiles)<>1 then raise exception 'team read failed';end if;end $$;
+do $$begin if (select count(*) from public.map_grid_profiles)<>1 then raise exception 'team read failed';end if;
+ if (select count(*) from public.map_grid_weekly_attempts)<>2 then raise exception 'team cannot read weekly attempts';end if;end $$;
 select set_config('request.jwt.claim.sub','99999999-0000-4000-a000-000000000099',true);
 do $$begin
- if exists(select 1 from public.map_grid_profiles) or exists(select 1 from public.map_grid_runs) or exists(select 1 from public.map_grid_checks) then raise exception 'non-team data leaked';end if;
+ if exists(select 1 from public.map_grid_profiles) or exists(select 1 from public.map_grid_runs) or exists(select 1 from public.map_grid_checks)
+   or exists(select 1 from public.map_grid_weekly_attempts) then raise exception 'non-team data leaked';end if;
 end $$;
 reset role;
 rollback;

@@ -3,6 +3,7 @@
 import { SOURCE_POLICY, type IntegrationEvidence } from "./integration-health.ts";
 import type { OperationalEvidence, OperationalCard } from "./operations-evidence";
 import type { ClientHealth } from "./operations-health";
+import type { WeeklyScanStatus } from "./map-grid-weekly";
 
 export type SourceKey = "gsc" | "ga4" | "gbp";
 export type Freshness = "current" | "stale" | "missing" | "unknown";
@@ -44,6 +45,9 @@ export type ClientReadiness = {
   freshness: Record<SourceKey, SourceReading>;
   multiBrand: boolean;
 };
+export type MapGridWeekly = {
+  clientId: string; profileId: string; label: string; status: WeeklyScanStatus;
+};
 export type OperationsV2 = {
   clients: ClientReadiness[];
   alerts: Alert[];
@@ -51,6 +55,7 @@ export type OperationsV2 = {
   generatedAt: string;
   integrations: IntegrationEvidence[];
   operationalCards?: OperationalCard[];
+  mapGrid?: MapGridWeekly[];
 };
 export type OperationsV2Input = {
   clients: ClientHealth[];
@@ -64,6 +69,7 @@ export type OperationsV2Input = {
   now: string;
   integrations?: IntegrationEvidence[];
   operational?: OperationalEvidence;
+  mapGrid?: MapGridWeekly[];
 };
 const PROVIDERS: Record<SourceKey, string> = {
   gsc: "Google Search Console property totals",
@@ -217,9 +223,19 @@ export function buildOperationsV2(input: OperationsV2Input): OperationsV2 {
       detail:entry.evidence+" Next: "+entry.nextAction,
       href:entry.state === "unconfigured" ? `/clients/${client.id}${entry.source === "gbp" ? "/social" : ""}` : entry.href});
   }
+  // A weekly-scheduled Maps grid with no successful scan for its due ISO week.
+  for (const grid of input.mapGrid ?? []) {
+    const client=input.clients.find(c=>c.id===grid.clientId);
+    if (!client || grid.status.state !== "missed") continue;
+    alerts.push({id:`${grid.clientId}:map-grid:${grid.profileId}`,clientId:client.id,clientName:client.name,
+      severity:grid.status.severity ?? "attention",
+      title:"Map rankings · "+grid.status.title,
+      detail:grid.status.detail+" Missing checks are not ranking losses.",
+      href:`/clients/${client.id}/maps`});
+  }
   alerts.push(...(input.operational?.alerts ?? []));
   const order: Record<Alert["severity"], number> = { critical: 0, attention: 1, setup: 2 };
   alerts.sort((a, b) => order[a.severity] - order[b.severity] ||
     a.clientName.localeCompare(b.clientName) || a.title.localeCompare(b.title));
-  return { clients, alerts, sourceErrors: input.sourceErrors, generatedAt: input.now, integrations: input.integrations ?? [], operationalCards: input.operational?.cards ?? [] };
+  return { clients, alerts, sourceErrors: input.sourceErrors, generatedAt: input.now, integrations: input.integrations ?? [], operationalCards: input.operational?.cards ?? [], mapGrid: input.mapGrid ?? [] };
 }

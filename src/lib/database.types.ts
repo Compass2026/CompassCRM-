@@ -37,6 +37,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      map_grid_weekly_attempts: {
+        Row: { id:string; profile_id:string; request_key:string; outcome:string; run_id:string|null; message:string|null; attempted_at:string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       agency_rollout_reviews: {
         Row: RolloutReview
         Insert: RolloutWrite
