@@ -5,6 +5,7 @@ create table gd.results(name text, passed boolean, detail text);
 create table gd.ids(k text primary key,id uuid);
 grant usage on schema gd to service_role,authenticated,anon;
 grant all on all tables in schema gd to service_role;
+grant select on gd.ids to authenticated;
 create function gd.ok(label text, value boolean, detail text default null) returns void language sql as $$
  insert into gd.results values(label,coalesce(value,false),detail)
 $$;
@@ -30,33 +31,35 @@ do $$ declare r jsonb; e text; n bigint; begin
 end $$;
 reset role;
 
-\c - supabase_admin
-update social_accounts set publish_provider=null,publish_account_id=null,publish_page_id=null,publish_verified_at=null
- where id=(select id from gd.ids where k='bound');
--- A foreign client's verified row must not satisfy client B's missing binding.
-insert into social_accounts(client_id,platform,external_account_id,publish_provider,publish_account_id,publish_page_id,publish_verified_at)
- values('00000000-0000-4000-b000-00000000000a','google_business','locations/7654321','zernio','ddddddddddddddddddddddd2','locations/7654321',now());
 \c - authenticator
+set role authenticated;
+select fd.as_user('authenticated', :'team');
+select publisher_unbind_account((select id from gd.ids where k='bound'));
+reset role;
 set role service_role;
 select fd.as_user('service_role',null);
+-- A foreign client's verified row must not satisfy client B's missing binding.
+select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000a',
+ 'ddddddddddddddddddddddd2','locations/7654321','Client A','Client A','{"status":"healthy"}');
 do $$ declare e text; n bigint; begin
  select count(*) into n from drafter_runs;
  e:=fd.try(format('select drafter_write(%L::jsonb)',gd.req('Missing destination test')));
  perform gd.ok('missing or unverified own binding refuses, never borrows another client',e like '23514:%verified location binding%',e);
  perform gd.ok('refusal is atomic and creates no drafter run',(select count(*)=n from drafter_runs));
 end $$;
-reset role;
-
-\c - supabase_admin
-update social_accounts set publish_provider='zernio',publish_account_id='ddddddddddddddddddddddd1',
- publish_page_id=external_account_id,publish_verified_at=now() where id=(select id from gd.ids where k='bound');
+select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b',
+ 'ddddddddddddddddddddddd1','locations/987654321','Client B','Client B','{"status":"healthy"}');
 do $$ declare e text; begin
- e:=fd.try($q$insert into social_accounts(client_id,platform,external_account_id,publish_provider,publish_account_id,publish_page_id,publish_verified_at)
- values('00000000-0000-4000-b000-00000000000b','google_business','locations/7654322','zernio','ddddddddddddddddddddddd3','locations/7654322',now())$q$);
+ e:=fd.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b',
+ 'ddddddddddddddddddddddd3','locations/7654322','Another B','Another B','{"status":"healthy"}')$q$);
  perform gd.ok('the database refuses a second bound location before it can become ambiguous',e like '23505:%',e);
 end $$;
-update publisher_client_transports set gbp_transport='google' where client_id='00000000-0000-4000-b000-00000000000b';
-\c - authenticator
+reset role;
+set role authenticated;
+select fd.as_user('authenticated', :'team');
+select publisher_unbind_account((select id from gd.ids where k='bound'));
+select publisher_set_gbp_transport('00000000-0000-4000-b000-00000000000b','google');
+reset role;
 set role service_role;
 select fd.as_user('service_role',null);
 do $$ declare r jsonb; begin
