@@ -26,6 +26,7 @@ export function assessIntent(query: string, stored: string | null, ctx: { client
     "safety", "heavy", "operator", "operators", "industrial", "consulting",
     "consultants", "consultant", "compliance", "audits", "audit", "contractors",
     "contractor", "interiors", "design", "build", "electrical", "marketing",
+    "solar",
   ]);
   const brandWords = (ctx.clientName.toLowerCase().match(/[a-z']{4,}/g) ?? [])
     .filter((w) => !generic.has(w));
