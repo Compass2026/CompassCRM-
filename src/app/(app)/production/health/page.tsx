@@ -242,7 +242,7 @@ export default async function OperationsHealthPage() {
     </details>
     <footer className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
       <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-blue-700" />
-      <p><strong>Evidence and operating reviews.</strong> Agency rollout reviews save internal scope, stage and evidence history.  Counts come from team-authorized production CRM records.
+      <p><strong>Evidence and operating reviews.</strong> Agency rollout stages require human review. Reviews save internal scope, stage and evidence history. Counts come from team-authorized production CRM records.
         A completed scheduled database job is not proof that an external provider delivered a notification.
         An approved draft is not a published article; only published release records count as execution.
         Data observations indicate presence, not automatic freshness. No SMS, billing, approval or publishing actions can be triggered here.</p>

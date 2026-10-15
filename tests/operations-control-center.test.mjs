@@ -80,7 +80,7 @@ test("A failed data-source read is unknown, never a healthy zero", () => {
   assert.equal(r.clients[1].hasGa4, null);
   assert.equal(r.clients[0].liveSubscriptions, null);
 });
-test("The health route is read-only, team-gated and accessible from navigation", () => {
+test("The health route reads evidence, requires human review, and is team-gated and accessible from navigation", () => {
   const route = readFileSync("src/app/(app)/production/health/page.tsx", "utf8");
   const nav = readFileSync("src/components/app-nav.tsx", "utf8");
   const auth = readFileSync("src/app/(app)/layout.tsx", "utf8");
