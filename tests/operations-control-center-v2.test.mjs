@@ -113,3 +113,19 @@ test('future scheduled blog releases and superseded failures do not create activ
  const m=mock();m.releases=[{id:'old',client_id:'a',draft_id:'draft',draft_version:1,status:'blocked',released_at:'2026-10-01',last_error:'old error'},{id:'new',client_id:'a',draft_id:'draft',draft_version:2,status:'published',released_at:'2026-10-10'},{id:'future',client_id:'a',draft_id:'other',draft_version:1,status:'queued',released_at:'2026-10-01',scheduled_at:'2027-01-01'}];
  const v=buildOperationsV2(m);assert.ok(!v.alerts.some(a=>a.id==='a:release:old'||a.id==='a:queued:future'));
 });
+
+test("a weekly Maps grid with no successful scan for its week becomes a linked action", () => {
+  const missed = { state: "missed", week: "2026-W42", severity: "critical", title: "Weekly scan failed to start (2026-W42)",
+    detail: "Grid keyword mismatch", lastSuccessAt: "2026-10-08T14:00:05Z", attempt: null };
+  const ok = { ...missed, state: "ok", severity: null, title: "Weekly scan complete for 2026-W42" };
+  const v2 = buildOperationsV2({ ...mock(), mapGrid: [
+    { clientId: "a", profileId: "p1", label: "Lucas 1/2/5 mi", status: missed },
+    { clientId: "b", profileId: "p2", label: "Ginger", status: ok },
+  ] });
+  const grid = v2.alerts.filter((a) => a.id.includes(":map-grid:"));
+  assert.equal(grid.length, 1);
+  assert.equal(grid[0].severity, "critical");
+  assert.equal(grid[0].href, "/clients/a/maps");
+  assert.match(grid[0].detail, /Grid keyword mismatch/);
+  assert.equal(v2.mapGrid.length, 2);
+});

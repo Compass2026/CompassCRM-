@@ -9,7 +9,17 @@ import {
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 const BASE = "https://api.dataforseo.com/v3/serp/google/maps";
-const VERSION = "map-grid-v3";
+const VERSION = "map-grid-v4";
+// Per-invocation bounds (the collector runs every five minutes). Posting is
+// deferred safely: a planned check has cost nothing. Collection never creates
+// a paid task. The deadline keeps one invocation inside the Edge wall clock.
+const POST_BATCH = 100;
+const COLLECT_PER_RUN = 60;
+const COLLECT_TOTAL = 360;
+const MAX_RUNS = 20;
+const WORK_MS = 100000;
+const LEASE_MS = 600000;
+const EXPIRY_MS = 6 * 3600000;
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -138,214 +148,312 @@ Deno.serve(async (req: Request) => {
           })),
       });
     }
-    const processRun = async (runId: string) => {
-      const now = new Date();
-      const lease = new Date(now.getTime() + 600000).toISOString();
-      const run = must(
+    type Run = {
+      id: string;
+      config: GridConfig;
+      started_at: string;
+      expected_checks: number;
+    };
+    type Outcome = {
+      run_id: string;
+      busy?: true;
+      error?: string;
+      expected?: number;
+      complete?: number;
+    };
+    type QueuedCheck = GridCheck & { task_id: string };
+    const postPlanned = async (run: Run, deadline: number) => {
+      const config = run.config;
+      const planned = must(
         await db
-          .from("map_grid_runs")
-          .update({ lease_until: lease })
-          .eq("id", runId)
-          .eq("status", "running")
-          .lt("lease_until", now.toISOString())
+          .from("map_grid_checks")
           .select("*")
-          .maybeSingle(),
-      );
-      if (!run) return { run_id: runId, busy: true };
+          .eq("run_id", run.id)
+          .eq("state", "planned")
+          .order("point_index"),
+      ) as GridCheck[];
+      for (let offset = 0; offset < planned.length; offset += POST_BATCH) {
+        // Planned checks have cost nothing; past the deadline they wait for the next invocation.
+        if (Date.now() > deadline) return;
+        const batch = planned.slice(offset, offset + POST_BATCH),
+          ids = batch.map((c) => c.id);
+        must(
+          await db
+            .from("map_grid_checks")
+            .update({ state: "posting" })
+            .in("id", ids)
+            .eq("state", "planned"),
+        );
+        let posted;
+        try {
+          posted = await dfs(
+            "/task_post",
+            batch.map((c) => mapTask(c, config.zoom, config.search_this_area ?? true)),
+          );
+        } catch {
+          must(
+            await db
+              .from("map_grid_checks")
+              .update({
+                state: "unknown",
+                error:
+                  "Submission outcome unknown; no automatic resubmission",
+              })
+              .in("id", ids),
+          );
+          continue;
+        }
+        // Echoed tags bind replies to checks, even if the provider changes result order.
+        for (const check of batch) {
+          const t = posted.tasks.find(
+            (t: { data?: { tag?: string } }) => t.data?.tag === check.id,
+          );
+          const accepted =
+            t?.status_code === 20100 && typeof t.id === "string";
+          must(
+            await db
+              .from("map_grid_checks")
+              .update({
+                state: accepted ? "queued" : t ? "failed" : "unknown",
+                task_id: accepted ? t.id : null,
+                cost: typeof t?.cost === "number" ? t.cost : 0,
+                error: accepted
+                  ? null
+                  : `Submission status ${t?.status_code ?? "missing"}`,
+              })
+              .eq("id", check.id),
+          );
+        }
+      }
+    };
+    const collectCheck = async (run: Run, check: QueuedCheck) => {
       try {
-        const config = run.config as GridConfig;
-        validateGrid(config);
-        // A previous interrupted POST has an unknown outcome. Never blindly charge again.
+        const response = await dfs(
+          `/task_get/advanced/${encodeURIComponent(check.task_id)}`,
+        );
+        const parsed = parseMapsTask(
+          response.tasks[0] ?? {},
+          run.config.target_place_id,
+        );
+        if (parsed.pending) {
+          must(
+            await db
+              .from("map_grid_checks")
+              .update({ checked_at: new Date().toISOString() })
+              .eq("id", check.id),
+          );
+          return;
+        }
         must(
           await db
             .from("map_grid_checks")
             .update({
-              state: "unknown",
-              error:
-                "Submission interrupted; review provider task before retrying",
+              state: "complete",
+              position: parsed.position,
+              results: parsed.results,
+              error: null,
+              checked_at: new Date().toISOString(),
             })
-            .eq("run_id", run.id)
-            .eq("state", "posting"),
+            .eq("id", check.id),
         );
-        const planned = must(
+      } catch {
+        // Transient fetch errors remain queued and are retried without a new paid task.
+        must(
           await db
             .from("map_grid_checks")
-            .select("*")
-            .eq("run_id", run.id)
-            .eq("state", "planned")
-            .order("point_index"),
-        ) as GridCheck[];
-        for (let offset = 0; offset < planned.length; offset += 100) {
-          const batch = planned.slice(offset, offset + 100),
-            ids = batch.map((c) => c.id);
+            .update({
+              error: "Result collection unavailable; will retry",
+              checked_at: new Date().toISOString(),
+            })
+            .eq("id", check.id),
+        );
+      }
+    };
+    const settle = async (run: Run, reason?: string): Promise<Outcome> => {
+      const states =
+        must(
+          await db
+            .from("map_grid_checks")
+            .select("state")
+            .eq("run_id", run.id),
+        ) ?? [];
+      const remaining = states.some((x) =>
+        ["planned", "posting", "queued"].includes(x.state),
+      );
+      const expired =
+        Date.now() - new Date(run.started_at).getTime() > EXPIRY_MS;
+      if (!remaining || expired) {
+        if (expired)
           must(
             await db
               .from("map_grid_checks")
-              .update({ state: "posting" })
-              .in("id", ids)
-              .eq("state", "planned"),
+              .update({
+                state: "failed",
+                error: "Collection timed out after six hours",
+              })
+              .eq("run_id", run.id)
+              .in("state", ["planned", "posting", "queued"]),
           );
-          let posted;
+        const completed = states.filter((x) => x.state === "complete").length;
+        must(
+          await db
+            .from("map_grid_runs")
+            .update({
+              status:
+                completed === run.expected_checks
+                  ? "complete"
+                  : completed
+                    ? "partial"
+                    : "failed",
+              completed_at: new Date().toISOString(),
+              error:
+                completed === run.expected_checks
+                  ? null
+                  : (reason ? `${reason}. ` : "") +
+                    "Some checks did not complete; missing checks are not ranking losses",
+            })
+            .eq("id", run.id),
+        );
+      }
+      return {
+        run_id: run.id,
+        expected: run.expected_checks,
+        complete: states.filter((x) => x.state === "complete").length,
+      };
+    };
+    // Works every given running run in one invocation: post all planned checks
+    // (oldest run first), then share one bounded collection budget fairly.
+    // A failure in one run is recorded on that run and never stops the others.
+    const processRuns = async (runIds: string[]): Promise<Outcome[]> => {
+      const deadline = Date.now() + WORK_MS;
+      const outcomes = new Map<string, Outcome>();
+      const leased: { run: Run; lease: string }[] = [];
+      const fail = async (run: Run, e: unknown) => {
+        const error = e instanceof Error ? e.message : "Grid worker failed";
+        outcomes.set(run.id, { run_id: run.id, error });
+        try {
+          must(
+            await db.from("map_grid_runs").update({ error }).eq("id", run.id),
+          );
+        } catch {
+          /* The run stays running; the next invocation retries it. */
+        }
+      };
+      try {
+        // Each run keeps its own lease, so overlapping collectors split runs instead of sharing one.
+        for (const id of runIds) {
+          const now = new Date();
+          const lease = new Date(now.getTime() + LEASE_MS).toISOString();
           try {
-            posted = await dfs(
-              "/task_post",
-              batch.map((c) => mapTask(c, config.zoom, config.search_this_area ?? true)),
-            );
-          } catch {
+            const run = must(
+              await db
+                .from("map_grid_runs")
+                .update({ lease_until: lease })
+                .eq("id", id)
+                .eq("status", "running")
+                .lt("lease_until", now.toISOString())
+                .select("*")
+                .maybeSingle(),
+            ) as Run | null;
+            if (run) leased.push({ run, lease });
+            else outcomes.set(id, { run_id: id, busy: true });
+          } catch (e) {
+            outcomes.set(id, {
+              run_id: id,
+              error: e instanceof Error ? e.message : "Grid lease failed",
+            });
+          }
+        }
+        for (const { run } of leased) {
+          try {
+            validateGrid(run.config);
+            // A previous interrupted POST has an unknown outcome. Never blindly charge again.
             must(
               await db
                 .from("map_grid_checks")
                 .update({
                   state: "unknown",
                   error:
-                    "Submission outcome unknown; no automatic resubmission",
-                })
-                .in("id", ids),
-            );
-            continue;
-          }
-          // Echoed tags bind replies to checks, even if the provider changes result order.
-          for (const check of batch) {
-            const t = posted.tasks.find(
-              (t: { data?: { tag?: string } }) => t.data?.tag === check.id,
-            );
-            const accepted =
-              t?.status_code === 20100 && typeof t.id === "string";
-            must(
-              await db
-                .from("map_grid_checks")
-                .update({
-                  state: accepted ? "queued" : t ? "failed" : "unknown",
-                  task_id: accepted ? t.id : null,
-                  cost: typeof t?.cost === "number" ? t.cost : 0,
-                  error: accepted
-                    ? null
-                    : `Submission status ${t?.status_code ?? "missing"}`,
-                })
-                .eq("id", check.id),
-            );
-          }
-        }
-        const queued = must(
-          await db
-            .from("map_grid_checks")
-            .select("*")
-            .eq("run_id", run.id)
-            .eq("state", "queued")
-            .order("checked_at", { ascending: true, nullsFirst: true })
-            .limit(60),
-        );
-        await parallel(queued ?? [], async (check) => {
-          try {
-            const response = await dfs(
-              `/task_get/advanced/${encodeURIComponent(check.task_id)}`,
-            );
-            const parsed = parseMapsTask(
-              response.tasks[0] ?? {},
-              config.target_place_id,
-            );
-            if (parsed.pending) {
-              must(
-                await db
-                  .from("map_grid_checks")
-                  .update({ checked_at: new Date().toISOString() })
-                  .eq("id", check.id),
-              );
-              return;
-            }
-            must(
-              await db
-                .from("map_grid_checks")
-                .update({
-                  state: "complete",
-                  position: parsed.position,
-                  results: parsed.results,
-                  error: null,
-                  checked_at: new Date().toISOString(),
-                })
-                .eq("id", check.id),
-            );
-          } catch {
-            // Transient fetch errors remain queued and are retried without a new paid task.
-            must(
-              await db
-                .from("map_grid_checks")
-                .update({
-                  error: "Result collection unavailable; will retry",
-                  checked_at: new Date().toISOString(),
-                })
-                .eq("id", check.id),
-            );
-          }
-        });
-        const states =
-          must(
-            await db
-              .from("map_grid_checks")
-              .select("state")
-              .eq("run_id", run.id),
-          ) ?? [];
-        const remaining = states.some((x) =>
-          ["planned", "posting", "queued"].includes(x.state),
-        );
-        const expired =
-          Date.now() - new Date(run.started_at).getTime() > 6 * 3600000;
-        if (!remaining || expired) {
-          if (expired)
-            must(
-              await db
-                .from("map_grid_checks")
-                .update({
-                  state: "failed",
-                  error: "Collection timed out after six hours",
+                    "Submission interrupted; review provider task before retrying",
                 })
                 .eq("run_id", run.id)
-                .in("state", ["planned", "posting", "queued"]),
+                .eq("state", "posting"),
             );
-          const completed = states.filter((x) => x.state === "complete").length;
-          must(
-            await db
-              .from("map_grid_runs")
-              .update({
-                status:
-                  completed === run.expected_checks
-                    ? "complete"
-                    : completed
-                      ? "partial"
-                      : "failed",
-                completed_at: new Date().toISOString(),
-                error:
-                  completed === run.expected_checks
-                    ? null
-                    : "Some checks did not complete; missing checks are not ranking losses",
-              })
-              .eq("id", run.id),
-          );
+            await postPlanned(run, deadline);
+          } catch (e) {
+            await fail(run, e);
+          }
         }
-        return {
-          run_id: run.id,
-          expected: run.expected_checks,
-          complete: states.filter((x) => x.state === "complete").length,
-        };
-      } catch (e) {
-        must(
-          await db
-            .from("map_grid_runs")
-            .update({
-              error: e instanceof Error ? e.message : "Grid worker failed",
-            })
-            .eq("id", run.id),
-        );
-        throw e;
+        const live = leased.map((l) => l.run).filter((r) => !outcomes.has(r.id));
+        const queues: QueuedCheck[][] = [];
+        for (const run of live) {
+          try {
+            queues.push(
+              (must(
+                await db
+                  .from("map_grid_checks")
+                  .select("*")
+                  .eq("run_id", run.id)
+                  .eq("state", "queued")
+                  .order("checked_at", { ascending: true, nullsFirst: true })
+                  .limit(COLLECT_PER_RUN),
+              ) ?? []) as QueuedCheck[],
+            );
+          } catch (e) {
+            queues.push([]);
+            await fail(run, e);
+          }
+        }
+        // Round-robin across runs, so a large or slow run cannot starve the others.
+        const turns: { run: Run; check: QueuedCheck }[] = [];
+        for (let i = 0; i < COLLECT_PER_RUN; i++)
+          live.forEach((run, r) => {
+            if (queues[r][i]) turns.push({ run, check: queues[r][i] });
+          });
+        await parallel(turns.slice(0, COLLECT_TOTAL), async ({ run, check }) => {
+          if (outcomes.has(run.id) || Date.now() > deadline) return;
+          try {
+            await collectCheck(run, check);
+          } catch (e) {
+            if (!outcomes.has(run.id)) await fail(run, e);
+          }
+        });
+        for (const run of live) {
+          if (outcomes.has(run.id)) continue;
+          try {
+            outcomes.set(run.id, await settle(run));
+          } catch (e) {
+            await fail(run, e);
+          }
+        }
+        // A run that errors on every pass still expires at six hours, so it
+        // cannot hold its profile's one running slot (and block weekly starts).
+        for (const { run } of leased) {
+          const error = outcomes.get(run.id)?.error;
+          if (!error || Date.now() - Date.parse(run.started_at) <= EXPIRY_MS)
+            continue;
+          try {
+            await settle(run, error);
+          } catch {
+            /* Retried on the next invocation. */
+          }
+        }
       } finally {
-        must(
-          await db
-            .from("map_grid_runs")
-            .update({ lease_until: new Date().toISOString() })
-            .eq("id", run.id)
-            .eq("lease_until", lease),
-        );
+        for (const { run, lease } of leased) {
+          try {
+            must(
+              await db
+                .from("map_grid_runs")
+                .update({ lease_until: new Date().toISOString() })
+                .eq("id", run.id)
+                .eq("lease_until", lease),
+            );
+          } catch {
+            /* An unreleased lease expires on its own after ten minutes. */
+          }
+        }
       }
+      return runIds.map((id) => outcomes.get(id) ?? { run_id: id, busy: true });
     };
     const start = async (profileId: string, key: string) => {
       const profile = must(
@@ -360,14 +468,25 @@ Deno.serve(async (req: Request) => {
         p_profile_id: profileId,
         p_request_key: key,
       });
-      if (error)
-        throw Error(
-          error.message.includes("already running")
-            ? "A grid scan is already running"
-            : error.message.includes("one hour")
-              ? "Wait one hour before another scan"
-              : "Unable to start this grid scan",
+      if (error) {
+        const outcome = error.message.includes("already running")
+          ? "already_running"
+          : error.message.includes("one hour")
+            ? "cooldown"
+            : error.message.includes("disabled")
+              ? "disabled"
+              : "error";
+        throw Object.assign(
+          Error(
+            outcome === "already_running"
+              ? "A grid scan is already running"
+              : outcome === "cooldown"
+                ? "Wait one hour before another scan"
+                : "Unable to start this grid scan",
+          ),
+          { outcome, detail: error.message },
         );
+      }
       return data as string;
     };
     if (body.mode === "start") {
@@ -381,8 +500,12 @@ Deno.serve(async (req: Request) => {
           { status: 400 },
         );
       const runId = await start(body.profile_id, body.request_key);
-      if (body.wait === true) return Response.json(await processRun(runId));
-      EdgeRuntime.waitUntil(processRun(runId).catch(() => {}));
+      if (body.wait === true) {
+        const [outcome] = await processRuns([runId]);
+        if (outcome.error) throw Error(outcome.error);
+        return Response.json(outcome);
+      }
+      EdgeRuntime.waitUntil(processRuns([runId]).catch(() => {}));
       return Response.json(
         { run_id: runId, status: "accepted" },
         { status: 202 },
@@ -392,6 +515,7 @@ Deno.serve(async (req: Request) => {
       return Response.json({ error: "Scheduler only" }, { status: 403 });
     if (body.mode === "weekly" || body.mode === "collect") {
       const work = async () => {
+        const attempts: Record<string, unknown>[] = [];
         if (body.mode === "weekly") {
           const profiles = must(
             await db
@@ -400,15 +524,37 @@ Deno.serve(async (req: Request) => {
               .eq("enabled", true)
               .eq("weekly_enabled", true),
           );
+          const key = `weekly:${new Date().toISOString().slice(0, 10)}`;
           for (const p of profiles ?? []) {
+            let attempt: {
+              outcome: string;
+              run_id: string | null;
+              message: string | null;
+            };
             try {
-              await start(
-                p.id,
-                `weekly:${new Date().toISOString().slice(0, 10)}`,
-              );
-            } catch {
-              /* Existing run stays in the collector. */
+              attempt = {
+                outcome: "started",
+                run_id: await start(p.id, key),
+                message: null,
+              };
+            } catch (e) {
+              const err = e as Error & { outcome?: string; detail?: string };
+              attempt = {
+                outcome: err.outcome ?? "error",
+                run_id: null,
+                message: String(
+                  err.detail ?? err.message ?? "Unable to start this grid scan",
+                ).slice(0, 500),
+              };
             }
+            // Every weekly outcome is kept, so a skipped week is visible instead of silent.
+            const row = { profile_id: p.id, request_key: key, ...attempt };
+            const { error } = await db
+              .from("map_grid_weekly_attempts")
+              .insert(row);
+            if (error)
+              console.error("Weekly grid attempt not recorded", p.id);
+            attempts.push(row);
           }
         }
         const runs = must(
@@ -417,11 +563,14 @@ Deno.serve(async (req: Request) => {
             .select("id")
             .eq("status", "running")
             .order("started_at")
-            .limit(1),
+            .limit(MAX_RUNS),
         );
-        return await Promise.all((runs ?? []).map((r) => processRun(r.id)));
+        return {
+          ...(body.mode === "weekly" ? { attempts } : {}),
+          runs: await processRuns((runs ?? []).map((r) => r.id)),
+        };
       };
-      if (body.wait === true) return Response.json({ runs: await work() });
+      if (body.wait === true) return Response.json(await work());
       EdgeRuntime.waitUntil(work().catch(() => {}));
       return Response.json({ status: "accepted" }, { status: 202 });
     }

@@ -29,6 +29,7 @@ const upstream=http.createServer(async(req,res)=>{
  if(url.pathname==='/rest/v1/map_grid_runs')return reply(runs);
  if(url.pathname==='/rest/v1/map_grid_checks')return reply(checks[url.searchParams.get('run_id')?.replace('eq.','')]??[]);
  if(url.pathname==='/rest/v1/grid_snapshots')return reply(baseline);
+ if(url.pathname==='/rest/v1/map_grid_weekly_attempts')return reply([]);
  if(url.pathname==='/rest/v1/grid_configs')return reply([{center_lat:center.lat,center_lng:center.lng}]);
  if(url.pathname==='/functions/v1/map-grid-sync'){starts++;assert.equal(JSON.parse(body).profile_id,'profile');return reply({error:'Wait one hour before another scan'},503);}
  unexpected.push(url.pathname);return reply({error:'Unexpected fixture request'},500);

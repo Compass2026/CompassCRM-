@@ -8,7 +8,7 @@ import { IntegrationHealthPanel } from "./integration-health-panel";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Clock3, Filter, Search, ShieldCheck, SlidersHorizontal, WifiOff } from "lucide-react";
-import type { Alert, ClientReadiness, Freshness, OperationsV2, ReadinessCheck, SourceReading } from "@/lib/operations-readiness";
+import type { Alert, ClientReadiness, Freshness, MapGridWeekly, OperationsV2, ReadinessCheck, SourceReading } from "@/lib/operations-readiness";
 
 type Tab = "rollout" | "overview" | "attention" | "freshness" | "delivery" | "onboarding";
 const tone: Record<Alert["severity"], string> = {
@@ -72,6 +72,31 @@ function ClientChecklist({ client }: { client: ClientReadiness }) {
       {client.multiBrand && " Multiple brand domains share this parent client; reporting must be checked per brand."}
     </p>
   </details>;
+}
+
+const gridTone: Record<MapGridWeekly["status"]["state"], string> = {
+  ok: "bg-emerald-50 text-emerald-800", scanning: "bg-blue-50 text-blue-800", due: "bg-slate-100 text-slate-600",
+  missed: "bg-red-50 text-red-800", off: "bg-slate-100 text-slate-600",
+};
+function MapGridWeeklyPanel({ rows, clients }: { rows: MapGridWeekly[]; clients: ClientReadiness[] }) {
+  if (!rows.length) return null;
+  const name = (id: string) => clients.find(c => c.id === id)?.name ?? "Client";
+  return <section className="space-y-3" aria-label="Map grid weekly scans" data-map-grid-weekly>
+    <h3 className="font-semibold text-navy-900">Map grid weekly scans</h3>
+    <p className="text-xs leading-5 text-slate-600">Weekly-scheduled Maps grids (Thursdays 14:00 UTC). Before Thursday&apos;s slot the previous ISO week is judged. Missed means no complete scan for that week; partial scans and missing checks are not ranking losses.</p>
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white" data-overflow-ok>
+      <table className="w-full min-w-[630px] text-left text-sm">
+        <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-3">Client</th><th className="p-3">Grid</th><th className="p-3">Week status</th><th className="p-3">Last complete scan</th></tr></thead>
+        <tbody>{rows.map(g => <tr key={g.profileId} className="border-b border-slate-100 align-top last:border-0" data-map-grid-profile={g.profileId}>
+          <td className="p-3 font-semibold text-navy-900"><Link href={"/clients/" + g.clientId + "/maps"} className="hover:underline">{name(g.clientId)}</Link></td>
+          <td className="p-3 text-xs text-slate-600">{g.label}</td>
+          <td className="p-3"><span className={"inline-flex rounded-full px-2 py-1 text-[11px] font-semibold " + gridTone[g.status.state]}>{g.status.title}</span>
+            {g.status.state === "missed" && <p className="mt-1 max-w-sm break-words text-xs leading-5 text-slate-600">{g.status.detail}</p>}</td>
+          <td className="p-3 text-xs tabular-nums text-slate-600">{shortDate(g.status.lastSuccessAt)}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  </section>;
 }
 
 export function ControlCenterV2({data,reviews=null,brands=null}:{data:OperationsV2;reviews?:RolloutReview[]|null;brands?:RolloutBrand[]|null}) {
@@ -175,6 +200,7 @@ export function ControlCenterV2({data,reviews=null,brands=null}:{data:Operations
         </table>
       </div>
     </section>}
+    {tab==="freshness" && <MapGridWeeklyPanel rows={(data.mapGrid ?? []).filter(g=>names.has(g.clientId))} clients={clients}/>}
     {tab==="delivery" && !!data.operationalCards?.length && <OperationalEvidencePanel cards={data.operationalCards} clients={clients}/>}
     {tab==="delivery" && !data.operationalCards?.length && <p role="alert" className="rounded-2xl bg-white p-5 text-sm text-slate-600">Operational evidence is unavailable. Reload to retry; no health conclusion was drawn.</p>}
     {tab==="onboarding" && <section className="space-y-3" role="tabpanel">
