@@ -20,6 +20,7 @@ on:
           - ga4-performance
           - gsc-performance
           - gbp-performance
+          - map-grid-sync
           - rank-sync
           - brightlocal-sync
           - site-push
