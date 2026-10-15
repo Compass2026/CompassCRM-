@@ -1,35 +1,17 @@
--- Binding claims on blog draft work (Oct 15 2026).
--- NOT APPLIED — written with its sandbox test (content_draft_claims.test.sql).
---
--- Incident (Oct 15 2026, Logic Solar blog A): Generate draft opened request
--- task d6d3fb61 (content_draft:a922bdfa) and fired the Foundation worker
--- Routine. A Claude operator session claimed the task first with the
--- worker skill's `update tasks set status = 'in_progress' … returning id`,
--- but the Routine wrote and submitted its own article 3–4 minutes later and
--- the operator's submit got 409 draft_not_open. The claim was advisory:
--- content_draft_write gated on the draft's status alone.
---
+-- Binding claims on blog draft work (Oct 15 2026). See PR #165.
 -- Now a claim records who holds it and the write boundary honours it:
---   * tasks.claimed_by / claimed_at, set only by content_draft_claim(draft,
---     claimant). It succeeds when the draft's task (its request task, else
---     the weekly blog_post task that opened it) is unclaimed, already the
---     claimant's, or claimed more than an hour ago — the skill's stale rule.
+--   * tasks.claimed_by / claimed_at, set only by content_draft_claim(draft, claimant).
 --   * content_draft_write refuses (CD409, claimed_by_other) when that task is
 --     claimed by a different claimant (p.claimant) within the hour.
---   * An unclaimed task writes exactly as before, so every other client's
---     Generate-draft runs and weekly blogs are unchanged.
---
--- Human edits, approvals, post-drafter and the weekly open are untouched.
+--   * An unclaimed task writes exactly as before.
 -- Rollback: restore 0067's content_draft_write, drop content_draft_claim,
 -- the tasks_ab_claim_guard trigger and function, and the two columns.
 
--- ── 1. Who holds a task ─────────────────────────────────────────────────────
 alter table tasks add column claimed_by text check (claimed_by is null or length(claimed_by) between 1 and 80);
 alter table tasks add column claimed_at timestamptz;
 comment on column tasks.claimed_by is
   'Who is working this task (a short label: worker-routine, an operator session). Set only by content_draft_claim; binding at content_draft_write for an hour.';
 
--- The claim columns change only inside content_draft_claim.
 create function tasks_claim_guard() returns trigger
 language plpgsql set search_path = public as $$
 begin
@@ -45,11 +27,6 @@ revoke all on function tasks_claim_guard() from public, anon, authenticated;
 create trigger tasks_ab_claim_guard before insert or update on tasks
   for each row execute function tasks_claim_guard();
 
--- ── 2. Claim ────────────────────────────────────────────────────────────────
--- The worker (its own SQL, postgres) and the content-drafter's service role
--- only. Locks the draft first, as content_draft_write does, so a claim and a
--- write serialize. A refusal is an answer, not an error: {claimed: false,
--- reason, claimed_by, expires_at}; the caller stops without writing.
 create function content_draft_claim(p_draft_id uuid, p_claimant text) returns jsonb
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
@@ -83,10 +60,6 @@ end $$;
 revoke all on function content_draft_claim(uuid, text) from public, anon, authenticated;
 grant execute on function content_draft_claim(uuid, text) to service_role;
 
--- ── 3. The drafter's write honours a live claim ─────────────────────────────
--- 0067's body, plus the claim gate after the draft lock. p.claimant is the
--- writer's label; a task nobody claimed (or claimed over an hour ago)
--- writes as before.
 create or replace function content_draft_write(p jsonb) returns jsonb
 language plpgsql security invoker set search_path = public as $$
 declare
@@ -131,7 +104,6 @@ end $$;
 revoke all on function content_draft_write(jsonb) from public, anon, authenticated;
 grant execute on function content_draft_write(jsonb) to service_role;
 
--- ── 4. Postconditions ───────────────────────────────────────────────────────
 do $$
 begin
   if has_function_privilege('authenticated', 'public.content_draft_claim(uuid, text)', 'execute')

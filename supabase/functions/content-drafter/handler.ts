@@ -13,7 +13,7 @@
 //             repeat). The task closes only when the draft is approved.
 //   version → what this deployment is, for the worker's preflight.
 //
-// Claims (20261015180000): brief, check and submit take a `claimant` label.
+// Claims (20261015175146): brief, check and submit take a `claimant` label.
 // When the draft's task is claimed (content_draft_claim) by someone else
 // within the hour, they answer 409 claimed_by_other and nothing is written;
 // content_draft_write enforces the same rule in the transaction. An

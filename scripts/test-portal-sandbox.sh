@@ -250,7 +250,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_planner.tes
 # sees one article, team-only access).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_drafts.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_publication.test.sql"
-# 20261015180000: binding claims — a fresh foreign claim blocks the drafter's
+# 20261015175146: binding claims — a fresh foreign claim blocks the drafter's
 # write, an expired one does not, an unclaimed task writes as before.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_draft_claims.test.sql"
 # Multi-brand isolation, human approvals, shared GBP and per-brand website destinations.

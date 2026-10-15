@@ -1,4 +1,4 @@
--- Tests for 20261015180000 (binding claims on blog draft work), run by
+-- Tests for 20261015175146 (binding claims on blog draft work), run by
 -- scripts/test-portal-sandbox.sh on the same replay. Own harness schema (cc)
 -- and fictional clients.
 --

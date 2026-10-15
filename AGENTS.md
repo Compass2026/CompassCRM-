@@ -2098,7 +2098,7 @@ go-live: `docs/blog-drafter.md`.
     until approval closes it with the final row.
   - Reopening returns the final row to `draft`: the slot stops counting, and
     Billing's count is unchanged.
-- **Binding claims (20261015180000, written, not applied; Oct 15 2026).**
+- **Binding claims (20261015175146, applied Oct 15 2026).**
   After the Logic Solar incident (the Routine overwrote an operator's
   claimed draft), a writer claims a draft with
   `content_draft_claim(draft_id, claimant)`. Only service_role and the

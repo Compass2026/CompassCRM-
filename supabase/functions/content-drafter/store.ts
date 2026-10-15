@@ -48,7 +48,7 @@ export function createStore(supabase: Client) {
       return (data ?? []) as SitePage[];
     },
     // Who holds the draft's task (its request task, else the weekly blog_post
-    // task), from content_draft_claim (20261015180000). null: no task.
+    // task), from content_draft_claim (20261015175146). null: no task.
     async claimHolder(draftId: string): Promise<ClaimHolder | null> {
       const { data: d, error } = await supabase.from("content_drafts").select("request_task_id, source_task_id").eq("id", draftId).maybeSingle();
       if (error) throw new Error(error.message);
