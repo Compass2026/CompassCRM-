@@ -84,6 +84,17 @@ test("pending and malformed provider responses do not become ranking losses", ()
     null,
   );
 });
+test("explicit no-search-results tasks complete without retrying or accepting malformed envelopes", () => {
+  for (const items of [null, []]) {
+    assert.deepEqual(
+      parseMapsTask({ status_code: 40102, result: [{ items }] }, "id"),
+      { pending: false, position: null, results: [] },
+    );
+  }
+  for (const result of [null, [], [{}], [{ items: [{ type: "maps_search" }] }]])
+    assert.throws(() => parseMapsTask({ status_code: 40102, result }, "id"));
+  assert.throws(() => parseMapsTask({ status_code: 40103, result: [{ items: null }] }, "id"));
+});
 test("coverage excludes incomplete checks and mean explicitly includes found ranks only", () => {
   const m = gridMetrics([
     { state: "complete", position: 1 },
