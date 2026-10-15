@@ -20,7 +20,7 @@ export type Database = {
   public: {
     Tables: {
       map_grid_profiles: {
-        Row: { id:string; client_id:string; grid_config_id:string; label:string; target_place_id:string; points:Json; keywords:Json; zoom:number; enabled:boolean; weekly_enabled:boolean; created_at:string }
+        Row: { id:string; client_id:string; grid_config_id:string; label:string; target_place_id:string; points:Json; keywords:Json; zoom:number; search_this_area:boolean; enabled:boolean; weekly_enabled:boolean; created_at:string }
         Insert: never
         Update: never
         Relationships: []
