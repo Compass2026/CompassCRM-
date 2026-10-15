@@ -1,4 +1,4 @@
-// The monthly delivery standard (20261015040000): what the team delivers per
+// The monthly delivery standard (20261015150000): what the team delivers per
 // brand site (or client) each America/Chicago calendar month, read from
 // delivery_targets(). Operational only — the agreement's entitlements
 // (entitlements.ts) stay what billing, agreements and the portal read.

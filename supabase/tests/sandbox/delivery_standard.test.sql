@@ -1,4 +1,4 @@
--- 20261015040000: the monthly delivery standard. Fictional clients only;
+-- 20261015150000: the monthly delivery standard. Fictional clients only;
 -- everything is rolled back. Fixtures are written with triggers off (they are
 -- not under test); the standard's own guard is exercised with triggers on.
 begin;

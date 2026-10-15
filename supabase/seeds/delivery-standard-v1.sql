@@ -1,4 +1,4 @@
--- PROVISIONAL — NOT APPLIED. Run only after migration 20261015040000 is
+-- PROVISIONAL — NOT APPLIED. Run only after migration 20261015150000 is
 -- reviewed, accepted and applied (PR #160).
 --
 -- Adopt delivery standard 1 from October 2026: Tom, 2026-10-14 22:05
