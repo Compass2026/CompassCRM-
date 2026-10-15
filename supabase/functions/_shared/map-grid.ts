@@ -5,6 +5,7 @@ export type GridConfig = {
   points: GridPoint[];
   keywords: GridKeyword[];
   zoom: number;
+  search_this_area?: boolean;
 };
 export type MapResult = {
   place_id: string | null;
@@ -25,6 +26,8 @@ export type GridCheck = GridPoint & {
   checked_at: string | null;
 };
 export function validateGrid(config: GridConfig) {
+  if (config.search_this_area !== undefined && typeof config.search_this_area !== "boolean")
+    throw Error("Invalid Maps search mode");
   if (
     !config.target_place_id ||
     !Number.isInteger(config.zoom) ||
@@ -70,6 +73,7 @@ export function validateGrid(config: GridConfig) {
 export function mapTask(
   check: Pick<GridCheck, "id" | "keyword" | "lat" | "lng">,
   zoom: number,
+  searchThisArea = true,
 ) {
   return {
     keyword: check.keyword.replace(/%/g, "%25").replace(/\+/g, "%2B"),
@@ -79,7 +83,7 @@ export function mapTask(
     depth: 100,
     priority: 1,
     search_places: false,
-    search_this_area: true,
+    search_this_area: searchThisArea,
     tag: check.id,
   };
 }

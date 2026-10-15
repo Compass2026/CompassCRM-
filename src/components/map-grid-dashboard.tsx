@@ -187,6 +187,7 @@ export function MapGridDashboard({
         </div>
         <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/15 pt-4 text-xs text-slate-300">
           <span>Source: Google Maps via DataForSEO</span>
+          <span>Search mode: {config.search_this_area === false ? "Query-led location" : "Search this area"}</span>
           <span>
             Schedule:{" "}
             {profile.weekly_enabled ? "Thursdays at 14:00 UTC" : "Manual pilot"}

@@ -29,6 +29,7 @@ function harness({ member = true, user = true, postFailure = false } = {}) {
     id: "profile",
     target_place_id: "ChIJfixture",
     zoom: 13,
+    search_this_area: false,
     points: [{ lat: 38, lng: -90 }],
     keywords: [{ id: uuid, keyword: "roof" }],
   };
@@ -143,6 +144,7 @@ function harness({ member = true, user = true, postFailure = false } = {}) {
         posts++;
         if (postFailure) throw Error("network lost");
         const payload = JSON.parse(init.body);
+        assert.equal(payload[0].search_this_area, false);
         return Response.json({
           status_code: 20000,
           tasks: payload.map((t) => ({
