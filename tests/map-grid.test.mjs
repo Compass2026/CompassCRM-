@@ -41,6 +41,9 @@ test("queued requests pin coordinates, depth, tag, zoom and local intent", () =>
   assert.equal(task.depth, 100);
   assert.equal(task.priority, 1);
   assert.equal(task.search_places, false);
+  assert.equal(task.search_this_area, true);
+  assert.equal(mapTask({ id, keyword: "roofer in wentzville mo", lat: 38.8, lng: -90.8 }, 13, false).search_this_area, false);
+  assert.throws(() => validateGrid({ ...config, search_this_area: "false" }));
 });
 test("matches exact place ID, never a similar name, host or advertisement", () => {
   const t = {
