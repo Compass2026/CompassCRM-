@@ -82,12 +82,17 @@ export default function MapGridMap({
         setZoom(map.getZoom());
       };
       map.on("zoomend moveend", sync);
-      const resize = new ResizeObserver(() => map.invalidateSize());
+      // Instant re-centering: an animated pan still running when the map is
+      // removed (a location switch during a layout shift) throws in Leaflet.
+      const resize = new ResizeObserver(() =>
+        map.invalidateSize({ animate: false }),
+      );
       resize.observe(el);
       leaflet.current = { L, map, markers, overlay };
       setReady(true);
       cleanup = () => {
         resize.disconnect();
+        map.stop();
         map.remove();
         leaflet.current = null;
       };
