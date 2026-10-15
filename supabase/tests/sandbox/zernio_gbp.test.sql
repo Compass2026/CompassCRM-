@@ -201,6 +201,78 @@ begin
 end $$;
 reset role;
 
+-- ── R. Repairing a post approved before it named a location ─────────────────
+-- Posts approved before drafts carried a destination (Lucas, Sept 2026) hold
+-- an approval with no location; the publisher refuses them (no_location). The
+-- repair is the ordinary workflow: a person reopens (the approval is cleared),
+-- names the client's own location as a draft, resubmits, and a person approves
+-- again. Nothing rewrites the old approval and the worker cannot reopen.
+\c - supabase_admin
+do $$
+declare v uuid;
+begin
+  insert into social_posts (client_id, platform, search_intent, crm_facts_only, copy)
+  values ('00000000-0000-4000-b000-00000000000a', 'google_business', 'navigational', true, 'Sandbox Client A, approved before it named a location.')
+  returning id into v;
+  insert into zg.ids values ('rpost', v);
+  insert into social_accounts (client_id, platform, external_account_id, display_name)
+  values ('00000000-0000-4000-b000-00000000000b', 'google_business', 'locations/555000', 'Sandbox Client B')
+  returning id into v;
+  insert into zg.ids values ('gb', v);
+end $$;
+\c - authenticator
+set role authenticated;
+select zg.as_user('authenticated', :'team');
+update social_posts set review_status = 'in_review' where id = zg.id('rpost');
+update social_posts set review_status = 'approved' where id = zg.id('rpost');
+-- zg.ids holds uuids; the old hash is kept as its md5.
+insert into zg.ids select 'rhash', md5(approved_hash)::uuid from social_posts where id = zg.id('rpost');
+reset role;
+\c - postgres
+do $$
+declare e text;
+begin
+  perform zg.ok('R1 the stranded state: approved, no location in the post or its approval',
+    (select review_status = 'approved' and social_account_id is null and approved_snapshot ->> 'social_account_id' is null
+     from social_posts where id = zg.id('rpost')));
+  e := zg.try(format($q$update social_posts set review_status = 'draft' where id = %L$q$, zg.id('rpost')));
+  perform zg.ok('R2 the worker cannot reopen an approved post', e like '42501:%signed-in%', e);
+end $$;
+\c - authenticator
+set role authenticated;
+select zg.as_user('authenticated', :'team');
+do $$
+declare e text;
+begin
+  e := zg.try(format($q$update social_posts set social_account_id = %L where id = %L$q$, zg.id('ga'), zg.id('rpost')));
+  perform zg.ok('R3 the location cannot be added to the approval in place', e like '23514:%frozen%', e);
+  update social_posts set review_status = 'draft' where id = zg.id('rpost');
+  perform zg.ok('R4 a person reopens: the approval, its hash and the reviewer are cleared',
+    (select review_status = 'draft' and publish_status = 'not_scheduled' and approved_snapshot is null
+            and approved_hash is null and reviewed_by is null and reviewed_at is null
+     from social_posts where id = zg.id('rpost')));
+  e := zg.try(format($q$update social_posts set social_account_id = %L where id = %L$q$, zg.id('gb'), zg.id('rpost')));
+  perform zg.ok('R5 another client''s location is refused', e like '23503:%', e);
+  update social_posts set social_account_id = zg.id('ga') where id = zg.id('rpost');
+  e := zg.try(format($q$update social_posts set review_status = 'approved' where id = %L$q$, zg.id('rpost')));
+  perform zg.ok('R6 a reopened draft cannot skip review', e like '23514:%draft to approved%', e);
+  update social_posts set review_status = 'in_review' where id = zg.id('rpost');
+  update social_posts set review_status = 'approved' where id = zg.id('rpost');
+  perform zg.ok('R7 a fresh approval binds the client''s location under a new hash',
+    (select review_status = 'approved' and approved_snapshot ->> 'social_account_id' = zg.id('ga')::text
+            and md5(approved_hash)::uuid <> zg.id('rhash') and reviewed_by is not null
+     from social_posts where id = zg.id('rpost')));
+  e := zg.try(format($q$update social_posts set social_account_id = %L where id = %L$q$, zg.id('gb'), zg.id('rpost')));
+  perform zg.ok('R8 once approved again the destination is frozen', e like '23514:%frozen%', e);
+end $$;
+reset role;
+\c - postgres
+do $$
+begin
+  perform zg.ok('R9 the new approval matches the post as it stands (the publisher''s claim check)',
+    (select approved_hash = social_post_hash(social_post_snapshot(p)) from social_posts p where id = zg.id('rpost')));
+end $$;
+
 -- ── T. The transport outlives the binding; only an admin returns to Google ──
 \c - authenticator
 set role authenticated;
