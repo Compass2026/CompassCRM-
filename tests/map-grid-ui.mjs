@@ -50,7 +50,7 @@ try{
  const markers=page.locator('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]'),map=page.getByTestId('map-grid-map');
  const radius=label=>page.getByRole('group',{name:'Radius from business'}).getByRole('button',{name:new RegExp(`^${label}`)});
  const card=label=>page.locator('div.rounded-2xl',{has:page.getByText(label,{exact:true})}).first();
- const count=async n=>{await page.waitForFunction(n=>document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]').length===n,n);};
+ const count=async n=>{try{await page.waitForFunction(n=>document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]').length===n,n);}catch(e){const seen=await page.evaluate(()=>({markers:document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon[title^="Point "]').length,maps:document.querySelectorAll('[data-testid=map-grid-map]').length,url:location.href,radius:[...document.querySelectorAll('[role=group] button[aria-pressed=true]')].map(b=>b.textContent)}));throw Error(`expected ${n} markers, saw ${JSON.stringify(seen)}: ${e.message}`);}};
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});
  await page.getByRole('heading',{name:'Your rankings, across the map.'}).waitFor();
  // Dense scan opens at the 5-mile default with the business center and three rings.
