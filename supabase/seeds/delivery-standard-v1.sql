@@ -1,17 +1,30 @@
--- Adopt delivery standard 1 (migration 20261015040000) for the current
--- clients, from the first full month after Tom's decision of 2026-10-14.
--- A data script, not a migration: run once after the migration is applied and
--- reviewed. Re-running is a no-op (one row per client and month).
+-- PROVISIONAL — NOT APPLIED. Run only after migration 20261015040000 is
+-- reviewed, accepted and applied (PR #160).
 --
--- Not included: Lucas Construction (102d3b20-…). Down and In owns Lucas; the
--- standard applies to Lucas too, and is recorded for it through onboarding
--- program b6021fd6-5406-481a-b8bd-7395c9f4815b when they are ready.
+-- Adopt delivery standard 1 from October 2026: Tom, 2026-10-14 22:05
+-- America/Chicago, "I want to apply them to October" (Executive OS task
+-- 367bdeba-7b52-4ce2-adbd-b98347499223, decision message
+-- 4f9b5b86-fac6-4b27-9b8d-632eddb572db). Continues every month after.
 --
--- No backfill: October 2026 keeps its existing plan. Nothing here schedules,
--- drafts or publishes; billing, prices and issued agreements are untouched.
+-- What October means, and what it does not:
+--   - The full standard, no proration: 8 / 8 Facebook / 8 GBP / 1 refresh per
+--     site; BHG's three sites 24 / 24 / 24 / 3.
+--   - Work already delivered in October counts toward its site's October
+--     target; existing planned work counts as planned, never as done.
+--   - Nothing is backdated. Opening October's remaining slots afterwards
+--     (plan_delivery_month, or the planner's "Open this month's slots") plans
+--     them from that day to October 31 only. No delivery record is written.
+--   - Nothing is drafted, scheduled or published by adoption.
+--
+-- Not included: Lucas Construction (102d3b20-…). The same business standard
+-- applies to Lucas; Down and In own its implementation, recorded through
+-- onboarding program b6021fd6-5406-481a-b8bd-7395c9f4815b.
+--
+-- Re-running is a no-op (one row per client and month). Billing, prices and
+-- issued agreements are untouched.
 insert into client_delivery_standards (client_id, standard_id, effective_month, source_ref)
-select c.id, s.id, date '2026-11-01',
-  'executive_os:task/367bdeba-7b52-4ce2-adbd-b98347499223#message/7251fd3a-1326-4a79-81c0-1b13afa69c0c'
+select c.id, s.id, date '2026-10-01',
+  'executive_os:task/367bdeba-7b52-4ce2-adbd-b98347499223#message/4f9b5b86-fac6-4b27-9b8d-632eddb572db'
 from clients c cross join (select id from delivery_standards where version = 1) s
 where c.id in (
   '3eaa3389-2a33-4004-837c-8aef90404410',  -- BHG Safety Partners LLC (three brand sites)

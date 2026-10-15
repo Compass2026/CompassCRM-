@@ -45,6 +45,9 @@ export async function createPlanItemAction(clientId: string, weekParam: string, 
   const week = parseWeek(weekParam);
   const parsed = parsePlanFields((k) => form.get(k), week);
   if (!parsed.ok) return { error: parsed.error };
+  // On the monthly delivery standard a web page slot is a refresh of an
+  // existing page (the only web page work the standard counts).
+  const refresh = form.get("standard_key") === "page_refreshes" && parsed.fields.deliverable === "web_page";
   const supabase = await start();
   if (!supabase) return { error: NOT_TEAM };
   const { error } = await supabase.from("content_plan_items").insert({
@@ -52,6 +55,7 @@ export async function createPlanItemAction(clientId: string, weekParam: string, 
     week_start: week,
     ...parsed.fields,
     channel: parsed.fields.channel as never,
+    ...(refresh ? { standard_key: "page_refreshes" } : {}),
   });
   if (error) return { error: planError(error.message) };
   revalidatePlanner(clientId);
@@ -88,6 +92,20 @@ export async function deletePlanItemAction(clientId: string, itemId: string): Pr
   if (!data?.length) return { error: "Unlink its draft first; a plan item with a draft is not deleted." };
   revalidatePlanner(clientId);
   return { ok: true };
+}
+
+// Open the month's missing delivery-standard slots (plan_delivery_month):
+// the database counts existing work first and never plans a past day.
+export async function planDeliveryMonthAction(clientId: string, month: string, _prev: PlanFormState & { opened?: number }):
+  Promise<PlanFormState & { opened?: number }> {
+  void _prev;
+  if (!isUuid(clientId) || !/^\d{4}-\d{2}-01$/.test(month)) return { error: "Unknown client or month." };
+  const supabase = await start();
+  if (!supabase) return { error: NOT_TEAM };
+  const { data, error } = await supabase.rpc("plan_delivery_month", { p_client_id: clientId, p_month: month });
+  if (error) return { error: planError(error.message) };
+  revalidatePlanner(clientId);
+  return { ok: true, opened: data ?? 0, n: Date.now() };
 }
 
 // Link an existing post (social / gbp slot) or blog (blog slot) to the item.

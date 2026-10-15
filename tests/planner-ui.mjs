@@ -133,7 +133,7 @@ try {
   await page.waitForURL(new RegExp(`/clients/${A}/planner\\?week=${W}`));
   // The monthly delivery standard: absent until the client adopts it, then
   // 8 blogs / 8 Facebook / 8 GBP / 1 refresh for the week's calendar month.
-  const card = page.locator('[data-card="delivery-standard"]');
+  const card = page.locator('[data-card="delivery-standard"]').first();
   assert.equal(await card.getAttribute("data-standard"), "none");
   sql(`insert into client_delivery_standards (client_id, standard_id, effective_month, source_ref)
        select '${A}', id, date_trunc('month', date '${W}')::date, 'planner-ui' from delivery_standards where version = 1`);
@@ -142,8 +142,15 @@ try {
   assert.deepEqual(await card.locator('[data-unit="client"] [data-deliverable]').evaluateAll((els) =>
     els.map((e) => `${e.getAttribute("data-deliverable")}:${e.getAttribute("data-target")}`)),
     ["blog_posts:8", "facebook_posts:8", "gbp_posts:8", "page_refreshes:1"]);
-  assert.match(await card.innerText(), /Facebook only[\s\S]*new pages are not part of the standard/);
+  assert.match(await card.innerText(), /Facebook only[\s\S]*New pages are not part of the standard/);
+  assert.match(await card.innerText(), /No verified Business Profile location is recorded/);
+  assert.equal(await page.locator('[data-planner-section="social"] [data-add-plan-item]').count(), 1);
   ok("The planner shows the client's monthly delivery standard once adopted: 8 / 8 / 8 / 1, Facebook only");
+  // Back to the weekly cadence for the rest of this run (the ledger is
+  // append-only, so the fixture is removed with its guard bypassed).
+  admin(`set session_replication_role = replica; delete from client_delivery_standards where source_ref = 'planner-ui'`);
+  await page.reload({ waitUntil: "networkidle" });
+  assert.equal(await card.getAttribute("data-standard"), "none");
   const gbp = page.locator('[data-planner-section="gbp"]');
   await gbp.locator("summary").filter({ hasText: "Plan 2 more" }).click();
   await gbp.getByLabel("Topic or target keyword").fill("Roof replacement before winter");

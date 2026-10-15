@@ -507,7 +507,7 @@ export async function revertSiteAction(
     return { ok: false, message: e instanceof Error ? e.message : "Could not reach site-push." };
   }
   const payload = (await res.json().catch(() => null)) as
-    | { commit_url?: string; restored?: string; error?: string }
+    | { commit_url?: string; restored?: string; reverted?: string; error?: string }
     | null;
   if (!payload) return { ok: false, message: `Revert failed (${res.status}).` };
   if (payload.error) return { ok: false, message: payload.error };
@@ -521,7 +521,9 @@ export async function revertSiteAction(
     object_type: "site",
     change_type: "revert",
     before: {},
-    after: { commit: payload.commit_url ?? null, restored: payload.restored ?? null },
+    // `reverted` (the undone commit) voids a refresh's live receipt for that
+    // commit in the monthly delivery standard (delivery_targets).
+    after: { commit: payload.commit_url ?? null, restored: payload.restored ?? null, reverted: payload.reverted ?? null },
     reasoning: `Put it back pressed by ${await whoami()}.`,
     status: "approved",
   });

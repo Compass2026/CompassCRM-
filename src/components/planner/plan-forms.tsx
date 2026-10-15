@@ -38,8 +38,8 @@ type Item = {
 };
 
 // The fields a teammate fills for a slot (shared by add and edit).
-function PlanFields({ deliverable, services, keywords, week, item, idPrefix }: {
-  deliverable: Deliverable; services: Option[]; keywords: Option[]; week: string; item?: Item; idPrefix: string;
+function PlanFields({ deliverable, services, keywords, week, item, idPrefix, facebookOnly = false }: {
+  deliverable: Deliverable; services: Option[]; keywords: Option[]; week: string; item?: Item; idPrefix: string; facebookOnly?: boolean;
 }) {
   const id = (k: string) => `${idPrefix}-${k}`;
   const sunday = new Date(`${week}T00:00:00Z`);
@@ -62,7 +62,7 @@ function PlanFields({ deliverable, services, keywords, week, item, idPrefix }: {
         <div className="space-y-1">
           <Label htmlFor={id("channel")}>Channel</Label>
           <select id={id("channel")} name="channel" className={field} defaultValue="facebook" required>
-            {SOCIAL_CHANNELS.map((c) => <option key={c} value={c}>{platformLabels[c].label}</option>)}
+            {SOCIAL_CHANNELS.filter((c) => !facebookOnly || c === "facebook").map((c) => <option key={c} value={c}>{platformLabels[c].label}</option>)}
           </select>
         </div>
       )}
@@ -103,18 +103,22 @@ function PlanFields({ deliverable, services, keywords, week, item, idPrefix }: {
   );
 }
 
-export function AddPlanItemForm({ clientId, week, deliverable, services, keywords, remaining }: {
-  clientId: string; week: string; deliverable: Deliverable; services: Option[]; keywords: Option[]; remaining: number;
+// standard: the client is on the monthly delivery standard this week, so
+// social is Facebook only, a web page slot is a refresh, and `remaining` is
+// the month's room rather than the weekly cadence.
+export function AddPlanItemForm({ clientId, week, deliverable, services, keywords, remaining, standard = false }: {
+  clientId: string; week: string; deliverable: Deliverable; services: Option[]; keywords: Option[]; remaining: number; standard?: boolean;
 }) {
   const [state, action, pending] = useActionState(createPlanItemAction.bind(null, clientId, week), {});
   return (
     <details className="rounded-md border border-dashed p-3" data-add-plan-item={deliverable}>
       <summary className="cursor-pointer text-sm font-medium">
-        {remaining > 0 ? `Plan ${remaining} more` : "Plan another"}
+        {remaining > 0 ? `Plan ${remaining} more${standard ? " this month" : ""}` : "Plan another"}
       </summary>
       <form action={action} className="mt-3 space-y-3" key={state.n ?? 0}>
         <input type="hidden" name="deliverable" value={deliverable} />
-        <PlanFields deliverable={deliverable} services={services} keywords={keywords} week={week} idPrefix={`add-${deliverable}`} />
+        {standard && deliverable === "web_page" && <input type="hidden" name="standard_key" value="page_refreshes" />}
+        <PlanFields deliverable={deliverable} services={services} keywords={keywords} week={week} idPrefix={`add-${deliverable}`} facebookOnly={standard} />
         <Button type="submit" size="sm" disabled={pending}>Add to the plan</Button>
         <Message state={state} />
       </form>

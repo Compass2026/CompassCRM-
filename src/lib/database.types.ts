@@ -4879,6 +4879,7 @@ export type Database = {
       content_plan_items: {
         Row: {
           authority_opportunity_id: string | null
+          brand_workspace_id: string | null
           channel: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id: string | null
@@ -4896,6 +4897,9 @@ export type Database = {
           search_intent: string | null
           service_id: string | null
           social_post_id: string | null
+          standard_key: string | null
+          standard_month: string | null
+          standard_seq: number | null
           target_url: string | null
           topic: string
           updated_at: string
@@ -4904,6 +4908,7 @@ export type Database = {
         }
         Insert: {
           authority_opportunity_id?: string | null
+          brand_workspace_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id?: string | null
@@ -4921,6 +4926,9 @@ export type Database = {
           search_intent?: string | null
           service_id?: string | null
           social_post_id?: string | null
+          standard_key?: string | null
+          standard_month?: string | null
+          standard_seq?: number | null
           target_url?: string | null
           topic: string
           updated_at?: string
@@ -4929,6 +4937,7 @@ export type Database = {
         }
         Update: {
           authority_opportunity_id?: string | null
+          brand_workspace_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id?: string
           content_post_id?: string | null
@@ -4946,6 +4955,9 @@ export type Database = {
           search_intent?: string | null
           service_id?: string | null
           social_post_id?: string | null
+          standard_key?: string | null
+          standard_month?: string | null
+          standard_seq?: number | null
           target_url?: string | null
           topic?: string
           updated_at?: string
@@ -5782,6 +5794,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      client_delivery_standards: {
+        Row: { client_id: string; effective_month: string; id: string; recorded_at: string; recorded_by: string | null; source_ref: string; standard_id: string }
+        Insert: { client_id: string; effective_month: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref: string; standard_id: string }
+        Update: { client_id?: string; effective_month?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string }
+        Relationships: []
+      }
+      delivery_standards: {
+        Row: {
+          blog_posts: number; decided_at: string; decided_by: string; exclusion_reason: string; exclusions: string[]
+          facebook_posts: number; gbp_posts: number; id: string; page_refreshes: number; recorded_at: string
+          recorded_by: string | null; review_trigger: string; source_ref: string; version: number
+        }
+        Insert: {
+          blog_posts: number; decided_at: string; decided_by: string; exclusion_reason?: string; exclusions?: string[]
+          facebook_posts: number; gbp_posts: number; id?: string; page_refreshes: number; recorded_at?: string
+          recorded_by?: string | null; review_trigger?: string; source_ref: string; version: number
+        }
+        Update: {
+          blog_posts?: number; decided_at?: string; decided_by?: string; exclusion_reason?: string; exclusions?: string[]
+          facebook_posts?: number; gbp_posts?: number; id?: string; page_refreshes?: number; recorded_at?: string
+          recorded_by?: string | null; review_trigger?: string; source_ref?: string; version?: number
+        }
+        Relationships: []
       }
       deliverables: {
         Row: {
@@ -13410,6 +13446,7 @@ export type Database = {
           client_id: string
           completed: number
           deliverable: string
+          destination: string | null
           month: string
           over_target: number
           planned: number
@@ -13419,8 +13456,13 @@ export type Database = {
           target: number
           unit_kind: string
           unit_name: string
+          unverified: number
           used: number
         }[]
+      }
+      plan_delivery_month: {
+        Args: { p_client_id: string; p_month?: string }
+        Returns: number
       }
       fire_foundation_worker: {
         Args: { p_client_id: string; p_reason: string }
