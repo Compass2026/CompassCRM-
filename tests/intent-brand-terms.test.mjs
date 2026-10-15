@@ -25,3 +25,21 @@ test("distinctive names and exact business initials still signal branded searche
   assert.equal(check("Ginger Huff Interiors","navigational","Ginger Huff Interiors").assessed,"navigational");
   assert.equal(check("Ginger design","commercial","Ginger Huff Interiors").conflict,true);
 });
+test("solar is an industry noun, not Logic Solar's brand",()=>{
+  for(const [query,intent] of [
+    ["solar battery backup overland park ks","commercial"],
+    ["solar battery backup wichita ks","commercial"],
+    ["solar site assessment kansas","commercial"],
+    ["commercial solar wichita ks","commercial"],
+    ["solar system monitoring","informational"],
+    ["solar installation overland park ks","transactional"],
+  ]) {
+    const actual=check(query,intent,"Logic Solar");
+    assert.notEqual(actual.assessed,"navigational",query);
+    assert.equal(actual.conflict,false,query);
+  }
+  // The distinctive word still marks a branded search.
+  assert.equal(check("logic solar","navigational","Logic Solar").assessed,"navigational");
+  assert.equal(check("logic solar reviews","commercial","Logic Solar").assessed,"navigational");
+  assert.equal(check("logic solar battery backup","commercial","Logic Solar").assessed,"navigational");
+});
