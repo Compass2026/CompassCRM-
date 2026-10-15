@@ -173,7 +173,7 @@ try{
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?profile=profile`,{waitUntil:'networkidle'});
  assert.equal(await page.locator('[data-weekly-scan-state]').count(),0);
  // Another client's grid or run is a 404 here too.
- for(const q of ['profile=other','run=o1']){const r=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?${q}`);assert.equal(r.status(),404,q);assert.doesNotMatch(await page.locator('body').innerText(),/Another client/);}
+ for(const q of ['profile=other','run=o1','profile=profile&run=market']){const r=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?${q}`);assert.equal(r.status(),404,q);assert.doesNotMatch(await page.locator('body').innerText(),/Another client/);}
  assert.equal(starts,startsBeforeLocations);
  // A profile id that is not this client's is a 404, never another client's data.
  const foreign=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?profile=00000000-0000-4000-8000-0000000000ff`);assert.equal(foreign.status(),404);
