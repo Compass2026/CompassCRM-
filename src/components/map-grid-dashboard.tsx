@@ -17,6 +17,7 @@ import {
   gridMetrics,
   rankColor,
   scanPreview,
+  usableGeometry,
   withinRadius,
   type GridCheck,
   type GridConfig,
@@ -88,20 +89,41 @@ export function MapGridDashboard({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [requestKey] = useState(() => crypto.randomUUID());
   const [confirming, setConfirming] = useState(false);
-  const geometry = config.geometry ?? null;
+  const keyword = config.keywords.find((k) => k.id === keywordId);
+  const baseline = baselines.find((b) => b.keyword_id === keywordId);
+  // Geometry, counts, spacing and coverage always describe the dataset on
+  // screen. A BrightLocal baseline never borrows the scan's dense metadata,
+  // and the next scan's profile is kept apart (see `next` below).
+  const runGeometry = usableGeometry(config);
+  const shown = useMemo(
+    () =>
+      source === "brightlocal"
+        ? { points: baseline?.points ?? [], geometry: null }
+        : { points: config.points, geometry: runGeometry },
+    [source, baseline, config.points, runGeometry],
+  );
+  const geometry = shown.geometry;
   const center = geometry?.center ?? homeCenter;
   const radii = geometry?.radii_miles ?? DEFAULT_RADII;
-  // Old broad scans open at their full extent: their 5-mile slice is nearly empty.
+  // Broad layouts open at their full extent: their 5-mile slice is nearly empty.
   const [radius, setRadius] = useState<number | null>(
-    geometry && center ? geometry.default_radius_miles : null,
+    runGeometry ? runGeometry.default_radius_miles : null,
   );
+  // A deliberate source switch resets the radius to that dataset's own default.
+  const changeSource = (next: "dataforseo" | "brightlocal") => {
+    setSource(next);
+    setSelectedId(null);
+    setRadius(
+      next === "dataforseo" && runGeometry
+        ? runGeometry.default_radius_miles
+        : null,
+    );
+  };
   const [showRings, setShowRings] = useState(true);
   const rings = useMemo(
     () => (showRings && center ? radii : []),
     [showRings, center, radii],
   );
-  const keyword = config.keywords.find((k) => k.id === keywordId);
-  const baseline = baselines.find((b) => b.keyword_id === keywordId);
   const viewPoints = useMemo<GridCheck[]>(
     () =>
       source === "brightlocal"
@@ -125,10 +147,10 @@ export function MapGridDashboard({
     [viewPoints, center, radius],
   );
   const pointsWithin = (r: number | null) =>
-    center ? withinRadius(config.points, center, r).length : config.points.length;
+    center ? withinRadius(shown.points, center, r).length : shown.points.length;
   const spacing = useMemo(
-    () => (geometry ? null : typicalSpacing(config.points)),
-    [geometry, config.points],
+    () => (geometry ? null : typicalSpacing(shown.points)),
+    [geometry, shown.points],
   );
   const selected = inRadius.find((c) => c.id === selectedId) ?? null;
   useEffect(() => {
@@ -141,7 +163,7 @@ export function MapGridDashboard({
   const totalCost = checks.reduce((s, c) => s + Number(c.cost), 0);
   // The next scan freezes the profile as it is now, not the scan on screen.
   const next = scanPreview(profile.config);
-  const nextGeometry = profile.config.geometry ?? null;
+  const nextGeometry = usableGeometry(profile.config);
   const radiusLabel = radius === null ? "full scan" : `${radius} mi`;
   const scan = () =>
     startTransition(async () => {
@@ -208,10 +230,12 @@ export function MapGridDashboard({
             </h2>
             <p className="mt-2 text-sm text-slate-300">
               {profile.label} ·{" "}
-              {geometry
-                ? `Dense local scan, ${radii.map((r) => `${r}`).join(" / ")} mi`
-                : "Broad scan"}{" "}
-              · {config.points.length} points · {config.keywords.length}{" "}
+              {source === "brightlocal"
+                ? "BrightLocal baseline"
+                : geometry
+                  ? `Dense local scan, ${radii.map((r) => `${r}`).join(" / ")} mi`
+                  : "Broad scan"}{" "}
+              · {shown.points.length} points · {config.keywords.length}{" "}
               keywords
             </p>
           </div>
@@ -344,7 +368,7 @@ export function MapGridDashboard({
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.started_at.slice(0, 16).replace("T", " ")} UTC · {r.status}{" "}
-                · {r.config?.geometry ? "dense 1/2/5 mi" : "broad"}
+                · {usableGeometry(r.config) ? "dense 1/2/5 mi" : "broad"}
               </option>
             ))}
           </select>
@@ -355,7 +379,7 @@ export function MapGridDashboard({
             aria-label="Grid source"
             className="field-sm mt-1 block text-foreground"
             value={source}
-            onChange={(e) => setSource(e.target.value as typeof source)}
+            onChange={(e) => changeSource(e.target.value as typeof source)}
           >
             <option value="dataforseo">Compass / DataForSEO</option>
             <option value="brightlocal" disabled={!baseline}>
@@ -410,7 +434,7 @@ export function MapGridDashboard({
           className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
         >
           {source === "brightlocal" ? "This BrightLocal baseline" : "This scan"}{" "}
-          used the earlier broad layout: {config.points.length} points
+          has no dense 1/2/5-mile layout: {shown.points.length} points
           {spacing ? `, about ${miles(spacing)} apart` : ""}.{" "}
           {radius !== null
             ? `Only ${inRadius.length} sampled point${inRadius.length === 1 ? " falls" : "s fall"} within ${radius} mi of the business. `
@@ -481,6 +505,7 @@ export function MapGridDashboard({
               onSelect={selectPoint}
               center={center}
               radiusMiles={radius}
+              datasetKey={`${source}:${run?.id ?? "profile"}`}
               rings={rings}
             />
           ) : (

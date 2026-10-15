@@ -83,15 +83,48 @@ try{
  await markers.first().click();await page.getByText(/mi from the business/).waitFor();
  // None of the radius, zoom, pan, ring or keyword changes asked for a scan.
  assert.equal(starts,0);
+ // Straight from the dense run to the BrightLocal baseline: the controls, counts, header and
+ // warning describe the baseline's own 25 broad points, never the dense scan's metadata.
+ const radiusCounts=async()=>Promise.all(['1 mi','2 mi','5 mi','Full scan'].map(async l=>Number((await radius(l).innerText()).match(/\((\d+)\)/)[1])));
+ const zoomBelow=z=>page.waitForFunction(z=>Number(document.querySelector('[data-testid=map-grid-map]').dataset.zoom)<z,z);
+ await radius('Full scan').click();await count(153);await page.waitForTimeout(300);
+ const denseFull=Number(await map.getAttribute('data-zoom'));
+ // Zoom in by hand so the refit on the source switch is observable.
+ await page.locator('.leaflet-control-zoom-in').click();await page.waitForFunction(z=>Number(document.querySelector('[data-testid=map-grid-map]').dataset.zoom)>z,denseFull);
+ await page.getByLabel('Grid source').selectOption('brightlocal');await count(25);
+ assert.equal(await radius('Full scan').getAttribute('aria-pressed'),'true');
+ // Same radius (full) and center as before, yet the view refits to the wider baseline extent.
+ await zoomBelow(denseFull);
+ assert.deepEqual(await radiusCounts(),[1,1,1,25]);
+ await page.getByText(/BrightLocal baseline · 25 points · 2 keywords/).waitFor();
+ assert.equal(await page.getByText(/Dense local scan/).count(),0);
+ await page.getByRole('note').filter({hasText:'This BrightLocal baseline has no dense 1/2/5-mile layout: 25 points, about 10 mi apart.'}).waitFor();
+ for(const [label,n] of [['1 mi',1],['2 mi',1],['5 mi',1],['Full scan',25]]){
+  await radius(label).click();await count(n);
+  assert.equal(await markers.count(),(await radiusCounts())[['1 mi','2 mi','5 mi','Full scan'].indexOf(label)]);
+  assert.match(await card('Sampled points').innerText(),new RegExp(`^Sampled points\\s+${n}`));
+  const note=await page.getByRole('note').innerText();
+  assert.match(note,/25 points, about 10 mi apart/);
+  if(label!=='Full scan')assert.match(note,new RegExp(`Only 1 sampled point falls within ${label}`));else assert.doesNotMatch(note,/Only/);
+  if(label==='5 mi')await page.screenshot({path:`${shots}/brightlocal-from-dense-5mi.png`,fullPage:true});
+ }
+ await page.screenshot({path:`${shots}/brightlocal-from-dense-full.png`,fullPage:true});
+ // Back to DataForSEO: the dense run's own default, counts and no broad warning.
+ await page.getByLabel('Grid source').selectOption('dataforseo');await count(153);
+ assert.equal(await radius('5 mi').getAttribute('aria-pressed'),'true');
+ assert.deepEqual(await radiusCounts(),[49,85,153,153]);
+ assert.equal(await page.getByRole('note').count(),0);
+ await page.getByText(/Dense local scan, 1 \/ 2 \/ 5 mi · 153 points/).waitFor();
+ assert.equal(starts,0);
  // The old broad scan opens at its full extent and says what it cannot show.
  await page.getByLabel('Scan history').selectOption('broad');await page.waitForURL(/run=broad/);
- await page.getByText(/earlier broad layout: 25 points, about 10 mi apart/).waitFor();
+ await page.getByText(/This scan has no dense 1\/2\/5-mile layout: 25 points, about 10 mi apart/).waitFor();
  assert.equal(await radius('Full scan').getAttribute('aria-pressed'),'true');await count(25);
  await radius('5 mi').click();await count(1);await page.getByText(/Only 1 sampled point falls within 5 mi/).waitFor();
  assert.equal(await page.getByTestId('business-center').count(),1);
  await page.screenshot({path:`${shots}/broad-5mi.png`,fullPage:true});
  await radius('Full scan').click();await count(25);
- await page.getByLabel('Grid source').selectOption('brightlocal');await page.getByText(/BrightLocal baseline: 2026-09-24/).waitFor();await page.getByText(/This BrightLocal baseline used the earlier broad layout/).waitFor();
+ await page.getByLabel('Grid source').selectOption('brightlocal');await page.getByText(/BrightLocal baseline: 2026-09-24/).waitFor();await page.getByText(/This BrightLocal baseline has no dense 1\/2\/5-mile layout/).waitFor();
  await page.screenshot({path:`${shots}/broad-full.png`,fullPage:true});
  await page.getByLabel('Grid source').selectOption('dataforseo');
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'CSV',exact:true}).click();assert.match((await download).suggestedFilename(),/^map-grid-dataforseo-.*-full\.csv$/);
@@ -109,5 +142,5 @@ try{
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(500);await page.screenshot({path:`${shots}/mobile.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  assert.equal(starts,1);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
- console.log('Grid browser checks passed: 1/2/5-mile radius controls (49/85/153 points), center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
+ console.log('Grid browser checks passed: 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
 }catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}

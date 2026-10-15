@@ -124,22 +124,69 @@ export function scanPreview(config: Pick<GridConfig, "points" | "keywords">) {
     estimatedCost: checks * COST_PER_CHECK,
   };
 }
+const positive = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v) && v > 0;
+// Why a declared geometry cannot be trusted, or null when it is complete and
+// consistent. Legacy configs (geometry absent or null) are not checked here.
+export function geometryProblem(
+  g: unknown,
+  points: GridPoint[],
+): string | null {
+  if (typeof g !== "object" || g === null || Array.isArray(g))
+    return "Invalid grid geometry";
+  const x = g as Record<string, unknown>;
+  if (x.version !== LOCAL_GEOMETRY_VERSION)
+    return "Unknown grid geometry version";
+  const c = x.center as Record<string, unknown> | null | undefined;
+  if (
+    typeof c?.lat !== "number" ||
+    typeof c?.lng !== "number" ||
+    !Number.isFinite(c.lat) ||
+    !Number.isFinite(c.lng) ||
+    Math.abs(c.lat) > 85 ||
+    Math.abs(c.lng) > 180
+  )
+    return "Invalid grid geometry center";
+  const tiers = x.tiers,
+    radii = x.radii_miles;
+  if (!Array.isArray(tiers) || tiers.length < 1 || tiers.length > 5)
+    return "Invalid grid geometry tiers";
+  if (!Array.isArray(radii) || radii.length !== tiers.length)
+    return "Grid geometry radii do not match its tiers";
+  let previous = 0;
+  for (const [i, t] of tiers.entries()) {
+    const tier = t as Record<string, unknown> | null;
+    if (
+      !positive(tier?.max_miles) ||
+      !positive(tier?.spacing_miles) ||
+      tier.spacing_miles > tier.max_miles ||
+      tier.max_miles <= previous
+    )
+      return "Invalid grid geometry tiers";
+    if (radii[i] !== tier.max_miles)
+      return "Grid geometry radii do not match its tiers";
+    previous = tier.max_miles;
+  }
+  if (!radii.includes(x.default_radius_miles))
+    return "Grid geometry default radius is not one of its radii";
+  if (x.point_count !== points.length)
+    return "Grid geometry point count does not match its points";
+  for (const p of points)
+    if (distanceMiles(c as GridPoint, p) > previous + RADIUS_TOLERANCE_MILES)
+      return "Grid point outside declared radius";
+  return null;
+}
+// The dense layout a viewer may rely on, or null for legacy and untrustworthy metadata.
+export function usableGeometry(config: Pick<GridConfig, "geometry" | "points">) {
+  const g = config.geometry;
+  if (g === undefined || g === null) return null;
+  return geometryProblem(g, config.points) ? null : g;
+}
 function validateGeometry(config: GridConfig) {
   const g = config.geometry;
   if (g === undefined || g === null) return;
-  if (
-    g.version !== LOCAL_GEOMETRY_VERSION ||
-    !Number.isFinite(g.center?.lat) ||
-    !Number.isFinite(g.center?.lng) ||
-    !Array.isArray(g.tiers) ||
-    !g.tiers.length ||
-    g.point_count !== config.points.length
-  )
-    throw Error("Invalid grid geometry");
-  const max = g.tiers[g.tiers.length - 1].max_miles;
-  for (const p of config.points)
-    if (distanceMiles(g.center, p) > max + RADIUS_TOLERANCE_MILES)
-      throw Error("Grid point outside declared radius");
+  const problem = geometryProblem(g, config.points);
+  if (problem) throw Error(problem);
 }
 export type MapResult = {
   place_id: string | null;

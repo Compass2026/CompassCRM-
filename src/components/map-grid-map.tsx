@@ -33,6 +33,7 @@ export default function MapGridMap({
   center,
   radiusMiles,
   rings,
+  datasetKey,
 }: {
   checks: GridCheck[];
   onSelect: (check: GridCheck) => void;
@@ -40,6 +41,8 @@ export default function MapGridMap({
   // null = the scan's full extent.
   radiusMiles: number | null;
   rings: number[];
+  // Changes only on a deliberate source switch; refits to that dataset's extent.
+  datasetKey: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const leaflet = useRef<{
@@ -95,8 +98,9 @@ export default function MapGridMap({
     };
   }, []);
 
-  // Deliberate radius changes (and the first render) fit the view.
-  const fitKey = `${radiusMiles ?? "all"}:${center?.lat},${center?.lng}`;
+  // Deliberate radius or source changes (and the first render) fit the view,
+  // even when the new dataset happens to share the radius and center.
+  const fitKey = `${datasetKey}|${radiusMiles ?? "all"}:${center?.lat},${center?.lng}`;
   const fitted = useRef<string | null>(null);
   useEffect(() => {
     const l = leaflet.current;

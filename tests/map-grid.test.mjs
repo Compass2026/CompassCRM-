@@ -9,6 +9,7 @@ import {
   withinRadius,
   distanceMiles,
   scanPreview,
+  usableGeometry,
   LOCAL_TIERS,
 } from "../supabase/functions/_shared/map-grid.ts";
 const id = "00000000-0000-4000-a000-000000000001";
@@ -186,4 +187,45 @@ test("scan preview and guards keep dense scans inside the 1,000-check budget", (
   validateGrid({ ...config, geometry: null });
   assert.throws(() => localGrid(lucas, [{ max_miles: 1, spacing_miles: 0.3 }]));
   assert.throws(() => localGrid({ lat: NaN, lng: 0 }));
+});
+test("incomplete or inconsistent geometry metadata is refused before spending", () => {
+  const { points, geometry } = localGrid(lucas);
+  const drop = (k) => {
+    const g = { ...geometry };
+    delete g[k];
+    return g;
+  };
+  const bad = [
+    {},
+    [],
+    "local-multiscale-v1",
+    drop("version"),
+    drop("center"),
+    drop("tiers"),
+    drop("radii_miles"),
+    drop("default_radius_miles"),
+    drop("point_count"),
+    { ...geometry, center: { lat: "38.8", lng: -90.8 } },
+    { ...geometry, tiers: [] },
+    { ...geometry, tiers: [{}], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: 5 }], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: 5, spacing_miles: 0 }], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: 5, spacing_miles: 6 }], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: Infinity, spacing_miles: 1 }], radii_miles: [Infinity] },
+    { ...geometry, tiers: [...geometry.tiers.slice(0, 2), { max_miles: 2, spacing_miles: 1 }], radii_miles: [1, 2, 2] },
+    { ...geometry, radii_miles: [1, 2] },
+    { ...geometry, radii_miles: [1, 2, 4] },
+    { ...geometry, default_radius_miles: 3 },
+    { ...geometry, point_count: "153" },
+  ];
+  for (const g of bad) {
+    assert.throws(() => validateGrid({ ...config, points, geometry: g }), undefined, JSON.stringify(g));
+    assert.equal(usableGeometry({ points, geometry: g }), null);
+  }
+  // Legacy configs and the generated layout stay valid.
+  for (const g of [undefined, null]) {
+    validateGrid({ ...config, geometry: g });
+    assert.equal(usableGeometry({ points: config.points, geometry: g }), null);
+  }
+  assert.equal(usableGeometry({ points, geometry }), geometry);
 });
