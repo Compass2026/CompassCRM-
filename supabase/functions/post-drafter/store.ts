@@ -2,7 +2,8 @@
 // service role, so every call reaches Postgres through PostgREST as
 // authenticator + service_role — the session 0047's write boundary admits.
 // It reads through the canonical loader and writes through drafter_write();
-// it never inserts or edits posts itself. Authority mode (v2) adds one
+// it never inserts or edits posts itself (attach_photo writes through
+// drafter_attach_photo() the same way). Authority mode (v2) adds one
 // read-only load of the opportunity's state; it writes no Authority record
 // (drafter_write links the post in its own transaction, 0053).
 import type { AuthorityState } from "./authority.ts";
@@ -145,6 +146,48 @@ export function createStore(supabase: Client) {
       if (error) return { error: { code: error.code ?? null, message: error.message } };
       return data as Written;
     },
+
+    // attach_photo (20261015060000): the post's client and the photo's
+    // client and file, read before the bytes are fetched.
+    // drafter_attach_photo checks all of it again under row locks.
+    async attachTarget(postId: string, assetId: string): Promise<AttachTarget> {
+      const { data: post, error: pe } = await supabase.from("social_posts").select("id, client_id").eq("id", postId).maybeSingle();
+      if (pe) throw new Error(pe.message);
+      const { data: asset, error: ae } = await supabase.from("brand_assets").select("id, client_id, storage_path")
+        .eq("id", assetId).maybeSingle();
+      if (ae) throw new Error(ae.message);
+      return { post: post ?? null, asset: asset ?? null };
+    },
+
+    // The stored file itself, so the hash recorded on the asset is checked
+    // against the bytes the publisher will send. Never returned to callers.
+    async assetBytes(storagePath: string): Promise<Uint8Array | null> {
+      const { data, error } = await supabase.storage.from("brand-assets").download(storagePath);
+      if (error || !data) return null;
+      return new Uint8Array(await data.arrayBuffer());
+    },
+
+    // One call, one transaction (drafter_attach_photo).
+    async attachPhoto(p: AttachPayload): Promise<Record<string, unknown> | { error: WriteError }> {
+      const { data, error } = await supabase.rpc("drafter_attach_photo", { p });
+      if (error) return { error: { code: error.code ?? null, message: error.message } };
+      return data as Record<string, unknown>;
+    },
   };
 }
+
+export type AttachTarget = {
+  post: { id: string; client_id: string } | null;
+  asset: { id: string; client_id: string; storage_path: string | null } | null;
+};
+export type AttachPayload = {
+  post_id: string;
+  brand_asset_id: string;
+  operation_id: string;
+  expected_updated_at: string | null;
+  verified_hash: string;
+  requested_via: "worker" | "team";
+  requested_by: string | null;
+  runtime: string;
+};
 export type Store = ReturnType<typeof createStore>;

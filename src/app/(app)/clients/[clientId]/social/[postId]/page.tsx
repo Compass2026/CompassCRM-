@@ -43,7 +43,7 @@ import { approvedChannelProblems, gbpPublishRoute, MAX_ATTEMPTS, modeLabels, out
 import { PublisherPreflight } from "@/components/publisher-preflight";
 import { drafterSummary } from "@/lib/drafter-run";
 import { canRenderCreative, canRequestNewCreative, creativeStatusLabels, isCreativePolicy } from "@/lib/creative-post";
-import { mediaPreview, noGraphicLine } from "@/lib/post-media";
+import { assetEligibility, mediaPreview, noGraphicLine, pickerText } from "@/lib/post-media";
 import { BRAND_BUCKET, SIGNED_URL_TTL } from "@/lib/brand";
 import { CreativePolicyForm, GenerateCreativeForm, RequestNewCreativeForm } from "@/components/creative/post-creative-forms";
 import { CopyTextButton } from "@/components/copy-text-button";
@@ -167,7 +167,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const creativeStatus = creativeStatusLabels[post.creative_status] ?? { label: post.creative_status, className: "" };
   const { data: brandAssets } = await supabase
     .from("brand_assets")
-    .select("id, label, kind")
+    .select("id, label, kind, storage_path, width, height, content_hash, creative_use, depicts_own_work, subjects")
     .eq("client_id", clientId)
     .order("kind")
     .order("sort_order");
@@ -181,7 +181,15 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   const linkedAssetIds = new Set(brandLinks.map((a) => a.brand_asset_id));
   // The files themselves, for review: signed with this teammate's session from
   // the private bucket (storage RLS applies; nothing is made public).
-  const mediaPaths = brandLinks.map((a) => a.brand_assets?.storage_path).filter((p): p is string => !!p);
+  // What may be added: the channel's eligible assets (assetEligibility, which
+  // linkAssetAction enforces again), with thumbnails signed in the same call.
+  // A Business Profile post takes one photo, so its picker closes once it has one.
+  const gbpHasPhoto = isGbp && brandLinks.length > 0;
+  const pickable = actions.includes("edit") && !gbpHasPhoto
+    ? (brandAssets ?? []).filter((b) => !linkedAssetIds.has(b.id) && assetEligibility(post.platform, b).ok)
+    : [];
+  const mediaPaths = [...brandLinks.map((a) => a.brand_assets?.storage_path), ...pickable.map((b) => b.storage_path)]
+    .filter((p): p is string => !!p);
   const mediaSigned = new Map<string, string>();
   let mediaSignError: string | null = null;
   if (mediaPaths.length > 0) {
@@ -524,7 +532,11 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           <LinkAssetForm
             clientId={clientId}
             postId={postId}
-            assets={(brandAssets ?? []).filter((b) => !linkedAssetIds.has(b.id)).map((b) => ({ id: b.id, label: `${b.label} (${b.kind})` }))}
+            assets={pickable.map((b) => ({ id: b.id, thumb: b.storage_path ? mediaSigned.get(b.storage_path) ?? null : null, ...pickerText(b) }))}
+            closedNote={gbpHasPhoto ? "A Business Profile post takes one photo. Remove this one to pick another." : null}
+            emptyNote={isGbp
+              ? "No photos are approved for creative use with a stored, hashed file. Review photos on the Brand tab; a Business Profile post takes one."
+              : "No other brand assets on file. Add them on the Brand tab."}
           />
         )}
       </section>

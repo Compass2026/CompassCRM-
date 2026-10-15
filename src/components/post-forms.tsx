@@ -379,31 +379,50 @@ export function ScheduleForm({
   );
 }
 
-export function LinkAssetForm({ clientId, postId, assets }: { clientId: string; postId: string; assets: Option[] }) {
+export type AssetChoice = { id: string; title: string; meta: string; alt: string; thumb: string | null };
+
+// The eligible assets as cards: a thumbnail, a name a person can tell apart,
+// and the facts that pin the file (size, own work or not, short id, hash).
+// linkAssetAction checks eligibility again on the server.
+export function LinkAssetForm({ clientId, postId, assets, emptyNote, closedNote }: {
+  clientId: string; postId: string; assets: AssetChoice[]; emptyNote: string; closedNote?: string | null;
+}) {
   const [state, action, pending] = useActionState(linkAssetAction.bind(null, clientId, postId), {});
+  if (closedNote) return <p className="text-xs text-muted-foreground" data-asset-picker-closed>{closedNote}</p>;
   if (assets.length === 0) {
-    return <p className="text-xs text-muted-foreground">No other brand assets on file. Add them on the Brand tab.</p>;
+    return <p className="text-xs text-muted-foreground" data-asset-picker-empty>{emptyNote}</p>;
   }
   return (
-    <form action={action} className="space-y-2">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1 space-y-1">
-          <Label htmlFor="brand_asset_id">Add a brand asset</Label>
-          <select id="brand_asset_id" name="brand_asset_id" className={selectClass} defaultValue="">
-            <option value="" disabled>
-              Photos, logos, graphics…
-            </option>
-            {assets.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label}
-              </option>
-            ))}
-          </select>
+    <form action={action} className="space-y-2" data-asset-picker>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Add a brand asset</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {assets.map((a) => (
+            <label
+              key={a.id}
+              className="flex cursor-pointer items-start gap-3 rounded-md border p-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-muted/40"
+              data-asset-option={a.id}
+            >
+              <input type="radio" name="brand_asset_id" value={a.id} required className="mt-1 shrink-0" />
+              {a.thumb ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={a.thumb} alt={a.alt} className="h-20 w-16 shrink-0 rounded border bg-muted object-cover" loading="lazy" />
+              ) : (
+                <span className="flex h-20 w-16 shrink-0 items-center justify-center rounded border bg-muted text-center text-[10px] text-muted-foreground">
+                  No preview
+                </span>
+              )}
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                <span className="block font-medium">{a.title}</span>
+                <span className="block text-xs text-muted-foreground">{a.meta}</span>
+              </span>
+            </label>
+          ))}
         </div>
-        <Button type="submit" variant="outline" disabled={pending}>
-          Add
-        </Button>
-      </div>
+      </fieldset>
+      <Button type="submit" variant="outline" disabled={pending}>
+        Add
+      </Button>
       <FormMessage state={state} />
     </form>
   );

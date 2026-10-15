@@ -66,6 +66,29 @@ jobs:
       - name: Review a fictional blog through the real browser and database
         run: npm run test:blog-drafter-ui
 
+  attach-photo-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Install isolated database and API
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql
+          curl -fsSL https://github.com/PostgREST/postgrest/releases/download/v16.4/postgrest-v16.4-linux-static-x86-64.tar.xz -o /tmp/postgrest.tar.xz
+          echo 'b47ecc82fce1dcebbbc4183d839e52f07f7630c9d7ad0f54db753d1939299354  /tmp/postgrest.tar.xz' | sha256sum -c -
+          tar -xJf /tmp/postgrest.tar.xz -C /tmp
+          sudo install /tmp/postgrest /usr/local/bin/postgrest
+      - name: Attach a photo through the drafter, the picker and the publisher preflight (fictional data)
+        run: CHROME_PATH=/usr/bin/google-chrome npm run test:attach-photo-ui
+
   client-growth-ui:
     runs-on: ubuntu-latest
     timeout-minutes: 15

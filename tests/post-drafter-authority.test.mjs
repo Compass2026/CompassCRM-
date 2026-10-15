@@ -64,11 +64,11 @@ async function hashOf(d) {
   return r.body.brief_hash;
 }
 
-test("version: v6 with keyword-first campaigns, Authority mode, duplicate rule and Facebook drafts", async () => {
+test("version: v7 with keyword-first campaigns, Authority mode, duplicate rule, Facebook drafts and photo attach", async () => {
   const v = await call(drafter(fakeStore().store), { mode: "version" });
-  assert.equal(v.body.version, 6);
-  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces"]);
-  assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version"]);
+  assert.equal(v.body.version, 7);
+  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "attach_photo"]);
+  assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version", "attach_photo"]);
 });
 
 test("brief: target derived from the opportunity; the Drafter's own brief plus brief.authority", async () => {
