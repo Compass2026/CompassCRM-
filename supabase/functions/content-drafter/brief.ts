@@ -135,8 +135,8 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
   const areas = assessIntelligence(input as unknown as IntelligenceInput);
   const area = (key: string) => areas.find((a) => a.key === key);
   const gate: Record<string, string> = workspaceGate(input);
-  if (!input.board) refuse("brand_board_missing", "The client has no brand board.");
-  else if (input.board.status !== "approved") refuse("brand_board_not_approved", `The brand board is ${input.board.status}, not approved.`);
+  if (!input.board) refuse("brand_board_missing", "The client has no brand board. Start and approve one on the Foundation tab.");
+  else if (input.board.status !== "approved") refuse("brand_board_not_approved", `Brand board v${input.board.version} is ${input.board.status}, not approved. Approve brand board v${input.board.version} on the Foundation tab.`);
   gate.brand_board = input.board?.status ?? "missing";
   if (!input.brand || !filled(input.brand.positioning) || !filled(input.brand.voice_tone)) {
     refuse("brand_voice_missing", "Positioning and voice must be written before drafting.");
