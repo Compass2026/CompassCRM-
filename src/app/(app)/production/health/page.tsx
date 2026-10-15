@@ -1,3 +1,4 @@
+import { loadRolloutReviews } from "@/lib/agency-rollout-loader";
 import Link from "next/link";
 import { Activity, ArrowRight, ChartNoAxesCombined, CircleAlert, Database, Layers3, ShieldCheck, Workflow } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -103,7 +104,7 @@ export default async function OperationsHealthPage() {
     db.from("subscriptions").select("client_id,livemode,status", {count:"exact"}).limit(3000),
     db.from("portal_users").select("client_id,is_active", {count:"exact"}).limit(3000),
     db.from("report_measurements").select("client_id,source,window_end,created_at", {count:"exact"}).eq("status", "measured").limit(3000),
-    db.from("client_brand_workspaces").select("id,client_id,status,blog_site_id", {count:"exact"}).limit(3000),
+    db.from("client_brand_workspaces").select("id,client_id,name,status,blog_site_id,gsc_property,ga4_property", {count:"exact"}).limit(3000),
     db.from("brand_boards").select("client_id,status", {count:"exact"}).limit(3000),
     db.from("inquiry_sources").select("client_id,enabled", {count:"exact"}).limit(3000),
     db.from("content_drafts").select("id,client_id,status,title,topic,request_task_id,created_at", {count:"exact"}).limit(3000),
@@ -155,9 +156,10 @@ export default async function OperationsHealthPage() {
     ...(completeRead(detailedReleasesQ) === null ? ["Publisher action queue"] : []),
   ];
   const generatedAt = new Date().toISOString();
-  const [integrations,operational] = await Promise.all([
+  const [integrations,operational,reviews] = await Promise.all([
     loadIntegrationHealth(db, summary.clients.map(c=>c.id), generatedAt),
     loadOperationalEvidence(db, summary.clients.map(c=>c.id), generatedAt).catch(()=>null),
+    loadRolloutReviews(db,summary.clients.map(c=>c.id)).catch(()=>null),
   ]);
   if(!operational)v2SourceErrors.push("Operational evidence");
   const v2 = buildOperationsV2({
@@ -180,7 +182,7 @@ export default async function OperationsHealthPage() {
       <CircleAlert className="mt-0.5 size-5 shrink-0" />
       <p><strong>Partial visibility:</strong> {failedSources.join(", ")} could not be read. Affected values show Unavailable or Unknown rather than zero.</p>
     </div>}
-    <ControlCenterV2 data={v2} />
+    <ControlCenterV2 data={v2} reviews={reviews} brands={completeRead(brandsQ)} />
     <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4" data-legacy-health>
       <summary className="cursor-pointer text-sm font-semibold text-navy-900">
         Classic five-layer counts and detailed operations table
@@ -240,7 +242,7 @@ export default async function OperationsHealthPage() {
     </details>
     <footer className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
       <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-blue-700" />
-      <p><strong>Read-only Control Center.</strong> Counts come from team-authorized production CRM records.
+      <p><strong>Evidence and operating reviews.</strong> Agency rollout stages require human review. Reviews save internal scope, stage and evidence history. Counts come from team-authorized production CRM records.
         A completed scheduled database job is not proof that an external provider delivered a notification.
         An approved draft is not a published article; only published release records count as execution.
         Data observations indicate presence, not automatic freshness. No SMS, billing, approval or publishing actions can be triggered here.</p>

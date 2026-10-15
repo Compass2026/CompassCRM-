@@ -252,6 +252,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_drafts.test
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_publication.test.sql"
 # Multi-brand isolation, human approvals, shared GBP and per-brand website destinations.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.test.sql"
-
 # New GBP drafts pin the existing client binding before human review.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_gbp_destination.test.sql"
+
+# Agency review ledger: human actor, versions, stage gates and portal isolation.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollout.test.sql"

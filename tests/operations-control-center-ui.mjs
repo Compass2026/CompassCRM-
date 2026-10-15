@@ -9,18 +9,28 @@ const now=new Date(),recent=new Date(now.getTime()-3600000).toISOString(),throug
 const clients=[{id:a,name:'Fictional North',status:'active',gsc_property:'sc-domain:north.test',ga4_property:'properties/123'},{id:b,name:'Fictional South',status:'active',gsc_property:null,ga4_property:'properties/456'}];
 const receipt={id:'r1',client_id:a,property:'properties/123',period,period_end:through,created_at:recent};
 const run={id:'run1',client_id:a,created_at:recent,finished_at:recent,status:'completed',results:[{month:period,status:'imported',receipt_id:'r1'}]};
-let ga4Failure=false,truncated=false;const writes=[],requests=[];
-const rows={client_growth_rankings:[],rank_runs:[],backlink_checks:[],backlink_profile_sync_runs:[],social_posts:[{client_id:a,id:'social-review',platform:'facebook',review_status:'in_review',publish_status:'not_scheduled'}],billing_reconciliation_results:[],services:[],claims:[],authority_latest:[],clients,keywords:[{client_id:a,is_active:true,is_tracked:true}],sites:[],report_measurements:[],content_drafts:[{id:'review1',client_id:a,status:'in_review',title:'Review this fictional article',topic:null,request_task_id:'task',created_at:recent}],blog_publications:[],crm_lite_settings:[],notification_jobs:[],backlink_opportunities:[],social_accounts:[],subscriptions:[],portal_users:[],client_brand_workspaces:[],brand_boards:[],inquiry_sources:[],gsc_performance_imports:[],gbp_performance_imports:[],gsc_performance_sync_runs:[],gbp_performance_sync_runs:[],ga4_performance_imports:[receipt],ga4_performance_sync_runs:[run,{...run,id:'run2',client_id:b,results:[]}]};
+let ga4Failure=false,truncated=false,rolloutFailure=false;const writes=[],requests=[];
+const rows={agency_rollout_reviews:[],client_growth_rankings:[],rank_runs:[],backlink_checks:[],backlink_profile_sync_runs:[],social_posts:[{client_id:a,id:'social-review',platform:'facebook',review_status:'in_review',publish_status:'not_scheduled'}],billing_reconciliation_results:[],services:[],claims:[],authority_latest:[],clients,keywords:[{client_id:a,is_active:true,is_tracked:true}],sites:[],report_measurements:[],content_drafts:[{id:'review1',client_id:a,status:'in_review',title:'Review this fictional article',topic:null,request_task_id:'task',created_at:recent}],blog_publications:[],crm_lite_settings:[],notification_jobs:[],backlink_opportunities:[],social_accounts:[],subscriptions:[],portal_users:[],client_brand_workspaces:[],brand_boards:[],inquiry_sources:[],gsc_performance_imports:[],gbp_performance_imports:[],gsc_performance_sync_runs:[],gbp_performance_sync_runs:[],ga4_performance_imports:[receipt],ga4_performance_sync_runs:[run,{...run,id:'run2',client_id:b,results:[]}]};
 const upstream=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');requests.push(url.pathname);
  const reply=(body,status=200,count)=>{res.writeHead(status,{'content-type':'application/json',...(count!==undefined?{'content-range':`0-${Math.max(0,count-1)}/${count}`}:{})});res.end(JSON.stringify(body));};
+ if(req.method==='POST'&&url.pathname==='/rest/v1/agency_rollout_reviews'){
+  let body='';for await(const chunk of req)body+=chunk;const row=JSON.parse(body);
+  writes.push(req.method+' '+url.pathname);rows.agency_rollout_reviews.push({...row,id:'review-'+row.version,reviewed_by:team,reviewed_at:new Date().toISOString()});return reply(null,201);
+ }
  if(req.method!=='GET'){writes.push(req.method+' '+url.pathname);return reply({message:'No writes allowed'},405);}
  if(url.pathname==='/auth/v1/user')return reply({id:team,email:'team@example.test',aud:'authenticated',role:'authenticated'});
  if(url.pathname==='/rest/v1/team_members')return reply({id:team});
  const table=url.pathname.split('/').at(-1);
  if(!(table in rows))return reply({message:'Unexpected table '+table},500);
  if(ga4Failure&&table==='ga4_performance_imports')return reply({message:'Simulated unavailable source'},503);
+ if(rolloutFailure&&table==='agency_rollout_reviews')return reply({message:'Review ledger unavailable'},503);
  let data=rows[table];
+ if(table==='agency_rollout_reviews'){
+  if(url.searchParams.get('client_id')?.startsWith('eq.'))data=data.filter(r=>r.client_id===url.searchParams.get('client_id').slice(3));
+  if(url.searchParams.get('brand_workspace_id')==='is.null')data=data.filter(r=>r.brand_workspace_id===null);
+  data=data.toSorted((a,b)=>b.version-a.version);if(url.searchParams.has('limit'))data=data.slice(0,Number(url.searchParams.get('limit')));
+ }
  if(url.searchParams.has('source'))data=data.filter(r=>r.source===url.searchParams.get('source').slice(3));
  return reply(data,200,truncated&&table==='ga4_performance_imports'?1001:data.length);
 });
@@ -84,7 +94,37 @@ try{
  ga4Failure=true;await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();
  assert.ok(await ga4.getByText('Unverified',{exact:true}).isVisible());assert.equal(await ga4.getByText('Verified retrieval',{exact:true}).count(),0);
  ga4Failure=false;truncated=true;await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Source freshness'}).click();assert.ok(await ga4.getByText('Unverified',{exact:true}).isVisible());
- assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);assert.ok(requests.includes('/rest/v1/ga4_performance_sync_runs'));
- console.log('Control Center browser passed: server reads, exact-count failure, provider evidence, linked alerts, client filtering, onboarding, responsive layout, no writes.');
+ // Internal review flow: safe empty state, save, persistent history and optimistic conflict.
+ ga4Failure=false;truncated=false;await page.reload({waitUntil:'networkidle'});
+ await page.getByRole('tab',{name:'Agency rollout',exact:true}).click();
+ assert.equal(await page.locator('[data-rollout-client]').count(),2);
+ const north=page.locator(`[data-rollout-client="${a}"]`);
+ await north.locator('[data-rollout-scope="parent"] > summary').click();
+ await north.getByText('Record / update review',{exact:true}).click();
+ const form=north.locator('[data-rollout-form]');
+ await form.getByLabel('Responsible owner / role',{exact:true}).first().fill('Fictional operator');
+ await form.getByLabel('Next action',{exact:true}).first().fill('Confirm contracted scope');
+ await form.getByLabel('Reason for this review',{exact:true}).fill('Initial portfolio assessment');
+ await form.getByRole('button',{name:'Save review',exact:true}).click();
+ await north.getByText('Review history (1)',{exact:true}).waitFor();
+ assert.equal(rows.agency_rollout_reviews.length,1);assert.equal(rows.agency_rollout_reviews[0].stage,'unassessed');
+ assert.equal(rows.agency_rollout_reviews[0].requirements.length,13);
+ // Refresh can close native details; open only those currently closed.
+ for(const summary of await north.locator('summary').all()){
+  if((await summary.innerText())==='Record / update review'&&!(await summary.evaluate(el=>el.parentElement.open)))await summary.click();
+ }
+ rows.agency_rollout_reviews.push({...rows.agency_rollout_reviews[0],id:'concurrent',version:2});
+ await form.getByLabel('Reason for this review',{exact:true}).fill('Stale browser review');
+ await form.getByRole('button',{name:'Save review',exact:true}).click();
+ assert.match(await form.getByRole('alert').innerText(),/changed/);assert.equal(writes.length,1);
+ await page.screenshot({path:'docs/screenshots/control-center/rollout-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ await page.screenshot({path:'docs/screenshots/control-center/rollout-mobile.png',fullPage:true});
+ rolloutFailure=true;await page.reload({waitUntil:'networkidle'});await page.getByRole('tab',{name:'Agency rollout',exact:true}).click();
+ assert.match(await page.locator('[data-agency-rollout]').getByRole('alert').innerText(),/unavailable/);
+ assert.equal(await page.getByText('Record / update review',{exact:true}).count(),0);
+ assert.deepEqual(errors,[]);assert.deepEqual(writes,['POST /rest/v1/agency_rollout_reviews']);assert.ok(requests.includes('/rest/v1/ga4_performance_sync_runs'));
+ console.log('Control Center browser passed: server reads, exact-count failure, provider evidence, linked alerts, client filtering, onboarding, responsive layout, internal review save and conflict refusal; no external writes.');
 }catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}
 
