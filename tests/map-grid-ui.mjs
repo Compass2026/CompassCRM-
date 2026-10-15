@@ -15,7 +15,8 @@ const profile={...config,id:'profile',client_id:clientId,grid_config_id:'grid',l
 const runs=[{id:'dense',profile_id:'profile',started_at:'2026-10-16T01:00:00Z',status:'running',config,error:null},{id:'broad',profile_id:'profile',started_at:'2026-10-15T01:00:00Z',status:'complete',config:broad,error:null}];
 const wichita={lat:37.6922361,lng:-97.3375448},marketGrid=localGrid(wichita,undefined,{label:'Wichita, KS market center'});
 const market={target_place_id:'ChIJfixture',zoom:13,search_this_area:false,points:marketGrid.points,geometry:marketGrid.geometry,keywords};
-runs.push({id:'market',profile_id:'profile',started_at:'2026-10-14T01:00:00Z',status:'complete',config:market,error:null});
+const profile2={...market,id:'profile2',client_id:clientId,grid_config_id:'grid2',label:'Fictional pilot — Wichita, KS',enabled:true,weekly_enabled:false};
+runs.push({id:'market',profile_id:'profile2',started_at:'2026-10-14T01:00:00Z',status:'complete',config:market,error:null});
 const make=(cfg,pending,c=center)=>cfg.keywords.flatMap(k=>cfg.points.map((p,i)=>{const d=distanceMiles(c,p),queued=pending&&i%17===5;return{...p,id:`${k.id}-${i}`,keyword_id:k.id,keyword:k.keyword,point_index:i,state:queued?'queued':'complete',position:queued?null:d>4.5&&i%3===0?null:1+Math.floor(d*2),results:queued?null:[{place_id:'ChIJfixture',position:1+Math.floor(d*2),title:'Fixture Roofing',domain:'example.test'}],cost:.0006,error:null,checked_at:'2026-10-16T01:01:00Z'};}));
 const checks={dense:make(config,true),broad:make(broad,false),market:make(market,false,wichita)};
 const baseline=keywords.map(k=>({keyword_id:k.id,recorded_at:'2026-09-24T14:00:00Z',points:broad.points.map(p=>({...p,position:2}))}));
@@ -28,8 +29,8 @@ const upstream=http.createServer(async(req,res)=>{
  if(url.pathname==='/rest/v1/team_members')return reply([{id:teamId}]);
  if(url.pathname==='/rest/v1/rpc/is_team')return reply(true);
  if(url.pathname==='/rest/v1/clients')return reply({id:clientId,name:'Fictional grid client',status:'active',website_url:'https://example.test'});
- if(url.pathname==='/rest/v1/map_grid_profiles')return reply([profile]);
- if(url.pathname==='/rest/v1/map_grid_runs')return reply(runs);
+ if(url.pathname==='/rest/v1/map_grid_profiles'){const id=url.searchParams.get('id');return reply(url.searchParams.get('client_id')==='eq.'+clientId?[profile,profile2].filter(p=>!id||'eq.'+p.id===id):[]);}
+ if(url.pathname==='/rest/v1/map_grid_runs')return reply(runs.filter(r=>'eq.'+r.profile_id===url.searchParams.get('profile_id')));
  if(url.pathname==='/rest/v1/map_grid_checks')return reply(checks[url.searchParams.get('run_id')?.replace('eq.','')]??[]);
  if(url.pathname==='/rest/v1/grid_snapshots')return reply(baseline);
  if(url.pathname==='/rest/v1/map_grid_weekly_attempts')return reply([]);
@@ -146,7 +147,19 @@ try{
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});await count(153);
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(500);await page.screenshot({path:`${shots}/mobile.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  // A market-centered run (service-area business, no public address) measures from the scan center, never from the business.
- await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?run=market`,{waitUntil:'networkidle'});
+ // Two profiles for one client: the location selector switches to Wichita without any scan request.
+ await page.setViewportSize({width:1440,height:1000});
+ const startsBeforeLocations=starts;
+ assert.deepEqual(await page.getByLabel('Map location').locator('option').allTextContents(),['Fictional pilot','Fictional pilot — Wichita, KS']);
+ await page.getByLabel('Map location').selectOption('profile2');await page.waitForURL(/profile=profile2/);
+ assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
+ assert.deepEqual(await page.getByLabel('Scan history').locator('option').allTextContents(),['2026-10-14 01:00 UTC · complete · dense 1/2/5 mi']);
+ // Refresh keeps the selected location; the first profile's history is not mixed in.
+ await page.reload({waitUntil:'networkidle'});assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
+ assert.equal(starts,startsBeforeLocations);
+ // A profile id that is not this client's is a 404, never another client's data.
+ const foreign=await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?profile=00000000-0000-4000-8000-0000000000ff`);assert.equal(foreign.status(),404);
+ await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps?profile=profile2`,{waitUntil:'networkidle'});
  await page.getByTestId('market-center-note').filter({hasText:'This scan is centred on Wichita, KS market center, not on a business address'}).waitFor();
  const marketRadius=label=>page.getByRole('group',{name:'Radius from scan center'}).getByRole('button',{name:new RegExp(`^${label}`)});
  assert.equal(await marketRadius('5 mi').getAttribute('aria-pressed'),'true');await count(153);
@@ -161,5 +174,5 @@ try{
  await page.screenshot({path:`${shots}/market-center-1mi.png`,fullPage:true});
  assert.equal(starts,1);
  assert.equal(starts,1);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
- console.log('Grid browser checks passed: market-centered run labelled from the scan center (never the business), 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
+ console.log('Grid browser checks passed: two profiles for one client (location selector, refresh keeps it, separate history, foreign profile 404, no scan request), market-centered run labelled from the scan center (never the business), 1/2/5-mile radius controls (49/85/153 points), dense run straight to BrightLocal (1/1/1/25, own warning, refit) and back, center and rings, zoom/pan kept through refresh/resize/keyword switch, pending and old broad scans, per-radius metrics, scan preview and confirmation, no scan request on view changes, CSV, mobile layout.');
 }catch(e){console.error(logs);throw e;}finally{await browser?.close();app.kill('SIGTERM');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));}

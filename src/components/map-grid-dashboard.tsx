@@ -63,6 +63,7 @@ export function MapGridDashboard({
   checks,
   baselines,
   homeCenter,
+  profiles = [],
 }: {
   clientId: string;
   profile: {
@@ -78,8 +79,13 @@ export function MapGridDashboard({
   baselines: GridBaseline[];
   // The grid config's recorded center, for runs frozen before geometry existed.
   homeCenter: GridPoint | null;
+  // Every map-grid profile this client has, one per location.
+  profiles?: { id: string; label: string }[];
 }) {
   const router = useRouter();
+  // Every link keeps the selected location, so refresh and history stay on it.
+  const mapsHref = (runId?: string) =>
+    `/clients/${clientId}/maps?profile=${profile.id}${runId ? `&run=${runId}` : ""}`;
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const config = run?.config ?? profile.config;
@@ -175,7 +181,7 @@ export function MapGridDashboard({
       const result = await startMapGridAction(clientId, profile.id, requestKey);
       if (result.error) setError(result.error);
       else if (result.runId)
-        router.push(`/clients/${clientId}/maps?run=${result.runId}`);
+        router.push(mapsHref(result.runId));
       router.refresh();
     });
   function download() {
@@ -342,6 +348,25 @@ export function MapGridDashboard({
         </p>
       )}
       <div className="flex flex-wrap items-end gap-4 rounded-2xl border bg-card p-4">
+        {profiles.length > 1 && (
+          <label className="min-w-56 flex-1 text-xs font-medium text-muted-foreground">
+            Location
+            <select
+              aria-label="Map location"
+              className="field-sm mt-1 block w-full text-foreground"
+              value={profile.id}
+              onChange={(e) =>
+                router.push(`/clients/${clientId}/maps?profile=${e.target.value}`)
+              }
+            >
+              {profiles.map((p) => (
+                <option value={p.id} key={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="min-w-56 flex-1 text-xs font-medium text-muted-foreground">
           Keyword
           <select
@@ -364,7 +389,7 @@ export function MapGridDashboard({
             className="field-sm mt-1 block text-foreground"
             value={run?.id ?? ""}
             onChange={(e) =>
-              router.push(`/clients/${clientId}/maps?run=${e.target.value}`)
+              router.push(mapsHref(e.target.value))
             }
           >
             {!runs.length && <option value="">No scans yet</option>}

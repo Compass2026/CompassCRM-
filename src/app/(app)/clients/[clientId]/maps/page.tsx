@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   MapGridDashboard,
@@ -12,19 +13,24 @@ export default async function MapsPage({
   searchParams,
 }: {
   params: Promise<{ clientId: string }>;
-  searchParams: Promise<{ run?: string }>;
+  searchParams: Promise<{ run?: string; profile?: string }>;
 }) {
   const { clientId } = await params;
-  const { run: runId } = await searchParams;
+  const { run: runId, profile: profileId } = await searchParams;
   const db = await createClient();
-  const { data: profile, error } = await db
+  // A client can have one profile per location (Logic Solar: Overland Park
+  // and Wichita). Only this client's profiles are candidates, so a profile
+  // id from another client is a 404, never a silent switch to other data.
+  const { data: profiles, error } = await db
     .from("map_grid_profiles")
     .select("*")
     .eq("client_id", clientId)
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
+    .order("created_at");
   if (error) throw Error("Map grid configuration could not be loaded");
+  const profile = profileId
+    ? (profiles ?? []).find((p) => p.id === profileId)
+    : profiles?.[0];
+  if (profileId && !profile) notFound();
   if (!profile)
     return (
       <div className="rounded-2xl border bg-card p-8">
@@ -104,8 +110,9 @@ export default async function MapsPage({
         <MapGridWeeklyNotice status={weekly} attempts={attempts} />
       )}
       <MapGridDashboard
-        key={run?.id ?? profile.id}
+        key={`${profile.id}:${run?.id ?? "latest"}`}
         clientId={clientId}
+        profiles={(profiles ?? []).map((p) => ({ id: p.id, label: p.label }))}
         profile={{
           id: profile.id,
           label: profile.label,
