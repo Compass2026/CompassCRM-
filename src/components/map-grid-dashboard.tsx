@@ -18,6 +18,7 @@ import {
   rankColor,
   scanPreview,
   usableGeometry,
+  centerDescription,
   withinRadius,
   type GridCheck,
   type GridConfig,
@@ -110,6 +111,8 @@ export function MapGridDashboard({
   );
   const geometry = shown.geometry;
   const center = geometry?.center ?? homeCenter;
+  // Distances are from the business unless this scan is centred on a market.
+  const centerText = centerDescription(geometry);
   const radii = geometry?.radii_miles ?? DEFAULT_RADII;
   // Broad layouts open at their full extent: their 5-mile slice is nearly empty.
   const [radius, setRadius] = useState<number | null>(
@@ -239,7 +242,7 @@ export function MapGridDashboard({
               {source === "brightlocal"
                 ? "BrightLocal baseline"
                 : geometry
-                  ? `Dense local scan, ${radii.map((r) => `${r}`).join(" / ")} mi`
+                  ? `Dense local scan, ${radii.map((r) => `${r}`).join(" / ")} mi${centerText.isBusiness ? "" : ` around ${centerText.label}`}`
                   : "Broad scan"}{" "}
               · {shown.points.length} points · {config.keywords.length}{" "}
               keywords
@@ -300,7 +303,7 @@ export function MapGridDashboard({
                       (r) =>
                         `${withinRadius(profile.config.points, nextGeometry.center, r).length} points within ${r} mi`,
                     )
-                    .join(", ")}.`
+                    .join(", ")} of ${centerDescription(nextGeometry).isBusiness ? "the business" : centerDescription(nextGeometry).label}.`
                 : `Broad layout: ${next.points} hand-placed points.`}{" "}
               {next.keywords} keywords · search mode{" "}
               {profile.config.search_this_area === false
@@ -413,11 +416,11 @@ export function MapGridDashboard({
           </select>
         </label>
         <fieldset className="text-xs font-medium text-muted-foreground">
-          <legend>Radius from business</legend>
+          <legend>Radius from {centerText.noun}</legend>
           <div
             className="mt-1 flex overflow-hidden rounded-lg border"
             role="group"
-            aria-label="Radius from business"
+            aria-label={`Radius from ${centerText.noun}`}
           >
             {[...radii, null].map((r) => (
               <button
@@ -453,6 +456,18 @@ export function MapGridDashboard({
           <Download size={15} /> CSV
         </Button>
       </div>
+      {!centerText.isBusiness && (
+        <p
+          role="note"
+          data-testid="market-center-note"
+          className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900"
+        >
+          This scan is centred on {centerText.label}, not on a business
+          address: the business serves this market without a public address.
+          Distances are measured from the scan center. Ranks are still matched
+          to the business&apos;s own Google profile.
+        </p>
+      )}
       {!geometry && (
         <p
           role="note"
@@ -462,7 +477,7 @@ export function MapGridDashboard({
           has no dense 1/2/5-mile layout: {shown.points.length} points
           {spacing ? `, about ${miles(spacing)} apart` : ""}.{" "}
           {radius !== null
-            ? `Only ${inRadius.length} sampled point${inRadius.length === 1 ? " falls" : "s fall"} within ${radius} mi of the business. `
+            ? `Only ${inRadius.length} sampled point${inRadius.length === 1 ? " falls" : "s fall"} within ${radius} mi of the ${centerText.noun}. `
             : ""}
           It holds no neighborhood-level detail, and it is a different
           baseline from the dense 1/2/5-mile layout, so differences between
@@ -476,7 +491,7 @@ export function MapGridDashboard({
             `${inRadius.length}`,
             radius === null
               ? "Full scan extent"
-              : `Within ${radius} mi of the business`,
+              : `Within ${radius} mi of the ${centerText.noun}`,
           ],
           [
             "Top 3 coverage",
@@ -531,6 +546,7 @@ export function MapGridDashboard({
               center={center}
               radiusMiles={radius}
               datasetKey={`${source}:${run?.id ?? "profile"}`}
+              centerLabel={centerText.label}
               rings={rings}
             />
           ) : (
@@ -558,7 +574,7 @@ export function MapGridDashboard({
             {center && (
               <span className="flex items-center gap-1.5">
                 <i className="h-3.5 w-3.5 rounded-full border-[3px] border-orange-500" />
-                Business location
+                {centerText.label}
               </span>
             )}
           </div>
@@ -569,7 +585,7 @@ export function MapGridDashboard({
           </h3>
           <p className="mt-2 text-xs text-muted-foreground">
             {selected
-              ? `${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}${center ? ` · ${distanceMiles(center, selected).toFixed(2)} mi from the business` : ""}`
+              ? `${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}${center ? ` · ${distanceMiles(center, selected).toFixed(2)} mi from the ${centerText.noun}` : ""}`
               : "Select a colored marker to see the businesses ranking there."}
           </p>
           {selected && (
@@ -617,7 +633,7 @@ export function MapGridDashboard({
         </aside>
       </div>
       <p className="text-xs text-muted-foreground">
-        Radius is distance from the business, not diameter. Each radius
+        Radius is distance from the {centerText.noun}, not diameter. Each radius
         shows the points this one scan actually sampled; nothing is
         interpolated, and switching radius never starts a scan. Top 3 coverage
         uses completed checks only. Average rank excludes points where the

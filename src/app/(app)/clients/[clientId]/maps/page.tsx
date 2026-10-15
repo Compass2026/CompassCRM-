@@ -38,14 +38,22 @@ export default async function MapsPage({
       </div>
     );
   let profileId = profileParam;
-  if (!profileId && runId) {
-    // An older run link without ?profile= still opens its own grid.
-    const { data: owner } = await db
+  // An explicit run must exist and belong to the selected profile (or, with
+  // no ?profile=, it selects its own). A mismatched or unknown run is a 404,
+  // never a silent fall back to some other scan; a failed lookup is an error.
+  let requestedRun = null;
+  if (runId) {
+    const { data, error: runError } = await db
       .from("map_grid_runs")
-      .select("profile_id")
+      .select("id,profile_id,started_at,status,error,config")
       .eq("id", runId)
       .maybeSingle();
-    profileId = owner?.profile_id;
+    // 22P02: not a uuid at all, so no such scan.
+    if (runError?.code === "22P02") notFound();
+    if (runError) throw Error("Scan could not be loaded");
+    if (!data || (profileId && data.profile_id !== profileId)) notFound();
+    profileId ??= data.profile_id;
+    requestedRun = data;
   }
   const profile = profileId
     ? profiles.find((p) => p.id === profileId)
@@ -58,7 +66,7 @@ export default async function MapsPage({
     .order("started_at", { ascending: false })
     .limit(30);
   if (runsError) throw Error("Scan history could not be loaded");
-  const run = (runs ?? []).find((r) => r.id === runId) ?? runs?.[0] ?? null;
+  const run = requestedRun ?? runs?.[0] ?? null;
   const [checksResult, baselineResult, gridResult, attemptsResult] =
     await Promise.all([
       run

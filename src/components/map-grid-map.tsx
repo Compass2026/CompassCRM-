@@ -34,6 +34,7 @@ export default function MapGridMap({
   radiusMiles,
   rings,
   datasetKey,
+  centerLabel = "Business location",
 }: {
   checks: GridCheck[];
   onSelect: (check: GridCheck) => void;
@@ -41,6 +42,8 @@ export default function MapGridMap({
   // null = the scan's full extent.
   radiusMiles: number | null;
   rings: number[];
+  // What the center is: the business, or a named market center.
+  centerLabel?: string;
   // Changes only on a deliberate source switch; refits to that dataset's extent.
   datasetKey: string;
 }) {
@@ -177,13 +180,13 @@ export default function MapGridMap({
         iconSize: [halo, halo],
         iconAnchor: [halo / 2, halo / 2],
       }),
-      title: "Business location (scan center)",
-      alt: "Business location",
+      title: `${centerLabel} (scan center)`,
+      alt: centerLabel,
       interactive: false,
       keyboard: false,
       zIndexOffset: -1000,
     }).addTo(l.overlay);
-  }, [ready, center, rings, minSpacing, zoom]);
+  }, [ready, center, rings, minSpacing, zoom, centerLabel]);
 
   useEffect(() => {
     const l = leaflet.current;

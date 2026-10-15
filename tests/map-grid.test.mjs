@@ -10,6 +10,7 @@ import {
   distanceMiles,
   scanPreview,
   usableGeometry,
+  centerDescription,
   LOCAL_TIERS,
 } from "../supabase/functions/_shared/map-grid.ts";
 const id = "00000000-0000-4000-a000-000000000001";
@@ -228,4 +229,31 @@ test("incomplete or inconsistent geometry metadata is refused before spending", 
     assert.equal(usableGeometry({ points: config.points, geometry: g }), null);
   }
   assert.equal(usableGeometry({ points, geometry }), geometry);
+});
+test("a market-centered grid is labelled and validated; business stays the default", () => {
+  const wichita = { lat: 37.6922361, lng: -97.3375448 };
+  const market = localGrid(wichita, undefined, { label: "Wichita, KS market center" });
+  assert.equal(market.geometry.center_kind, "market");
+  assert.equal(market.geometry.center_label, "Wichita, KS market center");
+  assert.deepEqual(market.points, localGrid(wichita).points);
+  validateGrid({ ...config, points: market.points, geometry: market.geometry });
+  assert.deepEqual(centerDescription(market.geometry), {
+    isBusiness: false,
+    noun: "scan center",
+    label: "Wichita, KS market center",
+  });
+  // Every geometry written so far has no center_kind and still means "business".
+  const business = localGrid(lucas).geometry;
+  assert.equal(business.center_kind, undefined);
+  assert.equal(centerDescription(business).isBusiness, true);
+  assert.equal(centerDescription(null).noun, "business");
+  for (const [g, reason] of [
+    [{ ...market.geometry, center_label: undefined }, /needs a center label/],
+    [{ ...market.geometry, center_kind: "storefront" }, /Unknown grid center kind/],
+    [{ ...market.geometry, center_label: "  " }, /center label/],
+    [{ ...market.geometry, center_label: "x".repeat(81) }, /center label/],
+    [{ ...market.geometry, center_label: 5 }, /center label/],
+  ])
+    assert.throws(() => validateGrid({ ...config, points: market.points, geometry: g }), reason);
+  validateGrid({ ...config, points: market.points, geometry: { ...business, center: wichita, center_kind: "business" } });
 });
