@@ -297,16 +297,19 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
 
   // ── Assets (optional, approved brand photos with a stored file) ──
   const assets: Brief["target"]["assets"] = [];
-  // Facebook may also carry a stored social graphic (kind social_post); it is
-  // presentation, never evidence. The database checks the stored file's hash.
-  const kinds = facebook ? ["photo", "social_post"] : ["photo"];
+  // Either channel may carry a stored social graphic (kind social_post)
+  // instead of a photo (Tom, Oct 15 2026 for Business Profile). A graphic is
+  // presentation, never evidence: it is not a photo of the client's work and
+  // supports no claim. The database checks the stored file's hash; the
+  // publisher's preflight still enforces Google's format, size and dimensions.
+  const kinds = ["photo", "social_post"];
   for (const id of target.assetIds ?? []) {
     const a = input.assets.find((x) => x.id === id);
     if (!a) refuse("asset_unknown", "The photo is not one of this client's brand assets.");
-    else if (!kinds.includes(a.kind) || !a.storage_path) refuse("asset_unusable", `Asset ${a.label ?? a.id} is not a stored ${facebook ? "photo or social graphic" : "photo"}.`);
+    else if (!kinds.includes(a.kind) || !a.storage_path) refuse("asset_unusable", `Asset ${a.label ?? a.id} is not a stored photo or social graphic.`);
     else assets.push({ id: a.id, kind: a.kind, label: a.label, storage_path: a.storage_path });
   }
-  if (assets.length > 1) refuse("too_many_assets", facebook ? "Facebook posts take one image in v1." : "Business Profile posts take one photo in v1.");
+  if (assets.length > 1) refuse("too_many_assets", facebook ? "Facebook posts take one image in v1." : "Business Profile posts take one image in v1.");
 
   // ── Facts a draft may state; what it may not ──
   const places = [...new Set(input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name).filter(Boolean) as string[])];

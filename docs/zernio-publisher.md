@@ -592,6 +592,16 @@ Migration `20261011050000_zernio_gbp_publisher.sql` (additive):
      path.
    - Facebook behaviour is unchanged.
 
+### Illustrative graphics on Business Profile posts (Oct 15 2026)
+
+`post-drafter` v7 (`gbp_social_graphics`) lets a Business Profile draft name
+one stored `social_post` graphic (filed by `source-assets` register, marked
+non-evidentiary) where it previously accepted only a `photo`. Nothing else
+changes: one image per post, the drafter's fact rules, the review and approval
+gates, and the publisher's preflight (JPEG/PNG, ≤ 5 MB, ≥ 400 × 300, stored
+and hashed) all apply. The post page labels a graphic "Illustrative graphic,
+not a photo of the client's work". First use: Logic Solar Campaign A.
+
 ### Lucas readiness and the steps to the first Business Profile post
 
 Not verified live yet: this session holds no credential that may call the

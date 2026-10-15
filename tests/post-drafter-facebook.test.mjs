@@ -63,15 +63,22 @@ test("Facebook refusals: no Page, another platform's account, a button, an offer
   assert.ok(ig.refusals.some((f) => f.code === "social_account_unknown"));
 });
 
-test("Business Profile unchanged: no social_account key, its own rules, a graphic is not a photo, an account is refused", async () => {
+test("Business Profile: no social_account key, its own rules, one photo or graphic, an account is refused", async () => {
   const g = buildBrief(withAssets(lucas()), TARGET);
   assert.equal(g.ok, true, JSON.stringify(g.refusals));
   assert.equal("social_account" in g.brief.target, false);
   assert.equal(g.brief.channel_rules.max_chars, GBP_RULES.max_chars);
   // The same brief whether or not Facebook Pages are passed in.
   assert.equal(await briefHash(g.brief), await briefHash(buildBrief(withAssets(lucas()), TARGET, { socialAccounts: ACCOUNTS }).brief));
+  // A stored, non-evidentiary social graphic may stand in for a photo (Oct 15 2026).
   const graphic = buildBrief(withAssets(lucas()), { ...TARGET, assetIds: [GRAPHIC] });
-  assert.ok(graphic.refusals.some((f) => f.code === "asset_unusable"));
+  assert.equal(graphic.ok, true, JSON.stringify(graphic.refusals));
+  assert.deepEqual(graphic.brief.target.assets.map((a) => [a.id, a.kind]), [[GRAPHIC, "social_post"]]);
+  // Still one image, and only a photo or a social graphic with a stored file.
+  const two = buildBrief(withAssets(lucas()), { ...TARGET, assetIds: [GRAPHIC, "photo-1"] });
+  assert.ok(two.refusals.some((f) => f.code === "too_many_assets"));
+  const logo = buildBrief(withAssets(lucas()), { ...TARGET, assetIds: ["logo-1"] });
+  assert.ok(logo.refusals.some((f) => f.code === "asset_unusable"));
   const named = buildBrief(withAssets(lucas()), { ...TARGET, socialAccountId: PAGE_ACCOUNT });
   assert.ok(named.refusals.some((f) => f.code === "social_account_not_applicable"));
 });

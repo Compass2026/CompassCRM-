@@ -1624,9 +1624,15 @@ Design, gates and the steps for Lucas are in `docs/zernio-publisher.md`
   alike. Runs record the pinned `target_location_id`; a binding that changes
   in flight goes to a person. A same-key re-send re-checks every write gate
   (binding on and healthy, content, approval and grounding) first.
-- **Scope:** standard posts — text, one JPEG/PNG photo (≤ 5 MB, ≥ 400 × 300)
+- **Scope:** standard posts — text, one JPEG/PNG image (≤ 5 MB, ≥ 400 × 300)
   and a linked button. Offer and event posts and Call buttons are refused
   explicitly.
+- **Illustrative graphics** (Oct 15 2026, `post-drafter` v7, feature
+  `gbp_social_graphics`): a Business Profile draft may carry one stored
+  `social_post` graphic instead of a photo, as Facebook drafts already could.
+  A graphic is presentation, never evidence: it supports no claim, is never
+  shown as the client's work (the post page labels it), and still passes the
+  publisher's format, size and dimension preflight. No schema change.
 
 ## Compass Communications (0063 applied Oct 2 2026 as `20261002211041`; functions deployed; issue #88)
 
