@@ -4,13 +4,13 @@ import http from 'node:http';
 import {spawn} from 'node:child_process';
 import {mkdirSync,existsSync} from 'node:fs';
 import {chromium} from 'playwright-core';
-const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002',team='00000000-0000-4000-8000-000000000011';
+const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002',mapOnly='00000000-0000-4000-8000-000000000003',team='00000000-0000-4000-8000-000000000011';
 const now=new Date(),recent=new Date(now.getTime()-3600000).toISOString(),through=new Date(now.getTime()-5*86400000).toISOString().slice(0,10),period=through.slice(0,7)+'-01';
-const clients=[{id:a,name:'Fictional North',status:'active',gsc_property:'sc-domain:north.test',ga4_property:'properties/123'},{id:b,name:'Fictional South',status:'active',gsc_property:null,ga4_property:'properties/456'}];
+const clients=[{id:a,name:'Fictional North',status:'active',gsc_property:'sc-domain:north.test',ga4_property:'properties/123'},{id:b,name:'Fictional South',status:'active',gsc_property:null,ga4_property:'properties/456'},{id:mapOnly,name:'Fictional Map-only Plumbing',status:'paused',service_scope:'map_tracking',gsc_property:null,ga4_property:null}];
 const receipt={id:'r1',client_id:a,property:'properties/123',period,period_end:through,created_at:recent};
 const run={id:'run1',client_id:a,created_at:recent,finished_at:recent,status:'completed',results:[{month:period,status:'imported',receipt_id:'r1'}]};
 let ga4Failure=false,truncated=false,rolloutFailure=false;const writes=[],requests=[];
-const rows={agency_rollout_reviews:[],client_growth_rankings:[],rank_runs:[],backlink_checks:[],backlink_profile_sync_runs:[],social_posts:[{client_id:a,id:'social-review',platform:'facebook',review_status:'in_review',publish_status:'not_scheduled'}],billing_reconciliation_results:[],services:[],claims:[],authority_latest:[],clients,keywords:[{client_id:a,is_active:true,is_tracked:true}],sites:[],report_measurements:[],content_drafts:[{id:'review1',client_id:a,status:'in_review',title:'Review this fictional article',topic:null,request_task_id:'task',created_at:recent}],blog_publications:[],crm_lite_settings:[],notification_jobs:[],backlink_opportunities:[],social_accounts:[],subscriptions:[],portal_users:[],client_brand_workspaces:[],brand_boards:[],inquiry_sources:[],gsc_performance_imports:[],gbp_performance_imports:[],gsc_performance_sync_runs:[],gbp_performance_sync_runs:[],ga4_performance_imports:[receipt],ga4_performance_sync_runs:[run,{...run,id:'run2',client_id:b,results:[]}]};
+const rows={map_grid_profiles:[{id:'grid1',client_id:a,label:'Fictional 1/2/5 mi grid',enabled:true,weekly_enabled:true},{id:'grid2',client_id:mapOnly,label:'Map-only 1/2/5 mi grid',enabled:true,weekly_enabled:true}],map_grid_runs:[],map_grid_weekly_attempts:[{profile_id:'grid1',outcome:'error',message:'Grid keyword mismatch',attempted_at:now.toISOString(),run_id:null}],agency_rollout_reviews:[],client_growth_rankings:[],rank_runs:[],backlink_checks:[],backlink_profile_sync_runs:[],social_posts:[{client_id:a,id:'social-review',platform:'facebook',review_status:'in_review',publish_status:'not_scheduled'}],billing_reconciliation_results:[],services:[],claims:[],authority_latest:[],clients,keywords:[{client_id:a,is_active:true,is_tracked:true}],sites:[],report_measurements:[],content_drafts:[{id:'review1',client_id:a,status:'in_review',title:'Review this fictional article',topic:null,request_task_id:'task',created_at:recent}],blog_publications:[],crm_lite_settings:[],notification_jobs:[],backlink_opportunities:[],social_accounts:[],subscriptions:[],portal_users:[],client_brand_workspaces:[],brand_boards:[],inquiry_sources:[],gsc_performance_imports:[],gbp_performance_imports:[],gsc_performance_sync_runs:[],gbp_performance_sync_runs:[],ga4_performance_imports:[receipt],ga4_performance_sync_runs:[run,{...run,id:'run2',client_id:b,results:[]}]};
 const upstream=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');requests.push(url.pathname);
  const reply=(body,status=200,count)=>{res.writeHead(status,{'content-type':'application/json',...(count!==undefined?{'content-range':`0-${Math.max(0,count-1)}/${count}`}:{})});res.end(JSON.stringify(body));};
@@ -26,6 +26,8 @@ const upstream=http.createServer(async(req,res)=>{
  if(ga4Failure&&table==='ga4_performance_imports')return reply({message:'Simulated unavailable source'},503);
  if(rolloutFailure&&table==='agency_rollout_reviews')return reply({message:'Review ledger unavailable'},503);
  let data=rows[table];
+ // Honour PostgREST in.() filters on the client roster, so a paused client stays out of the active roster.
+ if(table==='clients')for(const k of ['status','id']){const f=url.searchParams.get(k);if(f?.startsWith('in.('))data=data.filter(r=>f.slice(4,-1).split(',').map(v=>v.replace(/"/g,'')).includes(r[k]));}
  if(table==='agency_rollout_reviews'){
   if(url.searchParams.get('client_id')?.startsWith('eq.'))data=data.filter(r=>r.client_id===url.searchParams.get('client_id').slice(3));
   if(url.searchParams.get('brand_workspace_id')==='is.null')data=data.filter(r=>r.brand_workspace_id===null);
@@ -69,6 +71,12 @@ try{
  assert.ok(await page.getByText('Analytics 4 · missing',{exact:true}).isVisible());
  const socialReview=page.locator('[data-action-list] a').filter({hasText:'Social post waiting for approval'});assert.equal(await socialReview.getAttribute('href'),`/clients/${a}/social/social-review`);
  const review=page.locator('[data-action-list] a').filter({hasText:'Article waiting for approval'});assert.match(await review.getAttribute('href'),/drafts\/review1$/);
+ // A weekly grid with no scan for its due ISO week is a critical, linked action.
+ const grid=page.locator('[data-action-list] a').filter({hasText:'Fictional 1/2/5 mi grid'});assert.equal(await grid.getAttribute('href'),`/clients/${a}/maps?profile=grid1`);
+ // A paused map-tracking-only client is outside the roster, yet its missed weekly scan still reaches the queue, linked to its exact grid.
+ const mapOnlyAlert=page.locator('[data-action-list] a').filter({hasText:'Fictional Map-only Plumbing'});assert.equal(await mapOnlyAlert.count(),1);assert.equal(await mapOnlyAlert.getAttribute('href'),`/clients/${mapOnly}/maps?profile=grid2`);assert.match(await mapOnlyAlert.innerText(),/CRITICAL[\s\S]*Map rankings · Map-only 1\/2\/5 mi grid/i);
+ assert.equal(await page.locator(`[data-readiness-client="${mapOnly}"],[data-freshness-client="${mapOnly}"],[data-integration-client="${mapOnly}"]`).count(),0);
+assert.match(await grid.innerText(),/CRITICAL[\s\S]*(No weekly start was recorded|Grid keyword mismatch)/i);
  await page.getByRole('tab',{name:'Delivery & work',exact:true}).click();
  assert.equal(await page.locator('[data-operational-system]').count(),12);
  assert.match(await page.locator(`[data-operational-client="${a}"] [data-operational-system="notifications"]`).innerText(),/provider-confirmed deliveries/);
@@ -76,7 +84,12 @@ try{
  const ga4=page.locator(`[data-integration-client="${a}"] [data-integration-source="ga4"]`);
  assert.ok(await ga4.getByText('Verified retrieval',{exact:true}).isVisible());
  assert.match(await page.locator(`[data-integration-client="${b}"] [data-integration-source="ga4"]`).innerText(),/No provider results/);
+ assert.match(await page.locator('[data-map-grid-profile="grid1"]').innerText(),/Fictional North[\s\S]*(No successful weekly scan|failed to start)/);
+ assert.match(await page.locator('[data-map-grid-profile="grid2"]').innerText(),/Fictional Map-only Plumbing[\s\S]*Map-only 1\/2\/5 mi grid/);
+ // The client filter reaches map-tracking-only grids by name too.
+ await page.getByLabel('Filter Control Center clients').fill('Map-only');assert.equal(await page.locator('[data-map-grid-profile]').count(),1);assert.equal(await page.locator('[data-map-grid-profile="grid2"]').count(),1);
  await page.getByLabel('Filter Control Center clients').fill('North');assert.equal(await page.locator('[data-integration-client]').count(),1);
+ assert.equal(await page.locator('[data-map-grid-profile="grid2"]').count(),0);
  mkdirSync('docs/screenshots/control-center',{recursive:true});await page.screenshot({path:'docs/screenshots/control-center/integrations-desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  await page.screenshot({path:'docs/screenshots/control-center/integrations-mobile.png',fullPage:true});

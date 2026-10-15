@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildOperationsHealth, type HealthInputs, type ClientHealth } from "@/lib/operations-health";
 import { loadOperationalEvidence } from "@/lib/operations-evidence-loader";
 import { loadIntegrationHealth } from "@/lib/integration-health-loader";
+import { loadMapGridWeekly } from "@/lib/map-grid-weekly-loader";
 import { completeRead } from "@/lib/integration-health";
 import { buildOperationsV2 } from "@/lib/operations-readiness";
 import { ControlCenterV2 } from "@/components/operations/control-center-v2";
@@ -156,15 +157,18 @@ export default async function OperationsHealthPage() {
     ...(completeRead(detailedReleasesQ) === null ? ["Publisher action queue"] : []),
   ];
   const generatedAt = new Date().toISOString();
-  const [integrations,operational,reviews] = await Promise.all([
+  const [integrations,operational,reviews,mapGrid] = await Promise.all([
     loadIntegrationHealth(db, summary.clients.map(c=>c.id), generatedAt),
     loadOperationalEvidence(db, summary.clients.map(c=>c.id), generatedAt).catch(()=>null),
     loadRolloutReviews(db,summary.clients.map(c=>c.id)).catch(()=>null),
+    loadMapGridWeekly(db, generatedAt).catch(()=>null),
   ]);
   if(!operational)v2SourceErrors.push("Operational evidence");
+  if(!mapGrid)v2SourceErrors.push("Map grid weekly scans");
   const v2 = buildOperationsV2({
     integrations,
     operational: operational ?? undefined,
+    mapGrid: mapGrid ?? undefined,
     clients: summary.clients,
     measured: completeRead(measuredQ),
     brands: completeRead(brandsQ),
