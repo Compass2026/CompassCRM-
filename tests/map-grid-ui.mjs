@@ -39,6 +39,7 @@ try{
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`http://127.0.0.1:${port}/clients/${clientId}/maps`,{waitUntil:'networkidle'});
  await page.getByRole('heading',{name:'Your rankings, across the map.'}).waitFor();
+ assert.equal(await page.getByRole('heading',{name:'Your rankings, across the map.'}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
  await page.locator('.leaflet-marker-icon').first().waitFor();assert.equal(await page.locator('.leaflet-marker-icon').count(),25);
  await page.locator('.leaflet-marker-icon').first().click();await page.getByRole('heading',{name:'Point 1',exact:true}).waitFor();assert.ok(await page.getByText('Fixture Roofing',{exact:true}).isVisible());
  await page.getByLabel('Map keyword').selectOption(kw2);assert.equal(await page.getByRole('heading',{name:'Explore a point'}).count(),1);

@@ -154,7 +154,7 @@ export function MapGridDashboard({
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.18em] text-orange-300">
               <Radar size={16} /> Compass local visibility
             </div>
-            <h2 className="text-2xl font-semibold">
+            <h2 className="text-2xl font-semibold text-white">
               Your rankings, across the map.
             </h2>
             <p className="mt-2 text-sm text-slate-300">

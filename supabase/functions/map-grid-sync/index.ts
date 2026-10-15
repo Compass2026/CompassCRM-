@@ -140,7 +140,7 @@ Deno.serve(async (req: Request) => {
     }
     const processRun = async (runId: string) => {
       const now = new Date();
-      const lease = new Date(now.getTime() + 240000).toISOString();
+      const lease = new Date(now.getTime() + 600000).toISOString();
       const run = must(
         await db
           .from("map_grid_runs")
