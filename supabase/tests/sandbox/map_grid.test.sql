@@ -15,6 +15,36 @@ do $$declare r uuid;begin
  begin perform public.map_grid_start('90000000-0000-4000-a000-000000000005','other');raise exception 'duplicate allowed';exception when raise_exception then if sqlerrm='duplicate allowed' then raise;end if;end;
  update public.map_grid_runs set status='complete' where id=r;
  begin perform public.map_grid_start('90000000-0000-4000-a000-000000000005','other');raise exception 'cooldown failed';exception when raise_exception then if sqlerrm='cooldown failed' then raise;end if;end;
+ -- Dense geometry: the next run freezes it, the legacy run keeps no geometry, and a later edit never reaches history.
+ update public.map_grid_runs set started_at=now()-interval '2 hours' where id=r;
+ update public.map_grid_profiles set geometry='{"version":"local-multiscale-v1","center":{"lat":38,"lng":-90},"tiers":[{"max_miles":5,"spacing_miles":1}],"radii_miles":[5],"default_radius_miles":5,"point_count":2}' where id='90000000-0000-4000-a000-000000000005';
+ declare d uuid:=public.map_grid_start('90000000-0000-4000-a000-000000000005','dense');begin
+  if (select config->'geometry'->>'version' from public.map_grid_runs where id=d)<>'local-multiscale-v1' then raise exception 'geometry not frozen';end if;
+  if (select coalesce(config->'geometry','null'::jsonb) from public.map_grid_runs where id=r)<>'null'::jsonb then raise exception 'legacy run gained geometry';end if;
+  update public.map_grid_profiles set geometry=jsonb_set(geometry,'{center,lat}','38.5') where id='90000000-0000-4000-a000-000000000005';
+  if (select config->'geometry'->'center'->>'lat' from public.map_grid_runs where id=d)<>'38' then raise exception 'frozen geometry changed';end if;
+  update public.map_grid_runs set status='complete' where id=d;
+ end;
+ -- Empty, incomplete or inconsistent metadata is refused; the validator never answers NULL (which a CHECK would accept).
+ declare v jsonb:='{"version":"local-multiscale-v1","center":{"lat":38,"lng":-90},"tiers":[{"max_miles":5,"spacing_miles":1}],"radii_miles":[5],"default_radius_miles":5,"point_count":2}';bad jsonb;begin
+  if public.map_grid_geometry_valid(v,2) is not true then raise exception 'valid geometry refused';end if;
+  if public.map_grid_geometry_valid(null,2) is not true then raise exception 'legacy null geometry refused';end if;
+  foreach bad in array array['{}'::jsonb,'[]','"geometry"','5',
+    v-'version',v-'center',v-'tiers',v-'radii_miles',v-'default_radius_miles',v-'point_count',
+    jsonb_set(v,'{version}','"other"'),jsonb_set(v,'{center,lat}','"38"'),jsonb_set(v,'{center,lat}','95'),jsonb_set(v,'{center}','{}'),
+    jsonb_set(v,'{tiers}','[]'),jsonb_set(v,'{tiers}','[{}]'),jsonb_set(v,'{tiers}','[{"max_miles":5}]'),jsonb_set(v,'{tiers}','[{"max_miles":5,"spacing_miles":0}]'),
+    jsonb_set(v,'{tiers}','[{"max_miles":5,"spacing_miles":6}]'),jsonb_set(v,'{tiers}','[{"max_miles":"5","spacing_miles":1}]'),
+    jsonb_set(jsonb_set(v,'{tiers}','[{"max_miles":2,"spacing_miles":1},{"max_miles":2,"spacing_miles":1}]'),'{radii_miles}','[2,2]'),
+    jsonb_set(v,'{radii_miles}','[4]'),jsonb_set(v,'{radii_miles}','[5,5]'),jsonb_set(v,'{radii_miles}','{}'),jsonb_set(v,'{default_radius_miles}','3'),jsonb_set(v,'{default_radius_miles}','"5"'),
+    jsonb_set(v,'{point_count}','3'),jsonb_set(v,'{point_count}','"2"')] loop
+   if public.map_grid_geometry_valid(bad,2) is not false then raise exception 'geometry validator did not refuse %',bad;end if;
+   begin update public.map_grid_profiles set geometry=bad where id='90000000-0000-4000-a000-000000000005';raise exception 'invalid geometry stored: %',bad;exception when check_violation then null;end;
+  end loop;
+  update public.map_grid_profiles set geometry=null where id='90000000-0000-4000-a000-000000000005';
+  update public.map_grid_profiles set geometry=v where id='90000000-0000-4000-a000-000000000005';
+ end;
+ -- Budget guard: 153 dense points x 7 keywords exceeds 1,000 checks.
+ begin update public.map_grid_profiles set geometry=null,points=(select jsonb_agg(jsonb_build_object('lat',38+g/1000.0,'lng',-90)) from generate_series(1,153) g),keywords=(select jsonb_agg(jsonb_build_object('id',gen_random_uuid(),'keyword','k'||g)) from generate_series(1,7) g) where id='90000000-0000-4000-a000-000000000005';raise exception 'check budget exceeded';exception when check_violation then null;end;
  if has_function_privilege('authenticated','public.map_grid_start(uuid,text)','execute') or has_function_privilege('anon','public.map_grid_start(uuid,text)','execute') then raise exception 'start publicly executable';end if;
  if has_table_privilege('authenticated','public.map_grid_profiles','update') then raise exception 'profile writable';end if;
 end $$;

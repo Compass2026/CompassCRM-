@@ -13,10 +13,15 @@ import { MapPin, RefreshCw, Download, Radar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { startMapGridAction } from "@/app/map-grid-actions";
 import {
+  distanceMiles,
   gridMetrics,
   rankColor,
+  scanPreview,
+  usableGeometry,
+  withinRadius,
   type GridCheck,
   type GridConfig,
+  type GridPoint,
 } from "@/lib/map-grid";
 const MapGridMap = dynamic(() => import("./map-grid-map"), {
   ssr: false,
@@ -36,6 +41,19 @@ export type GridBaseline = {
   recorded_at: string;
   points: { lat: number; lng: number; position: number | null }[];
 };
+const DEFAULT_RADII = [1, 2, 5];
+const miles = (n: number) => `${Number(n.toFixed(1))} mi`;
+function typicalSpacing(points: GridPoint[]) {
+  const nn = points
+    .map((p, i) =>
+      Math.min(
+        ...points.filter((_, j) => j !== i).map((q) => distanceMiles(p, q)),
+      ),
+    )
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  return nn.length ? nn[Math.floor(nn.length / 2)] : null;
+}
 export function MapGridDashboard({
   clientId,
   profile,
@@ -43,6 +61,7 @@ export function MapGridDashboard({
   run,
   checks,
   baselines,
+  homeCenter,
 }: {
   clientId: string;
   profile: {
@@ -56,6 +75,8 @@ export function MapGridDashboard({
   run: GridRunView | null;
   checks: GridCheck[];
   baselines: GridBaseline[];
+  // The grid config's recorded center, for runs frozen before geometry existed.
+  homeCenter: GridPoint | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -67,8 +88,42 @@ export function MapGridDashboard({
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [requestKey] = useState(() => crypto.randomUUID());
+  const [confirming, setConfirming] = useState(false);
   const keyword = config.keywords.find((k) => k.id === keywordId);
   const baseline = baselines.find((b) => b.keyword_id === keywordId);
+  // Geometry, counts, spacing and coverage always describe the dataset on
+  // screen. A BrightLocal baseline never borrows the scan's dense metadata,
+  // and the next scan's profile is kept apart (see `next` below).
+  const runGeometry = usableGeometry(config);
+  const shown = useMemo(
+    () =>
+      source === "brightlocal"
+        ? { points: baseline?.points ?? [], geometry: null }
+        : { points: config.points, geometry: runGeometry },
+    [source, baseline, config.points, runGeometry],
+  );
+  const geometry = shown.geometry;
+  const center = geometry?.center ?? homeCenter;
+  const radii = geometry?.radii_miles ?? DEFAULT_RADII;
+  // Broad layouts open at their full extent: their 5-mile slice is nearly empty.
+  const [radius, setRadius] = useState<number | null>(
+    runGeometry ? runGeometry.default_radius_miles : null,
+  );
+  // A deliberate source switch resets the radius to that dataset's own default.
+  const changeSource = (next: "dataforseo" | "brightlocal") => {
+    setSource(next);
+    setSelectedId(null);
+    setRadius(
+      next === "dataforseo" && runGeometry
+        ? runGeometry.default_radius_miles
+        : null,
+    );
+  };
+  const [showRings, setShowRings] = useState(true);
+  const rings = useMemo(
+    () => (showRings && center ? radii : []),
+    [showRings, center, radii],
+  );
   const viewPoints = useMemo<GridCheck[]>(
     () =>
       source === "brightlocal"
@@ -87,19 +142,33 @@ export function MapGridDashboard({
         : checks.filter((c) => c.keyword_id === keywordId),
     [source, baseline, checks, keywordId, keyword],
   );
-  const selected = viewPoints.find((c) => c.id === selectedId) ?? null;
+  const inRadius = useMemo(
+    () => (center ? withinRadius(viewPoints, center, radius) : viewPoints),
+    [viewPoints, center, radius],
+  );
+  const pointsWithin = (r: number | null) =>
+    center ? withinRadius(shown.points, center, r).length : shown.points.length;
+  const spacing = useMemo(
+    () => (geometry ? null : typicalSpacing(shown.points)),
+    [geometry, shown.points],
+  );
+  const selected = inRadius.find((c) => c.id === selectedId) ?? null;
   useEffect(() => {
     if (run?.status !== "running") return;
     const timer = setInterval(() => router.refresh(), 15000);
     return () => clearInterval(timer);
   }, [run?.status, router]);
   const selectPoint = useCallback((c: GridCheck) => setSelectedId(c.id), []);
-  const metrics = gridMetrics(viewPoints);
+  const metrics = gridMetrics(inRadius);
   const totalCost = checks.reduce((s, c) => s + Number(c.cost), 0);
-  const estimated = config.points.length * config.keywords.length * 0.0006;
+  // The next scan freezes the profile as it is now, not the scan on screen.
+  const next = scanPreview(profile.config);
+  const nextGeometry = usableGeometry(profile.config);
+  const radiusLabel = radius === null ? "full scan" : `${radius} mi`;
   const scan = () =>
     startTransition(async () => {
       setError(null);
+      setConfirming(false);
       const result = await startMapGridAction(clientId, profile.id, requestKey);
       if (result.error) setError(result.error);
       else if (result.runId)
@@ -120,15 +189,17 @@ export function MapGridDashboard({
         "scan_time",
         "latitude",
         "longitude",
+        "distance_miles",
         "status",
         "rank",
       ],
-      ...viewPoints.map((c) => [
+      ...inRadius.map((c) => [
         keyword?.keyword,
         source,
         source === "brightlocal" ? baseline?.recorded_at : run?.started_at,
         c.lat,
         c.lng,
+        center ? distanceMiles(center, c).toFixed(3) : "",
         c.state,
         c.state === "complete"
           ? (c.position ?? "100+ / not found")
@@ -142,7 +213,7 @@ export function MapGridDashboard({
     );
     const a = document.createElement("a");
     a.href = url;
-    a.download = `map-grid-${source}-${keywordId}.csv`;
+    a.download = `map-grid-${source}-${keywordId}-${radius ?? "full"}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -158,8 +229,14 @@ export function MapGridDashboard({
               Your rankings, across the map.
             </h2>
             <p className="mt-2 text-sm text-slate-300">
-              {profile.label} · {config.points.length} points ·{" "}
-              {config.keywords.length} keywords
+              {profile.label} ·{" "}
+              {source === "brightlocal"
+                ? "BrightLocal baseline"
+                : geometry
+                  ? `Dense local scan, ${radii.map((r) => `${r}`).join(" / ")} mi`
+                  : "Broad scan"}{" "}
+              · {shown.points.length} points · {config.keywords.length}{" "}
+              keywords
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -171,9 +248,12 @@ export function MapGridDashboard({
               <RefreshCw size={15} /> Refresh
             </Button>
             <Button
-              onClick={scan}
+              onClick={() => setConfirming(true)}
               disabled={
-                pending || run?.status === "running" || !profile.enabled
+                pending ||
+                confirming ||
+                run?.status === "running" ||
+                !profile.enabled
               }
               className="bg-orange-500 text-white hover:bg-orange-600"
             >
@@ -192,8 +272,55 @@ export function MapGridDashboard({
             Schedule:{" "}
             {profile.weekly_enabled ? "Thursdays at 14:00 UTC" : "Manual pilot"}
           </span>
-          <span>Estimated data cost: ${estimated.toFixed(3)} / full scan</span>
+          <span>
+            Next scan: {next.points} points × {next.keywords} keywords ={" "}
+            {next.checks} checks · est. ${next.estimatedCost.toFixed(3)}
+          </span>
         </div>
+        {confirming && (
+          <div
+            role="dialog"
+            aria-label="Confirm paid scan"
+            className="mt-4 rounded-2xl border border-orange-300/40 bg-white/10 p-4 text-sm"
+          >
+            <p className="font-semibold text-white">
+              Start a paid scan of {next.checks} checks (est. $
+              {next.estimatedCost.toFixed(3)})?
+            </p>
+            <p className="mt-1 text-slate-300">
+              {nextGeometry
+                ? `Dense local layout: ${nextGeometry.radii_miles
+                    .map(
+                      (r) =>
+                        `${withinRadius(profile.config.points, nextGeometry.center, r).length} points within ${r} mi`,
+                    )
+                    .join(", ")}.`
+                : `Broad layout: ${next.points} hand-placed points.`}{" "}
+              {next.keywords} keywords · search mode{" "}
+              {profile.config.search_this_area === false
+                ? "query-led location"
+                : "search this area"}
+              . One scan covers every radius; switching radius or zooming
+              later never starts another.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button
+                onClick={scan}
+                disabled={pending}
+                className="bg-orange-500 text-white hover:bg-orange-600"
+              >
+                Start paid scan
+              </Button>
+              <Button
+                variant="outline"
+                className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                onClick={() => setConfirming(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
       {error && (
         <p
@@ -240,7 +367,8 @@ export function MapGridDashboard({
             {!runs.length && <option value="">No scans yet</option>}
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.started_at.slice(0, 16).replace("T", " ")} UTC · {r.status}
+                {r.started_at.slice(0, 16).replace("T", " ")} UTC · {r.status}{" "}
+                · {usableGeometry(r.config) ? "dense 1/2/5 mi" : "broad"}
               </option>
             ))}
           </select>
@@ -251,7 +379,7 @@ export function MapGridDashboard({
             aria-label="Grid source"
             className="field-sm mt-1 block text-foreground"
             value={source}
-            onChange={(e) => setSource(e.target.value as typeof source)}
+            onChange={(e) => changeSource(e.target.value as typeof source)}
           >
             <option value="dataforseo">Compass / DataForSEO</option>
             <option value="brightlocal" disabled={!baseline}>
@@ -259,37 +387,95 @@ export function MapGridDashboard({
             </option>
           </select>
         </label>
+        <fieldset className="text-xs font-medium text-muted-foreground">
+          <legend>Radius from business</legend>
+          <div
+            className="mt-1 flex overflow-hidden rounded-lg border"
+            role="group"
+            aria-label="Radius from business"
+          >
+            {[...radii, null].map((r) => (
+              <button
+                key={r ?? "full"}
+                type="button"
+                aria-pressed={radius === r}
+                disabled={r !== null && !center}
+                onClick={() => setRadius(r)}
+                className={`whitespace-nowrap px-2.5 py-1.5 text-sm sm:px-3 ${radius === r ? "bg-navy-900 text-white" : "bg-card text-foreground hover:bg-muted"} disabled:opacity-40`}
+              >
+                {r === null ? "Full scan" : `${r} mi`}
+                <span className="ml-1 text-[11px] opacity-70">
+                  ({pointsWithin(r)})
+                </span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <label className="flex items-center gap-2 pb-2 text-xs font-medium text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showRings}
+            disabled={!center}
+            onChange={(e) => setShowRings(e.target.checked)}
+          />
+          Distance rings
+        </label>
         <Button
           variant="outline"
           onClick={download}
-          disabled={!viewPoints.length}
+          disabled={!inRadius.length}
         >
           <Download size={15} /> CSV
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {!geometry && (
+        <p
+          role="note"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          {source === "brightlocal" ? "This BrightLocal baseline" : "This scan"}{" "}
+          has no dense 1/2/5-mile layout: {shown.points.length} points
+          {spacing ? `, about ${miles(spacing)} apart` : ""}.{" "}
+          {radius !== null
+            ? `Only ${inRadius.length} sampled point${inRadius.length === 1 ? " falls" : "s fall"} within ${radius} mi of the business. `
+            : ""}
+          It holds no neighborhood-level detail, and it is a different
+          baseline from the dense 1/2/5-mile layout, so differences between
+          the two are not ranking changes.
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
+          [
+            "Sampled points",
+            `${inRadius.length}`,
+            radius === null
+              ? "Full scan extent"
+              : `Within ${radius} mi of the business`,
+          ],
           [
             "Top 3 coverage",
             metrics.top3Percent === null
               ? "No data"
               : `${metrics.top3Percent}%`,
-            `${metrics.top3} of ${metrics.complete} completed points`,
+            `${metrics.top3} of ${metrics.complete} completed points, ${radiusLabel}`,
           ],
           [
             "Average rank when found",
             metrics.averageFound?.toFixed(1) ?? "No data",
-            `${metrics.found} points found in top 100`,
+            `${metrics.found} found in top 100 · ${metrics.complete - metrics.found} not found`,
           ],
           [
             "Checks completed",
             `${metrics.complete} / ${metrics.total}`,
             source === "brightlocal"
               ? "Imported baseline"
-              : (run?.status ?? "Ready for first scan"),
+              : metrics.total > metrics.complete
+                ? `${metrics.total - metrics.complete} pending or unavailable`
+                : (run?.status ?? "Ready for first scan"),
           ],
           [
-            "Data cost, full scan",
+            "Data cost, whole scan",
             source === "brightlocal"
               ? "Not available"
               : `$${totalCost.toFixed(3)}`,
@@ -314,7 +500,14 @@ export function MapGridDashboard({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="overflow-hidden rounded-2xl border bg-card p-2">
           {viewPoints.length ? (
-            <MapGridMap checks={viewPoints} onSelect={selectPoint} />
+            <MapGridMap
+              checks={inRadius}
+              onSelect={selectPoint}
+              center={center}
+              radiusMiles={radius}
+              datasetKey={`${source}:${run?.id ?? "profile"}`}
+              rings={rings}
+            />
           ) : (
             <div className="grid h-[480px] place-content-center gap-3 text-center text-muted-foreground">
               <MapPin className="mx-auto" />
@@ -337,6 +530,12 @@ export function MapGridDashboard({
                 {label}
               </span>
             ))}
+            {center && (
+              <span className="flex items-center gap-1.5">
+                <i className="h-3.5 w-3.5 rounded-full border-[3px] border-orange-500" />
+                Business location
+              </span>
+            )}
           </div>
         </div>
         <aside className="rounded-2xl border bg-card p-5">
@@ -345,7 +544,7 @@ export function MapGridDashboard({
           </h3>
           <p className="mt-2 text-xs text-muted-foreground">
             {selected
-              ? `${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}`
+              ? `${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}${center ? ` · ${distanceMiles(center, selected).toFixed(2)} mi from the business` : ""}`
               : "Select a colored marker to see the businesses ranking there."}
           </p>
           {selected && (
@@ -393,9 +592,11 @@ export function MapGridDashboard({
         </aside>
       </div>
       <p className="text-xs text-muted-foreground">
-        Top 3 coverage uses completed checks only. Average rank excludes points
-        where the business was not found. Failed checks never count as ranking
-        losses.{" "}
+        Radius is distance from the business, not diameter. Each radius
+        shows the points this one scan actually sampled; nothing is
+        interpolated, and switching radius never starts a scan. Top 3 coverage
+        uses completed checks only. Average rank excludes points where the
+        business was not found. Failed checks never count as ranking losses.{" "}
         <Link href={`/clients/${clientId}/keywords`} className="underline">
           Open keyword tracking
         </Link>

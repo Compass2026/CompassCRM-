@@ -21,7 +21,7 @@ const source = ts.transpileModule(
   },
 ).outputText;
 const uuid = "00000000-0000-4000-a000-000000000001";
-function harness({ member = true, user = true, postFailure = false } = {}) {
+function harness({ member = true, user = true, postFailure = false, geometry } = {}) {
   let handler,
     posts = 0,
     gets = 0;
@@ -32,6 +32,7 @@ function harness({ member = true, user = true, postFailure = false } = {}) {
     search_this_area: false,
     points: [{ lat: 38, lng: -90 }],
     keywords: [{ id: uuid, keyword: "roof" }],
+    ...(geometry ? { geometry } : {}),
   };
   const run = {
     id: "run",
@@ -226,3 +227,31 @@ test("ambiguous paid submission is never automatically reposted", async () => {
   assert.equal(h.counts().posts, 1);
   assert.equal(h.counts().gets, 0);
 });
+const validGeometry = {
+  version: "local-multiscale-v1",
+  center: { lat: 38, lng: -90 },
+  tiers: [{ max_miles: 5, spacing_miles: 1 }],
+  radii_miles: [5],
+  default_radius_miles: 5,
+  point_count: 1,
+};
+test("a frozen run with a complete geometry posts normally", async () => {
+  const h = harness({ geometry: validGeometry });
+  await h.request("collect");
+  assert.equal(h.counts().posts, 1);
+});
+for (const [label, geometry, reason] of [
+  ["point count mismatch", { ...validGeometry, point_count: 153 }, /point count/],
+  ["missing radii", { ...validGeometry, radii_miles: undefined }, /radii/],
+  ["empty tier", { ...validGeometry, tiers: [{}] }, /tiers/],
+  ["missing tiers", { ...validGeometry, tiers: undefined }, /tiers/],
+  ["default radius outside radii", { ...validGeometry, default_radius_miles: 2 }, /default radius/],
+  ["empty object", { geometry: {} }.geometry, /Unknown grid geometry version/],
+])
+  test(`a frozen run with invalid geometry (${label}) never spends`, async () => {
+    const h = harness({ geometry });
+    await h.request("collect");
+    assert.equal(h.counts().posts, 0);
+    assert.equal(h.check.state, "planned");
+    assert.match(h.run.error, reason);
+  });

@@ -5,6 +5,12 @@ import {
   mapTask,
   parseMapsTask,
   gridMetrics,
+  localGrid,
+  withinRadius,
+  distanceMiles,
+  scanPreview,
+  usableGeometry,
+  LOCAL_TIERS,
 } from "../supabase/functions/_shared/map-grid.ts";
 const id = "00000000-0000-4000-a000-000000000001";
 const config = {
@@ -109,4 +115,117 @@ test("coverage excludes incomplete checks and mean explicitly includes found ran
   assert.equal(m.top3Percent, 33);
   assert.equal(m.averageFound, 3);
   assert.equal(gridMetrics([]).averageFound, null);
+});
+// Lucas's verified home location (locations 60a4e3dc), read Oct 14 2026.
+const lucas = { lat: 38.805024, lng: -90.814768 };
+test("dense local layout is deterministic, deduplicated and nested once around the center", () => {
+  const a = localGrid(lucas),
+    b = localGrid(lucas);
+  assert.deepEqual(a, b);
+  const { points, geometry } = a;
+  assert.equal(points.length, 153);
+  assert.equal(geometry.point_count, 153);
+  assert.equal(new Set(points.map((p) => `${p.lat},${p.lng}`)).size, 153);
+  // The business center is sampled exactly once, first.
+  assert.deepEqual(points[0], lucas);
+  assert.equal(points.filter((p) => distanceMiles(lucas, p) < 0.01).length, 1);
+  assert.deepEqual(geometry.radii_miles, [1, 2, 5]);
+  assert.equal(geometry.default_radius_miles, 5);
+  assert.equal(geometry.version, "local-multiscale-v1");
+  validateGrid({ ...config, points, geometry });
+});
+test("radius means distance from the center and tiers keep their spacing", () => {
+  const { points } = localGrid(lucas);
+  assert.deepEqual(
+    [1, 2, 5].map((r) => withinRadius(points, lucas, r).length),
+    [49, 85, 153],
+  );
+  assert.equal(withinRadius(points, lucas, null).length, 153);
+  const d = points.map((p) => distanceMiles(lucas, p));
+  assert.ok(Math.max(...d) <= 5.001);
+  // Boundary points are geodesically on the ring, not a projection away from it.
+  for (const r of [1, 2, 5]) {
+    const ring = d.filter((x) => Math.abs(x - r) < 0.01);
+    assert.ok(ring.length >= 4);
+    for (const x of ring) assert.ok(Math.abs(x - r) < 0.00001);
+  }
+  // Each ring holds only its own lattice: nearest neighbour equals tier spacing.
+  for (const [i, p] of points.entries()) {
+    const nn = Math.min(
+      ...points.filter((_, j) => j !== i).map((q) => distanceMiles(p, q)),
+    );
+    const tier = LOCAL_TIERS.find((t) => d[i] <= t.max_miles + 0.001);
+    assert.ok(nn <= tier.spacing_miles + 0.001, `point ${i} too sparse`);
+    assert.ok(nn >= 0.25 - 0.001, `point ${i} duplicated`);
+  }
+  // Exactly one mile north is inside 1 mi; the next lattice step is not.
+  const north = points.find((p) => Math.abs(distanceMiles(lucas, p) - 1) < 0.00001 && p.lat > lucas.lat && Math.abs(p.lng - lucas.lng) < 1e-6);
+  assert.ok(north);
+  assert.equal(withinRadius([north], lucas, 1).length, 1);
+  assert.equal(withinRadius([north], lucas, 0.99).length, 0);
+});
+test("scan preview and guards keep dense scans inside the 1,000-check budget", () => {
+  const { points, geometry } = localGrid(lucas);
+  const kw = (n) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `00000000-0000-4000-a000-00000000001${i}`,
+      keyword: `roof ${i}`,
+    }));
+  const preview = scanPreview({ points, keywords: kw(5) });
+  assert.equal(preview.checks, 765);
+  assert.equal(preview.estimatedCost.toFixed(3), "0.459");
+  validateGrid({ ...config, points, geometry, keywords: kw(6) });
+  assert.throws(() => validateGrid({ ...config, points, geometry, keywords: kw(7) }), /scan limit/);
+  // Declared geometry must describe the points actually charged.
+  assert.throws(() => validateGrid({ ...config, points: points.slice(1), geometry }), /geometry/);
+  assert.throws(
+    () => validateGrid({ ...config, points: [...points.slice(1), { lat: 38.9, lng: -90.8 }], geometry }),
+    /outside declared radius/,
+  );
+  assert.throws(() => validateGrid({ ...config, points, geometry: { ...geometry, version: "v0" } }), /geometry/);
+  // Old broad configs have no geometry and still validate unchanged.
+  validateGrid({ ...config, geometry: null });
+  assert.throws(() => localGrid(lucas, [{ max_miles: 1, spacing_miles: 0.3 }]));
+  assert.throws(() => localGrid({ lat: NaN, lng: 0 }));
+});
+test("incomplete or inconsistent geometry metadata is refused before spending", () => {
+  const { points, geometry } = localGrid(lucas);
+  const drop = (k) => {
+    const g = { ...geometry };
+    delete g[k];
+    return g;
+  };
+  const bad = [
+    {},
+    [],
+    "local-multiscale-v1",
+    drop("version"),
+    drop("center"),
+    drop("tiers"),
+    drop("radii_miles"),
+    drop("default_radius_miles"),
+    drop("point_count"),
+    { ...geometry, center: { lat: "38.8", lng: -90.8 } },
+    { ...geometry, tiers: [] },
+    { ...geometry, tiers: [{}], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: 5 }], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: 5, spacing_miles: 0 }], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: 5, spacing_miles: 6 }], radii_miles: [5] },
+    { ...geometry, tiers: [{ max_miles: Infinity, spacing_miles: 1 }], radii_miles: [Infinity] },
+    { ...geometry, tiers: [...geometry.tiers.slice(0, 2), { max_miles: 2, spacing_miles: 1 }], radii_miles: [1, 2, 2] },
+    { ...geometry, radii_miles: [1, 2] },
+    { ...geometry, radii_miles: [1, 2, 4] },
+    { ...geometry, default_radius_miles: 3 },
+    { ...geometry, point_count: "153" },
+  ];
+  for (const g of bad) {
+    assert.throws(() => validateGrid({ ...config, points, geometry: g }), undefined, JSON.stringify(g));
+    assert.equal(usableGeometry({ points, geometry: g }), null);
+  }
+  // Legacy configs and the generated layout stay valid.
+  for (const g of [undefined, null]) {
+    validateGrid({ ...config, geometry: g });
+    assert.equal(usableGeometry({ points: config.points, geometry: g }), null);
+  }
+  assert.equal(usableGeometry({ points, geometry }), geometry);
 });
