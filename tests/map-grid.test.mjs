@@ -84,6 +84,16 @@ test("pending and malformed provider responses do not become ranking losses", ()
     null,
   );
 });
+test("documented no-results status completes only with a valid empty envelope", () => {
+  for (const items of [null, []]) {
+    assert.deepEqual(parseMapsTask({status_code:40102,result:[{items_count:0,items}]}, "id"),
+      {pending:false,position:null,results:[]});
+  }
+  for (const result of [null, [], [{}], [{items_count:1,items:[]}], [{items_count:0,items:[{type:'maps_search'}]}]]) {
+    assert.throws(() => parseMapsTask({status_code:40102,result}, "id"));
+  }
+  assert.throws(() => parseMapsTask({status_code:40101,result:[{items_count:0,items:null}]}, "id"));
+});
 test("coverage excludes incomplete checks and mean explicitly includes found ranks only", () => {
   const m = gridMetrics([
     { state: "complete", position: 1 },

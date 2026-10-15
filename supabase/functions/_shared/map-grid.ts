@@ -86,12 +86,22 @@ export function mapTask(
 export function parseMapsTask(
   task: {
     status_code?: number;
-    result?: { items?: Record<string, unknown>[] | null }[] | null;
+    result?: { items_count?: number; items?: Record<string, unknown>[] | null }[] | null;
   },
   placeId: string,
 ) {
   if (task.status_code === 40601 || task.status_code === 40602)
     return { pending: true as const };
+  // DataForSEO uses 40102 for a processed search with no matching listings.
+  // Require the documented empty result envelope, not just the status code.
+  if (
+    task.status_code === 40102 &&
+    task.result?.length === 1 &&
+    task.result[0].items_count === 0 &&
+    (task.result[0].items === null ||
+      (Array.isArray(task.result[0].items) && task.result[0].items.length === 0))
+  )
+    return { pending: false as const, position: null, results: [] as MapResult[] };
   if (task.status_code !== 20000)
     throw Error(`Provider status ${task.status_code ?? "missing"}`);
   if (!Array.isArray(task.result) || task.result.length !== 1)
