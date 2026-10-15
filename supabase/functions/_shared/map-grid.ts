@@ -92,12 +92,16 @@ export function parseMapsTask(
 ) {
   if (task.status_code === 40601 || task.status_code === 40602)
     return { pending: true as const };
-  if (task.status_code !== 20000)
+  // DataForSEO returns 40102 for a completed search with no listings.
+  // Keep validating its result envelope so malformed responses stay retryable.
+  if (task.status_code !== 20000 && task.status_code !== 40102)
     throw Error(`Provider status ${task.status_code ?? "missing"}`);
   if (!Array.isArray(task.result) || task.result.length !== 1)
     throw Error("Missing Maps result");
   const raw = task.result[0].items;
   if (raw !== null && !Array.isArray(raw)) throw Error("Malformed Maps items");
+  if (task.status_code === 40102 && raw?.length)
+    throw Error("No-results status contains Maps items");
   const results: MapResult[] = (raw ?? [])
     .filter(
       (i) =>
