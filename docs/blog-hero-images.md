@@ -1,6 +1,6 @@
 # Blog hero images
 
-One reviewed hero image per blog draft (migration `20261015210000_blog_hero_images.sql`).
+One reviewed hero image per blog draft (migration `20261016173307_blog_hero_images.sql`, applied Oct 16 2026; the file was written as 20261015210000 and renamed to the version production recorded).
 
 ## What a hero is
 
