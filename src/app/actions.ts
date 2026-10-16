@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { blockedQuery, blockedReason } from "@/lib/db-errors";
+import { blockedQuery, blockedReason, type BlockedReason } from "@/lib/db-errors";
 import { requireTeamMember } from "@/lib/team";
 import type { Database } from "@/lib/database.types";
 
@@ -160,10 +160,32 @@ export async function updateClientAction(clientId: string, form: FormData) {
       renewal_at: str(form, "renewal_at"),
       drive_root_url: str(form, "drive_root_url"),
       notes: str(form, "notes"),
+      service_scope: serviceScope(form),
     })
     .eq("id", clientId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    const blocked = blockedReason(error);
+    if (blocked) {
+      redirect(`/clients/${clientId}?${blockedQuery(clientBlockedReason(blocked))}`);
+    }
+    throw new Error(error.message);
+  }
   revalidatePath(`/clients/${clientId}`);
+}
+
+function serviceScope(form: FormData): "full" | "map_tracking" | undefined {
+  const value = str(form, "service_scope");
+  return value === "full" || value === "map_tracking" ? value : undefined;
+}
+
+// clients_map_tracking_paused (20261015170000) keeps map-tracking-only
+// clients out of every status-driven job; say so in the team's words.
+function clientBlockedReason(reason: BlockedReason): BlockedReason {
+  if (!reason.message.includes("clients_map_tracking_paused")) return reason;
+  return {
+    message: "A map-tracking-only client stays paused or offboarded. Nothing was saved.",
+    hint: "To make it launching or active, set Service scope to Full service in the same save. That does not replay onboarding: enroll its pipelines on the Plan tab.",
+  };
 }
 
 // ── Contacts ───────────────────────────────────────────────────────────────
