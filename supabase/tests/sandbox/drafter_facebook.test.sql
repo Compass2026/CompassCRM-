@@ -195,7 +195,7 @@ begin
   st := fd.try(format('select drafter_write(%L::jsonb)', fd.req('Panel upgrades. Licensed electricians.', fd.id('fb_b'),
     p_channel => 'google_business', p_intent => 'transactional',
     p_cta => '{"type": "LEARN_MORE", "url": "https://b.example.test/panel-upgrades"}')));
-  perform fd.ok('D19 a Business Profile brief may not name a social account', st like '23514:%Only a Facebook draft%', st);
+  perform fd.ok('D19 a Business Profile brief may name only one of the client''s verified locations (20261015200000), never a Facebook Page', st like '23514:%verified locations%', st);
   perform fd.ok('D20 every refusal rolled back completely',
     (select count(*) from drafter_runs) = r0 and (select count(*) from social_posts) = n0);
 

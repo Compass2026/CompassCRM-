@@ -27,8 +27,6 @@ do $$ declare r jsonb; e text; n bigint; begin
   and (select social_account_id=(select id from gd.ids where k='bound') from social_posts where id=(r->>'post_id')::uuid));
  perform gd.ok('draft stops at human review without scheduling',(select review_status='in_review' and publish_status='not_scheduled' and approved_hash is null from social_posts where id=(r->>'post_id')::uuid));
  perform gd.ok('drafting never enables publishing',(select not publish_enabled from social_accounts where id=(select id from gd.ids where k='bound')));
- e:=fd.try(format('select drafter_write(%L::jsonb)',jsonb_set(gd.req('Forged account test'),'{brief,target,social_account}',jsonb_build_object('id',(select id from gd.ids where k='bound')))));
- perform gd.ok('caller cannot supply a GBP social account',e like '23514:%Only a Facebook%',e);
 end $$;
 reset role;
 
@@ -52,15 +50,28 @@ do $$ declare e text; n bigint; begin
 end $$;
 select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b',
  'ddddddddddddddddddddddd1','locations/987654321','Client B','Client B','{"status":"healthy"}');
-do $$ declare e text; begin
- e:=fd.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b',
- 'ddddddddddddddddddddddd3','locations/7654322','Another B','Another B','{"status":"healthy"}')$q$);
- perform gd.ok('the database refuses a second bound location before it can become ambiguous',e like '23505:%',e);
+insert into gd.ids select 'second',(publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b',
+ 'ddddddddddddddddddddddd3','locations/7654322','Another B','Another B','{"status":"healthy"}') ->> 'social_account_id')::uuid;
+do $$ declare e text; n bigint; r jsonb; begin
+ select count(*) into n from drafter_runs;
+ e:=fd.try(format('select drafter_write(%L::jsonb)',gd.req('Ambiguous destination test')));
+ perform gd.ok('with two locations an unnamed draft is refused, never guessed',e like '23514:%several Business Profile locations%',e);
+ perform gd.ok('that refusal creates no drafter run',(select count(*)=n from drafter_runs));
+ e:=fd.try(format('select drafter_write(%L::jsonb)',jsonb_set(gd.req('Forged account test'),'{brief,target,social_account}',jsonb_build_object('id',gen_random_uuid()))));
+ perform gd.ok('a draft cannot name a location that is not this client''s verified one',e like '23514:%verified locations%',e);
+ e:=fd.try(format('select drafter_write(%L::jsonb)',jsonb_set(gd.req('Foreign location test'),'{brief,target,social_account}',jsonb_build_object('id',(select id from social_accounts where client_id='00000000-0000-4000-b000-00000000000a' and platform='google_business' and publish_provider is not null limit 1)))));
+ perform gd.ok('a draft cannot name another client''s verified location',e like '23514:%verified locations%',e);
+ r:=drafter_write(jsonb_set(gd.req('Second location test'),'{brief,target,social_account}',jsonb_build_object('id',(select id from gd.ids where k='second'))));
+ perform gd.ok('a draft naming the second location goes there',r->>'social_account_id'=(select id::text from gd.ids where k='second')
+  and (select social_account_id=(select id from gd.ids where k='second') from social_posts where id=(r->>'post_id')::uuid));
+ insert into gd.ids values('post3',(r->>'post_id')::uuid);
 end $$;
 reset role;
 set role authenticated;
 select fd.as_user('authenticated', :'team');
+update social_posts set review_status='rejected',review_note='Fictional destination test complete' where id=(select id from gd.ids where k='post3');
 select publisher_unbind_account((select id from gd.ids where k='bound'));
+select publisher_unbind_account((select id from gd.ids where k='second'));
 select publisher_set_gbp_transport('00000000-0000-4000-b000-00000000000b','google');
 reset role;
 set role service_role;

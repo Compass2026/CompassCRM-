@@ -4895,6 +4895,7 @@ export type Database = {
         Row: {
           authority_opportunity_id: string | null
           brand_workspace_id: string | null
+          gbp_location_id: string | null
           channel: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id: string | null
@@ -4924,6 +4925,7 @@ export type Database = {
         Insert: {
           authority_opportunity_id?: string | null
           brand_workspace_id?: string | null
+          gbp_location_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id?: string | null
@@ -4953,6 +4955,7 @@ export type Database = {
         Update: {
           authority_opportunity_id?: string | null
           brand_workspace_id?: string | null
+          gbp_location_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id?: string
           content_post_id?: string | null
