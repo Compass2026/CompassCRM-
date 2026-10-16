@@ -9,19 +9,26 @@ import {
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 const BASE = "https://api.dataforseo.com/v3/serp/google/maps";
-const VERSION = "map-grid-v4";
+const VERSION = "map-grid-v5";
 // Per-invocation bounds (the collector runs every five minutes). Posting is
 // deferred safely: a planned check has cost nothing. Collection never creates
 // a paid task. The deadline keeps one invocation inside the Edge wall clock.
-// Sized for ten 765-check runs due at the same weekly slot (docs/map-grid-pilot.md).
+// Edge kills an invocation at 2,000 ms CPU long before the wall clock, so
+// `weekly` and `collect` only dispatch: every running run is worked in its own
+// invocation (post at most 765 checks plus 60 reads, about 230–520 ms CPU).
+// Sized in docs/map-grid-pilot.md (CPU budget).
 const POST_BATCH = 100;
 const POST_LANES = 4;
 const READ_LANES = 10;
 const COLLECT_PER_RUN = 60;
-const COLLECT_TOTAL = 600;
+// Defence in depth: no invocation parses more results than this, whatever it is given.
+const COLLECT_TOTAL = 150;
 const MAX_RUNS = 20;
+const DISPATCH_LANES = 5;
 const WORK_MS = 100000;
-const LEASE_MS = 600000;
+// Longer than one invocation can live (150 s wall clock), shorter than the
+// five-minute tick, so a lease left by a killed invocation lapses by the next tick.
+const LEASE_MS = 180000;
 const EXPIRY_MS = 6 * 3600000;
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -329,8 +336,9 @@ Deno.serve(async (req: Request) => {
         complete: states.filter((x) => x.state === "complete").length,
       };
     };
-    // Works every given running run in one invocation: post all planned checks
-    // (oldest run first), then share one bounded collection budget fairly.
+    // Works the given running runs: post all planned checks (oldest run first),
+    // then share one bounded collection budget fairly. Only ever called with
+    // one run now; the multi-run fairness and COLLECT_TOTAL stay as defence.
     // A failure in one run is recorded on that run and never stops the others.
     const processRuns = async (runIds: string[]): Promise<Outcome[]> => {
       const deadline = Date.now() + WORK_MS;
@@ -458,13 +466,26 @@ Deno.serve(async (req: Request) => {
                 .eq("lease_until", lease),
             );
           } catch {
-            /* An unreleased lease expires on its own after ten minutes. */
+            /* An unreleased lease expires on its own after LEASE_MS. */
           }
         }
       }
       return runIds.map((id) => outcomes.get(id) ?? { run_id: id, busy: true });
     };
     const start = async (profileId: string, key: string) => {
+      // A key that already names a run is a re-dispatch (weekly, collect or a
+      // repeated click): work that run, exactly as map_grid_start would return
+      // it. No new run, no spend, and a later profile edit cannot strand the
+      // run; processRuns validates its frozen config before any post.
+      const existing = must(
+        await db
+          .from("map_grid_runs")
+          .select("id")
+          .eq("profile_id", profileId)
+          .eq("request_key", key)
+          .maybeSingle(),
+      ) as { id: string } | null;
+      if (existing) return existing.id;
       const profile = must(
         await db
           .from("map_grid_profiles")
@@ -523,8 +544,49 @@ Deno.serve(async (req: Request) => {
     if (body.mode === "weekly" && !isCron)
       return Response.json({ error: "Scheduler only" }, { status: 403 });
     if (body.mode === "weekly" || body.mode === "collect") {
+      // One run per invocation: re-send `start` with the run's own request key.
+      // Each child has its own CPU budget and takes its own per-run lease, so
+      // a run another worker holds is simply skipped there.
+      type Due = { id: string; profile_id: string; request_key: string };
+      const dispatch = async (runs: Due[]) => {
+        if (!runs.length) return [];
+        const anon = await secret("SUPABASE_ANON_KEY");
+        const cron = cronSecret;
+        if (!anon || !cron) throw Error("Grid dispatch is not configured");
+        const self = `${Deno.env.get("SUPABASE_URL")}/functions/v1/map-grid-sync`;
+        const sent: { run_id: string; status: number | "error" }[] = [];
+        await parallel(runs, DISPATCH_LANES, async (run) => {
+          let status: number | "error";
+          try {
+            const response = await fetch(self, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${anon}`,
+                "x-cron-secret": cron,
+              },
+              body: JSON.stringify({
+                mode: "start",
+                profile_id: run.profile_id,
+                request_key: run.request_key,
+              }),
+              signal: AbortSignal.timeout(30000),
+            });
+            status = response.status;
+            await response.body?.cancel();
+          } catch {
+            status = "error";
+          }
+          // An undelivered run stays running; the next five-minute tick dispatches it again.
+          if (status !== 202)
+            console.error("Grid run not dispatched", run.id, status);
+          sent.push({ run_id: run.id, status });
+        });
+        return sent;
+      };
       const work = async () => {
         const attempts: Record<string, unknown>[] = [];
+        const due = new Map<string, Due>();
         if (body.mode === "weekly") {
           const profiles = must(
             await db
@@ -541,6 +603,7 @@ Deno.serve(async (req: Request) => {
               message: string | null;
             };
             try {
+              // Database only: freezes the run and plans its checks. Nothing is posted here.
               attempt = {
                 outcome: "started",
                 run_id: await start(p.id, key),
@@ -564,23 +627,36 @@ Deno.serve(async (req: Request) => {
             if (error)
               console.error("Weekly grid attempt not recorded", p.id);
             attempts.push(row);
+            if (attempt.run_id)
+              due.set(attempt.run_id, {
+                id: attempt.run_id,
+                profile_id: p.id,
+                request_key: key,
+              });
           }
         }
-        const runs = must(
+        // Every running run whose lease is free, oldest first.
+        const free = must(
           await db
             .from("map_grid_runs")
-            .select("id")
+            .select("id,profile_id,request_key")
             .eq("status", "running")
+            .lt("lease_until", new Date().toISOString())
             .order("started_at")
             .limit(MAX_RUNS),
-        );
+        ) as Due[] | null;
+        for (const run of free ?? []) if (!due.has(run.id)) due.set(run.id, run);
         return {
           ...(body.mode === "weekly" ? { attempts } : {}),
-          runs: await processRuns((runs ?? []).map((r) => r.id)),
+          dispatched: await dispatch([...due.values()]),
         };
       };
       if (body.wait === true) return Response.json(await work());
-      EdgeRuntime.waitUntil(work().catch(() => {}));
+      EdgeRuntime.waitUntil(
+        work().catch((e) =>
+          console.error("Grid dispatch failed", e instanceof Error ? e.message : e),
+        ),
+      );
       return Response.json({ status: "accepted" }, { status: 202 });
     }
     return Response.json({ error: "Unknown mode" }, { status: 400 });
