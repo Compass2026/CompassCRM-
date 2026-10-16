@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   validateGrid,
   mapTask,
@@ -256,4 +257,24 @@ test("a market-centered grid is labelled and validated; business stays the defau
   ])
     assert.throws(() => validateGrid({ ...config, points: market.points, geometry: g }), reason);
   validateGrid({ ...config, points: market.points, geometry: { ...business, center: wichita, center_kind: "business" } });
+});
+
+// Edge kills an invocation at 2,000 ms CPU. Sizing from production
+// (2026-10-15): ~5.4 ms per result parse (370 parses hit the cap), up to
+// 62.5 ms per 100-task POST (500 ms for a 765-check run).
+test("map-grid-sync v5 sizes every invocation by CPU, not wall clock", () => {
+  const source = readFileSync("supabase/functions/map-grid-sync/index.ts", "utf8");
+  const value = (name) =>
+    Number(eval(source.match(new RegExp(`const ${name} = ([^;]+);`))[1]));
+  assert.match(source, /const VERSION = "map-grid-v5";/);
+  const worst =
+    Math.ceil(1000 / value("POST_BATCH")) * 62.5 + value("COLLECT_TOTAL") * (2000 / 370);
+  assert.ok(worst <= 1500, `a full 1,000-check post plus the read cap costs ~${worst} ms`);
+  assert.ok(value("COLLECT_PER_RUN") <= value("COLLECT_TOTAL"));
+  // A lease outlives one invocation (150 s wall clock) and lapses before the next 5-minute tick.
+  assert.ok(value("LEASE_MS") > 150000 && value("LEASE_MS") < 300000);
+  // weekly / collect only dispatch: the one processRuns call outside start is gone.
+  const scheduler = source.slice(source.indexOf('if (body.mode === "weekly" || body.mode === "collect")'));
+  assert.doesNotMatch(scheduler, /processRuns\(/);
+  assert.match(scheduler, /mode: "start"/);
 });
