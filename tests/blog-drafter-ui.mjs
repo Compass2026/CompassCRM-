@@ -38,6 +38,8 @@ const tokenFor = (u) => sign({ sub: u.id, role: "authenticated", aud: "authentic
 const run = (cmd, q) => execFileSync("/bin/sh", ["-c", `${cmd} -c "$Q"`], { env: { ...process.env, Q: q } }).toString().trim();
 const sql = (q) => run(PSQL, q);
 
+// A 1×1 teal PNG stands in for the stored hero files.
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNQSkzMBAADEAFOh00yJQAAAABJRU5ErkJggg==", "base64");
 const unexpected = [];
 const gateway = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
@@ -47,6 +49,20 @@ const gateway = http.createServer(async (req, res) => {
     const u = c?.sub && users.get(c.sub);
     res.writeHead(u ? 200 : 401, { "content-type": "application/json" });
     return res.end(JSON.stringify(u ? { ...u, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-09-01T00:00:00Z" } : { message: "invalid JWT" }));
+  }
+  // Storage: signed URLs for the hero picker's brand assets, teammates only.
+  if (url.pathname === "/storage/v1/object/sign/brand-assets" && req.method === "POST") {
+    const body = []; for await (const c of req) body.push(c);
+    const { paths } = JSON.parse(Buffer.concat(body).toString() || "{}");
+    const team = verify(bearer)?.sub === TEAM.id;
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify((paths ?? []).map((p) => (team
+      ? { path: p, signedURL: `/object/sign/brand-assets/${p}?token=t`, error: null }
+      : { path: p, signedURL: null, error: "Object not found" }))));
+  }
+  if (url.pathname.startsWith("/storage/v1/object/sign/brand-assets/")) {
+    res.writeHead(200, { "content-type": "image/png" });
+    return res.end(PNG);
   }
   if (url.pathname.startsWith("/rest/v1/")) {
     const body = []; for await (const c of req) body.push(c);
@@ -107,6 +123,12 @@ sql(`insert into keywords (id, client_id, keyword, intent, is_active, is_tracked
 sql(`insert into claims (id, client_id, claim, status, source) values
      ('${OC}', '${C}', 'Owens Corning Preferred Contractor', 'sourced', 'https://manufacturer.example.test/roofing/contractors/contractor-profile/1')`);
 sql(`insert into locations (client_id, name, city, state) values ('${C}', 'Wentzville, MO', 'Wentzville', 'MO')`);
+// Hero candidates (20261015210000): a generated graphic and a photo, stored and hashed.
+const HERO_GRAPHIC = "00000000-0000-4000-a500-0000000000e1";
+const HERO_PHOTO = "00000000-0000-4000-a500-0000000000e2";
+run(PSQL_ADMIN, `insert into brand_assets (id, client_id, kind, label, source, storage_path, mime_type, width, height, size_bytes, content_hash, content_hashed_at, content_measurement, notes) values
+     ('${HERO_GRAPHIC}', '${C}', 'social_post', 'Blog hero: homeowner checking an attic (illustrative)', 'upload', '${C}/upload/hero-graphic.png', 'image/png', 1730, 909, 2048, '${"1".repeat(64)}', now(), '{}', 'Generated / non-evidentiary visual.'),
+     ('${HERO_PHOTO}', '${C}', 'photo', 'Crew replacing shingles', 'upload', '${C}/upload/crew.png', 'image/png', 1600, 900, 4096, '${"2".repeat(64)}', now(), '{}', null)`);
 sql(`insert into page_groups (client_id, name, page_type, status, target_url, supporting_keyword_ids) values ('${C}', 'Roof Replacement', 'service', 'approved', '${PAGE}', '{}')`);
 sql(`insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, planned_date)
      values ('${ITEM}', '${C}', '${W}', 'blog', 'educational', 'How long does a roof last', 'informational', '${KW}', '${ROOF}', '${addDays(W, 2)}')`);
@@ -200,8 +222,23 @@ try {
   await page.getByRole("button", { name: "Save changes" }).click();
   await page.getByText("Saved.").waitFor();
   assert.equal(db(`select status||'/'||version||'/'||author_kind from content_drafts where id = '${draftId}'`), "draft/2/team");
+  // The hero image: chosen from the client's stored assets, beside the copy.
+  await page.locator("[data-hero-none]").waitFor();
+  await page.locator(`[data-hero-option="${HERO_GRAPHIC}"]`).click();
+  await page.locator("#hero_alt").fill("Homeowner checking attic ventilation with a flashlight");
+  await page.getByRole("button", { name: "Save hero image" }).click();
+  await page.getByText("Hero image saved.").waitFor();
+  await page.locator("[data-hero-preview]").waitFor();
+  assert.equal(await page.locator("[data-hero-illustrative]").innerText(), "Illustrative graphic, not a photo of the client's work");
+  assert.match(await page.locator("[data-hero-provenance]").innerText(), /generated graphic \(non-evidentiary\)/);
+  assert.equal(db(`select version||'/'||hero_alt from content_drafts where id = '${draftId}'`), "3/Homeowner checking attic ventilation with a flashlight");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const [heroBox, copyBox] = [await page.locator("[data-draft-hero]").boundingBox(), await page.locator("[data-draft-article]").boundingBox()];
+  assert.ok(heroBox.x > copyBox.x + copyBox.width - 1 && Math.abs(heroBox.y - copyBox.y) < 2, "the hero sits beside the copy on desktop");
+  ok("Hero image: chosen from the client's stored assets with alt text, previewed beside the copy, labelled illustrative; the version bumps");
   await page.getByRole("button", { name: "Submit for review" }).click();
   await page.locator('[data-draft-status]:text("In review")').waitFor();
+  assert.match(await page.locator("[data-hero-locked]").innerText(), /Withdraw the draft to change its hero image/);
   ok("Reject (with a note) → Revise → Edit (version 2, the team's) → Submit for review");
 
   // 5. Approve → ONE final content_posts row; the planner follows.
@@ -213,19 +250,26 @@ try {
   const [post] = db(`select id||'|'||status||'|'||title||'|'||origin||'|'||due_date from content_posts where client_id = '${C}'`).split("\n");
   const [postId, ...rest] = post.split("|");
   assert.deepEqual(rest, ["approved", "How long does a roof last? A plain answer for Wentzville homeowners", "compass", addDays(W, 2)]);
-  assert.equal(db(`select status||'/'||approved_version||'/'||final_content_post_id from content_drafts where id = '${draftId}'`), `approved/2/${postId}`);
+  assert.equal(db(`select status||'/'||approved_version||'/'||final_content_post_id from content_drafts where id = '${draftId}'`), `approved/3/${postId}`);
+  assert.equal(db(`select (approved_snapshot->'hero'->>'asset_id')||'/'||(approved_snapshot->'hero'->>'alt')||'/'||(approved_snapshot->'hero'->>'illustrative') from content_drafts where id = '${draftId}'`),
+    `${HERO_GRAPHIC}/Homeowner checking attic ventilation with a flashlight/true`);
   assert.equal(db(`select content_post_id from content_plan_items where id = '${ITEM}'`), postId);
   await page.goto(`${base}/clients/${C}/planner?week=${W}`, { waitUntil: "networkidle" });
   assert.equal(await item.locator("[data-plan-status]").getAttribute("data-plan-status"), "approved");
   assert.deepEqual(await page.locator('[data-slot-strip] [data-slot="blog"] [data-slot-count]').allInnerTexts(), ["1/2"]);
   await page.goto(`${base}/clients/${C}/content`, { waitUntil: "networkidle" });
   assert.match(await page.locator("main").innerText(), /How long does a roof last\? A plain answer[\s\S]*approved/);
-  ok("Approve creates ONE content_posts row (approved, Compass, the planned date); the plan item links it; Blogs 1/2");
+  ok("Approve creates ONE content_posts row (approved, Compass, the planned date); the plan item links it; Blogs 1/2; the approval pins the hero");
 
   // 6. Reopen → regenerate → the worker writes again → approve: the same row.
   await page.goto(`${base}/clients/${C}/drafts/${draftId}`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Reopen (clears approval)" }).click();
   await page.locator('[data-draft-status]:text("Draft")').waitFor();
+  await page.locator(`[data-hero-option="${HERO_PHOTO}"]`).click();
+  await page.locator("#hero_alt").fill("Crew replacing shingles on a two-story home");
+  await page.getByRole("button", { name: "Save hero image" }).click();
+  await page.getByText("Hero image saved.").waitFor();
+  assert.equal(await page.locator("[data-hero-illustrative]").count(), 0, "a photo is not labelled illustrative");
   await page.locator("#regen_note").fill("Add a section on attic ventilation");
   await page.getByRole("button", { name: "Regenerate" }).click();
   await page.locator("[data-draft-waiting]").waitFor();
@@ -236,7 +280,8 @@ try {
   await page.locator('[data-draft-status]:text("Approved")').waitFor();
   assert.equal(db(`select count(*)||'/'||max(title) from content_posts where client_id = '${C}'`), "1/How long does a roof last? Ventilation, weather and planning ahead");
   assert.equal(db(`select final_content_post_id from content_drafts where id = '${draftId}'`), postId);
-  ok("Reopen → Regenerate (with a note) → the worker rewrites → Approve: the same final row, updated; still one");
+  assert.equal(db(`select approved_snapshot->'hero'->>'asset_id' from content_drafts where id = '${draftId}'`), HERO_PHOTO);
+  ok("Reopen → replace the hero → Regenerate (with a note) → the worker rewrites → Approve: the same final row, updated, with the new hero; still one");
 
   // 7. Access and layout.
   const pctx = await contextFor(browser, PORTAL, { width: 1280, height: 900 });

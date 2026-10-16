@@ -201,3 +201,28 @@ export async function cancelBlogPublicationAction(_prev: DraftFormState, form: F
   revalidateDraft(p.client_id,p.draft_id);
   return {ok:true,text:"Publication cancelled. The reviewed article remains in history."};
 }
+
+// The blog's hero image (20261015210000): one of the client's stored, hashed
+// photos or social graphics, with alt text. Like a content edit, only on a
+// draft or rejected draft; the database re-checks the asset and bumps the
+// version, so a review or approval of the old hero no longer matches.
+export async function setDraftHeroAction(clientId: string, draftId: string, version: number, _prev: DraftFormState, form: FormData): Promise<DraftFormState> {
+  if (!isUuid(clientId) || !isUuid(draftId)) return { error: "Unknown draft." };
+  const remove = form.get("remove") === "1";
+  const assetId = String(form.get("hero_asset_id") ?? "");
+  const alt = String(form.get("hero_alt") ?? "").replace(/\s+/g, " ").trim();
+  if (!remove) {
+    if (!isUuid(assetId)) return { error: "Choose an image." };
+    if (!alt) return { error: "Describe the image for people who cannot see it (alt text)." };
+    if (alt.length > 250) return { error: "Alt text is at most 250 characters." };
+  }
+  const supabase = await start();
+  if (!supabase) return { error: NOT_TEAM };
+  const { data, error } = await supabase.from("content_drafts")
+    .update(remove ? { hero_asset_id: null, hero_alt: null } : { hero_asset_id: assetId, hero_alt: alt })
+    .eq("id", draftId).eq("client_id", clientId).eq("version", version).in("status", ["draft", "rejected"]).select("id");
+  if (error) return { error: draftError(error.message) };
+  if (!data?.length) return { error: CHANGED };
+  revalidateDraft(clientId, draftId);
+  return { ok: true, text: remove ? "Hero image removed." : "Hero image saved. Submit the draft for review again." };
+}

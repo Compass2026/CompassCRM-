@@ -4625,6 +4625,8 @@ export type Database = {
           cta: Json | null
           deliverable: string
           final_content_post_id: string | null
+          hero_alt: string | null
+          hero_asset_id: string | null
           h1: string | null
           id: string
           internal_links: Json | null
@@ -4674,6 +4676,8 @@ export type Database = {
           cta?: Json | null
           deliverable: string
           final_content_post_id?: string | null
+          hero_alt?: string | null
+          hero_asset_id?: string | null
           h1?: string | null
           id?: string
           internal_links?: Json | null
@@ -4723,6 +4727,8 @@ export type Database = {
           cta?: Json | null
           deliverable?: string
           final_content_post_id?: string | null
+          hero_alt?: string | null
+          hero_asset_id?: string | null
           h1?: string | null
           id?: string
           internal_links?: Json | null
@@ -13363,6 +13369,7 @@ export type Database = {
         Returns: Json
       }
       content_draft_write: { Args: { p: Json }; Returns: Json }
+      content_draft_write_with_hero: { Args: { p: Json }; Returns: Json }
       content_drafter_session_active: { Args: never; Returns: boolean }
       converge_client: { Args: { p_client_id: string }; Returns: boolean }
       create_monthly_cycles: { Args: { p_period?: string }; Returns: number }

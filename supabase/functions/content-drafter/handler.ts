@@ -26,12 +26,13 @@
 //
 // Callers: the worker (x-cron-secret) or a signed-in team member (JWT on
 // team_members). Nothing else.
+import { heroProblems, parseHero } from "./hero.ts";
 import { blogBriefHash, buildBlogBrief, CONTENT_DRAFTER_VERSION, type BlogBrief } from "./brief.ts";
 import { lintBlog, type BlogDraft } from "./lint.ts";
 import { claimedByOther } from "../post-drafter/claims.ts";
 import type { Store } from "./store.ts";
 
-export const HANDLER_VERSION = 5;
+export const HANDLER_VERSION = 6;
 export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
@@ -56,7 +57,10 @@ export function parseBlogDraft(d: unknown): BlogDraft | string {
   const cta = o.cta as Json | undefined;
   if (!cta || typeof cta !== "object" || !isStr(cta.text) || !(cta.url == null || isStr(cta.url))) return "draft.cta is { text, url }";
   if (!Array.isArray(o.claim_ids) || o.claim_ids.some((c) => !isStr(c) || !UUID.test(c))) return "draft.claim_ids must be uuids";
+  const hero = parseHero(o);
+  if (typeof hero === "string") return hero;
   return {
+    ...(hero ? { hero } : {}),
     title: o.title as string, slug: o.slug as string, meta_title: o.meta_title as string, meta_description: o.meta_description as string,
     h1: o.h1 as string, body_markdown: o.body_markdown as string,
     outline: (o.outline as Json[]).map((x) => ({ level: x.level as number, heading: x.heading as string })),
@@ -105,7 +109,7 @@ export function createContentDrafter(deps: Deps) {
     const body = (await req.json().catch(() => null)) as Json | null;
     if (!body || typeof body !== "object") return reply(400, { error: "JSON body required" });
     const mode = body.mode;
-    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations", "claims"] });
+    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations", "claims", "hero_images"] });
     if (mode === "open") {
       if (who.via !== "worker") return reply(403, { error: "open is the worker's (the weekly blog task)" });
       const taskId = body.task_id;
@@ -146,6 +150,10 @@ export function createContentDrafter(deps: Deps) {
     }
     const draft = parseBlogDraft(body.draft);
     if (typeof draft === "string") return reply(400, { error: draft });
+    if (draft.hero) {
+      const problems = heroProblems(await store.heroAsset(draft.hero.asset_id), built.brief.client.id);
+      if (problems.length) return reply(422, { error: "hero_refused", message: problems.join(" ") });
+    }
     const lint = lintBlog(built.brief, draft, { gazetteer: (built.state && deps.gazetteer?.[built.state]) || [] });
     if (mode === "check") return reply(200, { ...lint, brief_hash: built.hash });
 
