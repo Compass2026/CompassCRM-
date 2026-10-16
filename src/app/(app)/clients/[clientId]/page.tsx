@@ -10,6 +10,7 @@ import {
   revokePortalUserAction,
 } from "@/app/portal-actions";
 import { PORTAL_INVITES_FLAG, portalInvitesEnabled } from "@/lib/portal-invites";
+import { BlockedBanner } from "@/components/blocked-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,10 +35,13 @@ const selectClass =
 
 export default async function OverviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ clientId: string }>;
+  searchParams: Promise<{ blocked?: string; hint?: string }>;
 }) {
   const { clientId } = await params;
+  const { blocked, hint } = await searchParams;
   const supabase = await createClient();
   const [
     { data: client },
@@ -80,7 +84,8 @@ export default async function OverviewPage({
         <CardHeader>
           <CardTitle className="text-base">Business</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <BlockedBanner message={blocked} hint={hint} />
           <form action={updateClient} className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">
               <Label htmlFor="name">Business name</Label>
@@ -122,6 +127,18 @@ export default async function OverviewPage({
                 <option value="paused">paused</option>
                 <option value="offboarded">offboarded</option>
               </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="service_scope">Service scope</Label>
+              <select id="service_scope" name="service_scope" defaultValue={client.service_scope} className={`${selectClass} w-full`}>
+                <option value="full">Full service</option>
+                <option value="map_tracking">Map tracking only</option>
+              </select>
+              {client.service_scope === "map_tracking" && (
+                <p className="text-xs text-muted-foreground">
+                  Stays paused or offboarded. Switch to Full service to make it launching or active.
+                </p>
+              )}
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label htmlFor="address_line1">Address (NAP)</Label>
