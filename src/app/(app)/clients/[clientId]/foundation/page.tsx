@@ -699,7 +699,8 @@ export default async function FoundationPage({
 
       <div className="grid gap-4 xl:grid-cols-2">
         {/* ── Brand board ───────────────────────────────────────────── */}
-        <Card className="xl:col-span-2">
+        {/* #brand-board is linked from the Brand tab's board status line. */}
+        <Card id="brand-board" className="xl:col-span-2 scroll-mt-20">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <CardTitle className="text-base">Brand board</CardTitle>
