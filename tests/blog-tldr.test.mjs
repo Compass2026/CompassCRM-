@@ -157,7 +157,8 @@ test("a release approved without a TL;DR is delivered exactly as before", () => 
 test("a hero site without the slot refuses rather than putting the summary under the image", () => {
   const hero = { asset_id: "x", content_hash: "f".repeat(64), alt: "Bills on a table", kind: "social_post", illustrative: true,
     mime_type: "image/png", width: 10, height: 10, size_bytes: 3, storage_path: "c/u/x.png" };
-  const { tldr: _drop, ...heroOnly } = LOGIC;
+  const heroOnly = { ...LOGIC };
+  delete heroOnly.tldr;
   assert.throws(() => preparePublication(release({ hero }), hash, read(heroOnly), "2026-10-18", { base64: "AAA=" }), /TL;DR upgrade/);
   assert.equal(preparePublication(release({ hero }), hash, read(LOGIC), "2026-10-18", { base64: "AAA=" }).tldr_mode, "slot");
 });
