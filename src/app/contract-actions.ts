@@ -11,6 +11,7 @@ import {
   sha256,
   validAgreementToken,
   prepareContractPayment,
+  checkAgreementEmailSetup,
 } from "@/lib/agreements-server";
 import type { Contract } from "@/lib/agreements";
 import { buildAgreementPdf } from "@/lib/agreement-pdf";
@@ -82,6 +83,21 @@ export async function createContractAction(clientId: string) {
   }
   revalidatePath(base(clientId));
   redirect(`${base(clientId)}/${c!.id}`);
+}
+export async function checkContractEmailSetupAction(clientId: string, id: string) {
+  let feedback: { error?: string; notice?: string };
+  try {
+    const { actor } = await admin();
+    const contract = await agreementStaff<Contract>(actor, "read", { id });
+    if (contract.client_id !== clientId) throw new Error("Agreement not found.");
+    await checkAgreementEmailSetup();
+    feedback = { notice: "Email setup test accepted. This checks sending to a test address; it does not confirm delivery to the client." };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    feedback = { error: message.startsWith("The verification email") || message.startsWith("Email verification")
+      ? message : "Email setup could not be checked. Sign in as a Compass admin and try again." };
+  }
+  redirect(`${base(clientId)}/${id}?${new URLSearchParams(feedback as Record<string, string>)}`);
 }
 export async function saveContractAction(
   clientId: string,

@@ -11,6 +11,7 @@ import {
   saveContractAction,
   voidContractAction,
   attachContractPaymentAction,
+  checkContractEmailSetupAction,
 } from "@/app/contract-actions";
 import { AgreementDocument } from "@/components/agreements/agreement-document";
 import { IssueAgreement } from "@/components/agreements/issue-agreement";
@@ -173,6 +174,10 @@ export default async function AgreementPage({
                     Verification email setup is required.
                   </p>
                 )}
+                <form action={checkContractEmailSetupAction.bind(null, clientId, c.id)} className="mb-4 space-y-2">
+                  <Button type="submit" variant="outline" loadingLabel="Checking email setup…">Test verification email setup</Button>
+                  <p className="text-xs text-muted-foreground">Uses a test address. No client email is sent.</p>
+                </form>
                 <IssueAgreement
                   clientId={clientId}
                   id={c.id}

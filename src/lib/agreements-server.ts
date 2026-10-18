@@ -94,6 +94,17 @@ export const agreementMailReady = () =>
   !!(
     process.env.AGREEMENTS_RESEND_API_KEY && process.env.AGREEMENTS_EMAIL_FROM
   );
+// Admin-only callers use the provider's simulator, never a customer address.
+export async function checkAgreementEmailSetup() {
+  if (!agreementMailReady())
+    throw new Error("Email verification is not configured. Contact the sender.");
+  return deliverVerificationEmail({
+    from: process.env.AGREEMENTS_EMAIL_FROM!,
+    to: "delivered@resend.dev",
+    issuer: "Compass Marketing email setup test",
+    code: "000000", // Not attached to any link, session or agreement.
+  }, process.env.AGREEMENTS_RESEND_API_KEY!, async () => {});
+}
 export async function sendVerificationCode(token: string) {
   if (!agreementMailReady())
     throw new Error(

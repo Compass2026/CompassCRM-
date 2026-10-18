@@ -28,6 +28,11 @@ check its provider record before declaring inbox delivery verified.
 Regression checks cover acceptance, sender rejection, transport uncertainty,
 audit failure, request binding, idempotency, grant boundaries, and unchanged
 agreement content. No automatic retry or client reminder is introduced.
+Admins can use **Test verification email setup** on the agreement page to
+exercise the deployed sender and key against Resend's `delivered@resend.dev`
+simulator. This does not create a customer code, signature, payment, or history
+event. The displayed result confirms provider acceptance only. The recipient
+is fixed server-side and cannot be supplied by the browser.
 
 ## Payment handoff fix (October 14, 2026)
 
