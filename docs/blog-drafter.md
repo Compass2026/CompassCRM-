@@ -49,7 +49,7 @@ on the deploy workflow's list). Nothing publishes.
 
 | Who | What |
 |---|---|
-| A teammate | Generate (`content_draft_request`): one live request per plan item, a CLAUDE task `content_draft:<id>`, a worker fire. A location page needs an Authority `location_page` opportunity, never a service × city matrix. |
+| A teammate | Generate (`content_draft_request`): one live request per plan item, a CLAUDE task `content_draft:<id>`, a worker fire. A location page needs an Authority `location_page` opportunity, never a service × city matrix. **Reserve for** (20261018220000) holds the request for an operator session instead: the task is claimed for that label at request time and no worker fire is sent (see "Reserve for" below). |
 | The content-drafter function only (the drafter session) | `content_draft_write`: the brief, the content, the lint, the claims, then in review. It closes the request task. |
 | A teammate | Edit content and claims while a draft or rejected (bumps the version); submit; withdraw; reject (a note is required); revise; regenerate (`content_draft_regenerate`, with a note); approve (`content_draft_approve`, the version they saw); reopen; delete an unapproved draft. |
 | The worker's own SQL | Nothing. |
@@ -202,3 +202,52 @@ Both the drafter and the publisher run these checks. Live article verification
 also checks external body links. Existing review drafts need regeneration
 under v2 before publication because the reviewed rule set changes. Human
 article approval and the separate publication action remain required.
+
+## Reserve for (Oct 18 2026)
+
+Migration `20261018220000_reserve_draft_requests.sql`; sandbox suite
+`reserve_draft_requests.test.sql`; unit tests `tests/draft-reservations.test.mjs`;
+browser step 6b in `tests/blog-drafter-ui.mjs`.
+
+**Why.** On Oct 16 Tom pressed Generate on a Logic Solar blog slot meaning a
+Claude operator session to write it. The request fired the worker Routine,
+which claimed the task three seconds before the operator (whose claim then
+answered `claimed_by_other`) and submitted its own copy; the operator's copy
+had to go in as a revision after a Withdraw. The claims were right; nobody
+could say at request time who the request was for.
+
+**What.** The Planner's Generate draft form has a **Reserve for** select:
+*Worker Routine (starts now)*, the default, or *Claude operator session
+(claude-operator)*.
+
+- Unset: exactly as before — the task opens unclaimed and the worker is fired.
+- Reserved: `content_draft_request(..., p_reserve_for => 'claude-operator')`
+  claims the request task in the same transaction (`claimed_by`, `claimed_at
+  = now()`, status `in_progress`, through `compass.task_claim` like
+  `content_draft_claim`), notes it on the task, and sends no fire. The answer
+  carries `reserved_for` and `expires_at`.
+- The claim is the ordinary one-hour binding claim: a Routine run started by
+  anything else (the daily sweep, another fire for that client) gets
+  `claimed_by_other` from `content_draft_claim` and `409` from
+  `content-drafter`, and leaves it.
+- The operator session, once told, runs `select content_draft_claim('<draft>',
+  'claude-operator')` (same label, so it refreshes the hour) and writes
+  through `content-drafter` with `"claimant": "claude-operator"`.
+- Nobody acts within the hour: the claim expires and the next Routine run takes
+  the request. Late, never lost.
+- Pressing Generate again on a request that already exists may reserve it
+  (or refresh the same label's reservation); another label's live hold is
+  refused with `CD409` and the form says who holds it until when. An unset
+  second Generate fires the Routine as before and leaves a reservation alone.
+- Labels are 2–40 characters of lowercase letters, digits and dashes;
+  `worker-routine` is refused (leave it empty for the Routine).
+- The Planner shows "Held by claude-operator until …" beside an open draft
+  request, and the draft page shows the holder and, for a reserved request,
+  that the Routine was not started.
+
+**Not covered.** Regenerate on the draft page still always fires the Routine;
+a reservation there is the natural follow-up.
+
+**Rollback.** Drop `content_draft_request(uuid, text, text, text)` and
+restore 0067's three-argument function with its grants. Reservations already
+recorded expire on their own within the hour.

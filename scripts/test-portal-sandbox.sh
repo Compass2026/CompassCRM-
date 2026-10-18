@@ -257,6 +257,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_draft_claim
 # foreign claim blocks drafter_write, an expired one does not, an unclaimed
 # request writes as before.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_draft_claims.test.sql"
+# 20261018220000: Reserve for — a request reserved for an operator is claimed
+# at request time and fires nothing; unset, it fires the Routine as before.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/reserve_draft_requests.test.sql"
 # Multi-brand isolation, human approvals, shared GBP and per-brand website destinations.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.test.sql"
 # New GBP drafts pin the existing client binding before human review.

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { RESERVE_OPTIONS } from "@/lib/draft-reservations";
 
 function Message({ state }: { state: DraftFormState }) {
   if (state.error) return <p role="alert" className="text-sm text-red-700">{state.error}</p>;
@@ -31,8 +32,18 @@ export function GenerateDraftForm({ clientId, planItemId, label = "Generate draf
     <form action={action} className="space-y-1" data-generate-draft>
       <div className="flex flex-wrap items-end gap-2">
         <Input name="note" placeholder="Anything the drafter should know (optional)" maxLength={2000} className="w-72 max-w-full" />
+        <label className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          Reserve for
+          <select name="reserve_for" defaultValue="" className="field w-72 max-w-full text-sm text-foreground" data-reserve-for>
+            {RESERVE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
         <Button type="submit" size="sm" disabled={pending}>{pending ? "Requesting…" : label}</Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Reserving holds the request for that session for an hour and does not start the Routine. If nobody writes it in
+        that hour, the Routine picks it up on its next run.
+      </p>
       <Message state={state} />
     </form>
   );
