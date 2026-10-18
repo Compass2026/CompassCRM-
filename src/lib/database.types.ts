@@ -13361,11 +13361,16 @@ export type Database = {
         Returns: string[]
       }
       content_draft_regenerate: {
-        Args: { p_draft_id: string; p_note?: string }
+        Args: { p_draft_id: string; p_note?: string; p_reserve_for?: string }
         Returns: Json
       }
       content_draft_request: {
-        Args: { p_note?: string; p_page_type?: string; p_plan_item_id: string }
+        Args: {
+          p_note?: string
+          p_page_type?: string
+          p_plan_item_id: string
+          p_reserve_for?: string
+        }
         Returns: Json
       }
       content_draft_write: { Args: { p: Json }; Returns: Json }

@@ -2132,6 +2132,30 @@ go-live: `docs/blog-drafter.md`.
   - Ship in this order: apply the migration, merge (the skill goes live
     with it), then deploy `content-drafter` from main at once. Until it
     answers v5 with `claims`, the worker's preflight stops without writing.
+- **Reserve for (20261018220000, not applied yet).** After the Oct 16 Logic
+  Solar race (Tom pressed Generate meaning a Claude operator session to
+  write it; the Routine claimed it three seconds first), the Planner's
+  **Generate draft** has a **Reserve for** choice, default the worker
+  Routine.
+  - `content_draft_request(item, page_type, note, reserve_for)`: a label
+    (`claude-operator`; lowercase letters, digits, dashes, 2–40 chars;
+    never `worker-routine`) claims the request task at request time through
+    the same door as `content_draft_claim` (`compass.task_claim`) and does
+    **not** fire the worker. Unset is exactly the old behaviour.
+  - The claim is the usual one-hour binding claim, so a Routine run started
+    by anything else gets `claimed_by_other`. The operator re-claims with
+    the same label (`content_draft_claim(draft, 'claude-operator')`, which
+    refreshes the hour) and submits with that `claimant`. Unused, it
+    expires and the next sweep's Routine picks the request up.
+  - A second Generate on an existing request may reserve it unless another
+    label holds it (`CD409`). The Planner and the draft page show who holds
+    an open request and until when.
+  - **Regenerate** has the same choice (20261018230000, not applied yet):
+    `content_draft_regenerate(draft, note, reserve_for)` sends a draft or
+    rejected draft back to `requested` and, with a label, claims its Redraft
+    task for that operator and fires nothing; another label's live claim on
+    the open task is `CD409` and nothing changes. Unset is exactly 0067. The
+    two-argument function is dropped. Ship order: 20261018220000 first.
 - **Not yet:** the Web Page Drafter.
 
 ## Known state / open items (as of Sept 13 2026)

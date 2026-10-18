@@ -2,6 +2,8 @@ import { blogClient } from "@/lib/blog-publications";
 import { BlogPublicationControls } from "@/components/drafts/blog-publication-controls";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DraftHoldNote, loadDraftHolds } from "@/components/drafts/draft-hold";
+import { isRoutine } from "@/lib/draft-reservations";
 import { createClient } from "@/lib/supabase/server";
 import { isUuid, formatStamp, actorName } from "@/lib/tasks";
 import { listTeamMembers } from "@/lib/team";
@@ -69,6 +71,8 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
     id: a.id, label: a.label, kind: a.kind, width: a.width, height: a.height,
     preview: a.storage_path ? signedUrl.get(a.storage_path) ?? null : null,
   }));
+  // Who holds the request (Reserve for, or a writer's claim), while it is open.
+  const hold = ["requested", "draft", "rejected"].includes(d.status) ? (await loadDraftHolds(supabase, [draftId])).get(draftId) ?? null : null;
   const names = new Map(members.map((m) => [m.id, m.name]));
   const status = draftStatusLabels[d.status];
   const actions = draftActions(d);
@@ -93,14 +97,23 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
           <span>· version {d.version}</span>
           {d.author_kind && <span>· {d.author_kind === "drafter" ? `written by the drafter${d.runtime ? ` (${d.runtime})` : ""}` : "edited by the team"}</span>}
           {d.word_count != null && <span>· {d.word_count} words</span>}
+          {hold && <span>· <DraftHoldNote hold={hold} className="" /></span>}
         </div>
       </div>
 
       {d.status === "requested" && (
-        <p className="surface p-4 text-sm" data-draft-waiting>
-          The drafter is writing this {kind.toLowerCase()}. It appears here for review when it is done (usually within a few minutes);
-          reload to check.
-        </p>
+        hold && !isRoutine(hold.by) ? (
+          <p className="surface p-4 text-sm" data-draft-waiting="reserved">
+            Reserved for <span className="font-medium">{hold.by}</span>: the worker Routine was not started. Tell that session the draft
+            is waiting; it appears here for review when the session submits it. If nobody writes it by {formatStamp(hold.until)}, the
+            Routine picks it up on its next run.
+          </p>
+        ) : (
+          <p className="surface p-4 text-sm" data-draft-waiting>
+            The drafter is writing this {kind.toLowerCase()}. It appears here for review when it is done (usually within a few minutes);
+            reload to check.
+          </p>
+        )
       )}
       {d.status === "rejected" && d.review_note && (
         <p role="note" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">

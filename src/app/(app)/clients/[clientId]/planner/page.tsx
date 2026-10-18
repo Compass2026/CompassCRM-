@@ -26,6 +26,7 @@ import {
   UnlinkOutputButton,
 } from "@/components/planner/plan-forms";
 import { GenerateDraftForm } from "@/components/drafts/draft-forms";
+import { DraftHoldNote, loadDraftHolds } from "@/components/drafts/draft-hold";
 import { draftStatusLabels, isDraftStatus } from "@/lib/content-drafts";
 import { getDeliveryTargets, monthOf, remainingFor, type DeliveryKey } from "@/lib/delivery-standard";
 import { DeliveryStandardCard } from "@/components/planner/delivery-standard-card";
@@ -74,6 +75,9 @@ export default async function PlannerPage({ params, searchParams }: {
   // View rows are typed nullable; the columns below are not null in the table.
   const items = (boardQ.data ?? []).flatMap((r) =>
     r.id && r.deliverable && r.topic && r.purpose ? [{ ...r, id: r.id, deliverable: r.deliverable, topic: r.topic, purpose: r.purpose }] : []);
+  // Who holds each open draft request (Reserve for, or a writer's claim).
+  const holds = await loadDraftHolds(supabase, items.flatMap((i) =>
+    i.draft_id && ["requested", "draft", "rejected"].includes(i.draft_status ?? "") ? [i.draft_id] : []));
   const delivery = deliveries.map((d, i) => ({ month: months[i], error: d.error, client: d.clients[0] ?? null }));
   // On the standard for this week's month(s): the week is measured against
   // its share of the monthly plan, social is Facebook only, a web page slot
@@ -186,6 +190,7 @@ export default async function PlannerPage({ params, searchParams }: {
                         <span className="text-xs text-muted-foreground">
                           {" "}({isDraftStatus(i.draft_status) ? draftStatusLabels[i.draft_status].label.toLowerCase() : i.draft_status})
                         </span>
+                        {holds.has(i.draft_id) && <>{" · "}<DraftHoldNote hold={holds.get(i.draft_id)} /></>}
                       </p>
                     )}
                     {d === "blog" && !i.draft_id && !blog && i.status === "ready_to_generate" && (

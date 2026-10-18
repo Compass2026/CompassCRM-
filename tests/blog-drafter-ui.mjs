@@ -95,6 +95,7 @@ const ROOF = "00000000-0000-4000-e000-0000000000e1";
 const KW = "00000000-0000-4000-d000-0000000000e1";
 const OC = "00000000-0000-4000-f000-0000000000e1";
 const ITEM = "00000000-0000-4000-c300-0000000000e1";
+const ITEM_RESERVED = "00000000-0000-4000-c300-0000000000e2";
 const SITE = "https://roof.example.test";
 const PAGE = `${SITE}/services/roof-replacement`;
 const W = currentWeek();
@@ -131,7 +132,8 @@ run(PSQL_ADMIN, `insert into brand_assets (id, client_id, kind, label, source, s
      ('${HERO_PHOTO}', '${C}', 'photo', 'Crew replacing shingles', 'upload', '${C}/upload/crew.png', 'image/png', 1600, 900, 4096, '${"2".repeat(64)}', now(), '{}', null)`);
 sql(`insert into page_groups (client_id, name, page_type, status, target_url, supporting_keyword_ids) values ('${C}', 'Roof Replacement', 'service', 'approved', '${PAGE}', '{}')`);
 sql(`insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, planned_date)
-     values ('${ITEM}', '${C}', '${W}', 'blog', 'educational', 'How long does a roof last', 'informational', '${KW}', '${ROOF}', '${addDays(W, 2)}')`);
+     values ('${ITEM}', '${C}', '${W}', 'blog', 'educational', 'How long does a roof last', 'informational', '${KW}', '${ROOF}', '${addDays(W, 2)}'),
+            ('${ITEM_RESERVED}', '${C}', '${W}', 'blog', 'educational', 'When to replace a roof', 'informational', '${KW}', '${ROOF}', '${addDays(W, 4)}')`);
 
 const port = Number(process.env.BLOG_UI_PORT ?? 3435);
 const base = `http://127.0.0.1:${port}`;
@@ -149,13 +151,13 @@ async function contextFor(browser, user, viewport) {
   return context;
 }
 // The worker's loop: brief → check → submit, as the playbook does it.
-async function workerWrites(draftId, over = {}) {
-  const b = await worker({ mode: "brief", draft_id: draftId });
+async function workerWrites(draftId, over = {}, claimant = undefined) {
+  const b = await worker({ mode: "brief", draft_id: draftId, claimant });
   assert.equal(b.status, 200, JSON.stringify(b.body));
   const draft = article(over);
-  const c = await worker({ mode: "check", draft_id: draftId, brief_hash: b.body.brief_hash, draft });
+  const c = await worker({ mode: "check", draft_id: draftId, brief_hash: b.body.brief_hash, draft, claimant });
   assert.equal(c.body.ok, true, JSON.stringify(c.body.problems));
-  const s = await worker({ mode: "submit", draft_id: draftId, brief_hash: b.body.brief_hash, draft, runtime: "claude-worker-skill" });
+  const s = await worker({ mode: "submit", draft_id: draftId, brief_hash: b.body.brief_hash, draft, runtime: "claude-worker-skill", claimant });
   assert.equal(s.status, 201, JSON.stringify(s.body));
   return s.body;
 }
@@ -186,7 +188,8 @@ try {
   const draftId = page.url().match(/drafts\/([0-9a-f-]{36})/)[1];
   await page.locator("[data-draft-waiting]").waitFor();
   assert.equal(db(`select status||'/'||request_note||'/'||topic from content_drafts where id = '${draftId}'`), "requested/Keep it practical for first-time homeowners/How long does a roof last");
-  assert.equal(db(`select owner||'/'||status from tasks where key = 'content_draft:${draftId}'`), "CLAUDE/open");
+  assert.equal(db(`select owner||'/'||status||'/'||coalesce(claimed_by, 'unclaimed') from tasks where key = 'content_draft:${draftId}'`), "CLAUDE/open/unclaimed");
+  assert.equal(await page.locator("[data-draft-hold]").count(), 0, "an unreserved request shows no holder");
   assert.equal(db(`select count(*) from content_posts where client_id = '${C}'`), "0");
   ok("Planner → Generate draft opens a requested draft (with the note), a CLAUDE task, and no content_posts row");
 
@@ -271,9 +274,12 @@ try {
   await page.getByText("Hero image saved.").waitFor();
   assert.equal(await page.locator("[data-hero-illustrative]").count(), 0, "a photo is not labelled illustrative");
   await page.locator("#regen_note").fill("Add a section on attic ventilation");
+  assert.equal(await page.locator("[data-regenerate-draft] [data-reserve-for]").inputValue(), "", "Regenerate's Reserve for defaults to the Routine");
   await page.getByRole("button", { name: "Regenerate" }).click();
   await page.locator("[data-draft-waiting]").waitFor();
   assert.equal(db(`select status||'/'||request_note from content_drafts where id = '${draftId}'`), "requested/Add a section on attic ventilation");
+  assert.equal(db(`select coalesce(t.claimed_by, 'unclaimed')||'/'||t.status from content_drafts d join tasks t on t.id = d.request_task_id where d.id = '${draftId}'`),
+    "unclaimed/open", "an unreserved Regenerate opens the redraft unclaimed, as before");
   await workerWrites(draftId, { title: "How long does a roof last? Ventilation, weather and planning ahead" });
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Approve" }).click();
@@ -282,6 +288,61 @@ try {
   assert.equal(db(`select final_content_post_id from content_drafts where id = '${draftId}'`), postId);
   assert.equal(db(`select approved_snapshot->'hero'->>'asset_id' from content_drafts where id = '${draftId}'`), HERO_PHOTO);
   ok("Reopen → replace the hero → Regenerate (with a note) → the worker rewrites → Approve: the same final row, updated, with the new hero; still one");
+
+  // 6b. Reserve for: the request is held for an operator session, the Routine is not started.
+  await page.goto(`${base}/clients/${C}/planner?week=${W}`, { waitUntil: "networkidle" });
+  const reservedItem = page.locator(`[data-plan-item="${ITEM_RESERVED}"]`);
+  assert.equal(await reservedItem.locator("[data-reserve-for]").inputValue(), "", "Reserve for defaults to the Routine");
+  await reservedItem.locator("[data-reserve-for]").selectOption("claude-operator");
+  await reservedItem.getByRole("button", { name: "Generate draft" }).click();
+  await page.waitForURL(new RegExp(`/drafts/(?!${draftId})`));
+  const reservedId = page.url().match(/drafts\/([0-9a-f-]{36})/)[1];
+  await page.locator('[data-draft-waiting="reserved"]').waitFor();
+  assert.match(await page.locator('[data-draft-waiting="reserved"]').innerText(), /Reserved for claude-operator: the worker Routine was not started/);
+  assert.equal(await page.locator('[data-draft-hold="claude-operator"]').count(), 1, "the draft page names the holder");
+  assert.equal(db(`select status||'/'||claimed_by||'/'||(claimed_at > now() - interval '5 minutes') from tasks where key = 'content_draft:${reservedId}'`), "in_progress/claude-operator/true");
+  ok("Reserve for → claude-operator: the request task is claimed at request time; the draft page says who holds it and that the Routine was not started");
+
+  const routineTry = await worker({ mode: "brief", draft_id: reservedId, claimant: "worker-routine" });
+  assert.equal(routineTry.status, 409, JSON.stringify(routineTry.body));
+  assert.equal(routineTry.body.error, "claimed_by_other");
+  assert.equal(routineTry.body.claimed_by, "claude-operator");
+  await page.goto(`${base}/clients/${C}/planner?week=${W}`, { waitUntil: "networkidle" });
+  assert.match(await reservedItem.locator("[data-plan-draft]").innerText(), /Held by claude-operator until/);
+  const opWrote = await workerWrites(reservedId, {}, "claude-operator");
+  assert.equal(opWrote.status, "in_review");
+  await page.goto(`${base}/clients/${C}/drafts/${reservedId}`, { waitUntil: "networkidle" });
+  assert.equal(await page.locator("[data-draft-status]").innerText(), "In review");
+  assert.equal(await page.locator("[data-draft-hold]").count(), 0, "a submitted draft shows no holder");
+  assert.equal(db(`select count(*) from content_posts where client_id = '${C}'`), "1", "the reserved draft made no final row (only approval does)");
+  ok("A Routine run is refused (409 claimed_by_other); the Planner shows who holds it; the operator writes it into review");
+
+  // 6c. Reserve for on Regenerate: a rejected draft goes back to the operator, not the Routine.
+  await page.locator("#reject_note").fill("Name the local weather");
+  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByText(/Rejected by .*Name the local weather/).waitFor();
+  const regen = page.locator("[data-regenerate-draft]");
+  assert.equal(await regen.locator("[data-reserve-for]").inputValue(), "", "Reserve for defaults to the Routine");
+  await page.locator("#regen_note").fill("Add hail and freeze-thaw");
+  await regen.locator("[data-reserve-for]").selectOption("claude-operator");
+  await regen.getByRole("button", { name: "Regenerate" }).click();
+  await page.locator('[data-draft-waiting="reserved"]').waitFor();
+  assert.match(await page.locator('[data-draft-waiting="reserved"]').innerText(), /Reserved for claude-operator: the worker Routine was not started/);
+  assert.equal(await page.locator('[data-draft-hold="claude-operator"]').count(), 1, "the draft page names the holder");
+  assert.equal(db(`select d.status||'/'||d.request_note||'/'||t.status||'/'||t.claimed_by||'/'||(t.claimed_at > now() - interval '5 minutes')
+                   from content_drafts d join tasks t on t.id = d.request_task_id where d.id = '${reservedId}'`),
+    "requested/Add hail and freeze-thaw/in_progress/claude-operator/true");
+  ok("Reject → Regenerate reserved for claude-operator: the redraft task is claimed at once; the draft page says who holds it and that the Routine was not started");
+
+  const routineRedo = await worker({ mode: "brief", draft_id: reservedId, claimant: "worker-routine" });
+  assert.equal(routineRedo.status, 409, JSON.stringify(routineRedo.body));
+  assert.equal(routineRedo.body.claimed_by, "claude-operator");
+  const opRedo = await workerWrites(reservedId, { title: "When to replace a roof: hail, freeze-thaw and age" }, "claude-operator");
+  assert.equal(opRedo.status, "in_review");
+  await page.reload({ waitUntil: "networkidle" });
+  assert.equal(await page.locator("[data-draft-status]").innerText(), "In review");
+  assert.equal(await page.locator("[data-draft-hold]").count(), 0, "a submitted redraft shows no holder");
+  ok("The Routine's run on the reserved redraft is refused (409); the operator writes it back into review");
 
   // 7. Access and layout.
   const pctx = await contextFor(browser, PORTAL, { width: 1280, height: 900 });
