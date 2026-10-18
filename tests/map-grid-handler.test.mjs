@@ -24,7 +24,9 @@ const uuid = "00000000-0000-4000-a000-000000000001";
 function harness({ member = true, user = true, postFailure = false, geometry } = {}) {
   let handler,
     posts = 0,
-    gets = 0;
+    gets = 0,
+    starts = 0;
+  const background = [];
   const config = {
     id: "profile",
     target_place_id: "ChIJfixture",
@@ -37,6 +39,7 @@ function harness({ member = true, user = true, postFailure = false, geometry } =
   const run = {
     id: "run",
     profile_id: "profile",
+    request_key: "same",
     config,
     status: "running",
     lease_until: "2000-01-01",
@@ -57,10 +60,10 @@ function harness({ member = true, user = true, postFailure = false, geometry } =
     auth: {
       getUser: async () => ({ data: { user: user ? { id: "user" } : null } }),
     },
-    rpc: async (name) => ({
-      data: name === "get_secret" ? "secret" : "run",
-      error: null,
-    }),
+    rpc: async (name) => {
+      if (name === "map_grid_start") starts++;
+      return { data: name === "get_secret" ? "secret" : "run", error: null };
+    },
     from(table) {
       let update,
         filters = [],
@@ -103,7 +106,7 @@ function harness({ member = true, user = true, postFailure = false, geometry } =
           let rows =
             table === "team_members"
               ? member
-                ? [{ id: "member" }]
+                ? [{ id: "member", auth_user_id: "user" }]
                 : []
               : table === "map_grid_profiles"
                 ? [config]
@@ -139,8 +142,11 @@ function harness({ member = true, user = true, postFailure = false, geometry } =
     encodeURIComponent,
     console,
     Deno: { env: { get: () => "" }, serve: (fn) => (handler = fn) },
-    EdgeRuntime: { waitUntil: () => {} },
+    EdgeRuntime: { waitUntil: (p) => background.push(p) },
     fetch: async (url, init) => {
+      // collect dispatches each run to this same function in start mode.
+      if (url.endsWith("/functions/v1/map-grid-sync"))
+        return handler(new Request(`https://test${url}`, init));
       if (url.endsWith("/task_post")) {
         posts++;
         if (postFailure) throw Error("network lost");
@@ -183,9 +189,9 @@ function harness({ member = true, user = true, postFailure = false, geometry } =
   return {
     run,
     check,
-    counts: () => ({ posts, gets }),
-    request: (mode = "start", cron = true) =>
-      handler(
+    counts: () => ({ posts, gets, starts }),
+    request: async (mode = "start", cron = true, requestKey = "same") => {
+      const response = await handler(
         new Request("https://test", {
           method: "POST",
           headers: cron
@@ -194,11 +200,14 @@ function harness({ member = true, user = true, postFailure = false, geometry } =
           body: JSON.stringify({
             mode,
             profile_id: "profile",
-            request_key: "same",
+            request_key: requestKey,
             wait: true,
           }),
         }),
-      ),
+      );
+      while (background.length) await background.shift();
+      return response;
+    },
   };
 }
 test("unauthenticated and non-team calls cannot spend or read grid credentials", async () => {
@@ -217,6 +226,33 @@ test("successful queued scan stores exact identity, cost, results and completes 
   assert.equal(h.run.status, "complete");
   await h.request();
   assert.equal(h.counts().posts, 1);
+});
+test("a request key that already names a run works that run: no new run, no profile revalidation", async () => {
+  const h = harness({ geometry: { version: "edited-since" } });
+  // The run's frozen config has no geometry; the profile was edited after it started.
+  h.run.config = { ...h.run.config, geometry: undefined };
+  assert.equal((await h.request()).status, 200);
+  assert.equal(h.counts().starts, 0);
+  assert.equal(h.counts().posts, 1);
+  assert.equal(h.run.status, "complete");
+});
+test("a new request key goes through map_grid_start after validating the profile", async () => {
+  const h = harness();
+  h.run.request_key = "earlier";
+  assert.equal((await h.request("start", true, "new")).status, 200);
+  assert.equal(h.counts().starts, 1);
+});
+test("team members can run collect, which dispatches with the scheduler secret", async () => {
+  const h = harness();
+  const r = await h.request("collect", false);
+  assert.equal(r.status, 200);
+  assert.deepEqual((await r.json()).dispatched, [{ run_id: "run", status: 202 }]);
+  assert.equal(h.run.status, "complete");
+});
+test("weekly stays scheduler only", async () => {
+  const h = harness();
+  assert.equal((await h.request("weekly", false)).status, 403);
+  assert.equal(h.counts().posts, 0);
 });
 test("ambiguous paid submission is never automatically reposted", async () => {
   const h = harness({ postFailure: true });

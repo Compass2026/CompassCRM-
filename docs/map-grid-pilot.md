@@ -11,7 +11,7 @@ Replaces the Google Maps grid collector and viewer for explicitly enrolled locat
 - Standard Maps task queue: depth 100, desktop, English, priority 1, coordinates and zoom fixed in run configuration, search_this_area=true, search_places=false. Keywords encode literal percent and plus signs.
 - Search mode is now explicit on profiles and frozen into each run. `search_this_area=true` retains the initial pilot behavior; `false` allows the query's named market to influence results beyond the displayed viewport. Old run JSON without this field retains `true`. Never compare these modes as a ranking change. A production diagnostic at the same point/query returned Lucas at #4 with false and not found with true, so city-qualified BrightLocal replacement requires mode review before enrollment.
 - A scan snapshots the profile before spending. Task tags bind provider responses to exact checks. Unknown POST outcomes are never automatically reposted. Results are retried without creating paid tasks. Six-hour expiry is explicit failure, not a rank loss.
-- The collector works every running scan at once (see **Multi-client capacity** below). Weekly scheduler is Thursday 14:00 UTC, and selects enabled profiles with weekly_enabled=true. Each weekly start outcome is recorded (see **Weekly scan alerts**).
+- `weekly` and `collect` dispatch every running scan to its own invocation (see **Multi-client capacity** below). Weekly scheduler is Thursday 14:00 UTC, and selects enabled profiles with weekly_enabled=true. Each weekly start outcome is recorded (see **Weekly scan alerts**).
 
 ## Dense 1/2/5-mile layout (Oct 15 2026)
 
@@ -38,30 +38,49 @@ Tom asked for neighborhood detail rather than a 25-mile picture. Zooming a spars
 
 **Target (Tom, Oct 15):** ten dense weekly profiles, one for each BrightLocal location. Each is 153 points × 5 keywords = 765 checks, so 7,650 checks are all due Thursday 14:00 UTC.
 
-The pilot collector worked only the oldest running scan per invocation: it posted that run's checks and read 60 results. At that rate the later runs would not have been posted or collected before the six-hour expiry, and their paid tasks would have been failed. `map-grid-sync` (version `map-grid-v4`) now works every running run in each `collect` / `weekly` invocation.
+The pilot collector worked only the oldest running scan per invocation. `map-grid-v4` then worked every running run in one `collect` / `weekly` invocation, sized by the 150 s wall clock. That was the wrong limit (see **CPU budget** below). `map-grid-sync` version `map-grid-v5` works **one run per invocation**.
 
-**How each invocation works:**
+### CPU budget (map-grid-v5)
 
-1. **Lease.** Up to 20 running runs (`MAX_RUNS`, oldest first) are each leased separately for ten minutes. A run that another collector holds is skipped (`busy`) without blocking the rest. A lease-read failure affects only that run. Overlapping ticks, including the 14:00 `collect` that fires alongside `weekly`, split runs and never share one.
-2. **Post.** Runs post side by side in up to four lanes (`POST_LANES`), one run per lane. Each run posts its `planned` checks in 100-task batches (`POST_BATCH`), so its batches stay sequential. Any interrupted `posting` check is first marked `unknown`, and interrupted posts are still never reposted. At most 4 `task_post` calls are in flight.
-3. **Collect.** The invocation takes up to 60 of each run's oldest-polled `queued` checks (`COLLECT_PER_RUN`) and interleaves them round-robin across runs. It reads at most 600 results (`COLLECT_TOTAL`) with at most 10 reads in flight (`READ_LANES`). With ten runs, each run gets its full 60. With more runs, each gets an equal share, within one read of the others. Result reads never create a paid task.
-4. **Settle and release.** Each run is completed, made partial or expired on its own. Every lease is released.
+**Observed in production on 2026-10-15.** Supabase Edge kills an invocation at **2,000 ms CPU**: the log reason is `CPUTime`, and the wall clock does not matter. One v4 `collect` invocation was working 9 running runs. It was killed 77 s in, after about 370 `task_get` parses. That is far short of its 100 s `WORK_MS` deadline. Its `finally` never ran, so 8 run leases stayed held for the full ten-minute `LEASE_MS`.
 
-**Safety:**
+**Sizing model** (`tests/map-grid-capacity.test.mjs`, `tests/map-grid.test.mjs`). These figures are arithmetic from per-call constants taken from the production logs above, not new Edge CPU measurements. The test fixtures return one result item per read, so a full 100-item provider payload may cost more to parse. Get representative-payload evidence (non-billable: a staging function fed saved `task_get` responses) before relying on the margins below for the nine new weekly profiles.
 
-- **Deadline.** No new POST batch or result read starts more than 100 s (`WORK_MS`) into an invocation. In-flight calls have a 20 s timeout, which keeps an invocation under the 150 s Edge wall clock. A batch that is not posted stays `planned`: it has cost nothing and posts on the next tick. It is never marked `unknown`.
-- **Isolation.** An error in one run, such as invalid geometry, a database write failure or an ambiguous POST, is recorded on that run's `error`. That run is skipped for the rest of the invocation, and the other runs continue. A run that keeps erroring still expires at six hours: it becomes `failed` and keeps its error text. Before this change it stayed `running` indefinitely and blocked the profile's next start. `start` with `wait: true` still returns 503 for its own run's error.
-- **Unchanged.** Idempotent `request_key`, task-tag binding, unknown POSTs never reposted, no new paid task on retry, the six-hour expiry (not extended), and the 225-point, 1,000-check and 10-keyword limits.
+| Work in one invocation | CPU |
+|---|---|
+| One result read (fetch, JSON parse, `parseMapsTask`, row write) | ~5.4 ms (2,000 / 370) |
+| One 100-task POST and its 100 binding writes | up to ~62.5 ms (a 765-check run costs 350–500 ms) |
+| One run's pass: post up to 765 checks + 60 reads (measured 230–520 ms) | ≤ 824 ms modelled |
+| Read cap: a full 1,000-check post + 150 reads | ≤ 1,436 ms modelled |
+| v4 weekly pass: 10 runs × 8 POSTs + 600 reads | ~8,200 ms: killed mid-post |
 
-**Throughput** for ten 765-check runs (7,650 checks, 80 POST batches), as measured in `tests/map-grid-capacity.test.mjs`:
+A v4 weekly pass would be killed while posting. Checks left in `posting` become `unknown`: they may have been paid for, are never collected, and the runs end `partial`.
+
+**How v5 works:**
+
+1. **`weekly`** (cron only). For each enabled + weekly profile it calls `map_grid_start` (database only: it freezes the run and plans its checks) and records the `map_grid_weekly_attempts` row as before. It then **dispatches**. It posts nothing and parses nothing itself.
+2. **`collect`** (cron or team JWT) selects up to 20 (`MAX_RUNS`) `running` runs whose lease is free, oldest first, and dispatches them. `weekly` dispatches its started runs plus the same free-lease set.
+3. **Dispatch** sends one self-request per run to `map-grid-sync` with `{mode: "start", profile_id, request_key}`, using the run's own request key. It authenticates with the Vault `SUPABASE_ANON_KEY` bearer and the `x-cron-secret` header, exactly like pg_cron, and sends at most 5 at a time (`DISPATCH_LANES`). `start` finds the run that already owns that key and returns it, as `map_grid_start` would: there is no new run and no spend. The lookup comes before profile validation, so a profile edited mid-run cannot strand its run. `processRuns` still validates the run's **frozen** config before any POST. Each child replies 202 and works its run in the background with its own 2,000 ms CPU budget. A child that is not delivered (`status: "error"` or non-202 in `dispatched`) leaves its run `running`, and the next five-minute tick dispatches it again.
+4. **Each child** takes that run's lease, marks any interrupted `posting` checks `unknown`, posts that run's `planned` checks in 100-task batches (sequential within the run), reads up to 60 of its oldest-polled `queued` checks (10 in flight), settles the run and releases the lease.
+
+**Defence in depth:**
+
+- **Read cap.** No invocation parses more than 150 results (`COLLECT_TOTAL`), whatever it is given.
+- **Lease.** `LEASE_MS` stays 10 min. 150 s is the request idle timeout, not a limit on background work: a paid-plan worker may live 400 s ([limits](https://supabase.com/docs/guides/functions/limits), [background tasks](https://supabase.com/docs/guides/functions/background-tasks)). The lease must outlast any worker that could still post, so it is not shortened to recover faster. A lease left by a killed worker holds its run for up to two collector ticks; the next `collect` after it lapses resumes the run. The interrupted batch stays `unknown` and is never reposted.
+- **Paid-submission fence.** A worker can stall on database I/O, and `WORK_MS` alone is only checked before a batch. So before every `task_post` the worker (1) claims the batch `planned` → `posting` and posts **only the rows that claim returned**, so a row another worker took is never sent; (2) re-reads the clock against `WORK_MS` after the claim; and (3) re-reads the run and requires `lease_until` to still be its own lease. If (2) or (3) fails, nothing has been sent: the claimed rows go back to `planned`, unless a newer worker has already swept them to `unknown`, in which case they stay `unknown`. No POST is therefore issued later than `WORK_MS` (100 s) after the worker started, and each aborts after 20 s, far inside the 10-minute lease. Covered by the delayed-claim / takeover regressions in `tests/map-grid-capacity.test.mjs`.
+- **Overlap.** The 14:00 `collect` fires alongside `weekly`. Both dispatch the same runs, and the per-run lease lets exactly one child work each run. The other child is `busy` and does nothing.
+
+**Unchanged:** never blindly re-posting (`unknown` is final), per-run leases, the six-hour expiry (errored runs still expire, become `failed` and keep their error), cron-secret / team-JWT auth (`weekly` is scheduler only), idempotent request keys, task-tag binding, no new paid task on retry, `WORK_MS`, and the 225-point, 1,000-check and 10-keyword limits.
+
+**Throughput** for ten 765-check runs (7,650 checks, 80 POST batches), as measured in `tests/map-grid-capacity.test.mjs`. It matches v4, because each run still gets 60 reads per tick:
 
 | Scenario | Collector ticks | Time from slot |
 |---|---|---|
 | Results ready on first read (typical: DataForSEO returns in 1–2 min, and the next tick is 5 min later) | 13 | ~1.1 h |
-| Pessimistic latency: 5 s per POST including its 100 row writes, 1.5 s per read, every result pending once | 27 (longest invocation 101.5 s) | ~2.25 h |
+| Pessimistic latency: 5 s per POST including its 100 row writes, 1.5 s per read, every result pending once | 26 (longest invocation 49 s) | ~2.2 h |
 | Slow queue: three reads per check | 39 | ~3.25 h |
 
-- **Headroom.** Six hours is 72 ticks × 600 reads = 43,200 reads. That covers the ten target runs at up to five reads per check, or about 20 runs (the `MAX_RUNS` cap) at about two reads per check. Beyond that, stagger the weekly slots or switch collection to DataForSEO's `tasks_ready` endpoint rather than extending the expiry.
+- **Headroom.** Each run needs ⌈765 × reads-per-check / 60⌉ ticks, independent of how many runs share the slot. Six hours (72 ticks) covers up to about five reads per check. DataForSEO concurrency grows with the fleet: up to 10 reads in flight per run. `MAX_RUNS` (20) caps how many runs one tick dispatches, oldest first. A 21st running run waits until an older one finishes, so beyond about 20 weekly profiles, stagger the weekly slots or switch collection to DataForSEO's `tasks_ready` endpoint rather than extending the expiry.
 
 ## Weekly scan alerts (Oct 15 2026)
 
@@ -98,6 +117,12 @@ OSM standard tiles are fetched normally by the browser only for the current view
 4. Enable only the reviewed profile, run one manual scan, verify count, cost, identity and source date in production.
 5. Turn on that profile's weekly switch only after the manual run passes. Keep BrightLocal for overlap. Compare contemporaneous scans before any subscription change.
 
-6. Multi-client rollout: apply `20261015180000_map_grid_weekly_attempts.sql` and redeploy `map-grid-sync`. `status` mode returns `map-grid-v4`. Then enroll the next profiles one at a time, each with its own manual run, before turning on weekly. The first Thursday with several profiles, confirm in the Control Center that every weekly profile reads *Complete* for its week.
+6. Multi-client rollout: apply `20261015180000_map_grid_weekly_attempts.sql` and redeploy `map-grid-sync`. `status` mode returns `map-grid-v4`.
+7. CPU fix (`map-grid-v5`): redeploy `map-grid-sync`. No migration. The nine new profiles' initial scans **already completed on 2026-10-15** (6,426 / 6,426 checks). Do not enroll them again or run another initial scan.
+   - **Deployed version:** `status` mode returns `map-grid-v5`.
+   - **Controlled, non-billable worker check:** send `{mode: "start", profile_id, request_key}` with the cron secret, using one completed run's own key (e.g. `initial-<key>-2026-10-15`). Expect `202` with that existing `run_id`; no new `map_grid_runs` row; the run's lease is not taken (it is not `running`); no `task_post` or `task_get` in the Edge logs; no `CPUTime` shutdown. This proves the deployed auth and key-reuse path cannot spend.
+   - **Dispatcher check:** a `collect` tick with no running run dispatches nothing, so it does **not** prove child dispatch. Before the slot, only confirm `collect` answers 200 with `dispatched: []`.
+   - Then turn weekly on for the nine profiles under the existing authorization. Lucas stays on.
+   - **First scheduled live run (separate, still open):** Thursday 14:00 UTC. Check `map_grid_weekly_attempts` (one `started` row per weekly profile), `dispatched` statuses all 202, one child invocation per run in the Edge logs, no `CPUTime` shutdowns, and every leased run released. By about 15:30 UTC, every weekly profile should read *Complete* for its week in the Control Center, with posts = `ceil(checks / 100)` per run and no `unknown` checks. Alert on any `CPUTime` shutdown, any non-202 dispatch, or a run still `running` after three hours.
 
 Rollback: disable enabled/weekly_enabled on the pilot profile. Let queued paid tasks finish collecting. Revert UI code if necessary; retained tables and history are additive. Never delete prior source records.
