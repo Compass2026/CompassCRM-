@@ -221,7 +221,9 @@ source in words. No label (the page adds "TL;DR"), links, markup or line
 breaks, and never a copy of the title, H1 or meta description.
 
 **One representation:** `content_drafts.tldr` (migration
-`20261018230000_blog_tldr.sql`), never part of `body_markdown`. The linter
+`20261018222927_blog_tldr.sql`, applied Oct 18 2026; written as
+20261018230000 and renamed to the recorded version), never part of
+`body_markdown`. The linter
 refuses a TL;DR inside the body (`tldr_in_body`).
 
 **Enforcement:**
