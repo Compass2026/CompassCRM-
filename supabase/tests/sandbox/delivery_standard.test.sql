@@ -413,6 +413,9 @@ select ds_test.slot('00000000-0000-4000-d509-000000000031', '2026-10-27', 'deliv
 select ds_test.slot('00000000-0000-4000-d509-000000000032', '2026-10-28');
 update content_plan_items set content_post_id = '00000000-0000-4000-d508-000000000001' where id = '00000000-0000-4000-d509-000000000032';
 select ds_test.slot('00000000-0000-4000-d509-000000000033', '2026-10-29');
+-- Capture the original task before adding another task for the same slot.
+-- task_for intentionally has no ordering and cannot choose between duplicates.
+select set_config('ds_test.original_task', ds_test.task_for('00000000-0000-4000-d509-000000000020')::text, true);
 insert into tasks (id, client_id, title, owner, status, key, due_date, notes)
 select ('00000000-0000-4000-d50a-0000000000' || x.n)::uuid, '00000000-0000-4000-d500-00000000000e', 'named', 'CLAUDE', 'open', 'blog_post', '2026-10-26',
        'plan_item:' || x.slot
@@ -435,7 +438,7 @@ begin
       args || jsonb_build_object('task_id', '00000000-0000-4000-d50a-0000000000' || k))));
   end loop;
   -- Two tasks for the Oct 20 slot: the slot's own task, then the second one.
-  r := content_draft_open_weekly(args || jsonb_build_object('task_id', ds_test.task_for('00000000-0000-4000-d509-000000000020')));
+  r := content_draft_open_weekly(args || jsonb_build_object('task_id', current_setting('ds_test.original_task')));
   insert into ds_open_result values ('first', (r->>'plan_item_id'));
   insert into ds_open_result values ('second', ds_test.why(format('select content_draft_open_weekly(%L::jsonb)',
     args || jsonb_build_object('task_id', '00000000-0000-4000-d50a-000000000020'))));

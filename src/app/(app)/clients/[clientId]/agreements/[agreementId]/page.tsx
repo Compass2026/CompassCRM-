@@ -4,12 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentTeamRole } from "@/lib/team";
 import { agreementStaff, agreementMailReady, agreementOrigin } from "@/lib/agreements-server";
 import { buildAgreementEmail } from "@/lib/agreement-email";
+import { agreementEventDisplay } from "@/lib/agreement-history";
 import { AgreementEmailPreview } from "@/components/agreements/agreement-email-preview";
 import { activeAgreementPayment, agreementStatus, type Contract } from "@/lib/agreements";
 import {
   saveContractAction,
   voidContractAction,
   attachContractPaymentAction,
+  checkContractEmailSetupAction,
 } from "@/app/contract-actions";
 import { AgreementDocument } from "@/components/agreements/agreement-document";
 import { IssueAgreement } from "@/components/agreements/issue-agreement";
@@ -172,6 +174,10 @@ export default async function AgreementPage({
                     Verification email setup is required.
                   </p>
                 )}
+                <form action={checkContractEmailSetupAction.bind(null, clientId, c.id)} className="mb-4 space-y-2">
+                  <Button type="submit" variant="outline" loadingLabel="Checking email setup…">Test verification email setup</Button>
+                  <p className="text-xs text-muted-foreground">Uses a test address. No client email is sent.</p>
+                </form>
                 <IssueAgreement
                   clientId={clientId}
                   id={c.id}
@@ -241,11 +247,14 @@ export default async function AgreementPage({
             </CardHeader>
             <CardContent>
               <ol className="space-y-4 text-sm">
-                {c.events?.map((e) => (
-                  <li key={e.id}>
+                {c.events?.map((e) => {
+                  const display = agreementEventDisplay(e);
+                  return (
+                  <li key={e.id} className={display.warning ? "rounded-lg border border-red-200 bg-red-50 p-3 text-red-900" : undefined}>
                     <p className="font-medium capitalize">
-                      {e.kind.replaceAll("_", " ")}
+                      {display.title}
                     </p>
+                    {display.detail && <p className="mt-1 text-xs leading-5">{display.detail}</p>}
                     <p className="text-xs text-muted-foreground">
                       {e.actor} ·{" "}
                       {new Date(e.created_at).toLocaleString("en-US", {
@@ -253,7 +262,7 @@ export default async function AgreementPage({
                       })}
                     </p>
                   </li>
-                ))}
+                );})}
               </ol>
             </CardContent>
           </Card>

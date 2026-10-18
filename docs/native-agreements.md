@@ -1,5 +1,39 @@
 # Native Compass Agreements
 
+## Verification email delivery (October 18, 2026)
+
+Apply `20261018211252_agreement_verification_delivery.sql` before deploying
+the app. The isolated agreement runtime appends a provider outcome for each
+verification request: accepted (with provider message ID), failed (with an
+allowlisted reason and HTTP status), or unknown (network/server uncertainty).
+The team history explains these states and highlights failures. A requested
+code is not proof of sending, and provider acceptance is not inbox delivery.
+Old request events retain their original meaning and are not rewritten.
+
+The private delivery function verifies the current link and code hash, uses
+the existing contract/link lock order, and deduplicates by request event.
+Only `agreement_service` can call it. It adds no public RPC or table write
+grant. No raw code, token, recipient, credential or provider response body is
+stored in the delivery event. Signature and payment operations are unchanged.
+Audit failures do not trigger another email or falsely record a provider error.
+
+The production sender was restored to
+`Compass Marketing <agreements@send.compassmarketing.ai>` because the existing
+key rejected the root-domain sender with HTTP 403. Before changing the sender,
+verify both the domain and the key's sending scope. A verified domain alone
+does not authorize a domain-scoped key. Environment changes require a new
+deployment. Confirm a successful send from the actual agreement runtime and
+check its provider record before declaring inbox delivery verified.
+
+Regression checks cover acceptance, sender rejection, transport uncertainty,
+audit failure, request binding, idempotency, grant boundaries, and unchanged
+agreement content. No automatic retry or client reminder is introduced.
+Admins can use **Test verification email setup** on the agreement page to
+exercise the deployed sender and key against Resend's `delivered@resend.dev`
+simulator. This does not create a customer code, signature, payment, or history
+event. The displayed result confirms provider acceptance only. The recipient
+is fixed server-side and cannot be supplied by the browser.
+
 ## Payment handoff fix (October 14, 2026)
 
 Apply `20261014225000_agreement_payment_preparation.sql`, then deploy the CRM.

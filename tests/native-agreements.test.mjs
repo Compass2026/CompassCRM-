@@ -50,6 +50,12 @@ test("native agreement lifecycle, isolation, verification limits, immutability a
         "utf8",
       ),
     );
+    await db.exec(readFileSync(new URL("../supabase/migrations/20261018211252_agreement_verification_delivery.sql", import.meta.url), "utf8"));
+    for (const role of ["anon", "authenticated", "service_role"]) {
+      const permission = await db.query(`select has_function_privilege($1,'agreement_private.verification_delivery(text,text,jsonb)','execute') as allowed`, [role]);
+      assert.equal(permission.rows[0].allowed, false);
+    }
+    await assert.rejects(db.query("select agreement_private.verification_delivery('x','y','{}')"), /agreement_runtime_only/);
     const privileges = await db.query(`select
       has_schema_privilege('anon','agreement_private','usage') as anon_api,
       has_table_privilege('agreement_service','plans','select') as runtime_plan,
@@ -147,6 +153,20 @@ test("native agreement lifecycle, isolation, verification limits, immutability a
       /agreement_draft_only/,
     );
     await signer(hash("link"), null, "code", { code_hash: hash("123456") });
+    const delivery = (token, code, result) => db.query("select agreement_private.verification_delivery($1,$2,$3)", [token, code, result]);
+    const failure = {outcome:"failed",http_status:403,failure_code:"sender_not_authorized",raw_error:"must not persist"};
+    await assert.rejects(delivery(hash("other"), hash("123456"), failure), /agreement_delivery_unavailable/);
+    await assert.rejects(delivery(hash("link"), hash("wrong"), failure), /agreement_delivery_unavailable/);
+    await assert.rejects(delivery(hash("link"), null, failure), /agreement_delivery_invalid/);
+    await assert.rejects(delivery(hash("link"), hash("123456"), {outcome:"accepted"}), /agreement_delivery_invalid/);
+    await delivery(hash("link"), hash("123456"), failure);
+    await delivery(hash("link"), hash("123456"), failure);
+    await assert.rejects(delivery(hash("link"), hash("123456"), {outcome:"accepted",provider_id:"different"}), /agreement_delivery_conflict/);
+    const recorded = (await staff("read", {id: draft.id})).events.filter(e=>e.kind==="verification_email_failed");
+    assert.equal(recorded.length, 1);
+    assert.equal(recorded[0].detail.failure_code, "sender_not_authorized");
+    assert.equal(recorded[0].detail.raw_error, undefined);
+    assert.equal((await staff("read", {id: draft.id})).content_hash, issued.content_hash);
     assert.equal(
       (await signer(hash("link"), null, "code", { code_hash: hash("123456") }))
         .error,
