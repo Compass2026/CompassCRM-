@@ -35,6 +35,9 @@ const READ_LANES = constant("READ_LANES");
 const COLLECT_PER_RUN = constant("COLLECT_PER_RUN");
 // The five-minute collector tick (pg_cron map-grid-collect).
 const TICK = 5 * 60000;
+// Longest a paid-plan Edge worker may live (Supabase Functions limits). 150 s
+// is the request idle timeout, not a bound on background work.
+const WORKER_MAX_MS = 400000;
 // CPU cost model from production (2026-10-15): a v4 collect pass was killed at
 // the 2,000 ms CPU cap after about 370 result parses (5.4 ms each), and posting
 // one 765-check run (8 batches) cost up to 500 ms (62.5 ms per batch).
@@ -63,6 +66,8 @@ function fleet({
   kill = null,
   // Run ids whose first dispatch request is lost.
   dispatchFail = [],
+  // false: profiles exist but no run yet, so weekly creates fresh runs.
+  preRuns = true,
 } = {}) {
   let handler,
     clock = Date.parse("2026-10-15T14:00:00Z");
@@ -70,6 +75,8 @@ function fleet({
   const invocations = [],
     pending = [],
     posts = new Map(),
+    // Every paid task tag ever sent, with its count: a tag sent twice is a double charge.
+    postedTags = new Map(),
     gets = new Map(),
     pendingLeft = new Map(),
     lostDispatch = new Set(dispatchFail);
@@ -84,6 +91,8 @@ function fleet({
       inflight: { post: 0, get: 0 },
       maxInflight: { post: 0, get: 0 },
       killed: false,
+      // Waiting on a gated database call (see `gate`); drain() does not wait for it.
+      parked: false,
     };
     invocations.push(inv);
     return inv;
@@ -111,37 +120,23 @@ function fleet({
     lat: 38 + i / 1000,
     lng: -90,
   }));
-  for (let r = 0; r < runs; r++) {
-    const config = {
-      id: `profile${r}`,
-      target_place_id: "ChIJfixture",
-      zoom: 13,
-      search_this_area: true,
-      points,
-      keywords,
-      enabled: true,
-      weekly_enabled: true,
-    };
-    tables.map_grid_profiles.push(config);
+  const createRun = (config, id, key, startedAt) => {
     tables.map_grid_runs.push({
-      id: `run${r}`,
+      id,
       profile_id: config.id,
-      request_key: `weekly:2026-10-15`,
+      request_key: key,
       config,
       status: "running",
-      lease_until:
-        r === leasedRun
-          ? new Date(clock + LEASE_MS).toISOString()
-          : "2000-01-01T00:00:00.000Z",
-      started_at: new Date(clock + r).toISOString(),
+      lease_until: "2000-01-01T00:00:00.000Z",
+      started_at: startedAt,
       expected_checks: POINTS * KEYWORDS,
       error: null,
     });
     for (const kw of keywords)
       points.forEach((p, i) =>
         tables.map_grid_checks.push({
-          id: `run${r}:${kw.id}:${i}`,
-          run_id: `run${r}`,
+          id: `${id}:${kw.id}:${i}`,
+          run_id: id,
           keyword_id: kw.id,
           keyword: kw.keyword,
           point_index: i,
@@ -154,6 +149,23 @@ function fleet({
           checked_at: null,
         }),
       );
+  };
+  for (let r = 0; r < runs; r++) {
+    const config = {
+      id: `profile${r}`,
+      target_place_id: "ChIJfixture",
+      zoom: 13,
+      search_this_area: true,
+      points,
+      keywords,
+      enabled: true,
+      weekly_enabled: true,
+    };
+    tables.map_grid_profiles.push(config);
+    if (!preRuns) continue;
+    createRun(config, `run${r}`, "weekly:2026-10-15", new Date(clock + r).toISOString());
+    if (r === leasedRun)
+      tables.map_grid_runs.at(-1).lease_until = new Date(clock + LEASE_MS).toISOString();
   }
   const runOf = (checkId) => checkId.split(":")[0];
   const db = {
@@ -162,11 +174,20 @@ function fleet({
       if (name === "get_secret") return { data: "secret", error: null };
       const message = startErrors[args.p_profile_id];
       if (message) return { data: null, error: { message } };
-      return { data: args.p_profile_id.replace("profile", "run"), error: null };
+      if (preRuns)
+        return { data: args.p_profile_id.replace("profile", "run"), error: null };
+      // map_grid_start: one running run per profile; otherwise freeze a new one.
+      const profile = tables.map_grid_profiles.find((p) => p.id === args.p_profile_id);
+      if (tables.map_grid_runs.some((r) => r.profile_id === profile.id && r.status === "running"))
+        return { data: null, error: { message: "A grid scan is already running" } };
+      const id = `${profile.id.replace("profile", "run")}n${tables.map_grid_runs.length}`;
+      createRun(profile, id, args.p_request_key, new FakeDate().toISOString());
+      return { data: id, error: null };
     },
     from(table) {
       let update,
         insert,
+        keys = [],
         filters = [],
         single = false,
         sort = null,
@@ -182,6 +203,7 @@ function fleet({
           return q;
         },
         eq(k, v) {
+          keys.push(k);
           filters.push((r) => r[k] === v);
           return q;
         },
@@ -210,12 +232,25 @@ function fleet({
           return q;
         },
         then(resolve) {
+          // A gated call waits (I/O stalled) before its filters are evaluated.
+          const inv = als.getStore();
+          const wait = h.gate?.({ table, update, keys, inv });
+          if (wait) {
+            inv.parked = true;
+            return wait.then(() => {
+              inv.parked = false;
+              return this.run();
+            }).then(resolve);
+          }
+          return this.run().then(resolve);
+        },
+        run() {
           if (insert) {
             tables[table].push({
               ...insert,
               attempted_at: new FakeDate().toISOString(),
             });
-            return Promise.resolve({ data: null, error: null }).then(resolve);
+            return Promise.resolve({ data: null, error: null });
           }
           let rows = tables[table].filter((r) => filters.every((f) => f(r)));
           if (sort)
@@ -232,7 +267,7 @@ function fleet({
           return Promise.resolve({
             data: single ? (rows[0] ?? null) : rows.map((r) => ({ ...r })),
             error: null,
-          }).then(resolve);
+          });
         },
       };
       return q;
@@ -315,6 +350,7 @@ function fleet({
         inv.runs.add(run);
         inv.posts++;
         posts.set(run, (posts.get(run) ?? 0) + 1);
+        for (const t of payload) postedTags.set(t.tag, (postedTags.get(t.tag) ?? 0) + 1);
         if (kill && run === kill.run && posts.get(run) === kill.afterPosts + 1) {
           kill = null;
           inv.killed = true;
@@ -377,7 +413,7 @@ function fleet({
   // Background work of every live invocation; a killed one never finishes.
   const drain = async () => {
     for (;;) {
-      const live = pending.filter((e) => !e.done && !e.inv?.killed);
+      const live = pending.filter((e) => !e.done && !e.inv?.killed && !e.inv?.parked);
       if (!live.length) return;
       await Promise.race([
         ...live.map((e) => e.promise),
@@ -385,17 +421,20 @@ function fleet({
       ]);
     }
   };
-  return {
+  const h = {
+    gate: null,
     tables,
     run,
     states,
     posts,
+    postedTags,
     gets,
+    drain,
     invocations,
     advance: (ms) => (clock += ms),
     setClock: (t) => (clock = t),
     now: () => clock,
-    invoke: async (mode = "collect") => {
+    invoke: async (mode = "collect", { settle = true } = {}) => {
       const inv = newInvocation(mode);
       const first = invocations.length - 1;
       const response = await als.run(inv, () =>
@@ -408,7 +447,7 @@ function fleet({
         ),
       );
       const body = await response.json();
-      await drain();
+      if (settle) await drain();
       return {
         status: response.status,
         body,
@@ -417,6 +456,7 @@ function fleet({
       };
     },
   };
+  return h;
 }
 const totalPosts = (h) => [...h.posts.values()].reduce((a, b) => a + b, 0);
 const batchesPerRun = Math.ceil((POINTS * KEYWORDS) / 100);
@@ -521,7 +561,7 @@ test("with realistic provider latency every invocation stays inside the wall clo
   const longest = Math.max(...h.invocations.map((i) => i.offset - i.startOffset));
   // No new call starts after WORK_MS; the last in-flight one may finish.
   assert.ok(longest <= WORK_MS + 5000, `longest invocation ${longest} ms`);
-  assert.ok(longest < 150000, "inside the 150 s Edge wall clock");
+  assert.ok(longest < WORKER_MAX_MS, "inside the 400 s worker limit");
   assert.ok(longest < LEASE_MS, "a live invocation never outlasts its lease");
   for (let i = 0; i < 10; i++) assert.equal(h.run(`run${i}`).status, "complete");
   assert.equal(totalPosts(h), 10 * batchesPerRun);
@@ -551,9 +591,9 @@ test("more than ten runs each get their own invocation and their full read share
     assert.equal(h.gets.get(`run${i}`), COLLECT_PER_RUN);
 });
 
-test("an invocation killed mid-post holds its lease for at most LEASE_MS; the next tick resumes the run without reposting", async () => {
-  assert.ok(LEASE_MS >= 150000, "longer than the Edge wall clock");
-  assert.ok(LEASE_MS < TICK, "lapses before the next collector tick");
+test("an invocation killed mid-post holds its lease for at most LEASE_MS; a later tick resumes the run without reposting", async () => {
+  assert.ok(LEASE_MS >= WORKER_MAX_MS + 3 * 60000, "outlasts the longest worker with margin");
+  assert.ok(LEASE_MS <= 2 * TICK, "a killed worker's run waits at most two ticks");
   const h = fleet({ runs: 4, kill: { run: "run2", afterPosts: 3 } });
   await h.invoke("weekly");
   const killed = h.invocations.find((i) => i.killed);
@@ -721,4 +761,146 @@ test("no invocation can parse more than COLLECT_TOTAL results, and that worst ca
   // A full 765-check post plus the whole read cap in one invocation.
   const worst = batchesPerRun * POST_CPU + COLLECT_TOTAL * READ_CPU;
   assert.ok(worst <= 0.75 * CPU_LIMIT, `worst case ${worst} ms`);
+});
+
+// Review of 296b233: a worker whose claim stalls on I/O past its lease must
+// never post after another worker has taken the run over.
+const until = async (ready) => {
+  for (let i = 0; i < 10000 && !ready(); i++) await new Promise((r) => setImmediate(r));
+  assert.ok(ready(), "gated call never reached");
+};
+const noDoubleCharge = (h) => {
+  for (const [tag, n] of h.postedTags) assert.equal(n, 1, `${tag} posted ${n} times`);
+};
+const parkFirst = (h, match) => {
+  const parked = {};
+  h.gate = ({ table, update, keys, inv }) => {
+    if (parked.release || !match(table, update, keys)) return null;
+    parked.inv = inv;
+    return new Promise((resolve) => {
+      // Unpark at once, so a drain() right after release waits for this worker.
+      parked.release = () => {
+        inv.parked = false;
+        resolve();
+      };
+    });
+  };
+  return parked;
+};
+const isClaim = (table, update) => table === "map_grid_checks" && update?.state === "posting";
+const isLeaseCheck = (table, update, keys) =>
+  table === "map_grid_runs" && !update && keys.includes("lease_until");
+
+test("a worker whose claim stalls past a takeover never posts its stale batch", async () => {
+  const h = fleet({ runs: 1 });
+  const first = parkFirst(h, isClaim);
+  await h.invoke("collect", { settle: false });
+  await until(() => first.release);
+  // The reviewer's 300 s stall: the lease (600 s) still holds, nobody else works the run.
+  h.advance(300000);
+  const early = await h.invoke();
+  assert.deepEqual(early.body.dispatched, []);
+  assert.equal(totalPosts(h), 0);
+  // Past the lease, a second worker takes over and posts every batch.
+  h.advance(LEASE_MS);
+  await h.invoke();
+  assert.equal(h.posts.get("run0"), batchesPerRun);
+  // The stalled claim now matches no planned row: the old worker posts nothing.
+  first.release();
+  await h.drain();
+  assert.equal(h.posts.get("run0"), batchesPerRun);
+  assert.equal(h.postedTags.size, POINTS * KEYWORDS);
+  noDoubleCharge(h);
+  assert.equal(h.states("run0").unknown, undefined);
+});
+
+test("a claim that matched no rows posts nothing, even with the lease and clock still good", async () => {
+  const h = fleet({ runs: 1 });
+  const first = parkFirst(h, isClaim);
+  await h.invoke("collect", { settle: false });
+  await until(() => first.release);
+  // Meanwhile the first batch's rows left `planned` (another claimant took them).
+  const batch1 = h.tables.map_grid_checks
+    .filter((c) => c.run_id === "run0")
+    .sort((a, b) => a.point_index - b.point_index)
+    .slice(0, 100);
+  for (const c of batch1) Object.assign(c, { state: "queued", task_id: `task-${c.id}` });
+  first.release();
+  await h.drain();
+  for (const c of batch1) assert.equal(h.postedTags.get(c.id), undefined);
+  assert.equal(h.posts.get("run0"), batchesPerRun - 1);
+  noDoubleCharge(h);
+});
+
+test("a worker that loses its lease after claiming hands nothing to the provider", async () => {
+  const h = fleet({ runs: 1 });
+  // Park the lease check that runs between a successful claim and its POST.
+  const first = parkFirst(h, isLeaseCheck);
+  await h.invoke("collect", { settle: false });
+  await until(() => first.release);
+  assert.equal(h.states("run0").posting, 100);
+  h.advance(LEASE_MS + 1);
+  await h.invoke();
+  // The new worker cannot know whether the old batch was sent: unknown, never reposted.
+  assert.equal(h.states("run0").unknown, 100);
+  assert.equal(h.posts.get("run0"), batchesPerRun - 1);
+  // Even with the old worker's clock skewed back inside its deadline, the
+  // database lease check stops it.
+  first.inv.offset -= LEASE_MS + 1;
+  first.release();
+  await h.drain();
+  assert.equal(h.posts.get("run0"), batchesPerRun - 1);
+  assert.equal(h.states("run0").unknown, 100);
+  noDoubleCharge(h);
+});
+
+test("a claim that returns after the deadline gives its rows back unspent; they post once later", async () => {
+  const h = fleet({ runs: 1 });
+  const first = parkFirst(h, isClaim);
+  await h.invoke("collect", { settle: false });
+  await until(() => first.release);
+  // Past WORK_MS but well inside the lease.
+  h.advance(WORK_MS + 1000);
+  first.release();
+  await h.drain();
+  assert.equal(totalPosts(h), 0);
+  assert.equal(h.states("run0").planned, POINTS * KEYWORDS);
+  released(h, "run0");
+  h.advance(TICK);
+  await h.invoke();
+  assert.equal(h.posts.get("run0"), batchesPerRun);
+  noDoubleCharge(h);
+});
+
+test("a fresh weekly key creates one run per profile; a same-day repeat or a next-day call while running creates none", async () => {
+  const h = fleet({ runs: 3, preRuns: false });
+  assert.equal(h.tables.map_grid_runs.length, 0);
+  const weekly = await h.invoke("weekly");
+  assert.equal(weekly.inv.posts + weekly.inv.gets, 0);
+  const runs = h.tables.map_grid_runs;
+  assert.equal(runs.length, 3);
+  for (const r of runs) assert.equal(r.request_key, "weekly:2026-10-15");
+  assert.deepEqual(
+    h.tables.map_grid_weekly_attempts.map((a) => a.outcome),
+    ["started", "started", "started"],
+  );
+  onePerInvocation(weekly.children());
+  for (const r of runs) assert.equal(h.posts.get(r.id), batchesPerRun);
+  // Same day again: the key already names each run, so nothing new starts or posts.
+  await h.invoke("weekly");
+  assert.equal(h.tables.map_grid_runs.length, 3);
+  assert.deepEqual(
+    h.tables.map_grid_weekly_attempts.slice(3).map((a) => [a.outcome, a.run_id]),
+    runs.map((r) => ["started", r.id]),
+  );
+  // Next day while still running: map_grid_start refuses, the refusal is recorded.
+  h.advance(24 * 3600000);
+  await h.invoke("weekly");
+  assert.equal(h.tables.map_grid_runs.length, 3);
+  assert.deepEqual(
+    h.tables.map_grid_weekly_attempts.slice(6).map((a) => a.outcome),
+    ["already_running", "already_running", "already_running"],
+  );
+  assert.equal(totalPosts(h), 3 * batchesPerRun);
+  noDoubleCharge(h);
 });

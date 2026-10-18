@@ -271,8 +271,10 @@ test("map-grid-sync v5 sizes every invocation by CPU, not wall clock", () => {
     Math.ceil(1000 / value("POST_BATCH")) * 62.5 + value("COLLECT_TOTAL") * (2000 / 370);
   assert.ok(worst <= 1500, `a full 1,000-check post plus the read cap costs ~${worst} ms`);
   assert.ok(value("COLLECT_PER_RUN") <= value("COLLECT_TOTAL"));
-  // A lease outlives one invocation (150 s wall clock) and lapses before the next 5-minute tick.
-  assert.ok(value("LEASE_MS") > 150000 && value("LEASE_MS") < 300000);
+  // A lease outlives the longest paid-plan worker (400 s) with margin, and
+  // outlasts the last moment a POST can be issued (WORK_MS) plus its 20 s timeout.
+  assert.ok(value("LEASE_MS") >= 400000 + 180000);
+  assert.ok(value("LEASE_MS") > value("WORK_MS") + 20000);
   // weekly / collect only dispatch: the one processRuns call outside start is gone.
   const scheduler = source.slice(source.indexOf('if (body.mode === "weekly" || body.mode === "collect")'));
   assert.doesNotMatch(scheduler, /processRuns\(/);

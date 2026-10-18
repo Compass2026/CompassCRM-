@@ -25,10 +25,13 @@ const COLLECT_PER_RUN = 60;
 const COLLECT_TOTAL = 150;
 const MAX_RUNS = 20;
 const DISPATCH_LANES = 5;
+// No paid POST is issued after WORK_MS (checked again after every awaited
+// claim), and each POST aborts after 20 s.
 const WORK_MS = 100000;
-// Longer than one invocation can live (150 s wall clock), shorter than the
-// five-minute tick, so a lease left by a killed invocation lapses by the next tick.
-const LEASE_MS = 180000;
+// Must outlast any worker that could still post: paid-plan Edge workers may
+// live 400 s, so 600 s. A lease left by a killed worker therefore holds its
+// run for up to two collector ticks; it is never shortened to recover faster.
+const LEASE_MS = 600000;
 const EXPIRY_MS = 6 * 3600000;
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -177,7 +180,19 @@ Deno.serve(async (req: Request) => {
       complete?: number;
     };
     type QueuedCheck = GridCheck & { task_id: string };
-    const postPlanned = async (run: Run, deadline: number) => {
+    // True while this worker still owns the run's lease. Read before every
+    // paid POST, so a worker that stalled past a takeover stops instead.
+    const holds = async (run: Run, lease: string) =>
+      !!must(
+        await db
+          .from("map_grid_runs")
+          .select("id")
+          .eq("id", run.id)
+          .eq("status", "running")
+          .eq("lease_until", lease)
+          .maybeSingle(),
+      );
+    const postPlanned = async (run: Run, lease: string, deadline: number) => {
       const config = run.config;
       const planned = must(
         await db
@@ -190,15 +205,43 @@ Deno.serve(async (req: Request) => {
       for (let offset = 0; offset < planned.length; offset += POST_BATCH) {
         // Planned checks have cost nothing; past the deadline they wait for the next invocation.
         if (Date.now() > deadline) return;
-        const batch = planned.slice(offset, offset + POST_BATCH),
-          ids = batch.map((c) => c.id);
-        must(
-          await db
-            .from("map_grid_checks")
-            .update({ state: "posting" })
-            .in("id", ids)
-            .eq("state", "planned"),
+        // Post only the rows this claim actually moved: a row another worker
+        // claimed (or swept to unknown) since the read above is not ours.
+        const claimed = new Set(
+          (
+            (must(
+              await db
+                .from("map_grid_checks")
+                .update({ state: "posting" })
+                .in(
+                  "id",
+                  planned.slice(offset, offset + POST_BATCH).map((c) => c.id),
+                )
+                .eq("state", "planned")
+                .select("id"),
+            ) ?? []) as { id: string }[]
+          ).map((c) => c.id),
         );
+        const batch = planned
+            .slice(offset, offset + POST_BATCH)
+            .filter((c) => claimed.has(c.id)),
+          ids = batch.map((c) => c.id);
+        if (!ids.length) continue;
+        // The claim may have waited on I/O. Past the deadline, or once the
+        // lease is gone, nothing has been sent: hand the rows back unspent.
+        // A row a newer worker already swept to unknown stays unknown.
+        const lost = Date.now() > deadline || !(await holds(run, lease));
+        // holds() awaited too: the clock is read once more right before the POST.
+        if (lost || Date.now() > deadline) {
+          must(
+            await db
+              .from("map_grid_checks")
+              .update({ state: "planned" })
+              .in("id", ids)
+              .eq("state", "posting"),
+          );
+          return;
+        }
         let posted;
         try {
           posted = await dfs(
@@ -214,7 +257,8 @@ Deno.serve(async (req: Request) => {
                 error:
                   "Submission outcome unknown; no automatic resubmission",
               })
-              .in("id", ids),
+              .in("id", ids)
+              .eq("state", "posting"),
           );
           continue;
         }
@@ -381,7 +425,7 @@ Deno.serve(async (req: Request) => {
           }
         }
         // One run per lane, so a run's batches stay sequential while runs post side by side.
-        await parallel(leased, POST_LANES, async ({ run }) => {
+        await parallel(leased, POST_LANES, async ({ run, lease }) => {
           try {
             validateGrid(run.config);
             // A previous interrupted POST has an unknown outcome. Never blindly charge again.
@@ -396,7 +440,7 @@ Deno.serve(async (req: Request) => {
                 .eq("run_id", run.id)
                 .eq("state", "posting"),
             );
-            await postPlanned(run, deadline);
+            await postPlanned(run, lease, deadline);
           } catch (e) {
             await fail(run, e);
           }
