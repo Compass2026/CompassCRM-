@@ -1,9 +1,13 @@
-// Reserve for on Generate draft and the hold shown on the Planner / draft page
-// (src/lib/draft-reservations.ts). The database enforces the same rules
-// (supabase/tests/sandbox/reserve_draft_requests.test.sql).
+// Reserve for on Generate draft and Regenerate, and the hold shown on the
+// Planner / draft page (src/lib/draft-reservations.ts). The database enforces
+// the same rules (supabase/tests/sandbox/reserve_draft_requests.test.sql,
+// reserve_draft_regenerate.test.sql).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CLAIM_MS, RESERVE_OPTIONS, liveHold, parseReserveFor, reserveError } from "../src/lib/draft-reservations.ts";
+import { readFileSync } from "node:fs";
+import { CLAIM_MS, LABEL, RESERVE_OPTIONS, liveHold, parseReserveFor, reserveError, reservedText } from "../src/lib/draft-reservations.ts";
+
+const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 
 test("Reserve for: empty is the Routine, a short label reserves, anything else is refused", () => {
   assert.equal(RESERVE_OPTIONS[0].value, "", "the default is the Routine");
@@ -40,4 +44,36 @@ test("the database's CD409 reads as who holds the request and until when", () =>
     reserveError("claimed_by_other: claude-operator holds this request until 2026-10-18 22:51:24.123456+00", fmt),
     "claude-operator already holds this request until <2026-10-18T22:51:24.123Z>. Wait for it, or leave Reserve for on the Routine.");
   assert.equal(reserveError("Choose the page type", fmt), "Choose the page type", "other refusals pass through");
+});
+
+test("a reserved answer reads as who holds it; an unreserved one is the Routine's", () => {
+  const fmt = (iso) => `<${iso}>`;
+  assert.equal(reservedText({ draft_id: "d", task_id: "t", reserved_for: "claude-operator", expires_at: "2026-10-18T23:00:00Z" }, fmt),
+    "Reserved for claude-operator until <2026-10-18T23:00:00Z>. The worker Routine was not started.");
+  assert.equal(reservedText({ reserved_for: "claude-operator" }, fmt), "Reserved for claude-operator. The worker Routine was not started.");
+  assert.equal(reservedText({ draft_id: "d", task_id: "t" }, fmt), null, "0067's answer: sent to the Routine");
+  assert.equal(reservedText(null, fmt), null);
+  assert.equal(reservedText({ reserved_for: "" }, fmt), null);
+});
+
+test("Generate and Regenerate share one label rule with the database, and Regenerate offers the same choices", () => {
+  const rule = "'^[a-z0-9][a-z0-9-]{1,39}$'";
+  assert.equal(`'${LABEL.source}'`, rule);
+  for (const m of ["supabase/migrations/20261018220000_reserve_draft_requests.sql", "supabase/migrations/20261018230000_reserve_draft_regenerate.sql"]) {
+    const sql = read(m);
+    assert.ok(sql.includes(`v_who !~ ${rule}`), `${m} checks the same label`);
+    assert.ok(sql.includes("v_who = 'worker-routine'"), `${m} refuses the Routine's own label`);
+    assert.ok(sql.includes("claimed_by_other: % holds this request until %"), `${m} raises the CD409 reserveError reads`);
+  }
+  const regen = read("supabase/migrations/20261018230000_reserve_draft_regenerate.sql");
+  assert.ok(regen.includes("drop function content_draft_regenerate(uuid, text);"), "the two-argument function is dropped");
+  assert.match(regen, /if v_who is null then\s+perform fire_foundation_worker\(d\.client_id, 'Content draft request ' \|\| d\.id\);\s+return jsonb_build_object\('draft_id', d\.id, 'task_id', v_task\);/,
+    "unset fires and answers exactly as 0067 did");
+  const form = read("src/components/drafts/draft-forms.tsx");
+  const regenForm = form.slice(form.indexOf("export function RegenerateForm"));
+  assert.ok(regenForm.includes('name="reserve_for"') && regenForm.includes("RESERVE_OPTIONS.map"), "Regenerate has the Reserve for select");
+  const actions = read("src/app/draft-actions.ts");
+  const regenAction = actions.slice(actions.indexOf("export async function regenerateDraftAction"));
+  assert.ok(regenAction.includes('parseReserveFor(form.get("reserve_for"))') && regenAction.includes("p_reserve_for: reserve.value"),
+    "the action passes Reserve for to content_draft_regenerate");
 });

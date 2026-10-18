@@ -1995,7 +1995,8 @@ skip it. A missing `content_draft_claim` function means the claims migration
 is not applied: stop and say so. A Claude operator session working a draft by
 hand claims the same way with its own label (e.g. `operator-<initials>`) and
 passes that label as `claimant`. A teammate can **reserve** a request for an
-operator when pressing Generate draft (Reserve for, 20261018220000): the task
+operator when pressing Generate draft or Regenerate (Reserve for,
+20261018220000 / 20261018230000): the task
 then arrives already claimed (e.g. `claude-operator`) and no fire is sent, so
 your claim answers `claimed_by_other` until the hour is up — leave it, as
 above. Never mark the task done yourself: the

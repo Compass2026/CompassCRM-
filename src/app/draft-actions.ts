@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireTeamMember } from "@/lib/team";
 import { formatStamp, isUuid } from "@/lib/tasks";
-import { parseReserveFor, reserveError } from "@/lib/draft-reservations";
+import { parseReserveFor, reserveError, reservedText } from "@/lib/draft-reservations";
 import type { Database } from "@/lib/database.types";
 
 type DraftUpdate = Database["public"]["Tables"]["content_drafts"]["Update"];
@@ -69,10 +69,16 @@ export async function regenerateDraftAction(clientId: string, draftId: string, _
   const supabase = await start();
   if (!supabase) return { error: NOT_TEAM };
   const note = String(form.get("note") ?? "").trim().slice(0, 2000);
-  const { error } = await supabase.rpc("content_draft_regenerate", { p_draft_id: draftId, p_note: note || undefined });
-  if (error) return { error: error.message };
+  // Reserve for (20261018230000): as on Generate draft, a label claims the
+  // redraft for an operator session and the worker is not fired.
+  const reserve = parseReserveFor(form.get("reserve_for"));
+  if (reserve.error) return { error: reserve.error };
+  const { data, error } = await supabase.rpc("content_draft_regenerate", {
+    p_draft_id: draftId, p_note: note || undefined, p_reserve_for: reserve.value,
+  });
+  if (error) return { error: reserveError(error.message, formatStamp) };
   revalidateDraft(clientId, draftId);
-  return { ok: true, text: "Sent back to the drafter. The new version replaces this one when it arrives." };
+  return { ok: true, text: reservedText(data, formatStamp) ?? "Sent back to the drafter. The new version replaces this one when it arrives." };
 }
 
 // A status step, conditional on the status and version the teammate saw.

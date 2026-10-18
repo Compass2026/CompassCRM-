@@ -112,8 +112,18 @@ export function RegenerateForm({ clientId, draftId }: { clientId: string; draftI
       <Label htmlFor="regen_note">Regenerate</Label>
       <div className="flex flex-wrap items-end gap-2">
         <Input id="regen_note" name="note" placeholder="What the next version should do differently" maxLength={2000} className="w-80 max-w-full" />
+        <label className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          Reserve for
+          <select name="reserve_for" defaultValue="" className="field w-72 max-w-full text-sm text-foreground" data-reserve-for>
+            {RESERVE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
         <Button type="submit" size="sm" variant="outline" disabled={pending}>Regenerate</Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Reserving holds the redraft for that session for an hour and does not start the Routine. If nobody writes it in
+        that hour, the Routine picks it up on its next run.
+      </p>
       <Message state={state} />
     </form>
   );

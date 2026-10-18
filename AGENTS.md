@@ -2150,7 +2150,12 @@ go-live: `docs/blog-drafter.md`.
   - A second Generate on an existing request may reserve it unless another
     label holds it (`CD409`). The Planner and the draft page show who holds
     an open request and until when.
-  - Regenerate still always fires the Routine (follow-up).
+  - **Regenerate** has the same choice (20261018230000, not applied yet):
+    `content_draft_regenerate(draft, note, reserve_for)` sends a draft or
+    rejected draft back to `requested` and, with a label, claims its Redraft
+    task for that operator and fires nothing; another label's live claim on
+    the open task is `CD409` and nothing changes. Unset is exactly 0067. The
+    two-argument function is dropped. Ship order: 20261018220000 first.
 - **Not yet:** the Web Page Drafter.
 
 ## Known state / open items (as of Sept 13 2026)

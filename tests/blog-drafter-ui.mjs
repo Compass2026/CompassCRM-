@@ -274,9 +274,12 @@ try {
   await page.getByText("Hero image saved.").waitFor();
   assert.equal(await page.locator("[data-hero-illustrative]").count(), 0, "a photo is not labelled illustrative");
   await page.locator("#regen_note").fill("Add a section on attic ventilation");
+  assert.equal(await page.locator("[data-regenerate-draft] [data-reserve-for]").inputValue(), "", "Regenerate's Reserve for defaults to the Routine");
   await page.getByRole("button", { name: "Regenerate" }).click();
   await page.locator("[data-draft-waiting]").waitFor();
   assert.equal(db(`select status||'/'||request_note from content_drafts where id = '${draftId}'`), "requested/Add a section on attic ventilation");
+  assert.equal(db(`select coalesce(t.claimed_by, 'unclaimed')||'/'||t.status from content_drafts d join tasks t on t.id = d.request_task_id where d.id = '${draftId}'`),
+    "unclaimed/open", "an unreserved Regenerate opens the redraft unclaimed, as before");
   await workerWrites(draftId, { title: "How long does a roof last? Ventilation, weather and planning ahead" });
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Approve" }).click();
@@ -313,6 +316,33 @@ try {
   assert.equal(await page.locator("[data-draft-hold]").count(), 0, "a submitted draft shows no holder");
   assert.equal(db(`select count(*) from content_posts where client_id = '${C}'`), "1", "the reserved draft made no final row (only approval does)");
   ok("A Routine run is refused (409 claimed_by_other); the Planner shows who holds it; the operator writes it into review");
+
+  // 6c. Reserve for on Regenerate: a rejected draft goes back to the operator, not the Routine.
+  await page.locator("#reject_note").fill("Name the local weather");
+  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByText(/Rejected by .*Name the local weather/).waitFor();
+  const regen = page.locator("[data-regenerate-draft]");
+  assert.equal(await regen.locator("[data-reserve-for]").inputValue(), "", "Reserve for defaults to the Routine");
+  await page.locator("#regen_note").fill("Add hail and freeze-thaw");
+  await regen.locator("[data-reserve-for]").selectOption("claude-operator");
+  await regen.getByRole("button", { name: "Regenerate" }).click();
+  await page.locator('[data-draft-waiting="reserved"]').waitFor();
+  assert.match(await page.locator('[data-draft-waiting="reserved"]').innerText(), /Reserved for claude-operator: the worker Routine was not started/);
+  assert.equal(await page.locator('[data-draft-hold="claude-operator"]').count(), 1, "the draft page names the holder");
+  assert.equal(db(`select d.status||'/'||d.request_note||'/'||t.status||'/'||t.claimed_by||'/'||(t.claimed_at > now() - interval '5 minutes')
+                   from content_drafts d join tasks t on t.id = d.request_task_id where d.id = '${reservedId}'`),
+    "requested/Add hail and freeze-thaw/in_progress/claude-operator/true");
+  ok("Reject → Regenerate reserved for claude-operator: the redraft task is claimed at once; the draft page says who holds it and that the Routine was not started");
+
+  const routineRedo = await worker({ mode: "brief", draft_id: reservedId, claimant: "worker-routine" });
+  assert.equal(routineRedo.status, 409, JSON.stringify(routineRedo.body));
+  assert.equal(routineRedo.body.claimed_by, "claude-operator");
+  const opRedo = await workerWrites(reservedId, { title: "When to replace a roof: hail, freeze-thaw and age" }, "claude-operator");
+  assert.equal(opRedo.status, "in_review");
+  await page.reload({ waitUntil: "networkidle" });
+  assert.equal(await page.locator("[data-draft-status]").innerText(), "In review");
+  assert.equal(await page.locator("[data-draft-hold]").count(), 0, "a submitted redraft shows no holder");
+  ok("The Routine's run on the reserved redraft is refused (409); the operator writes it back into review");
 
   // 7. Access and layout.
   const pctx = await contextFor(browser, PORTAL, { width: 1280, height: 900 });
