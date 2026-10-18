@@ -4,6 +4,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { Contract } from "./agreements";
 import { buildAgreementPdf } from "./agreement-pdf";
 import { paymentLinkCall } from "./payment-links";
+import { deliverVerificationEmail } from "./agreement-verification-email";
 
 let pool: Pool | undefined;
 function database() {
@@ -99,31 +100,24 @@ export async function sendVerificationCode(token: string) {
       "Email verification is not configured. Contact the sender.",
     );
   const code = randomInt(100000, 1000000).toString();
+  const codeHash = sha256(`${token}:${code}`);
   const answer = await agreementSigner<{
     email?: string;
     issuer?: string;
     error?: string;
-  }>(token, undefined, "code", { code_hash: sha256(`${token}:${code}`) });
+  }>(token, undefined, "code", { code_hash: codeHash });
   if (answer.error || !answer.email) return answer;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.AGREEMENTS_RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: process.env.AGREEMENTS_EMAIL_FROM,
-      to: [answer.email],
-      subject: `${answer.issuer}: agreement verification code`,
-      text: `Your agreement verification code is ${code}. It expires in 10 minutes.\n\nOnly use this code if you requested it. Do not share it with anyone.`,
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok)
-    throw new Error(
-      "The verification email could not be sent. Wait one minute and try again or contact the sender.",
+  return deliverVerificationEmail({
+    from: process.env.AGREEMENTS_EMAIL_FROM!,
+    to: answer.email,
+    issuer: answer.issuer ?? "Compass Marketing",
+    code,
+  }, process.env.AGREEMENTS_RESEND_API_KEY!, async (outcome) => {
+    await database().query(
+      "select agreement_private.verification_delivery($1::text,$2::text,$3::jsonb)",
+      [sha256(token), codeHash, JSON.stringify(outcome)],
     );
-  return { ok: true };
+  });
 }
 export async function sealedAgreementPdf(
   c: Contract,
