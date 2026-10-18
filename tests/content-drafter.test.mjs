@@ -164,7 +164,7 @@ test("handler: a draft in review or approved is not written; the draft is parsed
 test("Markdown export: front matter, the H1, the body, the CTA", () => {
   const md = toMarkdown({ ...GOOD_BLOG, primary_keyword: "how long does a roof last" });
   assert.match(md, /^---\ntitle: "How long does a roof last\? What Wentzville homeowners should know"\nslug: "how-long-does-a-roof-last"\n/);
-  assert.match(md, /\nmeta_description: ".+"\nprimary_keyword: "how long does a roof last"\n---\n\n# How long does a roof last\?\n\n## What wears a roof out/);
+  assert.match(md, /\nmeta_description: ".+"\nprimary_keyword: "how long does a roof last"\n---\n\n# How long does a roof last\?\n\n\*\*TL;DR:\*\* [^\n]+\n\n## What wears a roof out/);
   assert.ok(md.trimEnd().endsWith(`[Request a quote](${PAGE})`));
 });
 

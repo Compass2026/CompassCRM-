@@ -197,6 +197,14 @@ try {
   assert.equal(await page.locator("[data-draft-status]").innerText(), "In review");
   assert.match(await page.locator("[data-draft-h1]").innerText(), /How long does a roof last\?/);
   assert.match(await page.locator("[data-markdown-preview]").innerText(), /What wears a roof out[\s\S]*roof replacement/);
+  // TL;DR (20261018230000): labelled, once, between the H1 and the article.
+  const tldrBox = page.locator("[data-draft-tldr]");
+  assert.equal(await tldrBox.count(), 1);
+  assert.match(await tldrBox.innerText(), /^TL;DR\s+A roof wears out gradually/);
+  const [h1Box, tBox, mdBox] = await Promise.all(["[data-draft-h1]", "[data-draft-tldr]", "[data-markdown-preview]"].map((q) => page.locator(q).boundingBox()));
+  assert.ok(h1Box.y < tBox.y && tBox.y < mdBox.y, "title, then TL;DR, then the article");
+  assert.ok(!(await page.locator("[data-markdown-preview]").innerText()).includes("TL;DR"), "not repeated in the body");
+  ok("The TL;DR shows once, labelled, between the H1 and the article body");
   assert.equal(await page.locator("[data-markdown-preview] a").first().getAttribute("href"), PAGE);
   assert.match(await page.locator("[data-draft-claims]").innerText(), /Owens Corning Preferred Contractor[\s\S]*Source: https:\/\/manufacturer[\s\S]*Grounding checks pass/);
   assert.equal(db(`select status from tasks where key = 'content_draft:${draftId}'`), "done");
@@ -295,6 +303,8 @@ try {
   const mp = await mctx.newPage();
   await mp.goto(`${base}/clients/${C}/drafts/${draftId}`, { waitUntil: "networkidle" });
   assert.ok(await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  const mt = await mp.locator("[data-draft-tldr]").boundingBox();
+  assert.ok(mt && mt.width <= 390 && mt.y > (await mp.locator("[data-draft-h1]").boundingBox()).y, "TL;DR fits and sits under the H1 at phone width");
   await mctx.close();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/blog-draft.png`, fullPage: true });
   ok("A portal contact sees no draft or Markdown; phone width has no horizontal scroll");

@@ -111,7 +111,7 @@ export function RegenerateForm({ clientId, draftId }: { clientId: string; draftI
 type Claim = { id: string; claim: string; status: string; source: string | null };
 export function EditDraftForm({ clientId, draftId, version, draft, claims, linked }: {
   clientId: string; draftId: string; version: number; claims: Claim[]; linked: string[];
-  draft: { title: string | null; slug: string | null; meta_title: string | null; meta_description: string | null; h1: string | null;
+  draft: { title: string | null; slug: string | null; meta_title: string | null; meta_description: string | null; h1: string | null; tldr?: string | null;
     outline: { level: number; heading: string }[]; body_markdown: string | null; internal_links: { url: string; anchor: string }[]; cta: { text?: string; url?: string | null } };
 }) {
   const [state, action, pending] = useActionState(saveDraftAction.bind(null, clientId, draftId, version), {});
@@ -124,6 +124,10 @@ export function EditDraftForm({ clientId, draftId, version, draft, claims, linke
         <div className={f}><Label htmlFor="d_mt">Meta title</Label><Input id="d_mt" name="meta_title" defaultValue={draft.meta_title ?? ""} /></div>
         <div className={f}><Label htmlFor="d_h1">H1</Label><Input id="d_h1" name="h1" defaultValue={draft.h1 ?? ""} /></div>
         <div className={`${f} sm:col-span-2`}><Label htmlFor="d_md">Meta description</Label><Input id="d_md" name="meta_description" defaultValue={draft.meta_description ?? ""} /></div>
+      </div>
+      <div className={f}>
+        <Label htmlFor="d_tldr">TL;DR (2–3 plain sentences shown under the title; the page adds the label)</Label>
+        <Textarea id="d_tldr" name="tldr" rows={3} maxLength={450} defaultValue={draft.tldr ?? ""} data-edit-tldr />
       </div>
       <div className={f}>
         <Label htmlFor="d_outline">Outline (one heading per line, ## or ###)</Label>

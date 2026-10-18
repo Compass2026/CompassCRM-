@@ -1,4 +1,5 @@
 import { citationUrl } from "./links.ts";
+import { TLDR_LABEL, TLDR_RULES } from "./tldr.ts";
 import { workspaceGate } from "../post-drafter/workspace.ts";
 // content-drafter: the governed brief for a blog draft (0067). Pure.
 //
@@ -38,6 +39,17 @@ export const BLOG_RULES = {
   money_links_preferred_max: 4,
   external_citations_min: 1,
 } as const;
+
+// What the TL;DR is, for every writer (the worker Routine, an operator, a
+// teammate). Its rule lives in brief.tldr, not in `rules`: the publisher
+// compares `rules` with each approved snapshot, and adding to them would
+// mark every approval made before Oct 18 2026 as a changed foundation.
+export const TLDR_GUIDANCE = [
+  `Write draft.tldr: ${TLDR_RULES.tldr_min_sentences}–${TLDR_RULES.tldr_max_sentences} plain-language sentences (at most ${TLDR_RULES.tldr_max_chars} characters) that answer the article's main question and give its most useful takeaway.`,
+  "Say only what the body supports: no new numbers, prices, savings, incentives, guarantees, credentials or places. If the takeaway rests on a cited source, name the source in words.",
+  `Plain text only: no "${TLDR_LABEL}" label (the page adds it), no links, markup or line breaks, and not a copy of the title, H1 or meta description.`,
+  "Keep it out of body_markdown. The page shows: title (H1), TL;DR, hero image, article, CTA.",
+] as const;
 
 // The draft row the request opened (0067), as the store reads it.
 export type DraftRow = {
@@ -104,6 +116,7 @@ export type BlogBrief = {
     money_pages: LinkTarget[]; external: { url: string; claim_ids: string[] }[];
     guidance: string[] };
   cta: { text: string | null; url: string | null };
+  tldr: { label: typeof TLDR_LABEL; required: true; rules: typeof TLDR_RULES; guidance: readonly string[] };
   rules: typeof BLOG_RULES;
 };
 
@@ -263,6 +276,7 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
         ],
       },
       cta: { text: input.board?.standing_cta ?? null, url: pageUrl ?? site },
+      tldr: { label: TLDR_LABEL, required: true, rules: TLDR_RULES, guidance: TLDR_GUIDANCE },
       rules: BLOG_RULES,
     },
   };

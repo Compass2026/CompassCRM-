@@ -267,6 +267,9 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollou
 # 20261015210000: blog hero images — same-client stored assets only, a hero
 # change bumps the version and clears approval, releases re-check the file.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_hero.test.sql"
+# 20261018230000: blog TL;DR (required under the rule, edited like content,
+# pinned by approval, legacy drafts unchanged) and immutable draft history.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_tldr.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).

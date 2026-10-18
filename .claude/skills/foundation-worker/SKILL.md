@@ -1997,9 +1997,9 @@ hand claims the same way with its own label (e.g. `operator-<initials>`) and
 passes that label as `claimant`. Never mark the task done yourself: the
 successful submit closes it in the same transaction that writes the draft.
 
-**Preflight:** `{"mode": "version"}` must answer `version` ≥ 5 with `kinds`
-containing `blog` and `features` containing `claims`. Anything else → stop,
-leave the task `in_progress`, say so.
+**Preflight:** `{"mode": "version"}` must answer `version` ≥ 7 with `kinds`
+containing `blog` and `features` containing `claims` and `tldr`. Anything
+else → stop, leave the task `in_progress`, say so.
 
 Every `brief`, `check` and `submit` call below carries
 `"claimant": "worker-routine"` (your claim's label).
@@ -2009,11 +2009,19 @@ Every `brief`, `check` and `submit` call below carries
    the claims you may cite (`allowed_facts.claims`, `recommended_claim_ids`),
    what you may not (`excluded`), the brand voice and hard rules, the pages
    you may link (`links.allowed`; `links.required` must be linked in the
-   body), the CTA and `rules`. `request_note` is the teammate's note for a
-   regenerate: follow it.
+   body), the CTA, `tldr.guidance` and `rules`. `request_note` is the
+   teammate's note for a regenerate: follow it.
 2. **Write** in the brand voice: `title`, `slug` (lowercase words and
    hyphens), `meta_title` (≤ 60 characters), `meta_description` (120–160),
-   `h1`, `outline` (`[{level: 2|3, heading}]`, at least three H2s, each a
+   `h1`, `tldr` (Tom, Oct 18 2026: every blog opens with a TL;DR — 2–3
+   plain-language sentences, at most 450 characters, that answer the main
+   question and give the article's most useful takeaway; only what the body
+   says, so no new numbers, prices, savings, incentives, guarantees or
+   places; name a cited source in words if the takeaway rests on it; no
+   "TL;DR" label, links, markup or line breaks; not a copy of the title, H1
+   or meta description; never repeated in `body_markdown` — the page shows
+   title, TL;DR, hero, article, CTA in that order),
+   `outline` (`[{level: 2|3, heading}]`, at least three H2s, each a
    heading in the body), `body_markdown` (starts at `##`, 800–1,400 words,
    an answer-first opening, the questions people ask as H2s, the required
    page linked with descriptive anchor text, Markdown links only to
@@ -2025,7 +2033,10 @@ Every `brief`, `check` and `submit` call below carries
    are inside the exact words of a claim you link; only the brief's places;
    never tell the reader what their home needs.
 3. **Check** `{"mode": "check", "draft_id", "brief_hash", "draft"}` → fix
-   every `problems` entry and check again until `ok`.
+   every `problems` entry and check again until `ok`. `tldr_missing`,
+   `tldr_sentences`, `tldr_in_body`, `tldr_format`, `tldr_too_long`,
+   `tldr_label_included` and `tldr_duplicates_metadata` are ordinary
+   problems: rewrite the summary, never drop it.
 4. **Submit** `{"mode": "submit", "draft_id", "brief_hash", "draft",
    "runtime": "claude-worker-skill", "claimant": "worker-routine"}`. `201` → done: the draft is in review,
    the request closed. Approval is a teammate's; it alone makes the final

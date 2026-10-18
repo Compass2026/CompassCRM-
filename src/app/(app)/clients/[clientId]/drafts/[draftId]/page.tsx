@@ -15,6 +15,7 @@ import { HeroPicker, type HeroOption } from "@/components/drafts/hero-picker";
 import { BRAND_BUCKET, SIGNED_URL_TTL } from "@/lib/brand";
 import { toMarkdown } from "../../../../../../../supabase/functions/content-drafter/markdown.ts";
 import { heroProblems, HERO_KINDS, HERO_MIME, ILLUSTRATIVE_LABEL } from "../../../../../../../supabase/functions/content-drafter/hero.ts";
+import { TLDR_LABEL } from "../../../../../../../supabase/functions/content-drafter/tldr.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,9 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
   const notReady = (problems as string[] | null) ?? [];
   const markdown = d.title ? toMarkdown({ ...d, cta }) : "";
   const kind = d.deliverable === "blog" ? "Blog" : "Web page";
+  // The TL;DR (tldr.ts): required for blogs whose brief carries the rule; older drafts keep their review unchanged.
+  const tldr = (d.tldr ?? "").trim();
+  const tldrRequired = isBlog && !!(d.brief as { tldr?: { required?: boolean } } | null)?.tldr?.required;
 
   return (
     <div className="max-w-4xl space-y-6" data-draft={d.status}>
@@ -150,6 +154,16 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
           </dl>
           <div className="rounded-md border p-4">
             <h1 className="mb-3 text-xl font-semibold [overflow-wrap:anywhere]" data-draft-h1>{d.h1}</h1>
+            {tldr ? (
+              <aside className="mb-4 rounded-md border-l-4 border-primary bg-muted/60 px-3 py-2 text-sm" data-draft-tldr>
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">{TLDR_LABEL}</p>
+                <p className="mt-1 [overflow-wrap:anywhere]">{tldr}</p>
+              </aside>
+            ) : tldrRequired ? (
+              <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-draft-tldr-missing>
+                This blog needs a {TLDR_LABEL} under the title before it can be submitted or approved.
+              </p>
+            ) : null}
             <MarkdownPreview markdown={d.body_markdown ?? ""} />
             {cta.text && <p className="mt-4 text-sm font-medium">{cta.url ? <a href={cta.url} className="underline" target="_blank" rel="noreferrer">{cta.text}</a> : cta.text}</p>}
           </div>
@@ -247,7 +261,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
         <section className="surface space-y-3 p-4">
           <h3 className="text-sm font-semibold">Edit</h3>
           <EditDraftForm clientId={clientId} draftId={draftId} version={d.version} claims={usable} linked={linkedIds}
-            draft={{ title: d.title, slug: d.slug, meta_title: d.meta_title, meta_description: d.meta_description, h1: d.h1,
+            draft={{ title: d.title, slug: d.slug, meta_title: d.meta_title, meta_description: d.meta_description, h1: d.h1, tldr: d.tldr,
                      outline, body_markdown: d.body_markdown, internal_links: links, cta }} />
         </section>
       )}

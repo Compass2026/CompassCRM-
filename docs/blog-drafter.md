@@ -202,3 +202,58 @@ Both the drafter and the publisher run these checks. Live article verification
 also checks external body links. Existing review drafts need regeneration
 under v2 before publication because the reviewed rule set changes. Human
 article approval and the separate publication action remain required.
+
+## TL;DR standard (October 18, 2026)
+
+Tom's rule: every new client blog opens with a TL;DR, whoever writes it (the
+worker Routine, a Claude operator session, a teammate).
+
+**Order on the page:** title (H1) → **TL;DR** → hero image (when there is one)
+→ article → CTA. The same order is used on the draft review page, in the
+Markdown export and on the published article, on desktop and mobile.
+
+**What it is:** 2–3 plain-language sentences (at most 450 characters) that
+answer the article's main question and give its most useful takeaway. It says
+only what the body supports: no new numbers, prices, savings, incentives,
+guarantees, credentials or places, and every fact detector that runs on the
+article runs on the summary. A takeaway that rests on a cited source names the
+source in words. No label (the page adds "TL;DR"), links, markup or line
+breaks, and never a copy of the title, H1 or meta description.
+
+**One representation:** `content_drafts.tldr` (migration
+`20261018222927_blog_tldr.sql`, applied Oct 18 2026; written as
+20261018230000 and renamed to the recorded version), never part of
+`body_markdown`. The linter
+refuses a TL;DR inside the body (`tldr_in_body`).
+
+**Enforcement:**
+- Briefs from content-drafter v7 carry `tldr: {label, required: true, rules,
+  guidance}` (kept out of `rules`, which the publisher compares with every
+  approved snapshot). `check` and `submit` refuse
+  `tldr_missing`, `tldr_sentences`, `tldr_too_long`, `tldr_format`,
+  `tldr_label_included`, `tldr_duplicates_metadata` and `tldr_in_body`.
+- `content_draft_write` refuses a write without one when the brief carries
+  the rule; `content_draft_problems` blocks submit and approval of such a
+  draft without one (a teammate can add it in the Edit form).
+- `content_drafts_tldr_guard` applies the content-edit rules to the field and
+  bumps the version; approval pins `tldr` in the snapshot.
+
+**Legacy policy:** drafts briefed before v7, approved articles and published
+releases are not invalidated, rewritten or republished. The publisher's
+re-lint applies the TL;DR rule only when the approved snapshot's brief
+carried it. Their approval hashes
+are unchanged (the snapshot gains `tldr` only when a draft has one). To give
+an older draft a TL;DR, withdraw or reopen it and revise it through the drafter
+or the Edit form; the new version goes through review again.
+
+**Delivery:** a site whose `compass-blog.json` advertises `"tldr": true`
+receives the article's `tldr` field and renders it in its own labelled slot
+between the H1 and the hero. Any other site receives it once, as the first
+paragraph of the body (`**TL;DR:** …`); a site that shows heroes must have the
+slot, or the release is refused rather than mis-ordered. Live verification
+requires the labelled summary exactly once, after the H1 and before the
+article (and before the hero image).
+
+**History:** `content_draft_versions` keeps the full previous row every time a
+draft's reader-visible content changes (team read-only, written only by its
+trigger), so a revision never loses the text it replaced.
