@@ -14,6 +14,7 @@ import { COMMON_WORD_PLACES, PLACE_AFTER, PLACE_BEFORE } from "../post-drafter/l
 import { DETECTORS, MATERIAL_RE, NUMBER_RE, PHONE_RE, digits, escapeRe, mask, ngrams, normalizeUrl, spansOf, words } from "../post-drafter/rules.ts";
 import type { LintProblem, LintResult } from "../post-drafter/types.ts";
 import type { BlogBrief } from "./brief.ts";
+import { tldrProblems } from "./tldr.ts";
 
 export type BlogDraft = {
   title: string;
@@ -21,6 +22,8 @@ export type BlogDraft = {
   meta_title: string;
   meta_description: string;
   h1: string;
+  /** The TL;DR (tldr.ts): plain text shown under the title, never in the body. */
+  tldr?: string;
   outline: { level: number; heading: string }[];
   body_markdown: string;
   internal_links: { url: string; anchor: string; reason?: string }[];
@@ -82,6 +85,8 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   if (n >= R.min_words && n <= R.max_words && (n < R.preferred_min_words || n > R.preferred_max_words)) {
     warn("length_outside_preferred", `Aim for ${R.preferred_min_words}–${R.preferred_max_words} words (this is ${n}).`);
   }
+  // ── TL;DR: required whenever the brief carries the rule (every brief since Oct 18 2026) ──
+  if (brief.tldr?.required) for (const p of tldrProblems(draft.tldr, draft)) add(p.code, p.message);
   const outline = Array.isArray(draft.outline) ? draft.outline : [];
   if (outline.filter((o) => o.level === 2).length < R.min_sections) add("outline_too_short", `The outline needs at least ${R.min_sections} H2 sections.`);
   const bodyHeadings = [...body.matchAll(/^(#{2,3})\s+(.+?)\s*$/gm)].map((m) => ({ level: m[1].length, heading: m[2].trim().toLowerCase() }));
@@ -153,7 +158,7 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   // as an unsupported price claim. The same words in article prose, titles
   // or a non-matching CTA remain subject to every detector.
   const approvedCta = !!brief.cta.text && draft.cta?.text?.trim().toLowerCase() === brief.cta.text.trim().toLowerCase();
-  const text = [draft.title, draft.meta_title, draft.meta_description, draft.h1, ...outline.map((o) => o.heading), visibleBody(body), ...(approvedCta ? [] : [draft.cta?.text])]
+  const text = [draft.title, draft.meta_title, draft.meta_description, draft.h1, draft.tldr, ...outline.map((o) => o.heading), visibleBody(body), ...(approvedCta ? [] : [draft.cta?.text])]
     .filter(Boolean).join("\n");
   const spans: [number, number][] = [];
   for (const c of linked) {

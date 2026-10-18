@@ -133,7 +133,8 @@ export async function saveDraftAction(clientId: string, draftId: string, version
   if (!supabase) return { error: NOT_TEAM };
   const { data, error } = await supabase.from("content_drafts").update({
     title: str("title") || null, slug: slug || null, meta_title: str("meta_title") || null, meta_description: str("meta_description") || null,
-    h1: str("h1") || null, body_markdown: String(form.get("body_markdown") ?? "") || null, outline, internal_links: links,
+    h1: str("h1") || null, tldr: str("tldr").replace(/\s+/g, " ") || null,
+    body_markdown: String(form.get("body_markdown") ?? "") || null, outline, internal_links: links,
     cta: { text: str("cta_text"), url: ctaUrl || null },
   }).eq("id", draftId).eq("client_id", clientId).eq("version", version).in("status", ["draft", "rejected"]).select("id");
   if (error) return { error: draftError(error.message) };

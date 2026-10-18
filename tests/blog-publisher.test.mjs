@@ -40,6 +40,20 @@ test('rebuilds approved snapshot draft identity and original note without skippi
  assert.equal((await r.json()).status,'uncertain');
  assert.ok(h.calls.includes('read'), 'foundation matches and reaches website checks');
 });
+test('an article approved before the TL;DR rule still publishes (legacy approval not invalidated)',async()=>{
+ const h=harness();
+ delete h.r.brief.tldr; delete h.r.tldr; delete h.r.id;
+ const r=await h.run();
+ assert.equal((await r.json()).status,'uncertain');
+ assert.ok(h.calls.includes('read'), 'reaches the website step');
+});
+test('an article reviewed under the TL;DR rule without one is blocked before any write',async()=>{
+ const h=harness();
+ delete h.r.tldr; delete h.r.id;
+ const r=await h.run();
+ assert.equal((await r.json()).status,'blocked');
+ assert.ok(!h.calls.includes('read') && !h.calls.includes('push'));
+});
 test('a genuine approved foundation change is still blocked',async()=>{
  const h=harness();
  delete h.r.id;

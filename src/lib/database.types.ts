@@ -4608,6 +4608,47 @@ export type Database = {
           },
         ]
       }
+      content_draft_versions: {
+        Row: {
+          client_id: string
+          content: Json
+          draft_id: string
+          id: string
+          status: string
+          superseded_at: string
+          superseded_by_version: number
+          version: number
+        }
+        Insert: {
+          client_id: string
+          content: Json
+          draft_id: string
+          id?: string
+          status: string
+          superseded_at?: string
+          superseded_by_version: number
+          version: number
+        }
+        Update: {
+          client_id?: string
+          content?: Json
+          draft_id?: string
+          id?: string
+          status?: string
+          superseded_at?: string
+          superseded_by_version?: number
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_draft_versions_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "content_drafts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_drafts: {
         Row: {
           approved_hash: string | null
@@ -4654,6 +4695,7 @@ export type Database = {
           submitted_at: string | null
           target_url: string | null
           title: string | null
+          tldr: string | null
           topic: string
           updated_at: string
           updated_by: string | null
@@ -4705,6 +4747,7 @@ export type Database = {
           submitted_at?: string | null
           target_url?: string | null
           title?: string | null
+          tldr?: string | null
           topic: string
           updated_at?: string
           updated_by?: string | null
@@ -4756,6 +4799,7 @@ export type Database = {
           submitted_at?: string | null
           target_url?: string | null
           title?: string | null
+          tldr?: string | null
           topic?: string
           updated_at?: string
           updated_by?: string | null

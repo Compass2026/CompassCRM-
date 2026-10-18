@@ -7,3 +7,12 @@ Only the recorded blog JSON is a push path. City pages, service pages, component
 The website loader validates provenance and slug collisions, renders Markdown without raw HTML execution, uses approved H1 and SEO fields, and emits the release marker. An empty release array is the initial state; adding the integration does not publish review drafts or change the four legacy articles.
 
 Validation: publication adapter and refusal tests, site unit suite, TypeScript and production prerender build. Initial content remains subject to brand and article review. Social account connections are separate.
+
+## TL;DR slot (optional, October 18 2026)
+
+A site may add `"tldr": true` to `compass-blog.json`. Articles then carry a
+`tldr` string, which the site renders once, labelled "TL;DR", between the H1
+and the hero image (and in its prerendered HTML). A site without the flag
+receives the summary as the first paragraph of `bodyMarkdown`
+(`**TL;DR:** …`) instead, so nothing renders it twice. Sites that render hero
+images need the flag before a release with both is accepted.

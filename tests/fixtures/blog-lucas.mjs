@@ -37,6 +37,7 @@ export const GOOD_BLOG = {
   meta_title: "How Long Does a Roof Last? A Wentzville Homeowner's Guide",
   meta_description: "What wears a roof out, the signs worth a closer look, and how to plan a repair or a replacement on your own schedule in Wentzville.",
   h1: "How long does a roof last?",
+  tldr: "A roof wears out gradually, and the signs show up long before a leak does. Knowing what to look for lets you plan a repair or a replacement on your own schedule instead of in a hurry.",
   outline: OUTLINE,
   body_markdown: [
     section(OUTLINE[0].heading, 0),

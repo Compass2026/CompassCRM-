@@ -19,6 +19,10 @@
 // content_draft_write enforces the same rule in the transaction. An
 // unclaimed task works exactly as before.
 //
+// TL;DR (tldr.ts, Oct 18 2026): draft.tldr is required by every brief built
+// from v7 on; check and submit refuse a missing, empty or misplaced summary
+// (tldr_missing / tldr_in_body / …) exactly like any other lint problem.
+//
 // Nothing here approves, finalizes or publishes: approval is a teammate's
 // (content_draft_approve), and that is the only way a blog becomes a
 // content_posts row. The model runtime is the caller's business: it sends a
@@ -32,7 +36,7 @@ import { lintBlog, type BlogDraft } from "./lint.ts";
 import { claimedByOther } from "../post-drafter/claims.ts";
 import type { Store } from "./store.ts";
 
-export const HANDLER_VERSION = 6;
+export const HANDLER_VERSION = 7;
 export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
@@ -57,12 +61,14 @@ export function parseBlogDraft(d: unknown): BlogDraft | string {
   const cta = o.cta as Json | undefined;
   if (!cta || typeof cta !== "object" || !isStr(cta.text) || !(cta.url == null || isStr(cta.url))) return "draft.cta is { text, url }";
   if (!Array.isArray(o.claim_ids) || o.claim_ids.some((c) => !isStr(c) || !UUID.test(c))) return "draft.claim_ids must be uuids";
+  if (o.tldr != null && !isStr(o.tldr)) return "draft.tldr must be a string";
   const hero = parseHero(o);
   if (typeof hero === "string") return hero;
   return {
     ...(hero ? { hero } : {}),
     title: o.title as string, slug: o.slug as string, meta_title: o.meta_title as string, meta_description: o.meta_description as string,
     h1: o.h1 as string, body_markdown: o.body_markdown as string,
+    ...(isStr(o.tldr) ? { tldr: o.tldr.trim() } : {}),
     outline: (o.outline as Json[]).map((x) => ({ level: x.level as number, heading: x.heading as string })),
     internal_links: (o.internal_links as Json[]).map((x) => ({ url: x.url as string, anchor: x.anchor as string, ...(isStr(x.reason) ? { reason: x.reason } : {}) })),
     cta: { text: cta.text as string, url: (cta.url as string | null) ?? null },
@@ -109,7 +115,7 @@ export function createContentDrafter(deps: Deps) {
     const body = (await req.json().catch(() => null)) as Json | null;
     if (!body || typeof body !== "object") return reply(400, { error: "JSON body required" });
     const mode = body.mode;
-    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations", "claims", "hero_images"] });
+    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations", "claims", "hero_images", "tldr"] });
     if (mode === "open") {
       if (who.via !== "worker") return reply(403, { error: "open is the worker's (the weekly blog task)" });
       const taskId = body.task_id;

@@ -1,7 +1,9 @@
 // A content draft as Markdown, for Copy / Download (the manual delivery path
 // while publishing is by hand). Front matter carries the SEO fields; the
-// governed claims stay in the CRM, not in the file.
-export function toMarkdown(d: { title: string | null; slug: string | null; meta_title: string | null; meta_description: string | null; h1: string | null;
+// governed claims stay in the CRM, not in the file. The TL;DR sits under the
+// H1, once, as the page shows it (tldr.ts).
+import { tldrParagraph } from "./tldr.ts";
+export function toMarkdown(d: { title: string | null; slug: string | null; meta_title: string | null; meta_description: string | null; h1: string | null; tldr?: string | null;
   body_markdown: string | null; cta: { text?: string; url?: string | null } | null; primary_keyword?: string | null }): string {
   const q = (s: string | null | undefined) => JSON.stringify(s ?? "");
   const front = [
@@ -14,5 +16,6 @@ export function toMarkdown(d: { title: string | null; slug: string | null; meta_
     "---",
   ].join("\n");
   const cta = d.cta?.text ? `\n\n${d.cta.url ? `[${d.cta.text}](${d.cta.url})` : d.cta.text}\n` : "\n";
-  return `${front}\n\n# ${d.h1 ?? ""}\n\n${(d.body_markdown ?? "").trim()}${cta}`;
+  const tldr = d.tldr?.trim() ? `${tldrParagraph(d.tldr)}\n\n` : "";
+  return `${front}\n\n# ${d.h1 ?? ""}\n\n${tldr}${(d.body_markdown ?? "").trim()}${cta}`;
 }

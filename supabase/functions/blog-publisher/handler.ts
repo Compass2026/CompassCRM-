@@ -1,5 +1,5 @@
 import { preparePublication, publicationPaths, type BlogRelease, type HeroBytes, type RepositoryRead } from "../content-drafter/publication.ts";
-import { buildBlogBrief, type DraftRow } from "../content-drafter/brief.ts";
+import { buildBlogBrief, type BlogBrief, type DraftRow } from "../content-drafter/brief.ts";
 import { lintBlog } from "../content-drafter/lint.ts";
 import { parseBlogDraft } from "../content-drafter/handler.ts";
 import { stableJson } from "../post-drafter/rules.ts";
@@ -57,7 +57,22 @@ export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, ur
   const prose = r.body_markdown.replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[*_`#]/g,"");
   // Check every authored nonempty line, not just a title that might also occur
   // on a 404, old article or listing page.
-  if (!prose.split(/\n+/).map((s)=>s.replace(/^\s*(?:-|\d+\.)\s+/,"").trim()).filter(Boolean).every((s)=>text.includes(plain(s)))) return false;
+  const lines = prose.split(/\n+/).map((s)=>s.replace(/^\s*(?:-|\d+\.)\s+/,"").trim()).filter(Boolean);
+  if (!lines.every((s)=>text.includes(plain(s)))) return false;
+  // The approved TL;DR shows once, labelled, after the H1 and before the article
+  // (and before the hero image when there is one).
+  if (r.tldr?.trim()) {
+    const summary = plain(r.tldr);
+    const at = text.indexOf(summary);
+    if (at < 0 || text.indexOf(summary, at + 1) >= 0) return false;
+    if (!/TL;DR/i.test(text.slice(Math.max(0, at - 24), at))) return false;
+    if (lines.length && at > text.indexOf(plain(lines[0]))) return false;
+    if (r.hero && heroSrc) {
+      const label = html.search(/TL;DR/i);
+      const img = [...html.matchAll(/<img\b[^>]*>/gi)].find(([tag]) => tag.includes(heroSrc))?.index ?? -1;
+      if (label < 0 || (img >= 0 && img < label)) return false;
+    }
+  }
   const bodyUrls = [...r.body_markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
   return [...r.internal_links.map((l) => l.url), ...bodyUrls].every((url)=>html.includes(`href="${url.replaceAll("&","&amp;")}"`));
 }
@@ -132,7 +147,11 @@ export function createBlogPublisher(deps: Deps) {
       }
       const parsed = parseBlogDraft({...r,claim_ids:(r.claims as {id:string}[]).map((c)=>c.id)});
       if (typeof parsed === "string") throw new Error(parsed);
-      const lint = lintBlog(brief.brief,parsed,{gazetteer:(input.client.state && deps.gazetteer?.[input.client.state]) || []});
+      // The TL;DR rule binds only releases reviewed under it (Oct 18 2026); an
+      // article approved before then is not retroactively invalidated.
+      const reviewedTldr = (r.brief as { tldr?: BlogBrief["tldr"] } | undefined)?.tldr;
+      const lintBrief = { ...brief.brief, tldr: reviewedTldr } as BlogBrief;
+      const lint = lintBlog(lintBrief,parsed,{gazetteer:(input.client.state && deps.gazetteer?.[input.client.state]) || []});
       if (!lint.ok) throw new Error(lint.problems.map((x)=>x.message).join(" "));
       evidence = {...evidence,lint};
       const readRes = await deps.sitePush({client_id:r.client_id,site_id:r.destination.site_id,read:true,paths:publicationPaths(r)});
