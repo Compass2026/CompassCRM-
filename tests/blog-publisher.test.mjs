@@ -189,3 +189,39 @@ test('missing commit receipt can only verify an existing release and cannot push
  assert.equal((await res.json()).status,'uncertain');
  assert.deepEqual(seen.filter(x=>typeof x==='string'),['read']);
 });
+
+test('a GitHub fast-forward conflict on first publish is recorded uncertain with a receipt reconcile can act on',async()=>{
+ // What site-push returns when another commit moved the branch between the
+ // publisher's read and its non-forced ref update (Oct 19 2026, Logic Solar).
+ const conflict='update ref failed (422): {"message":"Update is not a fast forward","documentation_url":"https://docs.github.com/rest/git/refs#update-a-reference","status":"422"}';
+ const h=harness(); const live=[];
+ delete h.r.id;
+ const head='b'.repeat(40);
+ const worker=createBlogPublisher({
+  authorized:async()=>true,
+  claim:async()=>({id:DRAFT_ID,lease_token:'token',status:'publishing',snapshot:h.r,release_hash:hash,scheduled_at:'2026-10-19T20:58:53Z'}),
+  resume:async()=>{throw new Error('Wrong flow')},
+  authorize:async()=>h.calls.push('authorize'),finish:async(...args)=>h.calls.push(['finish',...args]),
+  input:async()=>lucas(),pages:async()=>[],
+  sitePush:async(body)=>{
+   if(body.read){h.calls.push('read');return Response.json({head,repo_url:h.r.destination.repo_url,branch:'main',files:[
+    {path:'compass-blog.json',content:JSON.stringify({version:1,adapter:'lucas_json',keyword_provenance:true,markdown:true,seo_fields:true})},
+    {path:'data/blog-posts.json',content:'[]'}]});}
+   h.calls.push('push');assert.equal(body.expected_head,head,'writes against the exact revision it read');
+   return Response.json({error:conflict},{status:502});},
+  fetchLive:async(url)=>{live.push(url);return new Response('',{status:404});},
+ });
+ const res=await worker(new Request('https://test/publish',{method:'POST',body:JSON.stringify({publication_id:DRAFT_ID})}));
+ assert.equal(res.status,409);
+ assert.equal((await res.json()).status,'uncertain');
+ assert.deepEqual(h.calls.filter(x=>typeof x==='string'),['read','authorize','push'],'one write attempt, never retried');
+ assert.deepEqual(live,[],'no live verification without a commit');
+ const finish=h.calls.find(v=>Array.isArray(v)&&v[0]==='finish');
+ assert.equal(finish[2],'token');
+ assert.equal(finish[3],'uncertain','a rejected write is never recorded as blocked or published');
+ assert.equal(finish[4].commit_sha,undefined);
+ assert.equal(finish[5],'Website commit or deployment is not confirmed. Reconcile before retrying.');
+ // blog_publication_resume's "github fast-forward conflict" receipt rule.
+ const error=finish[4].transport.error;
+ assert.ok(error.startsWith('update ref failed (422):')&&error.includes('Update is not a fast forward'));
+});
