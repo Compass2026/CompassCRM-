@@ -36,7 +36,9 @@ export async function loadHero(deps: Deps, r: BlogRelease): Promise<HeroBytes | 
   }
   return { base64: base64(bytes) };
 }
-const plain = (s: string) => s.replace(/<\/(?:p|h[1-6]|li|div|article)>/gi," ").replace(/<[^>]*>/g,"").replace(/&(?:amp|#38);/g,"&").replace(/&(?:quot|#34);/g,'"')
+// Visible text only: structured data (JSON-LD) and styles are not what a
+// reader sees, so they neither satisfy nor duplicate the article checks.
+const plain = (s: string) => s.replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi," ").replace(/<\/(?:p|h[1-6]|li|div|article)>/gi," ").replace(/<[^>]*>/g,"").replace(/&(?:amp|#38);/g,"&").replace(/&(?:quot|#34);/g,'"')
   .replace(/&(?:apos|#39|#x27);/g,"'").replace(/&nbsp;/g," ").replace(/\s+/g," ").trim();
 const attr = (tag: string, name: string) => new RegExp(`\\s${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "i").exec(tag);
 export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, url: string, heroSrc: string | null = null): boolean {

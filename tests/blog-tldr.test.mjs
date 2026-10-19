@@ -177,6 +177,11 @@ test("the live check needs the labelled TL;DR exactly once, after the H1 and bef
   assert.equal(verifyLiveArticle(page(tl + tl + "<h2>Bills</h2>"), r, hash, url), false, "twice");
   assert.equal(verifyLiveArticle(page(`<p>${r.tldr}</p><h2>Bills</h2>`), r, hash, url), false, "unlabelled");
   assert.equal(verifyLiveArticle(page("<h2>Bills</h2>").replace("</article>", `${tl}</article>`), r, hash, url), false, "after the article");
+  // Structured data repeating the summary (JSON-LD "abstract") is not a second visible TL;DR,
+  // and text that exists only in structured data never satisfies the visible checks.
+  const jsonLd = `<script type="application/ld+json">${JSON.stringify({ "@type": "BlogPosting", abstract: r.tldr, headline: r.h1 })}</script>`;
+  assert.equal(verifyLiveArticle(page(tl + "<h2>Bills</h2>").replace("<head></head>", `<head>${jsonLd}</head>`), r, hash, url), true, "JSON-LD abstract");
+  assert.equal(verifyLiveArticle(page("<h2>Bills</h2>").replace("<head></head>", `<head>${jsonLd}</head>`), r, hash, url), false, "summary only in JSON-LD");
   const legacy = release({ tldr: undefined });
   assert.equal(verifyLiveArticle(page("<h2>Bills</h2>"), legacy, hash, url), true, "legacy release unaffected");
 });
