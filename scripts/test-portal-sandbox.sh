@@ -250,6 +250,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_planner.tes
 # sees one article, team-only access).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_drafts.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_publication.test.sql"
+# 20261019213500: one writer per website destination — the real ticks send
+# one release per repository branch, claim and resume defer on a busy one.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_publication_destination.test.sql"
 # 20261015175146: binding claims — a fresh foreign claim blocks the drafter's
 # write, an expired one does not, an unclaimed task writes as before.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_draft_claims.test.sql"
