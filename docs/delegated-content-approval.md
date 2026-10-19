@@ -6,7 +6,7 @@ C". The assistant then completes Compass's existing approval and publication
 workflow, so Tom does not click the same thing again in Compass. The Compass
 buttons stay exactly as they were.
 
-Logic Solar is the pilot (migration `20261019190000`, Edge Function
+Logic Solar is the pilot (migration `20261019190532`, Edge Function
 `content-approvals`, Executive OS tools `content_review_batch`,
 `content_approve` and `content_approval_status`).
 

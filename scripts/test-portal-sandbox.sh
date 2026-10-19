@@ -271,7 +271,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_hero.test.sql"
 # pinned by approval, legacy drafts unchanged) and immutable draft history.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_tldr.test.sql"
 
-# 20261019190000: delegated approval and publication through Executive OS
+# 20261019190532: delegated approval and publication through Executive OS
 # (receipts, scope binding, replay, refusals, publication states).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation.test.sql"
 

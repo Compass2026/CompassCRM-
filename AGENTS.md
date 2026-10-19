@@ -2134,7 +2134,7 @@ go-live: `docs/blog-drafter.md`.
     answers v5 with `claims`, the worker's preflight stops without writing.
 - **Not yet:** the Web Page Drafter.
 
-## Delegated content approval (Oct 19 2026; `20261019190000`, `content-approvals`)
+## Delegated content approval (Oct 19 2026; `20261019190532` applied, `content-approvals`)
 
 Tom can say "Approve and publish Logic Blogs A, B and C" in ChatGPT or Claude
 and the assistant completes the existing workflow through Executive OS's

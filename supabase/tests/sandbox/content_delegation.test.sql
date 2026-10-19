@@ -1,4 +1,4 @@
--- Tests for 20261019190000 (delegated content approval and publication), run
+-- Tests for 20261019190532 (delegated content approval and publication), run
 -- by scripts/test-portal-sandbox.sh after blog_tldr.test.sql (the cd harness,
 -- fictional client a with its Compass-controlled site from
 -- blog_publication.test.sql, client b with no delegation policy).

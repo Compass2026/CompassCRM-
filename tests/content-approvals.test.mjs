@@ -1,4 +1,4 @@
-// The content-approvals function's handler (20261019190000) over a fake
+// The content-approvals function's handler (20261019190532) over a fake
 // store. The rules themselves (admin, policy, intent, version, review hash,
 // destination, one transaction, replay) run in the database: the sandbox suite
 // supabase/tests/sandbox/content_delegation.test.sql. Here: the key, request
