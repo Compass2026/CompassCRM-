@@ -271,6 +271,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_hero.test.sql"
 # pinned by approval, legacy drafts unchanged) and immutable draft history.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_tldr.test.sql"
 
+# 20261019190532: delegated approval and publication through Executive OS
+# (receipts, scope binding, replay, refusals, publication states).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation.test.sql"
+
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_standard.test.sql"
