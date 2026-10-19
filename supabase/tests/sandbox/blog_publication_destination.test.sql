@@ -1,4 +1,4 @@
--- Tests for 20261019213500 (one writer per website destination), run by
+-- Tests for 20261019214729 (one writer per website destination), run by
 -- scripts/test-portal-sandbox.sh after blog_publication.test.sql on the cd
 -- harness. The ticks are the real cron.job commands, run against the pg_net
 -- stub; each request sent names the publication the publisher would claim.
