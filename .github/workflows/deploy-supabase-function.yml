@@ -12,6 +12,7 @@ on:
           - gsc-sync
           - post-drafter
           - content-drafter
+          - content-approvals
           - blog-publisher
           - post-publisher
           - google-ops
