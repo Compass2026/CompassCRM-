@@ -11,7 +11,7 @@ same thing again in Compass. The Compass buttons stay exactly as they were.
 | Migration | Scope |
 | --- | --- |
 | `20261019190532` | Logic Solar blogs only (the pilot). |
-| `20261019230000` | Every client, and three channels: blogs, Facebook posts and Google Business Profile posts. |
+| `20261019202359` | Every client, and three channels: blogs, Facebook posts and Google Business Profile posts. |
 
 The Edge Function is `content-approvals`. The Executive OS tools are
 `content_review_batch`, `content_approve` and `content_approval_status`.

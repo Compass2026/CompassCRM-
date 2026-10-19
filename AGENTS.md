@@ -2134,7 +2134,7 @@ go-live: `docs/blog-drafter.md`.
     answers v5 with `claims`, the worker's preflight stops without writing.
 - **Not yet:** the Web Page Drafter.
 
-## Delegated content approval (Oct 19 2026; `20261019190532` applied, `20261019230000` written, not applied; `content-approvals`)
+## Delegated content approval (Oct 19 2026; `20261019190532` applied, `20261019202359` applied; `content-approvals`)
 
 Tom can say "Approve and publish Logic Blogs A, B and C" or "Approve the Lucas
 Facebook posts" in ChatGPT or Claude, and the assistant completes the existing
@@ -2151,7 +2151,7 @@ today: `docs/delegated-content-approval.md`.
   unchanged blog functions and the social review gate / existing schedule.
   The gates accept a receipt only while it is `executing` in the same
   transaction, for items in its scope.
-- **Channels (20261019230000):** blogs, Facebook, Business Profile, for every
+- **Channels (20261019202359):** blogs, Facebook, Business Profile, for every
   client under one central policy (`content_delegation_settings` +
   `content_delegation_exclusions`; admin-only `content_delegation_configure` /
   `_exclude` / `_include`; paused and offboarded clients never). Publishing a

@@ -1,5 +1,5 @@
 // content-approvals — delegated approval and publication of blog drafts
-// (20261019190532) and Facebook / Business Profile posts (20261019230000). Executive OS is the only caller: it holds the owner's
+// (20261019190532) and Facebook / Business Profile posts (20261019202359). Executive OS is the only caller: it holds the owner's
 // standing grant (or a per-request approval) and relays Tom's explicit
 // instruction from ChatGPT or Claude. See docs/delegated-content-approval.md.
 //

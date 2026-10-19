@@ -1,4 +1,4 @@
--- Tests for 20261019230000 (delegated approval for every client and for
+-- Tests for 20261019202359 (delegated approval for every client and for
 -- Facebook / Business Profile posts), run by scripts/test-portal-sandbox.sh
 -- after content_delegation.test.sql (its cd harness and cd.dg_authorize).
 -- A fictional client with a bound, enabled, healthy Facebook Page and

@@ -274,7 +274,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_tldr.test.sql"
 # 20261019190532: delegated approval and publication through Executive OS
 # (receipts, scope binding, replay, refusals, publication states).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation.test.sql"
-# 20261019230000: every client, Facebook and Business Profile posts, the central policy.
+# 20261019202359: every client, Facebook and Business Profile posts, the central policy.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation_channels.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
