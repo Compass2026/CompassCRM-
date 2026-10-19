@@ -6,7 +6,7 @@
 --   DG1-DG3   the gates: the service role cannot approve or queue on its own,
 --             nor by forging the delegation setting; teammates and anon cannot
 --             call the receipt functions or write receipts
---   DG4-DG7   recording: not an admin, no policy, unclear or mismatched intent
+--   DG4-DG7   recording: not an admin, an excluded client, unclear or mismatched intent
 --             are refused and nothing is recorded
 --   DG8-DG10  approve only: approved with Tom as reviewer and the assistant
 --             named in the note, nothing queued; a replay is the same receipt
@@ -17,7 +17,7 @@
 --             why, and nothing changed
 --   DG15-DG17 approve and publish: both approved and queued once, released by
 --             Tom; a second operation for the same drafts queues nothing new;
---             status reports queued / deploying / live with the URL
+--             status reports queued / publishing / published with the URL
 --   DG18-DG19 failed publication: status says failed with the reason; a
 --             failure the publisher cannot prove was pre-write is not
 --             requeued; a safe pre-write one is requeued once, history intact
@@ -30,7 +30,6 @@
 \o /dev/null
 update team_members set role = 'admin' where auth_user_id = :'team';
 insert into team_members (name, email, role) values ('Delegation Member', 'dg-member@compassmarketing.ai', 'member');
-insert into content_delegation_policies (client_id, approve, publish, note) values (cd.id('a'), true, true, 'sandbox');
 insert into content_plan_items (id, client_id, week_start, deliverable, channel, purpose, topic, search_intent, keyword_id, service_id, planned_date) values
   (cd.id('i-dg1'), cd.id('a'), date '2026-10-26', 'blog', null, 'educational', 'Delegation one', 'informational', cd.id('kw'), cd.id('svc'), date '2026-10-26'),
   (cd.id('i-dg2'), cd.id('a'), date '2026-10-26', 'blog', null, 'educational', 'Delegation two', 'informational', cd.id('kw'), cd.id('svc'), date '2026-10-27'),
@@ -57,7 +56,11 @@ $$;
 create function cd.dg_authorize(p jsonb) returns text language plpgsql as $$
 declare r jsonb; e text;
 begin
-  r := content_authorization_record(p);
+  begin
+    r := content_authorization_record(p);
+  exception when others then
+    return sqlstate || ' ' || sqlerrm;  -- refused at recording: nothing recorded
+  end;
   if r->>'status' in ('executed', 'refused') then return 'replayed:' || (r->>'status'); end if;
   begin
     perform content_authorization_execute((r->>'id')::uuid);
@@ -78,6 +81,8 @@ select cd.as_user('authenticated', :'team');
 select cd.save('dg1', content_draft_request(cd.id('i-dg1'))->>'draft_id');
 select cd.save('dg2', content_draft_request(cd.id('i-dg2'))->>'draft_id');
 select cd.save('dg3', content_draft_request(cd.id('i-dg3'))->>'draft_id');
+-- 20261019230000: the central policy (every client, all channels) with one exclusion.
+select content_delegation_exclude(cd.id('b'), null, 'sandbox: client b is excluded');
 \o
 reset role;
 
@@ -149,7 +154,7 @@ begin
   perform cd.ok('DG4 an account that is not a Compass admin is refused', e like '42501%not_authorized%', e);
   e := cd.try(format('select content_authorization_record(%L::jsonb)',
     cd.dg_req('dg-nopolicy-1', 'approve', array[d1], 'Approve Blog A', p_client => cd.id('b'))));
-  perform cd.ok('DG5 a client without a delegation policy is refused', e like '42501%policy_disallows%', e);
+  perform cd.ok('DG5 an excluded client is refused', e like '42501%policy_disallows%excluded%', e);
   e := cd.try(format('select content_authorization_record(%L::jsonb)',
     cd.dg_req('dg-intent-1', 'approve_and_publish', array[d1], 'Approve Blog A')));
   perform cd.ok('DG6 approve and publish needs publishing words', e like '22023%intent_unclear%', e);
@@ -278,8 +283,8 @@ end $$;
 select set_config('compass.blog_publication_write', 'on', false);
 update blog_publications set status = 'publishing' where draft_id = cd.get('dg2')::uuid and status = 'queued';
 \o /dev/null
-select cd.ok('DG17b status says deploying while the publisher works',
-  (select x#>>'{publication,state}' = 'deploying' from jsonb_array_elements(content_authorization_status('dg-pub-1')->'items_now') x
+select cd.ok('DG17b status says publishing while the publisher works',
+  (select x#>>'{publication,state}' = 'publishing' from jsonb_array_elements(content_authorization_status('dg-pub-1')->'items_now') x
     where x->>'draft_id' = cd.get('dg2')));
 \o
 update blog_publications set status = 'published', published_url = 'https://draft.example.test/blog/delegation-2', published_at = now(),
@@ -294,8 +299,8 @@ declare s jsonb := content_authorization_status('dg-pub-1'); b jsonb; c jsonb; r
 begin
   select x into b from jsonb_array_elements(s->'items_now') x where x->>'draft_id' = cd.get('dg2');
   select x into c from jsonb_array_elements(s->'items_now') x where x->>'draft_id' = cd.get('dg3');
-  perform cd.ok('DG17 status says live with the actual URL',
-    b#>>'{publication,state}' = 'live' and b#>>'{publication,published_url}' = 'https://draft.example.test/blog/delegation-2', b::text);
+  perform cd.ok('DG17 status says published with the actual URL',
+    b#>>'{publication,state}' = 'published' and b#>>'{publication,published_url}' = 'https://draft.example.test/blog/delegation-2', b::text);
   perform cd.ok('DG18 status says failed with the reason',
     c#>>'{publication,state}' = 'failed' and c#>>'{publication,last_error}' like 'The website build failed%', c::text);
   old := (c#>>'{publication,id}')::uuid;
