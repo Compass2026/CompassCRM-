@@ -21,7 +21,9 @@ export function createStore(supabase: Client): Store {
       if (error) throw new Error(error.message);
       return (data ?? []) as { id: string; name: string }[];
     },
-    async batch(clientId) { return wrap<Json>(await supabase.rpc("content_review_batch", { p_client: clientId })); },
+    async batch(clientId, channel) {
+      return wrap<Json>(await supabase.rpc("content_review_batch", { p_client: clientId, ...(channel ? { p_channel: channel } : {}) }));
+    },
     async record(p) { return wrap<Json>(await supabase.rpc("content_authorization_record", { p })); },
     async execute(id) { return wrap<Json>(await supabase.rpc("content_authorization_execute", { p_id: id })); },
     async refuse(id, code, message) { return wrap<Json>(await supabase.rpc("content_authorization_refuse", { p_id: id, p_code: code, p_message: message })); },

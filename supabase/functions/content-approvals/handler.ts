@@ -1,18 +1,23 @@
 // content-approvals — delegated approval and publication of blog drafts
-// (20261019190532). Executive OS is the only caller: it holds the owner's
+// (20261019190532) and Facebook / Business Profile posts (20261019202359). Executive OS is the only caller: it holds the owner's
 // standing grant (or a per-request approval) and relays Tom's explicit
 // instruction from ChatGPT or Claude. See docs/delegated-content-approval.md.
 //
 //   version   → what this deployment is.
-//   batch     → a client's blog drafts in review or approved, with each draft's
-//               review hash (the complete publishable content + destination),
-//               article URL and publication state. Writes nothing.
+//   batch     → a client's blog drafts and Facebook / Business Profile posts in
+//               review or approved (optionally one channel), each with its
+//               review hash (the complete publishable content + destination:
+//               website, Page or location), whether the existing publisher
+//               would send it, and its publication state. Writes nothing.
 //   authorize → record the receipt (idempotent per operation_id), then execute
 //               it in ONE transaction: re-check every item, then the existing
-//               content_draft_approve and blog_publication_queue. A check that
-//               fails refuses the receipt with its reason; nothing changes.
-//   status    → the receipt and each item's state now:
-//               queued · deploying · live (URL) · failed · uncertain.
+//               content_draft_approve / blog_publication_queue for blogs, the
+//               social review gate and the existing schedule (post-publisher
+//               sends it) for posts. A check that fails refuses the receipt
+//               with its reason; nothing changes.
+//   status    → the receipt and each item's state now: approved · scheduled ·
+//               queued · publishing · published (URL, provider post id) ·
+//               failed (reason) · uncertain.
 //
 // Auth: the x-compass-delegation-key header must equal the Vault secret
 // EXECUTIVE_OS_DELEGATION_SECRET (constant-time). Nothing else is accepted —
@@ -23,10 +28,12 @@
 // caller retries with the SAME operation_id, which returns the receipt and
 // never executes twice.
 
-export const HANDLER_VERSION = 1;
+export const HANDLER_VERSION = 2;
 export const MODES = ["version", "batch", "authorize", "status"] as const;
 const ACTIONS = ["approve", "publish", "approve_and_publish"] as const;
 const CHANNELS = ["chatgpt", "claude"] as const;
+export const CONTENT_CHANNELS = ["blog", "facebook", "google_business"] as const;
+const MAX_ITEMS = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OPERATION = /^[A-Za-z0-9_-]{8,128}$/;
 const HASH = /^sha256:[0-9a-f]{64}$/;
@@ -38,7 +45,7 @@ export type DbResult<T> = { data: T | null; error: DbError | null };
 export type Store = {
   secret(name: string): Promise<string | null>;
   clientsNamed(name: string): Promise<{ id: string; name: string }[]>;
-  batch(clientId: string): Promise<DbResult<Json>>;
+  batch(clientId: string, channel: string | null): Promise<DbResult<Json>>;
   record(p: Json): Promise<DbResult<Json>>;
   execute(id: string): Promise<DbResult<Json>>;
   refuse(id: string, code: string, message: string): Promise<DbResult<Json>>;
@@ -73,16 +80,27 @@ export function parseAuthorize(b: Json): Json | string {
   if (!isStr(b.operation_id) || !OPERATION.test(b.operation_id)) return "operation_id is 8–128 letters, digits, _ or -";
   if (!isStr(b.client_id) || !UUID.test(b.client_id)) return "client_id must be a uuid";
   if (!ACTIONS.includes(b.action as typeof ACTIONS[number])) return `action is one of ${ACTIONS.join(", ")}`;
-  if (!Array.isArray(b.items) || b.items.length < 1 || b.items.length > 20) return "items lists 1–20 drafts";
+  if (!Array.isArray(b.items) || b.items.length < 1 || b.items.length > MAX_ITEMS) return `items lists 1–${MAX_ITEMS} items`;
   const seen = new Set<string>();
+  const items: Json[] = [];
   for (const it of b.items as Json[]) {
-    if (!it || !isStr(it.draft_id) || !UUID.test(it.draft_id)) return "each item needs a draft_id";
-    if (!Number.isInteger(it.version) || (it.version as number) < 1) return "each item needs its reviewed version";
+    if (!it || typeof it !== "object") return "each item is an object";
+    // v1 (blogs): {draft_id, version, review_hash} with a request destination_url.
+    const channel = it.channel ?? "blog";
+    if (!CONTENT_CHANNELS.includes(channel as typeof CONTENT_CHANNELS[number])) return `item channel is one of ${CONTENT_CHANNELS.join(", ")}`;
+    const id = it.id ?? it.draft_id ?? it.post_id;
+    if (!isStr(id) || !UUID.test(id)) return "each item needs its id from batch";
+    if (channel === "blog" && (!Number.isInteger(it.version) || (it.version as number) < 1)) return "each blog item needs its reviewed version";
     if (!isStr(it.review_hash) || !HASH.test(it.review_hash)) return "each item needs the review_hash from batch";
-    if (seen.has(it.draft_id)) return "a draft appears twice";
-    seen.add(it.draft_id);
+    const destination = it.destination ?? (channel === "blog" ? b.destination_url : undefined);
+    if (!isStr(destination) || !destination.trim() || destination.length > 300) return "each item needs its destination from batch";
+    if (channel === "blog" && !/^https:\/\/[^\s/]+\/?$/.test(destination)) return "a blog item's destination is the website origin from batch";
+    if (seen.has(id)) return "an item appears twice";
+    seen.add(id);
+    items.push({ channel, id, ...(channel === "blog" ? { version: it.version } : {}), review_hash: it.review_hash,
+      destination: channel === "blog" ? destination.replace(/\/$/, "") : destination });
   }
-  if (!isStr(b.destination_url) || !/^https:\/\/[^\s/]+\/?$/.test(b.destination_url)) return "destination_url is the website origin from batch";
+  if (b.destination_url != null && (!isStr(b.destination_url) || !/^https:\/\/[^\s/]+\/?$/.test(b.destination_url))) return "destination_url is the website origin from batch";
   if (b.publish_at != null && (!isStr(b.publish_at) || !Number.isFinite(Date.parse(b.publish_at)))) return "publish_at is an ISO time";
   if (b.action === "approve" && b.publish_at != null) return "approve never publishes; publish_at is only for publish actions";
   if (!isStr(instruction.text) || !instruction.text.trim() || instruction.text.length > 2000) return "instruction.text is the owner's exact words";
@@ -93,8 +111,8 @@ export function parseAuthorize(b: Json): Json | string {
   if (b.source_ref != null && (typeof b.source_ref !== "object" || Array.isArray(b.source_ref))) return "source_ref is an object";
   return {
     operation_id: b.operation_id, client_id: b.client_id, action: b.action,
-    items: (b.items as Json[]).map((it) => ({ draft_id: it.draft_id, version: it.version, review_hash: it.review_hash })),
-    destination_url: (b.destination_url as string).replace(/\/$/, ""),
+    items,
+    ...(isStr(b.destination_url) ? { destination_url: b.destination_url.replace(/\/$/, "") } : {}),
     ...(b.publish_at ? { publish_at: b.publish_at } : {}),
     instruction_text: (instruction.text as string).trim(), instructed_at: instruction.at ?? null,
     channel: instruction.channel, account_email: instruction.account_email, executed_by: instruction.executed_by,
@@ -119,9 +137,15 @@ export function createContentApprovals(deps: { store: Store }) {
     if (!body || typeof body !== "object") return reply(400, { error: "JSON body required" });
     const mode = body.mode;
 
-    if (mode === "version") return reply(200, { version: HANDLER_VERSION, modes: MODES, actions: ACTIONS, channels: CHANNELS });
+    if (mode === "version") {
+      return reply(200, { version: HANDLER_VERSION, modes: MODES, actions: ACTIONS, channels: CHANNELS, content_channels: CONTENT_CHANNELS });
+    }
 
     if (mode === "batch") {
+      const channel = body.channel ?? null;
+      if (channel !== null && !CONTENT_CHANNELS.includes(channel as typeof CONTENT_CHANNELS[number])) {
+        return reply(400, { error: `channel is one of ${CONTENT_CHANNELS.join(", ")}` });
+      }
       let clientId = isStr(body.client_id) && UUID.test(body.client_id) ? body.client_id : null;
       if (!clientId) {
         const name = isStr(body.client_name) ? body.client_name.trim() : "";
@@ -131,7 +155,7 @@ export function createContentApprovals(deps: { store: Store }) {
         if (found.length > 1) return reply(409, { error: "client_ambiguous", candidates: found });
         clientId = found[0].id;
       }
-      const r = await store.batch(clientId);
+      const r = await store.batch(clientId, channel as string | null);
       if (r.error) return reply(r.error.code === "P0002" ? 404 : 500, { error: "batch_failed", message: r.error.message });
       return reply(200, r.data ?? {});
     }

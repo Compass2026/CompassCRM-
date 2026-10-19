@@ -19,7 +19,7 @@ function fakeStore(o = {}) {
     calls,
     async secret(name) { calls.push(["secret", name]); return name === "EXECUTIVE_OS_DELEGATION_SECRET" ? (o.secret ?? KEY) : null; },
     async clientsNamed(name) { calls.push(["clientsNamed", name]); return (o.clients ?? [{ id: CLIENT, name: "Logic Solar" }]).filter((c) => c.name.toLowerCase().includes(name.toLowerCase())); },
-    async batch(id) { calls.push(["batch", id]); return o.batch ?? { data: { client: { id, name: "Logic Solar" }, drafts: [] }, error: null }; },
+    async batch(id, channel) { calls.push(["batch", id, channel]); return o.batch ?? { data: { client: { id, name: "Logic Solar" }, drafts: [] }, error: null }; },
     async record(p) { calls.push(["record", p]); if (o.recordThrows) throw new Error("fetch failed"); return o.record ?? { data: { id: "rcpt-1", status: "recorded" }, error: null }; },
     async execute(id) { calls.push(["execute", id]); if (o.executeThrows) throw new Error("fetch failed"); return o.execute ?? { data: { id, status: "executed", results: [] }, error: null }; },
     async refuse(id, code, message) { calls.push(["refuse", id, code, message]); return { data: { id, status: "refused", refusal_code: code }, error: null }; },
@@ -68,7 +68,7 @@ test("batch resolves a client by name and asks when it is ambiguous", async () =
 test("authorize validates the scope before anything is recorded", () => {
   assert.match(parseAuthorize(authorizeBody({ operation_id: "short" })), /operation_id/);
   assert.match(parseAuthorize(authorizeBody({ action: "publish_everything" })), /action/);
-  assert.match(parseAuthorize(authorizeBody({ items: [] })), /1–20/);
+  assert.match(parseAuthorize(authorizeBody({ items: [] })), /1–50/);
   assert.match(parseAuthorize(authorizeBody({ items: [{ draft_id: D1, version: 6 }] })), /review_hash/);
   assert.match(parseAuthorize(authorizeBody({ items: [{ draft_id: D1, version: 6, review_hash: HASH }, { draft_id: D1, version: 6, review_hash: HASH }] })), /twice/);
   assert.match(parseAuthorize(authorizeBody({ destination_url: "https://www.logic-solar.com/blog/x" })), /origin/);
@@ -81,6 +81,39 @@ test("authorize validates the scope before anything is recorded", () => {
   assert.equal(p.channel, "claude");
   assert.equal(p.instructed_at, null, "no invented time: the database stamps it");
   assert.deepEqual(p.source_ref, { executive_os_execution_id: "0f3c2b9e" });
+});
+
+test("v1 blog requests are normalized; Facebook and Business Profile items bind their Page / location", () => {
+  const v1 = parseAuthorize(authorizeBody());
+  assert.deepEqual(v1.items, [
+    { channel: "blog", id: D1, version: 6, review_hash: HASH, destination: "https://www.logic-solar.com" },
+    { channel: "blog", id: D2, version: 4, review_hash: HASH, destination: "https://www.logic-solar.com" },
+  ]);
+  const social = parseAuthorize(authorizeBody({
+    destination_url: undefined,
+    items: [
+      { channel: "facebook", id: D1, review_hash: HASH, destination: "facebook:103977857788955" },
+      { channel: "google_business", id: D2, review_hash: HASH, destination: "google_business:locations/3692365240387501506" },
+    ],
+  }));
+  assert.equal(typeof social, "object");
+  assert.deepEqual(social.items.map((i) => [i.channel, i.destination, "version" in i]), [
+    ["facebook", "facebook:103977857788955", false],
+    ["google_business", "google_business:locations/3692365240387501506", false],
+  ]);
+  assert.equal("destination_url" in social, false);
+  assert.match(parseAuthorize(authorizeBody({ items: [{ channel: "instagram", id: D1, review_hash: HASH, destination: "x" }] })), /channel/);
+  assert.match(parseAuthorize(authorizeBody({ items: [{ channel: "facebook", id: D1, review_hash: HASH }] })), /destination/);
+  assert.match(parseAuthorize(authorizeBody({ destination_url: undefined, items: [{ channel: "blog", id: D1, version: 1, review_hash: HASH }] })), /destination/);
+  const fifty = Array.from({ length: 51 }, (_, n) => ({ channel: "facebook", id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`, review_hash: HASH, destination: "facebook:1" }));
+  assert.match(parseAuthorize(authorizeBody({ items: fifty })), /1–50/);
+});
+
+test("batch passes a channel filter and refuses an unknown one", async () => {
+  const s = fakeStore();
+  assert.equal((await call(s, post({ mode: "batch", client_id: CLIENT, channel: "facebook" }))).status, 200);
+  assert.deepEqual(s.calls.find(([n]) => n === "batch"), ["batch", CLIENT, "facebook"]);
+  assert.equal((await call(fakeStore(), post({ mode: "batch", client_id: CLIENT, channel: "tiktok" }))).status, 400);
 });
 
 test("an invalid request records nothing", async () => {

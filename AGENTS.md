@@ -2134,25 +2134,33 @@ go-live: `docs/blog-drafter.md`.
     answers v5 with `claims`, the worker's preflight stops without writing.
 - **Not yet:** the Web Page Drafter.
 
-## Delegated content approval (Oct 19 2026; `20261019190532` applied, `content-approvals`)
+## Delegated content approval (Oct 19 2026; `20261019190532` applied, `20261019202359` applied; `content-approvals`)
 
-Tom can say "Approve and publish Logic Blogs A, B and C" in ChatGPT or Claude
-and the assistant completes the existing workflow through Executive OS's
-`content_review_batch` / `content_approve` / `content_approval_status` tools.
-Full design: `docs/delegated-content-approval.md`.
+Tom can say "Approve and publish Logic Blogs A, B and C" or "Approve the Lucas
+Facebook posts" in ChatGPT or Claude, and the assistant completes the existing
+workflow through Executive OS's `content_review_batch` / `content_approve` /
+`content_approval_status` tools. Full design, and which channels publish
+today: `docs/delegated-content-approval.md`.
 
 - **Delegated, not impersonated.** `content-approvals` (key:
   `x-compass-delegation-key` = Vault `EXECUTIVE_OS_DELEGATION_SECRET`, nothing
   else) records a receipt (`content_approval_authorizations`, unique
   `operation_id`, verbatim words, channel, account, executing assistant,
-  each draft's version + review hash, destination, time), then executes it in
-  one transaction through the unchanged `content_draft_approve` and
-  `blog_publication_queue`. Those gates (plus `content_drafts_guard` and the
-  approval-history guard) accept a receipt only while it is `executing` in
-  the same transaction, for drafts and versions in its scope.
+  each item's channel, review hash and destination — website, Page or
+  location — and the time), then executes it in one transaction through the
+  unchanged blog functions and the social review gate / existing schedule.
+  The gates accept a receipt only while it is `executing` in the same
+  transaction, for items in its scope.
+- **Channels (20261019202359):** blogs, Facebook, Business Profile, for every
+  client under one central policy (`content_delegation_settings` +
+  `content_delegation_exclusions`; admin-only `content_delegation_configure` /
+  `_exclude` / `_include`; paused and offboarded clients never). Publishing a
+  post is allowed only where `post-publisher` itself would send it (switch,
+  pilot list, verified enabled healthy Zernio binding): Lucas only today;
+  approval works everywhere.
 - Reviewer / releaser of record is the authorizing admin's `team_members.id`;
-  the review note names the assistant and channel. "approve" never publishes.
-- Per-client switch: `content_delegation_policies` (Logic Solar only).
+  the note names the assistant and channel. "approve" never publishes; it is
+  never unattended — every item or batch needs Tom's own words.
 - The Compass buttons are unchanged and remain the primary path.
 
 ## Known state / open items (as of Sept 13 2026)
