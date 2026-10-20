@@ -4,7 +4,9 @@
 -- rank-sync stored the first organic result matching the site host OR the
 -- business name. Directory, social and review pages titled with the name
 -- (and once a same-name firm in another state) were stored as the website's
--- organic rank: 197 rows across nine clients on Oct 20. The collector fix
+-- organic rank. Audit on Oct 20: 121 DataForSEO organic rows on another host
+-- across eight clients, plus 2 for a client with no website recorded
+-- (unverified). The collector fix
 -- ships separately; this migration stops every reader from counting them.
 -- No stored row is changed or deleted.
 --
