@@ -88,3 +88,41 @@ test("manual form text is screened the same way", () => {
   assert.throws(() => citationText(f, "notes"), (e) => /login or a private account/.test(e.message) && !e.message.includes("Fake-Pass"));
   assert.equal(citationText(f, "evidence"), "Owner verification required on the dashboard");
 });
+
+// ── Serialization boundary: nothing recognized as a secret leaves through metadata ─
+import { WITHHELD } from "../src/lib/citations-brightlocal.ts";
+import { storedLocationMapping, storedFileName } from "../src/lib/citations.ts";
+const FAKE = "SYNTHETIC_REVIEW_ONLY";
+const row = (o) => { const r = ["", "", "General", "40", "Low", "", "", "", ""]; Object.entries(o).forEach(([i, v]) => { r[i] = v; }); return r; };
+
+test("a held row's Status, Site or No never carries a recognized secret into reasons or counts", () => {
+  const t = [table[0],
+    row({ 0: "1", 1: "hotfrog.com", 5: "11th Nov 2025", 6: "Live", 7: "https://www.hotfrog.com/sample" }),
+    row({ 0: "2", 1: "clutch.co", 6: `Password: ${FAKE}` }),
+    row({ 0: "3", 1: `login=${FAKE}`, 6: "" }),
+    row({ 0: `token: ${FAKE}`, 1: "manta.com", 6: "Unavailable" }),
+    row({ 0: "5", 1: "all.biz", 6: "" }),
+    ["Aggregator/Network"]];
+  const bl = prepareBrightLocalCampaign(t, { locationLabel: "Sample", campaign: "900001" });
+  assert.ok(!JSON.stringify(bl).includes(FAKE), "nothing in rows, held, counts or source rows");
+  assert.deepEqual(bl.counts.byRawStatus, { Live: 1, [WITHHELD]: 1, "(blank)": 2, Unavailable: 1 }, "exact counts kept, secret key replaced");
+  assert.equal(bl.counts.directoryRows, 5);
+  assert.deepEqual(bl.held.map((h) => [h.row_number, h.site, h.raw_status]),
+    [[3, "clutch.co", WITHHELD], [4, WITHHELD, "(blank)"], [5, "manta.com", "Unavailable"], [6, "all.biz", "(blank)"]]);
+  assert.match(bl.held[2].reason, /row \? \(manta\.com\)/, "a non-numeric row number is never echoed");
+  assert.match(bl.held[0].reason, /CSV status \(withheld: looked like a login or private link\)/);
+});
+
+test("stored location mapping keeps only screened values that point at a real location", () => {
+  const m = storedLocationMapping({ mode: "column", values: { "Main (sample)": LOC, [`Password: ${FAKE}`]: LOC, "Typo": "not-a-location" } }, new Set([LOC]));
+  assert.deepEqual(m, { mode: "column", values: { "Main (sample)": LOC }, withheld: 1 });
+  assert.ok(!JSON.stringify(m).includes(FAKE));
+  assert.deepEqual(storedLocationMapping({ mode: "single", locationId: LOC }, new Set([LOC])), { mode: "single", locationId: LOC });
+  assert.equal(storedFileName(`export?token=${FAKE}1234.csv`), "import.csv (name withheld)");
+  assert.equal(storedFileName("campaign-908272.csv"), "campaign-908272.csv");
+});
+
+test("a mapped header that looks like a secret is refused without echo", () => {
+  assert.throws(() => prepareImport([["Directory", `https://x.example.test/a?token=${FAKE}`], ["Yelp", "x"]], { directory: 0, notes: 1 }, { mode: "single", locationId: LOC }, new Set([LOC])),
+    (e) => /header looks like it contains a login/.test(e.message) && !e.message.includes(FAKE));
+});

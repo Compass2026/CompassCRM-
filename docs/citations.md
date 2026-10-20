@@ -108,7 +108,8 @@ Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
   unverified.
 - **Confirmed absent** needs `owner_dashboard` or `publisher_confirmation`.
 - The latest check by date decides verification; a backdated entry never
-  overrides a newer one.
+  overrides a newer one. Ties on date and entry time are broken by the check's
+  insertion order (`seq`), never by a random id.
 - **Identity changes.**
   - A change to name, address, phone, website or the hidden-address setting
     creates a new version.
@@ -226,6 +227,20 @@ contains a login or a private account / verification link"). The value is
 never echoed into the preview, the row outcome, the import record or an error.
 A flagged form field is refused the same way.
 
+**The serialization boundary.** No recognized value leaves through import
+metadata either:
+- **Held rows (BrightLocal):** Status, Site and No go through `safeLabel()`
+  before any reason or count key is built. A flagged value becomes "(withheld:
+  looked like a login or private link)". A non-numeric row number is shown as
+  "?". Counts stay exact.
+- **Location mapping:** the stored mapping (`storedLocationMapping`) keeps only
+  screened values that point at one of the client's locations. A flagged key is
+  dropped and counted (`withheld`), even when other rows import.
+- **File and headers:** the file name is withheld when flagged
+  (`storedFileName`). A mapped header that looks like a secret is refused; such
+  headers are not offered in the column choices, and the browser masks the file
+  name and location values.
+
 Ordinary wording passes ("owner verification required", "client login required
 for edits", "verification email not received"). This catches the obvious
 cases; it is **not** universal secret detection. Credentials belong in the
@@ -245,11 +260,16 @@ single-cell "Aggregator/Network" footer that is not a listing.
 | --- | --- |
 | Status `Live` / `Updated` | listing, provider status **provider complete** (never verification) |
 | Status `Submitted` | listing, provider status **submitted** |
-| Any other status (`Unavailable`, blank, anything new) | **held** on the import with its CSV status and submitted date: not a listing, not proof of absence, no spend |
+| Any other status (`Unavailable`, blank, anything new) | **held** on the import with its (screened) CSV status and submitted date: not a listing, not proof of absence, no spend |
 | `Submitted` date | kept in the listing's note as "provider submitted YYYY-MM-DD (not an observation date)"; never `source_observed_on` |
 | `Notes` | **never read.** Only the count of non-empty Notes is reported. A separately reviewed safe summary per row can be added in code (`safeNotes`), and it is screened |
 | footer row | skipped and counted |
 
+- **Held-only files.** A file of only historical attempts (or a repeat file
+  whose active rows all skip) can be saved. The button says "Save import
+  history (N held, no listings)" or "Import N rows and record M held". An
+  import with nothing to save stays disabled ("Nothing to import"). The import
+  id keeps a retried save idempotent.
 - One campaign export is one business location, chosen by hand.
 - The provider label is BrightLocal.
 - BrightLocal's UI shows some held attempts as "Replaced". The CSV doesn't say
@@ -313,18 +333,25 @@ That is 11 active rows and 4 historical exceptions. No spend or credits were
 recorded for any of them. The raw export (SHA-256 `5c81a4d0…f6`) is held by
 Tom and is not in the repository.
 
-**Blockers before a production pilot:**
-- **Approved identity: conflicting instructions about the address.**
-  - Logic Solar's brand board (approved Oct 19 2026) says the Overland Park
-    Google Business Profile shows a **public** street address: 7300 W 110th St,
-    Plaza 1, 7th Floor, Overland Park, KS 66210.
-  - Oct 20 notes record Tom calling Logic a service-area business with **no
-    public address**.
-  - Tom decides `hide_address`. The rest of the proposed identity: Logic Solar,
-    phone 816-300-5781 (from `clients`, and matches the us-info.com listing id),
-    website https://logic-solar.com, linked to the existing Overland Park
-    tracking location (BrightLocal 3895356). It is not auto-approved from
-    `clients.address`.
+**Address decision (resolved Oct 20 2026):** `hide_address = true` for Logic
+Overland Park. Tom explicitly said Logic is a service-area business with no
+public address and chose Overland Park for this pilot. That takes precedence
+over the older brand-board text (approved Oct 19), which describes a public
+Google Business Profile street address.
+- The brand-board conflict is **recorded for later correction**, not silently
+  rewritten.
+- The decision does not verify current GBP visibility, and it does not approve
+  the proposed identity (Logic Solar, phone 816-300-5781, website
+  https://logic-solar.com, linked to the Overland Park tracking location,
+  BrightLocal 3895356). That identity is entered deliberately, never
+  auto-approved from `clients.address`.
+- Wichita stays separate.
+- Verification tasks for a hidden-address location say: if the listing shows a
+  street address, record a discrepancy, and never add the street.
+- The nine missing registry directories are created through the reviewed
+  preview. `hidden_address_support` stays unknown until it is checked.
+
+**Before a production pilot:**
 - Who may approve spend: approval is admin-only in code; actual role
   assignments need checking.
 - The production migration (`20261020230000`) and `CITATIONS_ENABLED`:
@@ -433,7 +460,9 @@ counts and filters always cover the whole location.
 - `tests/citations-brightlocal.test.mjs`: the campaign contract, held rows,
   status mapping, Notes exclusion, content screening (positives and innocuous
   negatives) and form-field screening, all on synthetic data.
-- `npm run test:citations-pilot`: the pilot rehearsal above.
+- `npm run test:citations-pilot`: the pilot rehearsal above. It also covers a
+  held-only history file, and secrets in a held row's Status / Site / No and in
+  a location-map key, checked in the preview and in what was stored.
 - `npm run test:citations-ui` drives the browser flows with PostgREST capped at
   1,000 rows. It includes the identity-change sequence, current evidence vs.
   the import, and 1,200 extra listings (one with 3,500 checks). Screenshots are

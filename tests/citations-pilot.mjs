@@ -22,7 +22,9 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { createHmac } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { parseCsv } from "../src/lib/citations.ts";
 
@@ -34,7 +36,11 @@ const IDENTITY = REAL ? JSON.parse(readFileSync(PILOT_IDENTITY, "utf8")) : {
   label: "Sample Solar - Overland Park (synthetic)", business_name: "Sample Solar (synthetic)", address_line1: "1 Synthetic Plaza, Floor 7",
   city: "Overland Park", region: "KS", postal_code: "66210", phone: "555-010-0000", website_url: "https://sample-solar.example.test",
 };
-const SECRETS = ["Fake-Pass-0000", "SyntheticToken", "fake-owner", "FAKE0123456789abcdef", "synthetic.user@example.test"];
+// Throwaway synthetic files for the held-only and leakage checks (never in the repo).
+const TMP = mkdtempSync(join(tmpdir(), "citations-pilot-"));
+const synthetic = readFileSync(new URL("./fixtures/citations/synthetic-brightlocal-campaign.csv", import.meta.url), "utf8");
+const FAKE = "SYNTHETIC_REVIEW_ONLY";
+const SECRETS = [FAKE, "Fake-Pass-0000", "SyntheticToken", "fake-owner", "FAKE0123456789abcdef", "synthetic.user@example.test"];
 const NEW_DIRECTORIES = ["merchantcircle.com", "provenexpert.com", "brownbook.net", "tupalo.com", "callupcontact.com", "cybo.com", "trepup.com", "ezlocal.com", "us-info.com"];
 
 const TEAM = { id: "00000000-0000-4000-a000-000000000001", email: "sandbox-team@compassmarketing.ai" };
@@ -121,6 +127,29 @@ try {
   const location = sql(`select id from citation_locations where label = '${IDENTITY.label.replaceAll("'", "''")}'`);
   assert.match(location, /^[0-9a-f-]{36}$/);
   ok("Identity: entered by hand as a hidden-address location (no clients.address auto-approval)");
+
+  // ── Held-only history import (historical exceptions only, no listings) ─
+  if (!REAL) {
+    const lines = synthetic.trim().split("\n");
+    const heldOnly = join(TMP, "held-only.csv");
+    writeFileSync(heldOnly, [lines[0], ...lines.filter((l) => /^1[2-5],/.test(l)), "Aggregator/Network"].join("\n"));
+    await team.goto(`${base}/clients/${CLIENT}/citations/import`, { waitUntil: "networkidle" });
+    await team.locator("input[type=file]").setInputFiles(heldOnly);
+    await team.locator("[data-brightlocal-contract]").waitFor();
+    await team.getByLabel("Location for every row").selectOption(location);
+    await team.getByRole("button", { name: "Preview import" }).click();
+    await team.locator("[data-import-preview]").waitFor();
+    assert.deepEqual(await counts(team), { rows: 4, added: 0, updated: 0, skipped: 0, rejected: 0, held: 4 });
+    const save = team.getByRole("button", { name: "Save import history (4 held, no listings)" });
+    assert.ok(await save.isEnabled(), "a held-only file can be saved");
+    await save.click();
+    await team.locator("[data-import-done]").getByText("Import history saved").waitFor();
+    assert.equal(sql(`select held || '/' || rows_total || '/' || added from citation_imports order by created_at desc limit 1`), "4/4/0");
+    assert.equal(sql(`select count(*) from citation_import_rows r join citation_imports i on i.id = r.import_id where r.outcome = 'held' and i.rows_total = 4`), "4");
+    assert.equal(sql(`select count(*) from citation_listings where location_id = '${location}'`), "0", "held history creates no listing");
+    await shot(team, "pilot-held-only");
+    ok("Held-only file: 4 held, saved as import history with no listings");
+  }
 
   // ── Directory review, preview, commit ─────────────────────────────────
   async function load() {
@@ -219,6 +248,51 @@ try {
   assert.ok(client.every((r) => r["Verification"] === "Unverified" && r["Evidence"] === "Never checked" && r["Last checked"] === "" && r["Source observed"] === ""));
   assert.ok(client.every((r) => !r["Approved address"].includes(IDENTITY.address_line1.split(",")[0])), "client-safe export withholds the street");
   ok("Export: 11 rows, all unverified / never checked, no observation date, street withheld in the client-safe file");
+
+  // ── Leakage: secrets in Status / Site / No of held rows and in a location-map key ─
+  if (!REAL) {
+    const lines = synthetic.trim().split("\n");
+    const leakyCampaign = join(TMP, "leaky-campaign.csv");
+    writeFileSync(leakyCampaign, [lines[0],
+      "20,hotfrog.com,General,40,Low,11th Nov 2025,Live,https://www.hotfrog.com/sample-solar-synthetic,",
+      `21,clutch.co,Niche,60,Medium,,Password: ${FAKE},,`,
+      `22,login=${FAKE},General,40,Low,,,,`,
+      `token: ${FAKE},manta.com,General,55,Medium,,Unavailable,,`,
+      "Aggregator/Network"].join("\n"));
+    await team.goto(`${base}/clients/${CLIENT}/citations/import`, { waitUntil: "networkidle" });
+    await team.locator("input[type=file]").setInputFiles(leakyCampaign);
+    await team.locator("[data-brightlocal-contract]").waitFor();
+    await team.getByLabel("Location for every row").selectOption(location);
+    await team.getByRole("button", { name: "Preview import" }).click();
+    await team.locator("[data-import-preview]").waitFor();
+    assert.deepEqual(await counts(team), { rows: 4, added: 1, updated: 0, skipped: 0, rejected: 0, held: 3 });
+    noSecrets(await team.content(), "the campaign preview");
+    await team.getByRole("button", { name: "Import 1 rows and record 3 held" }).click();
+    await team.locator("[data-import-done]").waitFor();
+    noSecrets(await team.content(), "the campaign result");
+
+    const leakyGeneric = join(TMP, "leaky-generic.csv");
+    writeFileSync(leakyGeneric, ["Location,Directory,Listing URL",
+      `${IDENTITY.label},Superpages,https://www.superpages.com/bp/sample-solar-synthetic`,
+      `Password: ${FAKE},Manta,https://www.manta.com/c/sample-solar-synthetic`].join("\n"));
+    await team.goto(`${base}/clients/${CLIENT}/citations/import`, { waitUntil: "networkidle" });
+    await team.locator("input[type=file]").setInputFiles(leakyGeneric);
+    await team.getByText(/data rows, \d+ columns\./).waitFor();
+    noSecrets(await team.content(), "the loaded generic file (location values are masked)");
+    await team.getByLabel(`Location for ${IDENTITY.label}`).selectOption(location);
+    await team.getByLabel("Location for [hidden: looks like a login or private link]").selectOption(location);
+    await team.getByRole("button", { name: "Preview import" }).click();
+    await team.locator("[data-import-preview]").waitFor();
+    assert.deepEqual(await counts(team), { rows: 2, added: 1, updated: 0, skipped: 0, rejected: 1, held: 0 });
+    noSecrets(await team.content(), "the generic preview");
+    await team.getByRole("button", { name: "Import 1 rows" }).click();
+    await team.locator("[data-import-done]").waitFor();
+    const stored = sql(`select string_agg(mapping::text || ' ' || file_name, ' ') from citation_imports`) + sql(`select string_agg(message, ' ') from citation_import_rows`)
+      + sql(`select string_agg(notes || source_name, ' ') from citation_listings`) + sql(`select string_agg(name || coalesce(domain, ''), ' ') from citation_directories`);
+    noSecrets(stored, "citation_imports.mapping / file_name, citation_import_rows, listings and the registry");
+    assert.equal(sql(`select (mapping->'location'->>'withheld') from citation_imports order by created_at desc limit 1`), "1", "the masked key was dropped and counted");
+    ok("Leakage: secrets in a held row's Status / Site / No and in a location-map key never reach the preview, mapping, rows, listings or registry");
+  }
 
   const summary = { mode: REAL ? "real sanitized rows (outside the repo)" : "synthetic", location, state: JSON.parse(state), tasks };
   if (shots) writeFileSync(`${shots}/pilot-summary.json`, JSON.stringify(summary, null, 2));

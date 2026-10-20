@@ -47,6 +47,16 @@ export function brightLocalDate(v: string): string | null {
   return null;
 }
 
+/**
+ * The only way a raw export value reaches a held reason, a count key or the
+ * import's source metadata: a recognized login / private link is replaced by
+ * a fixed descriptor (never echoed), and over-long text is cut.
+ */
+export const WITHHELD = "(withheld: looked like a login or private link)";
+export function safeLabel(v: string, max = 60) {
+  return sensitiveContent(v) ? WITHHELD : v.length > max ? `${v.slice(0, max)}…` : v;
+}
+
 export function isBrightLocalCampaign(header: string[]) {
   return header.length === BRIGHTLOCAL_CAMPAIGN_COLUMNS.length && header.every((h, i) => h.trim().toLowerCase() === BRIGHTLOCAL_CAMPAIGN_COLUMNS[i].toLowerCase());
 }
@@ -72,15 +82,18 @@ export function prepareBrightLocalCampaign(table: string[][], opts: { locationLa
     if ((cells[COL.Notes] ?? "").trim()) rawNotesExcluded++;
     const site = (cells[COL["Citation Site"]] ?? "").trim().toLowerCase();
     const raw = (cells[COL.Status] ?? "").trim();
+    // Screened before any count key or reason is built (row numbers are digits or nothing).
+    const siteLabel = safeLabel(site), rawLabel = safeLabel(raw, 40);
     const submittedText = (cells[COL.Submitted] ?? "").trim();
     const submittedOn = brightLocalDate(submittedText);
     const url = (cells[COL["Citation Link"]] ?? "").trim();
-    byRawStatus[raw || "(blank)"] = (byRawStatus[raw || "(blank)"] ?? 0) + 1;
+    byRawStatus[rawLabel || "(blank)"] = (byRawStatus[rawLabel || "(blank)"] ?? 0) + 1;
     const submittedNote = submittedOn ? `provider submitted ${submittedOn}` : submittedText ? "provider submitted date unparsed" : "no provider submitted date";
     const status = /^(live|updated)$/i.test(raw) ? "provider_complete" : /^submitted$/i.test(raw) ? "submitted" : null;
     if (!status || !site || !/^\d+$/.test(no)) {
-      held.push({ row_number: sourceRow, site: site || "(no site)", raw_status: raw || "(blank)", submitted_on: submittedOn,
-        reason: `Held for review: BrightLocal${campaign ? ` campaign ${campaign}` : ""} row ${no || "?"} (${site || "no site"}), CSV status ${raw || "blank"}, ${submittedNote}. Not a listing and not proof of absence.` });
+      const rowLabel = /^\d+$/.test(no) ? no : "?";
+      held.push({ row_number: sourceRow, site: siteLabel || "(no site)", raw_status: rawLabel || "(blank)", submitted_on: submittedOn,
+        reason: `Held for review: BrightLocal${campaign ? ` campaign ${campaign}` : ""} row ${rowLabel} (${siteLabel || "no site"}), CSV status ${rawLabel || "blank"}, ${submittedNote}. Not a listing and not proof of absence.` });
       return;
     }
     const safe = opts.safeNotes?.[no]?.trim() ?? "";

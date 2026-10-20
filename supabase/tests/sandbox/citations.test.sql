@@ -172,6 +172,11 @@ begin
     raise exception 'P8 imported rows must stay unverified with no dates'; end if;
   r := citation_import(imp || '{"id": "c1000000-0000-4000-e000-000000000011", "create_directories": true}', rows, '[]', true, v_held);
   if (r->>'added')::int <> 0 or (r->>'skipped')::int <> 2 or (r->>'held')::int <> 1 or r->'new_directories' <> '[]'::jsonb then raise exception 'P9 repeat %', r; end if;
+  -- A file of only historical attempts is saved as history: no listings, held rows kept, idempotent.
+  r := citation_import(imp || '{"id": "c1000000-0000-4000-e000-000000000012"}', '[]', '[]', true, v_held);
+  if (r->>'rows_total')::int <> 1 or (r->>'held')::int <> 1 or (r->>'added')::int <> 0 then raise exception 'P10 held-only commit %', r; end if;
+  r := citation_import(imp || '{"id": "c1000000-0000-4000-e000-000000000012"}', '[]', '[]', true, v_held);
+  if not (r->>'already_committed')::boolean or (r->>'held')::int <> 1 then raise exception 'P11 held-only retry %', r; end if;
 end $$;
 
 -- ── Correction task: assigned, dated, resolved only with evidence ─────────
@@ -234,7 +239,7 @@ declare l uuid := (select id from citation_listings where listing_url = 'https:/
   y uuid := (select id from citation_listings where listing_url = 'https://yelp.com/biz/sample-roofing-2');
   c1 uuid := 'c1000000-0000-4000-f000-0000000000c1'; c2 uuid := 'c1000000-0000-4000-f000-0000000000c2'; c3 uuid := 'c1000000-0000-4000-f000-0000000000c3';
 begin
-  if (select verification_status from citation_listing_overview where id = l) <> 'verified_accurate' then raise exception 'R0 setup'; end if;
+  if (select verification_status from citation_listing_overview where id = l) <> 'verified_accurate' then raise exception 'R0 setup %', (select to_jsonb(o) from citation_listing_overview o where id = l); end if;
   -- The version in effect on the check's date, not the one in force when it was typed in.
   insert into citation_checks (id, listing_id, checked_on, method, result, observed_name, evidence) values
     (c1, y, ct.today() - 7, 'visited_url', 'accurate', 'Sample Roofing', 'Seen a week ago (sample)'),

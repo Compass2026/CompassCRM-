@@ -114,7 +114,7 @@ export type Database = {
       }
       citation_checks: {
         Row: CitationCheck
-        Insert: Omit<CitationCheck, "identity_version" | "recorded_at" | "recorded_by" | "evidence_url"> & { evidence_url?: string | null }
+        Insert: Omit<CitationCheck, "seq" | "identity_version" | "recorded_at" | "recorded_by" | "evidence_url"> & { evidence_url?: string | null }
         Update: never
         Relationships: []
       }

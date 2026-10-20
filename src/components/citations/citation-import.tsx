@@ -71,7 +71,7 @@ export function CitationImport({ clientId, locations }: { clientId: string; loca
   function reset() { setImportId(crypto.randomUUID()); setFile(null); setPreview(null); setDone(null); setMapping({}); setValues({}); }
 
   if (done) return <div className="surface space-y-3 p-5" data-import-done>
-    <h3 className="font-semibold">{done.already_committed ? "This import was already saved" : "Import saved"}</h3>
+    <h3 className="font-semibold">{done.already_committed ? "This import was already saved" : (done.added ?? 0) + (done.updated ?? 0) === 0 ? "Import history saved" : "Import saved"}</h3>
     <Counts r={done} />
     <NewDirectories r={done} /><Source r={done} />
     <Rows r={done} />
@@ -94,8 +94,8 @@ export function CitationImport({ clientId, locations }: { clientId: string; loca
         <p className="mt-1">Live / Updated → provider complete; Submitted → submitted (neither is verification). Every other status (Unavailable, blank) is held for review, not imported. The footer row is skipped. The Submitted date is never used as an observation date. <strong>The Notes column is never imported</strong>: real exports carry logins and verification links there.</p>
       </div>}
       {fileError && <p role="alert" className="text-sm text-red-700">{fileError}</p>}
-      {file && <p className="text-xs text-muted-foreground">{file.name}: {file.rows.length - 1} data rows, {headers.length} columns.</p>}
-      {credentialColumns.length > 0 && <p className="callout text-sm" data-credential-notice>Ignored {credentialColumns.length} login-like column{credentialColumns.length > 1 ? "s" : ""} ({credentialColumns.join(", ")}). Their values are not imported or stored. Keep credentials in the approved secret store.</p>}
+      {file && <p className="text-xs text-muted-foreground">{shown(file.name)}: {file.rows.length - 1} data rows, {headers.length} columns.</p>}
+      {credentialColumns.length > 0 && <p className="callout text-sm" data-credential-notice>Ignored {credentialColumns.length} login-like column{credentialColumns.length > 1 ? "s" : ""} ({credentialColumns.map(shown).join(", ")}). Their values are not imported or stored. Keep credentials in the approved secret store.</p>}
     </section>
 
     {file && !brightLocal && <section className="surface space-y-3 p-5">
@@ -105,7 +105,7 @@ export function CitationImport({ clientId, locations }: { clientId: string; loca
         <label key={f} className="space-y-1 text-sm">{IMPORT_FIELDS[f].label}{IMPORT_FIELDS[f].hint && <span className="block text-xs text-muted-foreground">{IMPORT_FIELDS[f].hint}</span>}
           <select aria-label={`Column for ${IMPORT_FIELDS[f].label}`} className="field-sm block w-full" value={mapping[f] ?? ""} onChange={(e) => setField(f, e.target.value)}>
             <option value="">Not in this file</option>
-            {headers.map((h, i) => isCredentialHeader(h) ? null : <option key={i} value={i}>{h || `Column ${i + 1}`}</option>)}
+            {headers.map((h, i) => isCredentialHeader(h) || sensitiveContent(h) ? null : <option key={i} value={i}>{h || `Column ${i + 1}`}</option>)}
           </select></label>)}
       </div>
     </section>}
@@ -134,7 +134,7 @@ export function CitationImport({ clientId, locations }: { clientId: string; loca
       <p className="text-sm text-muted-foreground">The preview runs the real import and rolls it back. Importing the same rows again updates or skips them; it never duplicates. Provider status never marks a listing verified.</p>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={pending} onClick={() => run(false)}>{pending ? "Working…" : "Preview import"}</Button>
-        <Button disabled={pending || !preview || !!preview.error || (preview.added ?? 0) + (preview.updated ?? 0) === 0} onClick={() => run(true)}>Import {preview && !preview.error ? `${(preview.added ?? 0) + (preview.updated ?? 0)} rows` : ""}</Button>
+        <Button disabled={pending || !preview || !!preview.error || toSave(preview) === 0} onClick={() => run(true)}>{commitLabel(preview)}</Button>
       </div>
       {preview?.error && <p role="alert" className="text-sm text-red-700">{preview.error}</p>}
       {preview && !preview.error && <div data-import-preview><Counts r={preview} /><NewDirectories r={preview} /><Source r={preview} /><Rows r={preview} /></div>}
@@ -142,6 +142,17 @@ export function CitationImport({ clientId, locations }: { clientId: string; loca
   </div>;
 }
 
+// What a commit would write: listings added or updated, and held rows kept as history.
+// A file of only held attempts (historical exceptions) is still worth saving.
+const toSave = (r: ImportResult) => (r.added ?? 0) + (r.updated ?? 0) + (r.held ?? 0);
+function commitLabel(r: ImportResult | null) {
+  if (!r || r.error) return "Import";
+  const listings = (r.added ?? 0) + (r.updated ?? 0), held = r.held ?? 0;
+  if (listings && held) return `Import ${listings} rows and record ${held} held`;
+  if (listings) return `Import ${listings} rows`;
+  if (held) return `Save import history (${held} held, no listings)`;
+  return "Nothing to import";
+}
 function Counts({ r }: { r: ImportResult }) {
   return <dl className="grid grid-cols-2 gap-2 sm:grid-cols-6" data-import-counts>{([["Rows", r.rows_total], ["Added", r.added], ["Updated", r.updated], ["Skipped", r.skipped], ["Rejected", r.rejected], ["Held", r.held]] as const).map(([k, v]) =>
     <div key={k} className="rounded-lg bg-royal-50 p-3"><dt className="text-xs text-muted-foreground">{k}</dt><dd className="text-xl font-semibold" data-count={k.toLowerCase()}>{v ?? 0}</dd></div>)}</dl>;

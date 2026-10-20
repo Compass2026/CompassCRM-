@@ -48,7 +48,7 @@ export default async function CitationLocationPage({ params, searchParams }: { p
   const ids = shown.map((l) => l.id);
   const checksQ = ids.length
     ? await fetchAll<CitationCheck>((from, to) => db.from("citation_checks").select("*", { count: "exact" }).in("listing_id", ids)
-      .order("checked_on", { ascending: false }).order("recorded_at", { ascending: false }).order("id", { ascending: false }).range(from, to))
+      .order("checked_on", { ascending: false }).order("recorded_at", { ascending: false }).order("seq", { ascending: false }).range(from, to))
     : { rows: [] as CitationCheck[], error: null };
   const failure = error ?? tasksQ.error ?? requestsQ.error ?? dirsQ.error ?? checksQ.error;
   const tasks = tasksQ.rows;

@@ -155,7 +155,7 @@ try {
   await team.getByRole("button", { name: "Import another file" }).click();
   await mapImport(team);
   assert.deepEqual([await count(team, "added"), await count(team, "skipped"), await count(team, "rejected")], [0, 6, 4]);
-  assert.ok(await team.getByRole("button", { name: /^Import/ }).isDisabled(), "nothing to import");
+  assert.ok(await team.getByRole("button", { name: "Nothing to import" }).isDisabled(), "nothing to import");
   assert.equal(sql(`select count(*) from citation_listings where client_id = '${CLIENT_A}'`), "6");
   ok("Repeat import: 0 added, 6 skipped, no duplicates");
 

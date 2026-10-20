@@ -324,6 +324,27 @@ export type ImportRow = {
 export type RejectedRow = { row_number: number; reason: string };
 export type LocationMapping = { mode: "single"; locationId: string } | { mode: "column"; values: Record<string, string> };
 
+/**
+ * The location mapping as it may be stored on the import record: only
+ * screened values that point at one of this client's locations. A value that
+ * looks like a login or private link is dropped (and counted), never kept as
+ * a key, even when other rows import.
+ */
+export function storedLocationMapping(m: LocationMapping, ids: Set<string>) {
+  if (m.mode === "single") return { mode: "single" as const, locationId: ids.has(m.locationId) ? m.locationId : null };
+  const entries = Object.entries(m.values ?? {});
+  return {
+    mode: "column" as const,
+    values: Object.fromEntries(entries.filter(([k, v]) => k.length <= 200 && !sensitiveContent(k) && ids.has(v))),
+    withheld: entries.filter(([k]) => sensitiveContent(k)).length,
+  };
+}
+/** A file name as it may be stored or shown. */
+export function storedFileName(name: string) {
+  const n = name.slice(0, 300).trim();
+  return !n ? "import.csv" : sensitiveContent(n) ? "import.csv (name withheld)" : n;
+}
+
 /** FNV-1a over the mapped values: identifies a row's content without storing it. */
 export function rowHash(values: string[]) {
   let h = 0x811c9dc5;
@@ -344,6 +365,7 @@ export function prepareImport(rows: string[][], mapping: ColumnMapping, location
   for (const [field, col] of Object.entries(mapping)) {
     if (col === undefined) continue;
     if (!Number.isInteger(col) || col < 0 || col >= headers.length) throw new Error(`The column chosen for ${field} is not in the file.`);
+    if (sensitiveContent(headers[col])) throw new Error(`A mapped column's header ${SENSITIVE_MESSAGE}. Rename or remove that column.`);
     if (isCredentialHeader(headers[col])) throw new Error(`"${headers[col]}" looks like a login column and cannot be imported.`);
   }
   if (mapping.directory === undefined && mapping.listing_url === undefined) throw new Error("Map a directory column or a listing URL column.");
@@ -483,7 +505,7 @@ export function comparisonSource(l: CitationListingOverview): { from: "check" | 
   return { from: "none", fields: { observed_name: "", observed_address: "", observed_phone: "", observed_website: "" } };
 }
 export type CitationCheck = ObservedFields & {
-  id: string; listing_id: string; identity_version: number; checked_on: string; method: CheckMethod; result: CheckResult;
+  id: string; seq: number; listing_id: string; identity_version: number; checked_on: string; method: CheckMethod; result: CheckResult;
   evidence: string; evidence_url: string | null; recorded_at: string; recorded_by: string | null;
 };
 export type CitationTask = {

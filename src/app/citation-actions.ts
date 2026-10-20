@@ -15,7 +15,7 @@ import { GENERIC_MAPPING, prepareBrightLocalCampaign } from "@/lib/citations-bri
 import { loadListings } from "@/lib/citations-data";
 import {
   CHECK_METHODS, CHECK_RESULTS, FULFILLMENT_STATUSES, IMPORT_MAX_BYTES, REQUEST_ACTIONS, REQUEST_STATUSES, RESULT_METHODS, TASK_KINDS, TASK_STATUSES,
-  citationText, isCredentialHeader, listingUrl, parseCsv, prepareImport,
+  citationText, isCredentialHeader, listingUrl, parseCsv, prepareImport, storedFileName, storedLocationMapping,
   type CheckMethod, type CheckResult, type ColumnMapping, type ImportField, type LocationMapping,
 } from "@/lib/citations";
 
@@ -247,7 +247,7 @@ export async function queueVerificationAction(clientId: string, locationId: stri
     let created = 0;
     for (const l of due) {
       const reason = `Verify ${l.directory_name} against approved identity v${loc.identity_version}: open the listing URL and record name, phone, website and address`
-        + `${loc.hide_address ? " (the street must not be shown: hidden-address business)" : ""}. Provider status: ${l.fulfillment_status.replace("_", " ")}; never independently checked`
+        + `${loc.hide_address ? ". Hidden-address business: if the listing shows a street address, record that as a discrepancy; never add the street" : ""}. Provider status: ${l.fulfillment_status.replace("_", " ")}; never independently checked`
         + `${l.verification_status === "needs_reverification" ? " against the current identity" : ""}.`;
       const { error: e } = await db.from("citation_tasks").insert({ client_id: clientId, location_id: locationId, listing_id: l.id, kind: "verify", reason });
       if (!e) created++;
@@ -369,15 +369,15 @@ export async function runCitationImportAction(clientId: string, req: ImportReque
       prepared = prepareImport(bl.rows, GENERIC_MAPPING, req.locations, ids, undefined, (i) => bl.sourceRows[i]);
       held = bl.held.map((h) => ({ row_number: h.row_number, reason: h.reason }));
       source = { directoryRows: bl.counts.directoryRows, footerRows: bl.counts.footerRows, byRawStatus: bl.counts.byRawStatus, rawNotesExcluded: bl.counts.rawNotesExcluded };
-      mapping = { format: "brightlocal_campaign", campaign: req.campaign ?? null, location: req.locations, raw_notes: "excluded", source };
+      mapping = { format: "brightlocal_campaign", campaign: req.campaign || null, location: storedLocationMapping(req.locations, ids), raw_notes: "excluded", source };
     } else {
       prepared = prepareImport(table, req.mapping, req.locations, ids);
       // The mapping is kept by header name; credential-like headers can never be in it (prepareImport refuses them).
       const columns = Object.fromEntries(Object.entries(req.mapping).filter(([, i]) => i !== undefined).map(([f, i]) => [f, prepared.headers[i as number]]));
-      mapping = { format: "generic", columns: columns as Partial<Record<ImportField, string>>, location: req.locations, credential_columns_ignored: prepared.headers.filter(isCredentialHeader).length };
+      mapping = { format: "generic", columns: columns as Partial<Record<ImportField, string>>, location: storedLocationMapping(req.locations, ids), credential_columns_ignored: prepared.headers.filter(isCredentialHeader).length };
     }
     const { data, error: rpcError } = await db.rpc("citation_import", {
-      p_import: { id: req.importId, client_id: clientId, provider: req.provider, file_name: req.fileName.slice(0, 300) || "import.csv",
+      p_import: { id: req.importId, client_id: clientId, provider: req.provider, file_name: storedFileName(req.fileName),
         file_sha256: createHash("sha256").update(req.csv).digest("hex"), create_directories: req.createDirectories, mapping: mapping as Json },
       p_rows: prepared.accepted, p_rejected: prepared.rejected, p_commit: commit, p_held: held,
     });

@@ -157,6 +157,8 @@ comment on table public.citation_listings is 'Directory listing inventory. sourc
 -- ── Checks: append-only teammate evidence ──────────────────────────────────
 create table public.citation_checks (
   id uuid primary key default gen_random_uuid(),
+  -- Entry order: the last tie-breaker for "latest check", so two checks saved in the same instant never swap.
+  seq bigint generated always as identity,
   listing_id uuid not null references public.citation_listings(id) on delete restrict,
   identity_version integer not null default 0,
   checked_on date not null,
@@ -180,7 +182,7 @@ create table public.citation_checks (
   -- A verdict on the listing's content records at least one thing that was seen.
   check (result not in ('accurate','discrepancy') or btrim(observed_name || observed_address || observed_phone || observed_website) <> '')
 );
-create index citation_checks_latest on public.citation_checks(listing_id, checked_on desc, recorded_at desc, id desc);
+create index citation_checks_latest on public.citation_checks(listing_id, checked_on desc, recorded_at desc, seq desc);
 comment on table public.citation_checks is 'Append-only manual evidence. not_found is a search result, never proof of absence. identity_version is the approved identity in effect on checked_on (0 = before any approved identity).';
 
 -- ── Correction / verification queue ────────────────────────────────────────
@@ -685,7 +687,7 @@ join public.citation_directories d on d.id = x.directory_id
 join public.citation_locations l on l.id = x.location_id
 join public.clients c on c.id = x.client_id
 left join lateral (select * from public.citation_checks k where k.listing_id = x.id
-  order by k.checked_on desc, k.recorded_at desc, k.id desc limit 1) k on true
+  order by k.checked_on desc, k.recorded_at desc, k.seq desc limit 1) k on true
 where not x.archived;
 
 create view public.citation_credit_balances with (security_invoker = true) as
