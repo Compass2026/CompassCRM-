@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { AppNav } from "@/components/app-nav";
+import { citationsEnabled } from "@/lib/citations-flag";
 import { Suspense } from "react";
 import { ActionFeedback } from "@/components/action-feedback";
 
@@ -84,7 +85,7 @@ export default async function AppLayout({
               </span>
             </span>
           </Link>
-          <AppNav className="order-last sm:order-none" />
+          <AppNav className="order-last sm:order-none" citations={citationsEnabled()} />
           <div className="ml-auto flex items-center gap-2">
             <span
               className="hidden size-9 place-items-center rounded-full bg-navy-700 text-xs font-semibold text-white ring-2 ring-card sm:grid"

@@ -32,8 +32,12 @@ const tabs = [
   { label: "Billing", segment: "billing" },
 ];
 
-export function ClientTabs({ clientId }: { clientId: string }) {
+export function ClientTabs({ clientId, citations = false }: { clientId: string; citations?: boolean }) {
   const pathname = usePathname();
+  // Citations sits beside Backlinks while its server-side flag is on.
+  const visible = citations
+    ? tabs.flatMap((t) => (t.segment === "backlinks" ? [t, { label: "Citations", segment: "citations" }] : [t]))
+    : tabs;
   const base = `/clients/${clientId}`;
   const railRef = useActiveInView<HTMLElement>(pathname);
   const railId = useId();
@@ -96,7 +100,7 @@ export function ClientTabs({ clientId }: { clientId: string }) {
         aria-label="Client sections"
         className={`${navTrack} min-w-0 flex-1`}
       >
-        {tabs.map((tab) => {
+        {visible.map((tab) => {
           const href = tab.segment ? `${base}/${tab.segment}` : base;
           const active = tab.segment
             ? pathname.startsWith(href)

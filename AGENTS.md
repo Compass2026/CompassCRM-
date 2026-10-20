@@ -2221,3 +2221,17 @@ today: `docs/delegated-content-approval.md`.
   promotion; the client portal. Tom's by design: client review, DNS
   records, photos, pressing send on drafted mail, and the billable
   BrightLocal work. The open list is `docs/follow-ups.md`.
+
+## Citations Phase 1 (Oct 20 2026, draft — not in production)
+
+Provider-neutral listing inventory: approved identity per actual business
+location (`citation_locations`, hidden-address flag, versioned history),
+directory registry, listings, append-only teammate checks, the correction /
+verification queue, manual fulfillment requests (admin approval, cash and
+prepaid credits apart) and a generic mapped CSV import with a rolled-back
+preview (`citation_import()`). Provider fulfillment never sets verification;
+"not found" is not absence. Behind the server-only `CITATIONS_ENABLED` flag
+(`src/lib/citations-flag.ts`); migration
+`20261020200000_citations_foundation.sql` is **not applied** remotely. No
+provider calls, crawling or spend. Full notes, mapping, rollback and cost
+measurement points: `docs/citations.md`.

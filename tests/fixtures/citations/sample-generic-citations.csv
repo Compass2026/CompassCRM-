@@ -1,0 +1,11 @@
+Location,Directory,Listing URL,Status,Business Name,Address,Phone,Website,Date checked,Notes,Login password
+Main office (sample),Yelp,https://www.yelp.com/biz/sample-roofing-springfield,Complete,Sample Roofing,"100 N Main St, Springfield, MO 65806",(417) 555-0100,https://sample-roofing.example.test,2026-10-01,SAMPLE DATA - fictional,hunter2
+Main office (sample),Yellow Pages,https://www.yellowpages.com/springfield-mo/mip/sample-roofing-1,Pending,Sample Roofing LLC,"100 North Main Street, Springfield, MO",417-555-0199,,10/02/2026,"SAMPLE: phone differs, needs correction",hunter2
+Main office (sample),Yellow Pages,https://www.yellowpages.com/springfield-mo/mip/sample-roofing-2,Complete,Sample Roofing,"100 N Main St, Springfield, MO",417-555-0100,,2026-10-02,SAMPLE: suspected duplicate,
+Main office (sample),Facebook,https://www.facebook.com/sample.roofing.example,Complete,Sample Roofing,,417-555-0100,https://sample-roofing.example.test,2026-10-03,SAMPLE: provider says complete,
+North branch (sample),Bing Places,,Submitted,Sample Roofing North,,417-555-0101,,2026-10-04,SAMPLE: no URL yet,
+North branch (sample),MapQuest,https://www.mapquest.com/us/missouri/sample-roofing-0000,Failed,,,,,2026-10-04,SAMPLE: provider failed,
+Unknown annex (sample),Yelp,https://www.yelp.com/biz/sample-roofing-annex,Complete,Sample Roofing,,,,2026-10-05,SAMPLE: location not mapped (must be rejected),
+Main office (sample),Manta,https://www.manta.com/c/sample,verified by robot,Sample Roofing,,,,2026-10-05,SAMPLE: unknown status (must be rejected),
+Main office (sample),Hotfrog,not a url,Complete,Sample Roofing,,,,2026-10-05,SAMPLE: bad URL (must be rejected),
+Main office (sample),Superpages,https://www.superpages.com/bp/sample,Complete,Sample Roofing,,,,2099-01-01,SAMPLE: future date (must be rejected),

@@ -2,6 +2,7 @@ import type { GrowthRanking } from "./growth-rankings";
 import type { RolloutReview, RolloutWrite } from "./agency-rollout";
 import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
 import type { GrowthMeasurement, SearchHistory, GrowthWork } from "./client-growth";
+import type { CitationLocation, CitationLocationIdentity, CitationDirectory, CitationListing, CitationListingOverview, CitationCheck, CitationTask, CitationRequest, CitationCreditEntry, CitationCreditBalance, CitationImport } from "./citations";
 
 export type Json =
   | string
@@ -91,6 +92,52 @@ export type Database = {
         Update: { finished_at?: string | null; status?: string; results?: Json }
         Relationships: []
       }
+      // Citations Phase 1 (20261020200000). Hand-written like the backlink tables; the guards stamp the omitted columns.
+      citation_locations: {
+        Row: CitationLocation
+        Insert: Pick<CitationLocation, "client_id" | "label" | "business_name"> & Partial<Omit<CitationLocation, "client_id" | "label" | "business_name" | "identity_version" | "approved_at" | "approved_by" | "created_at" | "updated_at">>
+        Update: Partial<Omit<CitationLocation, "id" | "client_id" | "identity_version" | "approved_at" | "approved_by" | "created_at" | "updated_at">>
+        Relationships: []
+      }
+      citation_location_identities: { Row: CitationLocationIdentity; Insert: never; Update: never; Relationships: [] }
+      citation_directories: {
+        Row: CitationDirectory
+        Insert: Pick<CitationDirectory, "key" | "name"> & Partial<Pick<CitationDirectory, "domain" | "kind" | "hidden_address_support" | "is_active">>
+        Update: Partial<Pick<CitationDirectory, "name" | "domain" | "kind" | "hidden_address_support" | "is_active">>
+        Relationships: []
+      }
+      citation_listings: {
+        Row: CitationListing
+        Insert: Pick<CitationListing, "client_id" | "location_id" | "directory_id"> & Partial<Pick<CitationListing, "id" | "listing_url" | "external_id" | "fulfillment_status" | "source_provider" | "source_observed_on" | "notes" | "observed_name" | "observed_address" | "observed_phone" | "observed_website">>
+        Update: Partial<Pick<CitationListing, "fulfillment_status" | "notes" | "archived" | "external_id" | "observed_name" | "observed_address" | "observed_phone" | "observed_website">>
+        Relationships: []
+      }
+      citation_checks: {
+        Row: CitationCheck
+        Insert: Omit<CitationCheck, "identity_version" | "recorded_at" | "recorded_by" | "evidence_url"> & { evidence_url?: string | null }
+        Update: never
+        Relationships: []
+      }
+      citation_tasks: {
+        Row: CitationTask
+        Insert: Pick<CitationTask, "client_id" | "location_id" | "kind" | "reason"> & Partial<Pick<CitationTask, "id" | "listing_id" | "assignee_id" | "due_on" | "status">>
+        Update: Partial<Pick<CitationTask, "status" | "assignee_id" | "due_on" | "resolution" | "resolved_on" | "evidence_ref" | "check_id">>
+        Relationships: []
+      }
+      citation_fulfillment_requests: {
+        Row: CitationRequest
+        Insert: Pick<CitationRequest, "client_id" | "location_id" | "directory_id" | "action" | "provider"> & Partial<Pick<CitationRequest, "id" | "listing_id" | "status" | "approved_budget" | "budget_currency" | "notes" | "provider_reference">>
+        Update: Partial<Pick<CitationRequest, "status" | "provider_reference" | "approved_budget" | "budget_currency" | "actual_amount" | "actual_currency" | "credits_used" | "notes">>
+        Relationships: []
+      }
+      citation_credit_entries: {
+        Row: CitationCreditEntry
+        Insert: Omit<CitationCreditEntry, "id" | "recorded_at" | "recorded_by" | "reference" | "note" | "cash_amount" | "currency"> & Partial<Pick<CitationCreditEntry, "id" | "reference" | "note" | "cash_amount" | "currency">>
+        Update: never
+        Relationships: []
+      }
+      citation_imports: { Row: CitationImport; Insert: never; Update: never; Relationships: [] }
+      citation_import_rows: { Row: { import_id: string; row_number: number; row_hash: string; outcome: string; listing_id: string | null; message: string }; Insert: never; Update: never; Relationships: [] }
       backlink_opportunities: {
         Row: BacklinkOpportunity
         Insert: Omit<BacklinkOpportunity, "id"|"stage"|"created_at"|"updated_at"> & { id?:string; stage?:BacklinkOpportunity["stage"]; created_at?:string; updated_at?:string }
@@ -11500,6 +11547,8 @@ export type Database = {
       client_growth_search: { Row: SearchHistory; Relationships: [] }
       portal_growth_search: { Row: SearchHistory; Relationships: [] }
       portal_backlinks: { Row: PortalBacklink; Relationships: [] }
+      citation_listing_overview: { Row: CitationListingOverview; Relationships: [] }
+      citation_credit_balances: { Row: CitationCreditBalance; Relationships: [] }
       authority_latest: {
         Row: {
           client_id: string | null
@@ -13047,6 +13096,10 @@ export type Database = {
       }
     }
     Functions: {
+      citation_import: {
+        Args: { p_import: Json; p_rows: Json; p_rejected: Json; p_commit: boolean }
+        Returns: Json
+      }
       gsc_performance_record: {
         Args: { p_client_id: string; p_property: string; p_start: string; p_end: string; p_data: Json }
         Returns: Json
