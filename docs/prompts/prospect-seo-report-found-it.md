@@ -1,24 +1,27 @@
-# Prospect SEO & Competitor Report — reusable prompt
+# Prospect SEO & Competitor Report — Found It Marketing
 
-The sales version of the client SEO report prompt. The client report shows a
-customer what is working. This one is for a **prospect** before they sign: it
-measures where they stand against the local competitors who are taking their
-searches, puts a number on the demand they are not capturing, and lays out the
-plan Compass would run. Everything is measured; nothing is invented to make the
-pitch land.
+Found It-branded. The documents it produces carry Found It Marketing's brand
+only and never mention Compass. (The Compass edition is
+`prospect-seo-report-compass.md`.)
+
+The sales version of Found It's client SEO report prompt. The client report
+shows a customer what is working. This one is for a **prospect** before they
+sign: it measures where they stand against the local competitors who are taking
+their searches, puts a number on the demand they are not capturing, and lays
+out the plan Found It would run. Everything is measured; nothing is invented to
+make the pitch land.
 
 Paste everything below the line into a new Claude Code session after filling
 in the PROSPECT CONFIG block. It produces two print-ready PDFs for the prospect
 and one internal brief for the person running the meeting.
 
 **Credentials are never pasted into this prompt.** Set `DATAFORSEO_LOGIN` /
-`DATAFORSEO_PASSWORD` as secrets of the Claude Code environment (or in a
-gitignored `.env` in the session), and use the Data for SEO connector where it
-covers an endpoint.
+`DATAFORSEO_PASSWORD` (Found It's own DataForSEO API login) as secrets of the
+Claude Code environment, or in a gitignored `.env` in the session, and use the
+Data for SEO connector where it covers an endpoint.
 
-This prompt is a pre-sale tool. It writes nothing to the Compass CRM: no
-client row, no keywords, no tasks. If the prospect signs, onboarding starts
-from the New client dialog as usual.
+This prompt is a pre-sale tool: it researches and writes documents, and
+writes to no CRM or client system.
 
 ---
 
@@ -35,13 +38,16 @@ Surrounding towns they serve:          <e.g. Sulphur, Moss Bluff, Westlake, DeRi
                                         Vinton, Iowa, Jennings, Kinder, DeQuincy>
 Competitors they named (optional):     <e.g. "Bayou Dirt Works", "Gulf Coast Site Prep">
 Prepared for (person, optional):       <e.g. Jordan Smith, Owner>
-Agency name for the byline:            Compass Marketing Advisors
+Agency name for the byline:            Found It Marketing
+Agency website for the footer:         <e.g. founditsoftware.com>
 Contact for the call to action:        <name · phone · email · booking link>
-Services Compass will propose:         <default: SEO, Google Business Profile, Website
-                                        Management, Blog Posts, GBP Posts, Social Media,
-                                        Monthly Reporting, Client Portal>
+Services Found It will propose:        <required — list exactly what Found It will
+                                        sell this prospect, e.g. local SEO, Google
+                                        Business Profile management, website build>
+How Found It reports progress:         <e.g. "monthly report re-running these
+                                        measurements" — leave blank to promise none>
 Proof points we may cite (optional):   <only real results, with the client's
-                                        permission, e.g. "Lucas Construction: …">
+                                        permission, e.g. "Upward Development: …">
 Offer / terms to state (optional):     <e.g. "month-to-month, no setup fee" — leave
                                         blank to state no terms>
 Report date:                           <e.g. October 2026>
@@ -270,24 +276,38 @@ Author each as a standalone HTML file, then render with headless Chromium.
 through the proxy and it silently falls back to system fonts. `curl` does work.
 So: fetch the Google Fonts CSS with a browser User-Agent, `curl` each `.woff2`
 it references, base64 them into `@font-face` `data:` URIs, and inline that CSS.
-Fonts: **Inter** 400/500/600/700 (Compass's typeface; headings 700, body 400,
-emphasis 500/600) and **IBM Plex Mono** 600 for eyebrows and figure labels.
+Fonts — Found It's own (from founditsoftware.com): **Outfit** 600/700 for
+headlines and KPI figures, **Inter** 400/500/600 for body and tables, and
+**IBM Plex Mono** 500 for eyebrows and figure labels (their site uses a system
+monospace there, which cannot be embedded).
 
-**Palette** — Compass's navy / royal / orange
-(`docs/design-system.md`). The prospect is always royal; competitors are
-always the muted grey, so the eye finds the prospect on every chart:
+**Palette** — Found It's near-black, warm paper and signal orange. The prospect
+is always orange; competitors are always charcoal:
 ```
---ground #F3F6FB   --surface #FFFFFF   --raised #EDF3FD
---ink #0B162A      --ink-mid #33425C   --ink-mute #4A5A74
---rule #D3DEEE     --rule-soft #E6EDF7
---prospect #1A3F84  --prospect-soft #DCE8FA     (the prospect's bars and rows)
---competitor #8A97AB                             (competitor bars, never text)
---mark #E85D04      (header strip, small marks — never text or a fill behind text)
---good #2E7049      --gap #B54708                (working / missing labels)
+--paper #F7F4EC    --surface #FFFFFF   --raised #F3EFE6
+--plate #141413    (dark masthead band and section openers)
+--ink #0A0A0A      --ink-mid #3D3A34   --ink-mute #6B675E
+--rule #D9D3C6     --rule-soft #E9E4D8
+--orange #FF5500   (the brand orange: text only on --plate, marks anywhere)
+--prospect #E04A00  --prospect-text #B83D00  --prospect-soft #FCE6D9
+--competitor #4A4740                           (competitor bars)
+--on-plate #F3EFE6  --on-plate-mute #A8A296    (text on --plate)
+--good #1F6B45      --gap #B42318              (working / missing labels)
 ```
-Before building, check text tokens reach 4.5:1 on `--surface` and chart marks
-3:1 (a short script is fine). Never encode working / missing by colour alone —
-pair it with a word or a symbol.
+Checked: text tokens are ≥ 5:1 on `--paper` and `--surface`; `#FF5500` is
+5.75:1 on `--plate` but only 2.9:1 on paper, so on light grounds orange text
+uses `--prospect-text`; the prospect and competitor bars are ≥ 3.7:1 on paper
+and far apart in lightness, so they survive greyscale printing and
+colour-blind reading. (Found It's warm grey `#9A9993` is *not* used for
+competitors: next to the orange it disappears in greyscale.) Never encode
+working / missing by colour alone — pair it with a word or a symbol.
+
+**Look** — Found It's style, deliberately unlike a light corporate report: a
+full-bleed `--plate` masthead on page 1 with the headline in large Outfit 700
+in `--on-plate` and the eyebrow in orange mono; warm `--paper` pages after it;
+square corners, hairline `--rule` dividers instead of boxed cards; KPI figures
+oversized in Outfit with an orange underline mark; each section opens with a
+thin orange rule and a mono eyebrow. Tables are open, with hairlines only.
 
 **Print CSS:**
 ```css
@@ -349,21 +369,18 @@ Then:
    gap count ("<Competitor> ranks for 14 of your 50 terms; you rank for 3").
 7. **What AI assistants say** (if run) — the businesses each answer named, the
    date, and the point-in-time caveat.
-8. **The plan** — a table: each gap → the Compass work that addresses it → what
-   the prospect will see us measure (weekly rank checks on their tracked
-   keywords, map grid scans, the monthly report, the client portal). Map only
-   to the services in "Services Compass will propose". When no Compass service
-   addresses a gap (often reviews), say plainly what the owner can do
-   themselves — honesty here is persuasive.
-9. **Why Compass** — short and concrete: how we work (every claim on their
-   site and posts comes from a sourced or confirmed fact; a person approves
-   before anything publishes; the same measurements in this report are re-run
-   every month so progress is visible), the proof points from config only, and
-   the terms from config only. No logos, testimonials or results that were not
-   supplied.
+8. **The plan** — a table: each gap → the Found It work that addresses it →
+   how progress will be shown (from "How Found It reports progress"; leave the
+   column out if that is blank). Map only to the services in "Services Found It
+   will propose". When none of them addresses a gap (often reviews), say
+   plainly what the owner can do themselves — honesty here is persuasive.
+9. **Why Found It** — short and concrete, built only from config: the services,
+   how progress is reported, the proof points and the terms. No logos,
+   testimonials, process claims or results that were not supplied.
 10. **Next step** — one call to action with the contact from config.
-11. **Footer** — method, data source (DataForSEO; Google Ads volumes for
-    <State>), the measurement date, and the location caveat: "Map positions
+11. **Footer** — Found It Marketing and the agency website, method, data
+    source (DataForSEO; Google Ads volumes for <State>), the measurement date,
+    and the location caveat: "Map positions
     were measured from <point> on <date>; they change with where the searcher
     stands."
 
@@ -402,7 +419,7 @@ A Markdown file next to the PDFs, plus its summary in chat:
 - If the meeting needs a revenue conversation: the formula to work through
   *with the prospect's own* job value and close rate — never a figure we
   supply.
-- The recommended scope from "Services Compass will propose", and what would
+- The recommended scope from "Services Found It will propose", and what would
   be measured at 30 / 60 / 90 days.
 - DataForSEO balance before and after, and the actual spend.
 
@@ -428,7 +445,7 @@ A Markdown file next to the PDFs, plus its summary in chat:
 - **Report what you actually measured.** If a pull returns nothing, say so and
   investigate rather than filling the gap with a plausible number. Estimates the
   API itself models (Labs traffic) are labelled as estimates.
-- **Claim only what Compass delivers.** The plan and "Why Compass" map to the
+- **Claim only what Found It delivers.** The plan and "Why Found It" map to the
   services listed in config; proof points and terms come only from config.
 - **Lead with what is working, then show the gaps.** A prospect who feels
   attacked stops reading.
