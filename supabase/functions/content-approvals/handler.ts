@@ -19,6 +19,18 @@
 //               queued · publishing · published (URL, provider post id) ·
 //               failed (reason) · uncertain.
 //
+// Delegated post edits (20261020200000, docs/delegated-post-edits.md): Claude
+// or ChatGPT revises ONE Facebook / Business Profile post in review, never
+// approving, scheduling or publishing it.
+//   stage_media   → record a declared file for one post and hand out a signed,
+//                   single-use upload URL for its content-addressed path
+//                   (never overwritten). Writes no post.
+//   revise        → record the receipt (idempotent per operation_id), measure
+//                   the stored bytes here (sha256, signature type, size,
+//                   dimensions), then in ONE transaction withdraw the post,
+//                   replace its media and resubmit it for a fresh review.
+//   revise_status → the receipt and the post now.
+//
 // Auth: the x-compass-delegation-key header must equal the Vault secret
 // EXECUTIVE_OS_DELEGATION_SECRET (constant-time). Nothing else is accepted —
 // not a team JWT, not the cron secret. Executive OS never touches the database.
@@ -28,8 +40,10 @@
 // caller retries with the SAME operation_id, which returns the receipt and
 // never executes twice.
 
-export const HANDLER_VERSION = 2;
-export const MODES = ["version", "batch", "authorize", "status"] as const;
+import { measure, sha256Hex } from "../_shared/image-meta.ts";
+
+export const HANDLER_VERSION = 3;
+export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status"] as const;
 const ACTIONS = ["approve", "publish", "approve_and_publish"] as const;
 const CHANNELS = ["chatgpt", "claude"] as const;
 export const CONTENT_CHANNELS = ["blog", "facebook", "google_business"] as const;
@@ -37,10 +51,18 @@ const MAX_ITEMS = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OPERATION = /^[A-Za-z0-9_-]{8,128}$/;
 const HASH = /^sha256:[0-9a-f]{64}$/;
+const HEX = /^[0-9a-f]{64}$/;
+const POST_CHANNELS = ["facebook", "google_business"] as const;
+const EDIT_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const MAX_EDIT_BYTES = 30 * 1024 * 1024;
 
 type Json = Record<string, unknown>;
 export type DbError = { code: string | null; message: string };
 export type DbResult<T> = { data: T | null; error: DbError | null };
+
+export type StoredRead =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; reason: "missing" | "unreadable" | "too_large"; detail?: string };
 
 export type Store = {
   secret(name: string): Promise<string | null>;
@@ -50,6 +72,14 @@ export type Store = {
   execute(id: string): Promise<DbResult<Json>>;
   refuse(id: string, code: string, message: string): Promise<DbResult<Json>>;
   status(operationId: string): Promise<DbResult<Json>>;
+  // Delegated post edits.
+  editStage(p: Json): Promise<DbResult<Json>>;
+  uploadSlot(storagePath: string): Promise<{ exists: true } | { exists: false; signed_url: string; token: string }>;
+  read(storagePath: string): Promise<StoredRead>;
+  editRecord(p: Json): Promise<DbResult<Json>>;
+  editExecute(id: string, measured: Json): Promise<DbResult<Json>>;
+  editRefuse(id: string, code: string, message: string): Promise<DbResult<Json>>;
+  editStatus(operationId: string): Promise<DbResult<Json>>;
 };
 
 const reply = (status: number, body: Json) => Response.json(body, { status });
@@ -116,6 +146,70 @@ export function parseAuthorize(b: Json): Json | string {
     ...(b.publish_at ? { publish_at: b.publish_at } : {}),
     instruction_text: (instruction.text as string).trim(), instructed_at: instruction.at ?? null,
     channel: instruction.channel, account_email: instruction.account_email, executed_by: instruction.executed_by,
+    ...(b.source_ref ? { source_ref: b.source_ref } : {}),
+  };
+}
+
+const str = (v: unknown, max: number) => isStr(v) && v.trim().length > 0 && v.length <= max;
+
+/** Validates a stage_media request. Returns the RPC payload or an error message. */
+export function parseStage(b: Json): Json | string {
+  const post = (b.post ?? {}) as Json;
+  const f = (b.file ?? {}) as Json;
+  if (!isStr(b.operation_id) || !OPERATION.test(b.operation_id)) return "operation_id is 8–128 letters, digits, _ or -";
+  if (!isStr(b.client_id) || !UUID.test(b.client_id)) return "client_id must be a uuid";
+  if (!POST_CHANNELS.includes(post.channel as typeof POST_CHANNELS[number])) return "post.channel is facebook or google_business";
+  if (!isStr(post.id) || !UUID.test(post.id)) return "post.id must be a uuid";
+  if (!isStr(f.sha256) || !HEX.test(f.sha256)) return "file.sha256 is a sha256 hex digest";
+  if (!EDIT_TYPES.includes(f.mime_type as typeof EDIT_TYPES[number])) return `file.mime_type is one of ${EDIT_TYPES.join(", ")}`;
+  if (!Number.isInteger(f.size_bytes) || (f.size_bytes as number) < 1 || (f.size_bytes as number) > MAX_EDIT_BYTES) return `file.size_bytes is 1–${MAX_EDIT_BYTES}`;
+  for (const k of ["width", "height"]) {
+    if (!Number.isInteger(f[k]) || (f[k] as number) < 1 || (f[k] as number) > 10000) return `file.${k} is 1–10000 pixels`;
+  }
+  if (!isStr(f.file_name) || !/^[\w.\- ]{1,200}$/.test(f.file_name)) return "file.file_name is a plain file name";
+  return {
+    operation_id: b.operation_id, client_id: b.client_id, post: { channel: post.channel, id: post.id },
+    file: { sha256: f.sha256, size_bytes: f.size_bytes, mime_type: f.mime_type, width: f.width, height: f.height, file_name: f.file_name },
+  };
+}
+
+/** Validates a revise request. Returns the RPC payload or an error message. */
+export function parseRevise(b: Json): Json | string {
+  const post = (b.post ?? {}) as Json;
+  const change = (b.change ?? {}) as Json;
+  const ex = (b.executor ?? {}) as Json;
+  const au = (b.authority ?? {}) as Json;
+  if (!isStr(b.operation_id) || !OPERATION.test(b.operation_id)) return "operation_id is 8–128 letters, digits, _ or -";
+  if (!isStr(b.client_id) || !UUID.test(b.client_id)) return "client_id must be a uuid";
+  if (!POST_CHANNELS.includes(post.channel as typeof POST_CHANNELS[number])) return "post.channel is facebook or google_business";
+  if (!isStr(post.id) || !UUID.test(post.id)) return "post.id must be a uuid";
+  if (!isStr(post.service_id) || !UUID.test(post.service_id)) return "post.service_id is the post's service from batch";
+  if (!isStr(post.review_hash) || !HASH.test(post.review_hash)) return "post.review_hash is the review_hash from batch";
+  if (!str(post.destination, 300)) return "post.destination is the destination from batch";
+  if (change.kind !== "replace_media") return "change.kind is replace_media";
+  if (!isStr(change.stage_id) || !UUID.test(change.stage_id)) return "change.stage_id is the stage from stage_media";
+  if (!isStr(change.sha256) || !HEX.test(change.sha256)) return "change.sha256 is the staged file's sha256";
+  if (!str(change.label, 200)) return "change.label names the asset";
+  if (!str(change.provenance, 1000)) return "change.provenance says how the image was made";
+  if (!CHANNELS.includes(ex.channel as typeof CHANNELS[number])) return "executor.channel is chatgpt or claude";
+  if (!str(ex.executed_by, 120)) return "executor.executed_by names the assistant";
+  if (!isStr(ex.account_email) || !/^[^@\s]+@[^@\s]+$/.test(ex.account_email)) return "executor.account_email is the authorizing owner";
+  if (au.kind !== "standing_policy" && au.kind !== "owner_approval") return "authority.kind is standing_policy or owner_approval";
+  if (!str(au.id, 200)) return "authority.id is the policy or approval id";
+  for (const k of ["channels", "service_ids", "operations"]) {
+    if (!Array.isArray(au[k]) || !(au[k] as unknown[]).length || !(au[k] as unknown[]).every((v) => isStr(v))) return `authority.${k} lists what it covers`;
+  }
+  if (!str(b.reason, 1000)) return "reason says why, in the assistant's words";
+  if (b.source_ref != null && (typeof b.source_ref !== "object" || Array.isArray(b.source_ref))) return "source_ref is an object";
+  return {
+    operation_id: b.operation_id, client_id: b.client_id,
+    post: { channel: post.channel, id: post.id, service_id: (post.service_id as string).toLowerCase(), review_hash: post.review_hash,
+            destination: (post.destination as string).trim() },
+    change: { kind: "replace_media", stage_id: change.stage_id, sha256: change.sha256, label: (change.label as string).trim(),
+              provenance: (change.provenance as string).trim() },
+    executor: { channel: ex.channel, executed_by: (ex.executed_by as string).trim(), account_email: ex.account_email },
+    authority: { kind: au.kind, id: au.id, channels: au.channels, service_ids: au.service_ids, operations: au.operations },
+    reason: (b.reason as string).trim(),
     ...(b.source_ref ? { source_ref: b.source_ref } : {}),
   };
 }
@@ -196,7 +290,91 @@ export function createContentApprovals(deps: { store: Store }) {
       return reply(201, { receipt: ex.data, replayed: false });
     }
 
+    if (mode === "stage_media") return stageMedia(body);
+    if (mode === "revise") return revise(body);
+    if (mode === "revise_status") {
+      if (!isStr(body.operation_id) || !OPERATION.test(body.operation_id)) return reply(400, { error: "operation_id is required" });
+      const r = await store.editStatus(body.operation_id);
+      if (r.error) return reply(500, { error: "status_failed", message: r.error.message });
+      if (!r.data) return reply(404, { error: "not_found", message: "No edit with that operation_id: nothing was changed." });
+      return reply(200, { receipt: r.data });
+    }
+
     return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
+  }
+
+  // A refusal SQLSTATE proves the database ran and refused; anything else is unknown.
+  function refusedAtDb(e: DbError): Response {
+    const status = e.code === "CD409" ? 409 : e.code === "42501" ? 403 : 422;
+    return reply(status, { error: refusalCode(e.message), message: e.message, recorded: false });
+  }
+
+  async function stageMedia(body: Json): Promise<Response> {
+    const p = parseStage(body);
+    if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
+    const st = await store.editStage(p).catch(unconfirmed);
+    if (st.error) {
+      if (st.error.code && REFUSAL.test(st.error.code)) return refusedAtDb(st.error);
+      return reply(503, { error: "outcome_unknown", message: "Staging did not confirm; retry with the same operation_id." });
+    }
+    const stage = st.data as Json;
+    let slot: Awaited<ReturnType<Store["uploadSlot"]>>;
+    try {
+      slot = await store.uploadSlot(String(stage.storage_path));
+    } catch {
+      return reply(503, { error: "outcome_unknown", message: "The upload slot did not confirm; retry with the same operation_id." });
+    }
+    return reply(stage.replayed ? 200 : 201, {
+      stage: {
+        id: stage.id, storage_path: stage.storage_path, expires_at: stage.expires_at, replayed: !!stage.replayed,
+        already_stored: slot.exists, upload_url: slot.exists ? null : slot.signed_url, upload_token: slot.exists ? null : slot.token,
+      },
+    });
+  }
+
+  async function revise(body: Json): Promise<Response> {
+    const p = parseRevise(body);
+    if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
+    const rec = await store.editRecord(p).catch(unconfirmed);
+    if (rec.error) {
+      if (rec.error.code && REFUSAL.test(rec.error.code)) return refusedAtDb(rec.error);
+      return reply(503, { error: "outcome_unknown", message: "Recording did not confirm; retry with the same operation_id." });
+    }
+    const receipt = rec.data as Json;
+    if (receipt.status === "executed" || receipt.status === "refused") return reply(200, { receipt, replayed: true });
+    const id = receipt.id as string;
+
+    // The bytes as stored, measured here: the database never trusts a declared hash.
+    let read: StoredRead;
+    try {
+      read = await store.read(String(receipt.storage_path));
+    } catch {
+      return reply(503, { error: "outcome_unknown", message: "The stored file could not be read; retry with the same operation_id.", receipt });
+    }
+    const refuse = async (code: string, message: string) => {
+      const refused = await store.editRefuse(id, code, `${code}: ${message}`);
+      return reply(422, { error: code, message: `${code}: ${message}`, receipt: refused.data ?? receipt });
+    };
+    if (!read.ok) {
+      if (read.reason === "missing") return refuse("bytes_missing", "nothing was uploaded to the slot");
+      if (read.reason === "too_large") return refuse("bytes_mismatch", `the stored file is larger than ${MAX_EDIT_BYTES} bytes`);
+      return reply(503, { error: "outcome_unknown", message: "The stored file could not be read; retry with the same operation_id.", receipt });
+    }
+    const meta = measure(read.bytes);
+    if (!meta) return refuse("bytes_mismatch", "the stored file is not a PNG, JPEG or WebP image");
+    const measured = { content_hash: await sha256Hex(read.bytes), ...meta };
+
+    const ex = await store.editExecute(id, measured).catch(unconfirmed);
+    if (ex.error) {
+      if (ex.error.code && REFUSAL.test(ex.error.code)) {
+        // The transaction rolled back: nothing was withdrawn, replaced or resubmitted.
+        const code = refusalCode(ex.error.message);
+        const refused = await store.editRefuse(id, code, ex.error.message);
+        return reply(422, { error: code, message: ex.error.message, receipt: refused.data ?? receipt });
+      }
+      return reply(503, { error: "outcome_unknown", message: "Execution did not confirm; check revise_status or retry with the same operation_id.", receipt });
+    }
+    return reply(201, { receipt: ex.data, replayed: false });
   }
 
   return { handle };

@@ -2163,6 +2163,24 @@ today: `docs/delegated-content-approval.md`.
   never unattended — every item or batch needs Tom's own words.
 - The Compass buttons are unchanged and remain the primary path.
 
+## Delegated post edits (Oct 20 2026; `20261020200000` written, **not applied**; `content-approvals` v3 not deployed)
+
+Tom: "I don't want to have to withdraw them, I want you 2 to handle these kind
+of edits." Claude / ChatGPT, through Executive OS (`content_stage_media`,
+`content_revise`, `content_revision_status`), revise ONE Facebook / Business
+Profile post in review: withdraw → replace media with bytes the function
+measured → resubmit for a fresh review, in one transaction under a
+`content_edit_receipts` row. Never approves, schedules or publishes; refuses
+approved, scheduled and published posts. Full design: `docs/delegated-post-edits.md`.
+
+- Identity is the executing receipt in THIS transaction (`content_edit_receipt()`,
+  txid-bound, service role) — never a session flag alone. History records
+  `actor_kind = 'assistant'` with the receipt and no person; `updated_by` is the
+  authorizing admin.
+- Policy: `content_delegation_settings.allow_edit` (seeded on; admin-only
+  `content_delegation_configure_edits`) plus the existing exclusions; the post's
+  channel / service must be inside the authority Executive OS sends.
+
 ## Known state / open items (as of Sept 13 2026)
 
 - **Stripe secrets are not in Vault yet.** Billing code is deployed but inert
