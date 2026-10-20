@@ -2250,6 +2250,6 @@ prepaid credits apart) and a generic mapped CSV import with a rolled-back
 preview (`citation_import()`). Provider fulfillment never sets verification;
 "not found" is not absence. Behind the server-only `CITATIONS_ENABLED` flag
 (`src/lib/citations-flag.ts`); migration
-`20261020200000_citations_foundation.sql` is **not applied** remotely. No
+`20261020230000_citations_foundation.sql` is **not applied** remotely. No
 provider calls, crawling or spend. Full notes, mapping, rollback and cost
 measurement points: `docs/citations.md`.

@@ -6,10 +6,13 @@
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/lib/database.types";
 import { getCurrentTeamMember } from "@/lib/team";
 import { isUuid } from "@/lib/tasks";
 import { agencyToday, validDate } from "@/lib/reporting";
 import { citationsEnabled } from "@/lib/citations-flag";
+import { GENERIC_MAPPING, prepareBrightLocalCampaign } from "@/lib/citations-brightlocal";
+import { loadListings } from "@/lib/citations-data";
 import {
   CHECK_METHODS, CHECK_RESULTS, FULFILLMENT_STATUSES, IMPORT_MAX_BYTES, REQUEST_ACTIONS, REQUEST_STATUSES, RESULT_METHODS, TASK_KINDS, TASK_STATUSES,
   citationText, isCredentialHeader, listingUrl, parseCsv, prepareImport,
@@ -225,6 +228,36 @@ export async function updateCitationTaskAction(clientId: string, taskId: string,
   } catch (e) { return failure(e); }
 }
 
+/**
+ * One verify task for every listing with a URL that is not currently verified
+ * (unverified or needs reverification) and has no open verify task. A listing
+ * without a URL needs an investigation first, which a person opens. Safe to
+ * repeat: the one-open-task index makes a second run add nothing.
+ */
+export async function queueVerificationAction(clientId: string, locationId: string): Promise<CitationActionState & { created?: number }> {
+  try {
+    const db = await team(clientId); uuid(locationId);
+    const { data: loc } = await db.from("citation_locations").select("identity_version, hide_address").eq("client_id", clientId).eq("id", locationId).maybeSingle();
+    if (!loc) throw new Error("Location unavailable for this client.");
+    const { listings, error } = await loadListings(db, { clientId, locationId });
+    if (error) throw new Error(error);
+    const { data: open } = await db.from("citation_tasks").select("listing_id").eq("location_id", locationId).eq("kind", "verify").in("status", ["open", "in_progress", "waiting"]);
+    const busy = new Set((open ?? []).map((t) => t.listing_id));
+    const due = listings.filter((l) => l.listing_url && ["unverified", "needs_reverification"].includes(l.verification_status) && !busy.has(l.id));
+    let created = 0;
+    for (const l of due) {
+      const reason = `Verify ${l.directory_name} against approved identity v${loc.identity_version}: open the listing URL and record name, phone, website and address`
+        + `${loc.hide_address ? " (the street must not be shown: hidden-address business)" : ""}. Provider status: ${l.fulfillment_status.replace("_", " ")}; never independently checked`
+        + `${l.verification_status === "needs_reverification" ? " against the current identity" : ""}.`;
+      const { error: e } = await db.from("citation_tasks").insert({ client_id: clientId, location_id: locationId, listing_id: l.id, kind: "verify", reason });
+      if (!e) created++;
+      else if (e.code !== "23505") throw new Error("Some verification tasks could not be opened. Retry; the ones already opened are kept.");
+    }
+    refresh(clientId, locationId);
+    return { savedId: locationId, created };
+  } catch (e) { return failure(e); }
+}
+
 // ── Manual fulfillment and credits (records only; nothing is ordered) ─────
 
 export async function createCitationRequestAction(clientId: string, locationId: string, _s: CitationActionState, form: FormData): Promise<CitationActionState> {
@@ -291,21 +324,28 @@ export async function recordCreditEntryAction(_s: CitationActionState, form: For
 
 // ── Import ────────────────────────────────────────────────────────────────
 
+export type ImportFormat = "generic" | "brightlocal_campaign";
 export type ImportRequest = {
   importId: string;
   fileName: string;
   csv: string;
   provider: string;
+  /** generic: the teammate's column mapping; brightlocal_campaign: the reviewed export contract (mapping ignored). */
+  format?: ImportFormat;
+  campaign?: string;
   mapping: ColumnMapping;
   locations: LocationMapping;
   createDirectories: boolean;
 };
-export type ImportRowResult = { row_number: number; outcome: "added" | "updated" | "skipped" | "rejected"; listing_id: string | null; message: string };
+export type ImportRowResult = { row_number: number; outcome: "added" | "updated" | "skipped" | "rejected" | "held"; listing_id: string | null; message: string };
 export type ImportResult = {
   error?: string;
   committed?: boolean;
   already_committed?: boolean;
-  rows_total?: number; added?: number; updated?: number; skipped?: number; rejected?: number;
+  rows_total?: number; added?: number; updated?: number; skipped?: number; rejected?: number; held?: number;
+  new_directories?: string[];
+  /** A provider-format preparation's own counts (BrightLocal campaign: footer, raw statuses, raw Notes excluded). */
+  source?: { directoryRows: number; footerRows: number; byRawStatus: Record<string, number>; rawNotesExcluded: number };
   rows?: ImportRowResult[];
 };
 
@@ -318,19 +358,31 @@ export async function runCitationImportAction(clientId: string, req: ImportReque
     if (!PROVIDER.test(req.provider)) throw new Error("Choose where this file came from.");
     const { data: locs, error } = await db.from("citation_locations").select("id").eq("client_id", clientId).eq("status", "active");
     if (error) throw new Error("Business locations could not be read. Retry.");
-    const rows = parseCsv(req.csv);
-    const prepared = prepareImport(rows, req.mapping, req.locations, new Set((locs ?? []).map((l) => l.id)));
-    // The mapping is kept by header name; credential-like headers can never be in it (prepareImport refuses them).
-    const columns = Object.fromEntries(Object.entries(req.mapping).filter(([, i]) => i !== undefined).map(([f, i]) => [f, prepared.headers[i as number]]));
-    const ignored = prepared.headers.filter(isCredentialHeader);
+    const ids = new Set((locs ?? []).map((l) => l.id));
+    const table = parseCsv(req.csv);
+    let prepared: ReturnType<typeof prepareImport>, mapping: Record<string, unknown>, held: { row_number: number; reason: string }[] = [];
+    let source: ImportResult["source"];
+    if (req.format === "brightlocal_campaign") {
+      // One campaign export = one business location, chosen by the teammate; raw Notes are never read.
+      if (req.locations.mode !== "single") throw new Error("A BrightLocal campaign export belongs to one business location. Choose it.");
+      const bl = prepareBrightLocalCampaign(table, { locationLabel: "campaign location", campaign: req.campaign });
+      prepared = prepareImport(bl.rows, GENERIC_MAPPING, req.locations, ids, undefined, (i) => bl.sourceRows[i]);
+      held = bl.held.map((h) => ({ row_number: h.row_number, reason: h.reason }));
+      source = { directoryRows: bl.counts.directoryRows, footerRows: bl.counts.footerRows, byRawStatus: bl.counts.byRawStatus, rawNotesExcluded: bl.counts.rawNotesExcluded };
+      mapping = { format: "brightlocal_campaign", campaign: req.campaign ?? null, location: req.locations, raw_notes: "excluded", source };
+    } else {
+      prepared = prepareImport(table, req.mapping, req.locations, ids);
+      // The mapping is kept by header name; credential-like headers can never be in it (prepareImport refuses them).
+      const columns = Object.fromEntries(Object.entries(req.mapping).filter(([, i]) => i !== undefined).map(([f, i]) => [f, prepared.headers[i as number]]));
+      mapping = { format: "generic", columns: columns as Partial<Record<ImportField, string>>, location: req.locations, credential_columns_ignored: prepared.headers.filter(isCredentialHeader).length };
+    }
     const { data, error: rpcError } = await db.rpc("citation_import", {
       p_import: { id: req.importId, client_id: clientId, provider: req.provider, file_name: req.fileName.slice(0, 300) || "import.csv",
-        file_sha256: createHash("sha256").update(req.csv).digest("hex"), create_directories: req.createDirectories,
-        mapping: { columns: columns as Partial<Record<ImportField, string>>, location: req.locations, credential_columns_ignored: ignored.length } },
-      p_rows: prepared.accepted, p_rejected: prepared.rejected, p_commit: commit,
+        file_sha256: createHash("sha256").update(req.csv).digest("hex"), create_directories: req.createDirectories, mapping: mapping as Json },
+      p_rows: prepared.accepted, p_rejected: prepared.rejected, p_commit: commit, p_held: held,
     });
     if (rpcError) throw new Error(rpcError.code === "42501" ? rpcError.message : "The import could not run. Nothing was saved; retry.");
     if (commit) refresh(clientId);
-    return data as ImportResult;
+    return { ...(data as ImportResult), source };
   } catch (e) { return { error: e instanceof Error ? e.message : "The import could not run." }; }
 }

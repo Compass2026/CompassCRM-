@@ -80,19 +80,22 @@ create table public.citation_directories (
   domain text check (domain is null or domain ~ '^[a-z0-9.-]+\.[a-z]{2,}$'),
   kind text not null default 'directory' check (kind in ('search_engine','map','aggregator','directory','social','review','niche','other')),
   hidden_address_support text not null default 'unknown' check (hidden_address_support in ('unknown','supported','not_supported')),
+  -- Other names and hosts an export uses for this publisher (lowercase), e.g. maps.apple.com for Apple Business Connect.
+  aliases text[] not null default '{}' check (aliases::text = lower(aliases::text)),
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   created_by uuid references auth.users(id)
 );
 create unique index citation_directories_name on public.citation_directories(lower(name));
 create unique index citation_directories_domain on public.citation_directories(domain) where domain is not null;
-comment on table public.citation_directories is 'Publisher registry. hidden_address_support is unknown until confirmed; it is not a provider claim.';
+comment on table public.citation_directories is 'Publisher registry. hidden_address_support is unknown until confirmed; it is not a provider claim. aliases: other names / hosts imports use for the same publisher.';
 
+insert into public.citation_directories (key, name, domain, kind, aliases) values
+  ('google_business_profile', 'Google Business Profile', 'business.google.com', 'search_engine', '{google.com,google,google maps,maps.google.com}'),
+  ('apple_business_connect', 'Apple Business Connect', 'businessconnect.apple.com', 'map', '{maps.apple.com,apple maps,apple}'),
+  ('bing_places', 'Bing Places', 'bingplaces.com', 'search_engine', '{bing.com,bing,bing maps}'),
+  ('facebook', 'Facebook', 'facebook.com', 'social', '{fb.com}');
 insert into public.citation_directories (key, name, domain, kind) values
-  ('google_business_profile', 'Google Business Profile', 'business.google.com', 'search_engine'),
-  ('apple_business_connect', 'Apple Business Connect', 'businessconnect.apple.com', 'map'),
-  ('bing_places', 'Bing Places', 'bingplaces.com', 'search_engine'),
-  ('facebook', 'Facebook', 'facebook.com', 'social'),
   ('yelp', 'Yelp', 'yelp.com', 'review'),
   ('yellow_pages', 'Yellow Pages', 'yellowpages.com', 'directory'),
   ('mapquest', 'MapQuest', 'mapquest.com', 'map'),
@@ -261,16 +264,18 @@ create table public.citation_imports (
   mapping jsonb not null,
   rows_total integer not null check (rows_total >= 0),
   added integer not null, updated integer not null, skipped integer not null, rejected integer not null,
+  -- Rows a provider-format preparation routed to review / history instead of the inventory (e.g. a failed or replaced submission).
+  held integer not null default 0,
   created_at timestamptz not null default now(),
   created_by uuid references auth.users(id),
-  check (added + updated + skipped + rejected = rows_total)
+  check (added + updated + skipped + rejected + held = rows_total)
 );
 create index citation_imports_client on public.citation_imports(client_id, created_at desc);
 create table public.citation_import_rows (
   import_id uuid not null references public.citation_imports(id) on delete restrict,
   row_number integer not null check (row_number >= 2),
   row_hash text not null default '',
-  outcome text not null check (outcome in ('added','updated','skipped','rejected')),
+  outcome text not null check (outcome in ('added','updated','skipped','rejected','held')),
   listing_id uuid references public.citation_listings(id) on delete restrict,
   message text not null default '' check (length(message) <= 500),
   primary key (import_id, row_number)
@@ -499,11 +504,12 @@ for each row execute function public.stamp_citation_directory();
 
 -- ── Import ─────────────────────────────────────────────────────────────────
 -- p_rows: rows already validated by src/lib/citations.ts prepareImport;
--- p_rejected: the rows it refused. Everything is re-checked against this
+-- p_rejected: the rows it refused; p_held: rows a provider-format preparation
+-- routed to review / history (never listings). Everything is re-checked against this
 -- client here. p_commit = false runs the identical path and rolls it back
 -- (the preview). Committing an import id twice returns the first result.
 -- Security invoker: RLS and the guards above apply to the caller.
-create function public.citation_import(p_import jsonb, p_rows jsonb, p_rejected jsonb, p_commit boolean) returns jsonb
+create function public.citation_import(p_import jsonb, p_rows jsonb, p_rejected jsonb, p_commit boolean, p_held jsonb default '[]') returns jsonb
 language plpgsql security invoker set search_path = pg_catalog, public, pg_temp as $$
 declare
   v_client uuid := (p_import->>'client_id')::uuid;
@@ -514,7 +520,8 @@ declare
   v_seen jsonb := '{}'; v_out jsonb := '[]'; v_outcome text; v_message text;
   v_name text; v_domain text; v_slug text;
   v_fs text; v_on date; v_changed boolean;
-  n_add int := 0; n_upd int := 0; n_skip int := 0; n_rej int := 0;
+  n_add int := 0; n_upd int := 0; n_skip int := 0; n_rej int := 0; n_held int := 0;
+  v_new jsonb := '[]'; v_created uuid;
   v_result jsonb;
 begin
   if not public.is_team() then raise exception 'Only Compass team members can import citations.' using errcode = '42501'; end if;
@@ -522,7 +529,7 @@ begin
   if not exists (select 1 from public.clients where id = v_client) then raise exception 'Client unavailable.' using errcode = '42501'; end if;
   if p_commit then
     select jsonb_build_object('import_id', id, 'committed', true, 'already_committed', true, 'rows_total', rows_total, 'added', added,
-      'updated', updated, 'skipped', skipped, 'rejected', rejected,
+      'updated', updated, 'skipped', skipped, 'rejected', rejected, 'held', held, 'new_directories', '[]'::jsonb,
       'rows', (select coalesce(jsonb_agg(jsonb_build_object('row_number', row_number, 'outcome', outcome, 'listing_id', listing_id, 'message', message) order by row_number), '[]')
         from public.citation_import_rows where import_id = i.id))
     into v_result from public.citation_imports i where id = v_import and client_id = v_client;
@@ -541,18 +548,21 @@ begin
         else
           v_name := btrim(r->>'directory');
           select id into v_dir from public.citation_directories
-          where lower(name) = lower(v_name) or key = lower(v_name) or domain = regexp_replace(lower(v_name), '^www\.', '') limit 1;
+          where lower(name) = lower(v_name) or key = lower(v_name) or domain = regexp_replace(lower(v_name), '^www\.', '')
+            or regexp_replace(lower(v_name), '^www\.', '') = any(aliases) limit 1;
           if v_dir is null and nullif(r->>'listing_url', '') is not null then
             v_domain := regexp_replace(lower(substring(r->>'listing_url' from '^https?://([^/?#:]+)')), '^www\.', '');
-            select id into v_dir from public.citation_directories where domain = v_domain
+            select id into v_dir from public.citation_directories where domain = v_domain or v_domain = any(aliases)
               or v_domain like '%.' || domain limit 1;
           end if;
           if v_dir is null and v_create then
             v_slug := left(regexp_replace(regexp_replace(lower(v_name), '[^a-z0-9]+', '_', 'g'), '^_+|_+$', '', 'g'), 60);
             if length(v_slug) < 2 then v_slug := 'directory_' || substr(md5(v_name), 1, 8); end if;
+            v_created := null;
             insert into public.citation_directories (key, name, domain, kind)
-            values (v_slug, left(v_name, 120), case when v_name ~ '^[a-z0-9.-]+\.[a-z]{2,}$' then lower(v_name) end, 'other')
-            on conflict do nothing returning id into v_dir;
+            values (v_slug, left(v_name, 120), case when lower(v_name) ~ '^[a-z0-9.-]+\.[a-z]{2,}$' then regexp_replace(lower(v_name), '^www\.', '') end, 'other')
+            on conflict do nothing returning id into v_created;
+            v_dir := v_created;
             if v_dir is null then select id into v_dir from public.citation_directories where key = v_slug or lower(name) = lower(v_name) limit 1; end if;
           end if;
           if v_dir is null then
@@ -608,6 +618,9 @@ begin
       exception when others then
         v_outcome := 'rejected'; v_message := left('Not saved: ' || sqlerrm, 500); v_id := null;
       end;
+      -- A directory created for a row that then failed is rolled back with it; only kept ones are reported.
+      if v_created is not null and v_outcome <> 'rejected' and not v_new ? left(v_name, 120) then v_new := v_new || to_jsonb(left(v_name, 120)); end if;
+      v_created := null;
       case v_outcome when 'added' then n_add := n_add + 1; when 'updated' then n_upd := n_upd + 1; when 'skipped' then n_skip := n_skip + 1; else n_rej := n_rej + 1; end case;
       v_out := v_out || jsonb_build_object('row_number', (r->>'row_number')::int, 'row_hash', coalesce(r->>'row_hash', ''), 'outcome', v_outcome,
         'listing_id', case when v_outcome = 'rejected' then null else v_id end, 'message', v_message);
@@ -616,11 +629,15 @@ begin
       n_rej := n_rej + 1;
       v_out := v_out || jsonb_build_object('row_number', (r->>'row_number')::int, 'row_hash', '', 'outcome', 'rejected', 'listing_id', null, 'message', left(coalesce(r->>'reason', 'Invalid row.'), 500));
     end loop;
+    for r in select value from jsonb_array_elements(coalesce(p_held, '[]')) loop
+      n_held := n_held + 1;
+      v_out := v_out || jsonb_build_object('row_number', (r->>'row_number')::int, 'row_hash', '', 'outcome', 'held', 'listing_id', null, 'message', left(coalesce(r->>'reason', 'Held for review.'), 500));
+    end loop;
     select coalesce(jsonb_agg(value order by (value->>'row_number')::int), '[]') into v_out from jsonb_array_elements(v_out);
     if p_commit then
-      insert into public.citation_imports (id, client_id, file_name, file_sha256, provider, mapping, rows_total, added, updated, skipped, rejected, created_by)
+      insert into public.citation_imports (id, client_id, file_name, file_sha256, provider, mapping, rows_total, added, updated, skipped, rejected, held, created_by)
       values (v_import, v_client, left(coalesce(p_import->>'file_name', 'import.csv'), 300), p_import->>'file_sha256', v_provider,
-        coalesce(p_import->'mapping', '{}'), n_add + n_upd + n_skip + n_rej, n_add, n_upd, n_skip, n_rej, auth.uid());
+        coalesce(p_import->'mapping', '{}'), n_add + n_upd + n_skip + n_rej + n_held, n_add, n_upd, n_skip, n_rej, n_held, auth.uid());
       insert into public.citation_import_rows (import_id, row_number, row_hash, outcome, listing_id, message)
       select v_import, (value->>'row_number')::int, value->>'row_hash', value->>'outcome', (value->>'listing_id')::uuid, value->>'message'
       from jsonb_array_elements(v_out);
@@ -630,8 +647,8 @@ begin
   exception when sqlstate 'CIT01' then
     null; -- preview: every write above is rolled back; the counts are kept
   end;
-  return jsonb_build_object('import_id', v_import, 'committed', p_commit, 'already_committed', false, 'rows_total', n_add + n_upd + n_skip + n_rej,
-    'added', n_add, 'updated', n_upd, 'skipped', n_skip, 'rejected', n_rej, 'rows', v_out);
+  return jsonb_build_object('import_id', v_import, 'committed', p_commit, 'already_committed', false, 'rows_total', n_add + n_upd + n_skip + n_rej + n_held,
+    'added', n_add, 'updated', n_upd, 'skipped', n_skip, 'rejected', n_rej, 'held', n_held, 'new_directories', v_new, 'rows', v_out);
 end $$;
 
 -- ── Read models (invoker: RLS applies) ─────────────────────────────────────
@@ -696,8 +713,8 @@ grant select on public.citation_location_identities to authenticated;
 revoke all on public.citation_listing_overview, public.citation_credit_balances from public, anon, authenticated;
 grant select on public.citation_listing_overview, public.citation_credit_balances to authenticated;
 
-revoke all on function public.citation_import(jsonb, jsonb, jsonb, boolean) from public, anon;
-grant execute on function public.citation_import(jsonb, jsonb, jsonb, boolean) to authenticated;
+revoke all on function public.citation_import(jsonb, jsonb, jsonb, boolean, jsonb) from public, anon;
+grant execute on function public.citation_import(jsonb, jsonb, jsonb, boolean, jsonb) to authenticated;
 revoke all on function public.citation_listing_key(text, text) from public, anon;
 grant execute on function public.citation_listing_key(text, text) to authenticated;
 revoke all on function public.guard_citation_location(), public.record_citation_identity(), public.guard_append_only(), public.guard_citation_listing(),

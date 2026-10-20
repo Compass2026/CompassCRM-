@@ -2,7 +2,7 @@
 import { useActionState, useState } from "react";
 import {
   addCitationDirectoryAction, addCitationListingAction, createCitationLocationAction, createCitationRequestAction, openCitationTaskAction,
-  recordCitationCheckAction, recordCreditEntryAction, updateCitationLocationAction, updateCitationRequestAction, updateCitationTaskAction,
+  queueVerificationAction, recordCitationCheckAction, recordCreditEntryAction, updateCitationLocationAction, updateCitationRequestAction, updateCitationTaskAction,
   type CitationActionState,
 } from "@/app/citation-actions";
 import {
@@ -231,4 +231,14 @@ function Directory({ again, clientId }: { again: () => void; clientId: string })
     <label className="space-y-1 text-sm">Directory name<Input name="name" required maxLength={120} /></label>
     <label className="space-y-1 text-sm">Domain<Input name="domain" maxLength={200} placeholder="example.com" /></label>
     <Button size="sm" disabled={pending}>{pending ? "Saving…" : "Add directory"}</Button><Outcome state={state} /></form>;
+}
+
+/** Opens a verify task for each linked, not-currently-verified listing that has none. Repeating it adds nothing. */
+export function QueueVerificationButton({ clientId, locationId }: { clientId: string; locationId: string }) {
+  const [state, action, pending] = useActionState(queueVerificationAction.bind(null, clientId, locationId), {});
+  return <form action={action} className="flex flex-wrap items-center gap-2">
+    <Button size="sm" variant="outline" disabled={pending}>{pending ? "Queuing…" : "Queue verification for linked listings"}</Button>
+    {state.error && <p role="alert" className="text-sm text-red-700">{state.error}</p>}
+    {state.savedId && <p role="status" className="text-sm text-emerald-700" data-queued={state.created}>{state.created ? `Opened ${state.created} verification task${state.created > 1 ? "s" : ""}.` : "Nothing new to queue."}</p>}
+  </form>;
 }

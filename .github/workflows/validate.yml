@@ -88,11 +88,15 @@ jobs:
           sudo install /tmp/postgrest /usr/local/bin/postgrest
       - name: Import, verify and correct sample citations through the real browser and database
         run: CHROME_PATH=/usr/bin/google-chrome SCREENSHOTS=docs/screenshots/citations npm run test:citations-ui
+      - name: Rehearse the BrightLocal campaign pilot on synthetic data
+        run: CHROME_PATH=/usr/bin/google-chrome SCREENSHOTS=docs/screenshots/citations-pilot npm run test:citations-pilot
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: citations-screenshots
-          path: docs/screenshots/citations/
+          path: |
+            docs/screenshots/citations/
+            docs/screenshots/citations-pilot/
 
   client-growth-ui:
     runs-on: ubuntu-latest

@@ -1,7 +1,7 @@
 // Citations Phase 1 is behind a server-side flag (Oct 20 2026).
 //
 // Merging to `main` deploys the CRM to production, but the module's migration
-// (20261020200000_citations_foundation.sql) is not applied there and the
+// (20261020230000_citations_foundation.sql) is not applied there and the
 // workflow is still in review. So the Citations nav item, client tab, pages,
 // export and server actions stay off in every deployment until
 // CITATIONS_ENABLED is set to "true" in that deployment's environment

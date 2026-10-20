@@ -23,7 +23,7 @@ spends credits or sends mail.
 Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
 `src/lib/citations-data.ts` (reads), `src/app/citation-actions.ts` (writes),
 `src/components/citations/*`, migration
-`supabase/migrations/20261020200000_citations_foundation.sql`.
+`supabase/migrations/20261020230000_citations_foundation.sql`.
 
 ## Overlap with what was already there
 
@@ -154,8 +154,10 @@ The two read models are `security_invoker`.
 
 ## Import
 
-Generic and mapped. **No provider format is assumed.** A BrightLocal mapping is
-added only after a real export has been reviewed.
+Two formats:
+- **Generic mapped CSV:** no provider format is assumed; the steps below.
+- **BrightLocal Citation Builder campaign export:** a fixed contract taken from
+  a real export. See the section after this one.
 
 1. **File and source.** A CSV up to 900 KB / 5,000 rows, plus a provider
    label: manual, BrightLocal, Advice Local, Synup, Whitespark, other.
@@ -179,11 +181,19 @@ added only after a real export has been reviewed.
 
 3. **Locations.** Either "every row is one location", or a column whose
    distinct values are each mapped to a location by hand. An unmapped value
-   rejects its rows; nothing is guessed. Unknown directories are rejected unless
-   "add directories" is ticked.
-4. **Preview, then import.** Both run `citation_import()`; the preview rolls
+   rejects its rows; nothing is guessed. Any distinct value that looks like a
+   secret is masked before it is shown.
+4. **Directories.** A row's directory is matched against the registry by name,
+   key, domain or alias (for example, `maps.apple.com` is Apple Business
+   Connect), then by the listing URL's host. Unknown directories are rejected and
+   named in the preview unless "add directories" is ticked. With it ticked, the
+   preview lists every directory the import would add and writes nothing, so a
+   person can check none is another name for an existing one.
+5. **Preview, then import.** Both run `citation_import()`; the preview rolls
    back (SQLSTATE `CIT01` inside the function). Counts are added / updated /
-   skipped / rejected, with a reason per row, and always reconcile.
+   skipped / rejected / **held**, with a reason per row, and always reconcile.
+   Held rows are attempts a provider-format preparation routed to review or
+   history. They are recorded on the import and are never listings.
    - A repeat import of the same rows adds nothing.
    - Committing the same import id twice returns the first result.
    - A row identical to the stored one is "unchanged".
@@ -191,8 +201,134 @@ added only after a real export has been reviewed.
    - Empty cells never clear stored values.
    - Two rows for the same listing in one file: the second is rejected.
 
-Fixtures: `tests/fixtures/citations/` (fictional, labeled SAMPLE, not a
-provider export).
+Fixtures: `tests/fixtures/citations/`. Everything there is fictional and
+labeled SAMPLE / SYNTHETIC; no real customer export is committed.
+
+### Content screening (credentials and private links)
+
+Column headers that look like logins are refused (`isCredentialHeader`), but a
+mapped column can still carry secrets in its cells. A real BrightLocal export's
+Notes held a plaintext login and a tokenized verification link.
+`sensitiveContent()` screens:
+- every mapped cell (on the server, before anything is written);
+- every free-text form field (notes, evidence, reasons, resolutions, references,
+  identity notes);
+- the distinct location values before the browser shows them.
+
+It recognizes:
+- credential assignments: `Password: …`, `login = …`, `user name = …`, `PIN: …`,
+  `API key …`, `token: …`, `… password is …`;
+- tokenized links: `?token=` / `code=` / `sig=` / `reset=` … with a long value,
+  `/verify/…`, `/confirm/…` or `/reset/…` paths ending in a long token, and JWTs.
+
+A flagged import row is rejected with a generic reason ("Notes looks like it
+contains a login or a private account / verification link"). The value is
+never echoed into the preview, the row outcome, the import record or an error.
+A flagged form field is refused the same way.
+
+Ordinary wording passes ("owner verification required", "client login required
+for edits", "verification email not received"). This catches the obvious
+cases; it is **not** universal secret detection. Credentials belong in the
+approved secret store.
+
+## BrightLocal campaign exports
+
+Contract from the real export for Logic Solar Overland Park (campaign 908272,
+reconciled by ChatGPT on Oct 20 2026): the columns `No, Citation Site, Type of
+Site, Domain Authority, Citation Value, Submitted, Status, Citation Link,
+Notes`, in that order. There is one row per directory attempt, then a
+single-cell "Aggregator/Network" footer that is not a listing.
+`src/lib/citations-brightlocal.ts` and the import's "File format" choice
+(auto-detected from the header) prepare it:
+
+| CSV | Becomes |
+| --- | --- |
+| Status `Live` / `Updated` | listing, provider status **provider complete** (never verification) |
+| Status `Submitted` | listing, provider status **submitted** |
+| Any other status (`Unavailable`, blank, anything new) | **held** on the import with its CSV status and submitted date: not a listing, not proof of absence, no spend |
+| `Submitted` date | kept in the listing's note as "provider submitted YYYY-MM-DD (not an observation date)"; never `source_observed_on` |
+| `Notes` | **never read.** Only the count of non-empty Notes is reported. A separately reviewed safe summary per row can be added in code (`safeNotes`), and it is screened |
+| footer row | skipped and counted |
+
+- One campaign export is one business location, chosen by hand.
+- The provider label is BrightLocal.
+- BrightLocal's UI shows some held attempts as "Replaced". The CSV doesn't say
+  that, so the CSV's own status is what's kept.
+- The synthetic fixture `synthetic-brightlocal-campaign.csv` follows the
+  contract exactly, including fake secrets in Notes.
+
+## Pilot: Logic Solar, Overland Park (sandbox rehearsal, Oct 20 2026)
+
+**Rehearsed:**
+- `npm run test:citations-pilot` replays the whole pilot in the sandbox with the
+  synthetic campaign file. That is the committed evidence.
+- With `PILOT_CSV=<sanitized generic CSV> PILOT_IDENTITY=<json>` the same
+  rehearsal runs on the real sanitized rows. Both inputs stay outside the
+  repository, and so should `SCREENSHOTS`.
+- On Oct 20 it ran on the real 11 rows. They were rebuilt from ChatGPT's
+  transcription of campaign 908272 (exact URLs and statuses, safe notes only),
+  because the sanitized library file is not reachable from this machine.
+
+**Steps and results:**
+1. **Identity.** The proposed identity was entered by hand as a hidden-address
+   location (sandbox only).
+2. **Directory review, without creation.** 2 rows resolve (Yelp; Apple via the
+   `maps.apple.com` alias). The 9 others are named and rejected:
+   merchantcircle.com, provenexpert.com, brownbook.net, tupalo.com,
+   callupcontact.com, cybo.com, trepup.com, ezlocal.com, us-info.com.
+3. **Directory review, with creation.** The preview lists those 9 and writes
+   nothing.
+4. **Import.** 11 added, 0 rejected. The synthetic file additionally holds 4.
+5. **Repeat.** 0 added, 11 skipped, no new directories.
+6. **State.** 11 listings:
+   - 9 provider complete, 2 submitted;
+   - all 11 unverified;
+   - 0 check dates, 0 observation dates, no observed NAP;
+   - 9 with URLs, 11 distinct keys;
+   - no raw Notes anywhere.
+7. **Review queue** (nothing marked corrected):
+   - 9 verify tasks, one per linked listing, opened by "Queue verification for
+     linked listings". A repeat run adds 0;
+   - Yelp owner verification (personal + phone, flagged by BrightLocal);
+   - Apple: find the current listing and who controls it;
+   - Bing: presence / ownership investigation before any creation.
+8. **Export.** 11 rows, all Unverified / Never checked, street withheld in the
+   client-safe file.
+
+**Reconciliation of campaign 908272** (15 directory rows + footer):
+
+| Source rows | Directory | CSV status | Pilot treatment |
+| --- | --- | --- | --- |
+| 2–9 | merchantcircle.com, provenexpert.com, brownbook.net, tupalo.com, callupcontact.com, cybo.com, trepup.com, ezlocal.com | Live | listing, provider complete, unverified, verify task |
+| 10 | us-info.com | Updated | listing, provider complete, unverified, verify task |
+| 11 | maps.apple.com | Submitted | listing (Apple Business Connect), submitted, no URL; investigate task |
+| 12 | yelp.com | Submitted | listing, submitted, no URL; owner verification task |
+| 13 | manta.com | Unavailable (UI: Replaced) | **held**: provider says the confirmation email was not received |
+| 14 | bing.com | blank (UI: Replaced) | **held**: historical provider technical issue. Not absence, not a current outage. Bing investigation task at the location |
+| 15 | all.biz | blank (UI: Replaced) | **held**: provider reports uncontrolled merging of locations; **excluded from the fulfillment queue** pending review |
+| 16 | clutch.co | blank (UI: Replaced) | **held**: provider cited B2B eligibility (not independently confirmed) |
+
+Totals: 8 Live + 1 Updated + 2 Submitted + 1 Unavailable + 3 blank = 15.
+That is 11 active rows and 4 historical exceptions. No spend or credits were
+recorded for any of them. The raw export (SHA-256 `5c81a4d0…f6`) is held by
+Tom and is not in the repository.
+
+**Blockers before a production pilot:**
+- **Approved identity: conflicting instructions about the address.**
+  - Logic Solar's brand board (approved Oct 19 2026) says the Overland Park
+    Google Business Profile shows a **public** street address: 7300 W 110th St,
+    Plaza 1, 7th Floor, Overland Park, KS 66210.
+  - Oct 20 notes record Tom calling Logic a service-area business with **no
+    public address**.
+  - Tom decides `hide_address`. The rest of the proposed identity: Logic Solar,
+    phone 816-300-5781 (from `clients`, and matches the us-info.com listing id),
+    website https://logic-solar.com, linked to the existing Overland Park
+    tracking location (BrightLocal 3895356). It is not auto-approved from
+    `clients.address`.
+- Who may approve spend: approval is admin-only in code; actual role
+  assignments need checking.
+- The production migration (`20261020230000`) and `CITATIONS_ENABLED`:
+  explicit approval.
 
 ## Exports
 
@@ -237,7 +373,7 @@ here.
 ## Turning it on (not done)
 
 1. Review this PR.
-2. Apply `20261020200000_citations_foundation.sql` through the Supabase MCP
+2. Apply `20261020230000_citations_foundation.sql` through the Supabase MCP
    (`apply_migration`). It is additive: ten tables, two views, one function, and
    seventeen reference directories. It inserts no client rows. Rename the file to
    the recorded version.
@@ -255,10 +391,10 @@ here.
   citation_import_rows, citation_imports, citation_credit_entries,
   citation_fulfillment_requests, citation_tasks, citation_checks,
   citation_listings, citation_directories, citation_location_identities,
-  citation_locations; drop function citation_import(jsonb,jsonb,jsonb,boolean),
+  citation_locations; drop function citation_import(jsonb,jsonb,jsonb,boolean,jsonb),
   citation_listing_key(text,text)`, plus the trigger functions:
   `guard_citation_location`, `record_citation_identity`, `guard_append_only`,
-  `guard_citation_listing`, `guard_citation_check`, `record_citation_check`,
+  `guard_citation_listing`, `guard_citation_check`,
   `guard_citation_task`, `guard_citation_request`, `mirror_citation_request`,
   `stamp_citation_entry`, `stamp_citation_directory`.
 - **After real data:** turn the flag off only. The tables are append-only
@@ -294,6 +430,10 @@ counts and filters always cover the whole location.
 - `scripts/test-portal-sandbox.sh` runs the same SQL suite on real Postgres.
 - `tests/fetch-all.test.mjs`: complete reads through a 1,000-row cap and a cap
   below the page size; partial, uncountable or moving data is an error.
+- `tests/citations-brightlocal.test.mjs`: the campaign contract, held rows,
+  status mapping, Notes exclusion, content screening (positives and innocuous
+  negatives) and form-field screening, all on synthetic data.
+- `npm run test:citations-pilot`: the pilot rehearsal above.
 - `npm run test:citations-ui` drives the browser flows with PostgREST capped at
   1,000 rows. It includes the identity-change sequence, current evidence vs.
   the import, and 1,200 extra listings (one with 3,500 checks). Screenshots are

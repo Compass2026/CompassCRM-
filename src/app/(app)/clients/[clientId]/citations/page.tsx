@@ -21,7 +21,7 @@ export default async function ClientCitationsPage({ params }: { params: Promise<
     fetchAll<CitationLocation>((from, to) => db.from("citation_locations").select("*", { count: "exact" }).eq("client_id", clientId).order("status").order("label").order("id").range(from, to)),
     db.from("locations").select("id, name").eq("client_id", clientId).order("sort_order"),
     db.from("client_brand_workspaces").select("id, name").eq("client_id", clientId).order("name"),
-    db.from("citation_imports").select("id, client_id, file_name, file_sha256, provider, mapping, rows_total, added, updated, skipped, rejected, created_at, created_by")
+    db.from("citation_imports").select("id, client_id, file_name, file_sha256, provider, mapping, rows_total, added, updated, skipped, rejected, held, created_at, created_by")
       .eq("client_id", clientId).order("created_at", { ascending: false }).limit(10),
   ]);
   // Counts are shown only when every list was read completely.
@@ -62,9 +62,9 @@ export default async function ClientCitationsPage({ params }: { params: Promise<
 
     <section className="surface space-y-3 p-5" data-imports>
       <h3 className="font-semibold">Recent imports</h3>
-      {imports.length ? <table className="w-full text-left text-sm"><thead className="text-xs text-muted-foreground"><tr><th>When</th><th>File</th><th>Source</th><th>Rows</th><th>Added</th><th>Updated</th><th>Skipped</th><th>Rejected</th></tr></thead>
+      {imports.length ? <table className="w-full text-left text-sm"><thead className="text-xs text-muted-foreground"><tr><th>When</th><th>File</th><th>Source</th><th>Rows</th><th>Added</th><th>Updated</th><th>Skipped</th><th>Rejected</th><th>Held</th></tr></thead>
         <tbody>{imports.map((i) => <tr key={i.id} className="border-t"><td className="py-1">{i.created_at.slice(0, 16).replace("T", " ")}</td><td className="break-all">{i.file_name}</td><td>{i.provider}</td>
-          <td>{i.rows_total}</td><td>{i.added}</td><td>{i.updated}</td><td>{i.skipped}</td><td>{i.rejected}</td></tr>)}</tbody></table>
+          <td>{i.rows_total}</td><td>{i.added}</td><td>{i.updated}</td><td>{i.skipped}</td><td>{i.rejected}</td><td>{i.held}</td></tr>)}</tbody></table>
         : <p className="text-sm text-muted-foreground">No imports yet.</p>}
     </section>
 

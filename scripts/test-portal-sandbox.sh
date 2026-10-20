@@ -294,7 +294,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_service_scop
 # Market-centered map grids: labelled market centers only; legacy geometry still means business.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid_market_center.test.sql"
 
-# 20261020200000: Citations Phase 1 — mapped imports that never duplicate,
+# 20261020230000: Citations Phase 1 — mapped imports that never duplicate,
 # provider fulfillment kept apart from teammate verification, append-only
 # dated evidence, the correction queue, admin-approved manual fulfillment
 # with cash and prepaid credits apart, team-only access (rolled back).

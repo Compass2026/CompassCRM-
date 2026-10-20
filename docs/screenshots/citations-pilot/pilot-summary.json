@@ -1,0 +1,21 @@
+{
+  "mode": "synthetic",
+  "location": "647cabdf-fab4-4a9e-bb4f-19dfd14c126f",
+  "state": {
+    "n": 11,
+    "complete": 9,
+    "submitted": 2,
+    "unverified": 11,
+    "checked": 0,
+    "observed": 0,
+    "nap": 0,
+    "linked": 9,
+    "keys": 11
+  },
+  "tasks": {
+    "open": 12,
+    "verify": 10,
+    "investigate": 2,
+    "resolved": 0
+  }
+}

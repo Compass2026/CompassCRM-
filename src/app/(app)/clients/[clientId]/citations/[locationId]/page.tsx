@@ -11,7 +11,7 @@ import {
   type CitationCheck, type CitationLocation, type CitationLocationIdentity, type CitationRequest, type CitationTask,
 } from "@/lib/citations";
 import { FieldChip, FreshnessBadge, FulfillmentBadge, PhaseNote, SummaryCards, VerificationBadge, ViewNav } from "@/components/citations/citation-bits";
-import { AddListingForm, CheckForm, EditLocationForm, OpenTaskForm, PROVIDERS, RequestForm, RequestUpdateForm, TaskUpdateForm } from "@/components/citations/citation-forms";
+import { AddListingForm, CheckForm, EditLocationForm, OpenTaskForm, PROVIDERS, QueueVerificationButton, RequestForm, RequestUpdateForm, TaskUpdateForm } from "@/components/citations/citation-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +95,7 @@ export default async function CitationLocationPage({ params, searchParams }: { p
 
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-lg font-semibold">Listings</h3>
-        <div className="flex flex-wrap gap-2"><AddListingForm clientId={clientId} locationId={locationId} directories={directories} /><OpenTaskForm clientId={clientId} locationId={locationId} listings={listingOptions} team={teamOptions} /></div></div>
+        <div className="flex flex-wrap gap-2"><QueueVerificationButton clientId={clientId} locationId={locationId} /><AddListingForm clientId={clientId} locationId={locationId} directories={directories} /><OpenTaskForm clientId={clientId} locationId={locationId} listings={listingOptions} team={teamOptions} /></div></div>
       <ViewNav base={base} view={view} />
       <p className="text-xs text-muted-foreground" data-listing-range>{visible.length ? `Showing ${(page - 1) * PAGE + 1}–${(page - 1) * PAGE + shown.length} of ${visible.length}` : "0"} {view === "all" ? "listings" : LISTING_VIEWS[view].toLowerCase()}{listings.length !== visible.length ? ` (of ${listings.length} listings)` : ""}.</p>
       {!visible.length && <p className="surface p-8 text-center text-sm text-muted-foreground">No listings in this view.</p>}

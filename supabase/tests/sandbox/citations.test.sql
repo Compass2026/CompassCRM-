@@ -1,4 +1,4 @@
--- Citations Phase 1 (20261020200000_citations_foundation.sql). Plain SQL, one
+-- Citations Phase 1 (20261020230000_citations_foundation.sql). Plain SQL, one
 -- transaction, rolled back: runs in scripts/test-portal-sandbox.sh and in
 -- tests/citations-database.test.mjs (PGlite). Fictional clients and
 -- example.test domains only; no provider is called.
@@ -41,7 +41,7 @@ begin
   if exists (select 1 from pg_views v where v.schemaname = 'public' and v.viewname like 'portal\_%' and v.definition like '%citation%') then
     raise exception 'C5 a portal view reads citations';
   end if;
-  if has_function_privilege('anon', 'public.citation_import(jsonb, jsonb, jsonb, boolean)', 'execute') then raise exception 'C6 anon can import'; end if;
+  if has_function_privilege('anon', 'public.citation_import(jsonb, jsonb, jsonb, boolean, jsonb)', 'execute') then raise exception 'C6 anon can import'; end if;
 end $$;
 
 -- ── The team ──────────────────────────────────────────────────────────────
@@ -140,6 +140,38 @@ begin
     raise exception 'V7 an accurate verdict recorded nothing it saw'; end if;
   if ct.err($q$update citation_checks set evidence = 'x'$q$) = '' or ct.err(format($q$insert into citation_checks (listing_id, checked_on, method, result, observed_name, evidence) values (%L, ct.today() + 5, 'visited_url', 'accurate', 'x', 'x')$q$, l)) <> '23514' then
     raise exception 'V8 checks editable or future-dated'; end if;
+end $$;
+
+-- ── Provider-format imports: registry aliases, reviewed directory creation, held rows ─
+do $$
+declare r jsonb; rows jsonb; v_held jsonb; imp jsonb;
+begin
+  imp := jsonb_build_object('client_id', 'c1000000-0000-4000-b000-00000000000a', 'provider', 'brightlocal', 'file_name', 'synthetic-campaign.csv', 'file_sha256', repeat('d', 64));
+  rows := jsonb_build_array(
+    jsonb_build_object('row_number', 11, 'location_id', 'c1000000-0000-4000-d000-0000000000a2', 'directory', 'maps.apple.com', 'fulfillment_status', 'submitted', 'notes', 'BrightLocal; source row 10; CSV status Submitted'),
+    jsonb_build_object('row_number', 2, 'location_id', 'c1000000-0000-4000-d000-0000000000a2', 'directory', 'merchantcircle.com', 'listing_url', 'https://www.merchantcircle.com/sample-solar-synthetic', 'fulfillment_status', 'provider_complete'));
+  v_held := '[{"row_number": 13, "reason": "Held for review: BrightLocal row 12 (manta.com), CSV status Unavailable. Not a listing and not proof of absence."}]';
+  -- Without creation: the alias resolves Apple; the unknown directory is named, not guessed.
+  r := citation_import(imp || '{"id": "c1000000-0000-4000-e000-000000000010", "create_directories": false}', rows, '[]', false, v_held);
+  if (r->>'added')::int <> 1 or (r->>'rejected')::int <> 1 or (r->>'held')::int <> 1 or (r->>'rows_total')::int <> 3 then raise exception 'P1 preview %', r; end if;
+  if not exists (select 1 from jsonb_array_elements(r->'rows') e where e->>'message' like 'Unknown directory "merchantcircle.com"%') then raise exception 'P2 unknown directory not named'; end if;
+  -- With creation: the preview lists what it would add and adds nothing.
+  r := citation_import(imp || '{"id": "c1000000-0000-4000-e000-000000000010", "create_directories": true}', rows, '[]', false, v_held);
+  if (r->>'added')::int <> 2 or r->'new_directories' <> '["merchantcircle.com"]'::jsonb then raise exception 'P3 creation preview %', r; end if;
+  if exists (select 1 from citation_directories where domain = 'merchantcircle.com') then raise exception 'P4 the preview created a directory'; end if;
+  r := citation_import(imp || '{"id": "c1000000-0000-4000-e000-000000000010", "create_directories": true}', rows, '[]', true, v_held);
+  if (r->>'added')::int <> 2 or (r->>'held')::int <> 1 or r->'new_directories' <> '["merchantcircle.com"]'::jsonb then raise exception 'P5 commit %', r; end if;
+  if (select (held, rows_total) <> (1, 3) from citation_imports where id = 'c1000000-0000-4000-e000-000000000010')
+    or (select outcome from citation_import_rows where import_id = 'c1000000-0000-4000-e000-000000000010' and row_number = 13) <> 'held' then
+    raise exception 'P6 held row not kept'; end if;
+  if (select d.key from citation_listings x join citation_directories d on d.id = x.directory_id where x.location_id = 'c1000000-0000-4000-d000-0000000000a2' and x.listing_key = 'none' and d.key like 'apple%') <> 'apple_business_connect'
+    or (select count(*) from citation_directories where key like '%apple%') <> 1 then
+    raise exception 'P7 maps.apple.com did not resolve to the existing Apple directory'; end if;
+  if (select count(*) from citation_listing_overview where location_id = 'c1000000-0000-4000-d000-0000000000a2' and directory_key in ('apple_business_connect', 'merchantcircle_com')
+      and verification_status = 'unverified' and last_checked_on is null and source_observed_on is null) <> 2 then
+    raise exception 'P8 imported rows must stay unverified with no dates'; end if;
+  r := citation_import(imp || '{"id": "c1000000-0000-4000-e000-000000000011", "create_directories": true}', rows, '[]', true, v_held);
+  if (r->>'added')::int <> 0 or (r->>'skipped')::int <> 2 or (r->>'held')::int <> 1 or r->'new_directories' <> '[]'::jsonb then raise exception 'P9 repeat %', r; end if;
 end $$;
 
 -- ── Correction task: assigned, dated, resolved only with evidence ─────────

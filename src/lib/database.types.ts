@@ -92,7 +92,7 @@ export type Database = {
         Update: { finished_at?: string | null; status?: string; results?: Json }
         Relationships: []
       }
-      // Citations Phase 1 (20261020200000). Hand-written like the backlink tables; the guards stamp the omitted columns.
+      // Citations Phase 1 (20261020230000). Hand-written like the backlink tables; the guards stamp the omitted columns.
       citation_locations: {
         Row: CitationLocation
         Insert: Pick<CitationLocation, "client_id" | "label" | "business_name"> & Partial<Omit<CitationLocation, "client_id" | "label" | "business_name" | "identity_version" | "approved_at" | "approved_by" | "created_at" | "updated_at">>
@@ -13097,7 +13097,7 @@ export type Database = {
     }
     Functions: {
       citation_import: {
-        Args: { p_import: Json; p_rows: Json; p_rejected: Json; p_commit: boolean }
+        Args: { p_import: Json; p_rows: Json; p_rejected: Json; p_commit: boolean; p_held?: Json }
         Returns: Json
       }
       gsc_performance_record: {

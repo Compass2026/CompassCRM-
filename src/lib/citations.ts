@@ -224,6 +224,26 @@ export function isCredentialHeader(header: string) {
   return /pass(word)?|passwd|\bpwd\b|secret|token|api[\s_-]?key|credential|\blogin\b|user ?name|\bpin\b|security (question|answer)/i.test(header);
 }
 
+/**
+ * Recognizable secrets inside cell or form text: a credential assignment
+ * ("Password: …", "login = …", "API key: …") or a tokenized account /
+ * verification link. It is a guard for the obvious cases, not universal secret
+ * detection. Innocuous wording such as "owner verification required" passes.
+ * Callers reject with a generic reason and never echo the value.
+ */
+const CREDENTIAL_ASSIGNMENT = /(?:^|[^a-z0-9])(?:pass(?:word|wd|code|phrase)?|pwd|pin|login|log-in|user ?(?:name|id)|api[\s_-]?key|secret|access[\s_-]?key|client[\s_-]?secret|auth(?:entication)?[\s_-]?code|security (?:question|answer)|token)\s*(?:[:=]|\bis\b)\s*\S/i;
+const TOKEN_PARAM = /[?&#;](?:token|access_token|id_token|auth|authkey|key|code|sig|signature|hash|otp|session|sessionid|sid|ticket|nonce|verify|verification|confirm|reset|magic)=[^&\s#]{8,}/i;
+const TOKEN_PATH = /https?:\/\/\S*?\/(?:verify|verification|confirm|confirmation|activate|activation|reset|reset-password|magic|invite|login|auth|token|validate)[^\s]*?\/[A-Za-z0-9_.~-]{16,}/i;
+const JWT = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+/;
+export type SensitiveKind = "credential" | "private_link";
+export function sensitiveContent(text: string): SensitiveKind | null {
+  if (!text) return null;
+  if (CREDENTIAL_ASSIGNMENT.test(text)) return "credential";
+  if (TOKEN_PARAM.test(text) || TOKEN_PATH.test(text) || JWT.test(text)) return "private_link";
+  return null;
+}
+export const SENSITIVE_MESSAGE = "looks like it contains a login or a private account / verification link";
+
 export const IMPORT_FIELDS = {
   location: { label: "Business location", hint: "Mapped to a location you choose below; never guessed." },
   directory: { label: "Directory / publisher", hint: "Name or domain, matched to the directory registry." },
@@ -316,7 +336,8 @@ export function rowHash(values: string[]) {
  * a location the teammate mapped, or that carry an invalid value, are rejected
  * with a reason; nothing is guessed. Credential-like columns are ignored.
  */
-export function prepareImport(rows: string[][], mapping: ColumnMapping, locations: LocationMapping, locationIds: Set<string>, today = agencyToday()) {
+export function prepareImport(rows: string[][], mapping: ColumnMapping, locations: LocationMapping, locationIds: Set<string>, today = agencyToday(),
+  rowNumberOf: (index: number) => number = (index) => index + 2) {
   if (!rows.length) throw new Error("The file has no header row.");
   const [headers, ...data] = rows;
   if (data.length > IMPORT_MAX_ROWS) throw new Error(`The file has ${data.length} rows; the limit is ${IMPORT_MAX_ROWS}. Split it and import each part.`);
@@ -330,10 +351,13 @@ export function prepareImport(rows: string[][], mapping: ColumnMapping, location
   if (locations.mode === "single" && !locationIds.has(locations.locationId)) throw new Error("Choose a business location for this file.");
   const accepted: ImportRow[] = [], rejected: RejectedRow[] = [];
   data.forEach((cells, index) => {
-    const row_number = index + 2;
+    const row_number = rowNumberOf(index);
+    // Only mapped columns are ever read. Each value is screened before use;
+    // a flagged value is never echoed into the reason, the preview or the database.
     const cell = (f: ImportField, max = 1000) => {
       const col = mapping[f];
       const v = col === undefined ? "" : (cells[col] ?? "").trim();
+      if (sensitiveContent(v)) throw new Error(`${IMPORT_FIELDS[f].label} ${SENSITIVE_MESSAGE}, so the row was not imported. Remove it from the file and import again.`);
       if (v.length > max) throw new Error(`${IMPORT_FIELDS[f].label} is longer than ${max} characters.`);
       return v;
     };
@@ -422,6 +446,7 @@ export function citationText(form: FormData, key: string, max = 1000) {
   const v = form.get(key);
   if (v === null) return "";
   if (typeof v !== "string" || v.trim().length > max) throw new Error(`Check ${key.replaceAll("_", " ")}.`);
+  if (sensitiveContent(v)) throw new Error(`The ${key.replaceAll("_", " ")} ${SENSITIVE_MESSAGE}. Keep credentials in the approved secret store, not in Citations.`);
   return v.trim();
 }
 
@@ -433,7 +458,7 @@ export type CitationLocation = CitationIdentity & {
   notes: string; created_at: string; updated_at: string;
 };
 export type CitationLocationIdentity = CitationIdentity & { id: string; location_id: string; version: number; note: string; recorded_at: string; recorded_by: string | null };
-export type CitationDirectory = { id: string; key: string; name: string; domain: string | null; kind: string; hidden_address_support: "unknown" | "supported" | "not_supported"; is_active: boolean; created_at: string; created_by: string | null };
+export type CitationDirectory = { id: string; key: string; name: string; domain: string | null; kind: string; hidden_address_support: "unknown" | "supported" | "not_supported"; aliases: string[]; is_active: boolean; created_at: string; created_by: string | null };
 export type SourceFields = { source_name: string; source_address: string; source_phone: string; source_website: string };
 export type CitationListing = SourceFields & {
   id: string; client_id: string; location_id: string; directory_id: string; listing_url: string | null; external_id: string | null; listing_key: string;
@@ -473,4 +498,4 @@ export type CitationRequest = {
 };
 export type CitationCreditEntry = { id: string; provider: string; kind: "opening_balance" | "purchase" | "adjustment"; credits: number; cash_amount: number | null; currency: string; occurred_on: string; reference: string; note: string; recorded_at: string; recorded_by: string | null };
 export type CitationCreditBalance = { provider: string; credits_recorded: number; credits_used: number; credit_purchase_cash: number };
-export type CitationImport = { id: string; client_id: string; file_name: string; file_sha256: string; provider: string; mapping: unknown; rows_total: number; added: number; updated: number; skipped: number; rejected: number; created_at: string; created_by: string | null };
+export type CitationImport = { id: string; client_id: string; file_name: string; file_sha256: string; provider: string; mapping: unknown; rows_total: number; added: number; updated: number; skipped: number; rejected: number; held: number; created_at: string; created_by: string | null };
