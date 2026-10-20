@@ -2,7 +2,7 @@
 // separately by client_growth.test.sql against the full migration chain.
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {mkdirSync,existsSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 const clientId='00000000-0000-4000-8000-000000000001',teamId='00000000-0000-4000-8000-000000000011',portalId='00000000-0000-4000-8000-000000000012',keywordId='00000000-0000-4000-8000-000000000021';
@@ -71,9 +71,20 @@ const upstream=http.createServer(async(req,res)=>{
  if(url.pathname==='/rest/v1/portal_site')return reply(null);
  unexpected.push(`${req.method} ${url.pathname}`);return reply({message:'unexpected fixture request'},500);
 });
-await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));
+// The app runs as a production build. next dev recomputes a dynamic route's
+// static paths by reading, parsing and rewriting .next/prerender-manifest.json
+// with a non-atomic writeFile while a compile can rewrite the same file: on a
+// slow runner a request then reads an empty manifest ("Unexpected end of JSON
+// input", HTTP 500 on /clients/[clientId]/growth, CI run 39509860696). A build
+// compiles once up front, so no request races a compile. NEXT_PUBLIC_* values
+// are inlined at build time, hence the fixed fixture API port.
+const stubPort=Number(process.env.GROWTH_STUB_PORT??54338);
+await new Promise(resolve=>upstream.listen(stubPort,'127.0.0.1',resolve));
 const port=Number(process.env.GROWTH_UI_PORT??3438);
-const app=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--webpack','--hostname','127.0.0.1','--port',String(port)],{env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:`http://127.0.0.1:${upstream.address().port}`,NEXT_PUBLIC_SUPABASE_ANON_KEY:'synthetic-test-key',NEXT_TELEMETRY_DISABLED:'1'},stdio:['ignore','pipe','pipe']});
+const appEnv={...process.env,NEXT_PUBLIC_SUPABASE_URL:`http://127.0.0.1:${stubPort}`,NEXT_PUBLIC_SUPABASE_ANON_KEY:'synthetic-test-key',NEXT_TELEMETRY_DISABLED:'1'};
+const built=spawnSync(process.execPath,['node_modules/next/dist/bin/next','build'],{env:appEnv,stdio:['ignore','pipe','pipe'],encoding:'utf8',maxBuffer:64*1024*1024});
+if(built.status!==0){upstream.close();throw new Error(`next build failed\n${built.stdout.slice(-4000)}\n${built.stderr.slice(-4000)}`);}
+const app=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(port)],{env:appEnv,stdio:['ignore','pipe','pipe']});
 let logs='';app.stdout.on('data',c=>logs=(logs+c).slice(-9000));app.stderr.on('data',c=>logs=(logs+c).slice(-9000));
 let browser;
 const shots='docs/screenshots/client-growth';mkdirSync(shots,{recursive:true});
@@ -161,30 +172,24 @@ try{
  assert.ok(await page.getByText('Not checked',{exact:true}).isVisible());
  await page.locator('summary').filter({hasText:'Verification & history'}).click();await page.getByRole('button',{name:'Record a link check',exact:true}).click();await page.locator('textarea[name="evidence"]').fill('PRIVATE screenshot evidence confirms exact target');await page.getByRole('button',{name:'Save link check',exact:true}).click();await page.getByText('Verified live',{exact:true}).waitFor();assert.equal(checks.length,1);
  await page.screenshot({path:`${shots}/backlinks-team.png`,fullPage:true});
- const portal=await context(portalId);
- // next dev compiles a route on its first request and can then full-reload pages already open,
- // aborting an in-flight navigation (net::ERR_ABORTED on slower CI runners). Compile the portal
- // routes with the portal session before any portal tab exists, and retry only that abort.
- for(const route of ['/portal','/portal/growth','/portal/search','/portal/rankings','/portal/backlinks'])assert.equal((await portal.request.get(`http://127.0.0.1:${port}${route}`)).ok(),true,`warm ${route}`);
- const visit=async(target,url)=>{for(let attempt=1;;attempt++){try{return await target.goto(url,{waitUntil:'networkidle'});}catch(e){if(attempt>=3||!String(e.message).includes('ERR_ABORTED'))throw e;}}};
- const clientPage=await portal.newPage();clientPage.on('pageerror',e=>errors.push(e.message));
- await visit(clientPage,`http://127.0.0.1:${port}/portal/growth`);await clientPage.getByRole('heading',{name:/Where we started.*How you're growing/}).waitFor();assert.equal(await clientPage.getByText('Record measurements & review reports',{exact:true}).count(),0);
+ const portal=await context(portalId),clientPage=await portal.newPage();clientPage.on('pageerror',e=>errors.push(e.message));
+ await clientPage.goto(`http://127.0.0.1:${port}/portal/growth`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:/Where we started.*How you're growing/}).waitFor();assert.equal(await clientPage.getByText('Record measurements & review reports',{exact:true}).count(),0);
  assert.match(await clientPage.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+4/);
- await visit(clientPage,`http://127.0.0.1:${port}/portal`);
+ await clientPage.goto(`http://127.0.0.1:${port}/portal`,{waitUntil:'networkidle'});
  const searchCard=clientPage.locator('div').filter({has:clientPage.getByText('Search traffic',{exact:true})}).filter({hasText:'clicks from Google Search'}).last();
  assert.match(await searchCard.innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280[\s\S]*Search Console totals for your website/);
  assert.doesNotMatch(await searchCard.innerText(),/\b27\b|13,408/,'query-row sums are not the website total');
- await visit(clientPage,`http://127.0.0.1:${port}/portal/search`);
+ await clientPage.goto(`http://127.0.0.1:${port}/portal/search`,{waitUntil:'networkidle'});
  assert.match(await clientPage.locator('main').innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280/);
  assert.match(await clientPage.locator('main').innerText(),/does not add up to your totals/);
  assert.equal(await clientPage.getByText('average position',{exact:true}).count(),0,'no unweighted average of query rows as a headline');
- await visit(clientPage,`http://127.0.0.1:${port}/portal/rankings`);
+ await clientPage.goto(`http://127.0.0.1:${port}/portal/rankings`,{waitUntil:'networkidle'});
  const rankRow=k=>clientPage.getByRole('row').filter({hasText:k});
  assert.match(await rankRow('fictional brand roofing').innerText(),/not available/);
  assert.doesNotMatch(await rankRow('fictional brand roofing').innerText(),/not in top 100|▼|▲/);
  assert.match(await rankRow('roof replacement').innerText(),/not in top 100/);
  assert.match(await rankRow('roof repair').first().innerText(),/2[\s\S]*▲ 3/);
- await visit(clientPage,`http://127.0.0.1:${port}/portal/backlinks`);await clientPage.getByRole('heading',{name:'Regional trade association'}).waitFor();assert.doesNotMatch(await clientPage.locator('body').innerText(),/PRIVATE/);assert.equal(await clientPage.getByRole('button',{name:'Save link check'}).count(),0);
+ await clientPage.goto(`http://127.0.0.1:${port}/portal/backlinks`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:'Regional trade association'}).waitFor();assert.doesNotMatch(await clientPage.locator('body').innerText(),/PRIVATE/);assert.equal(await clientPage.getByRole('button',{name:'Save link check'}).count(),0);
  await clientPage.setViewportSize({width:390,height:844});await clientPage.screenshot({path:`${shots}/backlinks-portal-mobile.png`,fullPage:true});assert.equal(await clientPage.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
  console.log('Growth UI passed: fixed baseline, date filters, mobile layout, retry retention, opportunity save, stage update, evidence check, portal rendering. Synthetic data only.');
