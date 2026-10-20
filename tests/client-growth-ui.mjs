@@ -32,6 +32,9 @@ const upstream=http.createServer(async(req,res)=>{
  if(url.pathname==='/rest/v1/clients')return reply(client);
  if(url.pathname==='/rest/v1/portal_client')return reply(client);
  if(['/rest/v1/portal_billing_summary','/rest/v1/portal_crm_lite'].includes(url.pathname))return reply(null);
+ if(url.pathname==='/rest/v1/portal_growth_measurements'&&(url.searchParams.get('metric')??'').includes('search_clicks'))return reply([
+  {metric:'search_clicks',scope:'Search Console https://client.example.test/',source:'Google Search Console property totals',status:'measured',value:64,window_start:'2026-09-01',window_end:'2026-09-30',sequence:41},
+  {metric:'search_impressions',scope:'Search Console https://client.example.test/',source:'Google Search Console property totals',status:'measured',value:14280,window_start:'2026-09-01',window_end:'2026-09-30',sequence:42}]);
  if(['/rest/v1/report_measurements','/rest/v1/portal_growth_measurements'].includes(url.pathname)){if(req.method==='POST'){measurements.push(...input.map((r,i)=>({...r,sequence:100+i,created_at:new Date().toISOString()})));return reply(null,201);}return reply(measurements.map(({evidence,meaning,next_action,recorded_by,...r})=>r));}
  if(['/rest/v1/client_growth_search','/rest/v1/portal_growth_search'].includes(url.pathname))return reply([{client_id:clientId,period_start:'2026-08-01',period_end:'2026-08-28',clicks:10,impressions:100,imported_rows:5},{client_id:clientId,period_start:'2026-09-01',period_end:'2026-09-28',clicks:30,impressions:200,imported_rows:8}]);
  if(['/rest/v1/client_growth_rankings','/rest/v1/portal_growth_rankings'].includes(url.pathname))return reply(rankingRows);
@@ -56,6 +59,16 @@ const upstream=http.createServer(async(req,res)=>{
   return reply(checks);
  }
  if(url.pathname==='/rest/v1/portal_backlinks')return reply(opportunities.flatMap(o=>{const history=checks.filter(c=>c.opportunity_id===o.id),last=history.at(-1);return last?[{id:o.id,client_id:clientId,title:o.title,source_url:o.source_url,target_url:o.target_url,keyword:'roof repair',brand_name:null,observed_on:last.observed_on,result:last.result,rel:last.rel,anchor_text:last.anchor_text,first_live_on:history[0].observed_on}]:[];}));
+ // Portal overview, search and rankings. Search Console headlines must come from the verified property
+ // import (portal_growth_measurements); the query-row sample below sums to different, smaller numbers.
+ if(url.pathname==='/rest/v1/portal_search_performance')return reply([{client_id:clientId,period_start:'2026-09-15',period_end:'2026-10-12',clicks:27,impressions:13408,avg_position:20.3,queries:935}]);
+ if(url.pathname==='/rest/v1/portal_search_queries')return reply([{query:'fictional roof repair',clicks:9,impressions:400,avg_position:3.2}]);
+ if(url.pathname==='/rest/v1/portal_rankings')return reply([
+  {client_id:clientId,keyword:'roof repair',city:'Springfield',is_money:true,result_type:'organic',position:2,previous_position:5,checked_at:'2026-10-19T06:00:00Z',state:'website',previous_state:'website'},
+  {client_id:clientId,keyword:'fictional brand roofing',city:'Springfield',is_money:false,result_type:'organic',position:null,previous_position:3,checked_at:'2026-10-19T06:00:00Z',state:'third_party',previous_state:'website'},
+  {client_id:clientId,keyword:'roof replacement',city:'Springfield',is_money:false,result_type:'organic',position:null,previous_position:null,checked_at:'2026-10-19T06:00:00Z',state:'not_found',previous_state:'not_found'}]);
+ if(['/rest/v1/portal_progress','/rest/v1/portal_work_log','/rest/v1/portal_reports'].includes(url.pathname))return reply([]);
+ if(url.pathname==='/rest/v1/portal_site')return reply(null);
  unexpected.push(`${req.method} ${url.pathname}`);return reply({message:'unexpected fixture request'},500);
 });
 await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));
@@ -151,6 +164,20 @@ try{
  const portal=await context(portalId),clientPage=await portal.newPage();clientPage.on('pageerror',e=>errors.push(e.message));
  await clientPage.goto(`http://127.0.0.1:${port}/portal/growth`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:/Where we started.*How you're growing/}).waitFor();assert.equal(await clientPage.getByText('Record measurements & review reports',{exact:true}).count(),0);
  assert.match(await clientPage.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+4/);
+ await clientPage.goto(`http://127.0.0.1:${port}/portal`,{waitUntil:'networkidle'});
+ const searchCard=clientPage.locator('div').filter({has:clientPage.getByText('Search traffic',{exact:true})}).filter({hasText:'clicks from Google Search'}).last();
+ assert.match(await searchCard.innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280[\s\S]*Search Console totals for your website/);
+ assert.doesNotMatch(await searchCard.innerText(),/\b27\b|13,408/,'query-row sums are not the website total');
+ await clientPage.goto(`http://127.0.0.1:${port}/portal/search`,{waitUntil:'networkidle'});
+ assert.match(await clientPage.locator('main').innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280/);
+ assert.match(await clientPage.locator('main').innerText(),/does not add up to your totals/);
+ assert.equal(await clientPage.getByText('average position',{exact:true}).count(),0,'no unweighted average of query rows as a headline');
+ await clientPage.goto(`http://127.0.0.1:${port}/portal/rankings`,{waitUntil:'networkidle'});
+ const rankRow=k=>clientPage.getByRole('row').filter({hasText:k});
+ assert.match(await rankRow('fictional brand roofing').innerText(),/not available/);
+ assert.doesNotMatch(await rankRow('fictional brand roofing').innerText(),/not in top 100|▼|▲/);
+ assert.match(await rankRow('roof replacement').innerText(),/not in top 100/);
+ assert.match(await rankRow('roof repair').first().innerText(),/2[\s\S]*▲ 3/);
  await clientPage.goto(`http://127.0.0.1:${port}/portal/backlinks`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:'Regional trade association'}).waitFor();assert.doesNotMatch(await clientPage.locator('body').innerText(),/PRIVATE/);assert.equal(await clientPage.getByRole('button',{name:'Save link check'}).count(),0);
  await clientPage.setViewportSize({width:390,height:844});await clientPage.screenshot({path:`${shots}/backlinks-portal-mobile.png`,fullPage:true});assert.equal(await clientPage.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
