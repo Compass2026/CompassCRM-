@@ -279,6 +279,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_tldr.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation.test.sql"
 # 20261019202359: every client, Facebook and Business Profile posts, the central policy.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation_channels.test.sql"
+# 20261020200000: delegated post edits (withdraw → replace media → resubmit
+# under a receipt; identity bound to the executing transaction; never approves).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edits.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).

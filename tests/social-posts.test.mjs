@@ -98,6 +98,16 @@ test("history names people by name and never shows an Auth UUID", () => {
     describePostEvent({ kind: "created", actor_kind: "worker", actor_id: null, from_value: null, to_value: "draft", detail: {} }, names),
     "Worker: Drafted"
   );
+  // 20261020200000: a delegated edit names the assistant and the authorizing admin, not as the admin's own action.
+  assert.equal(
+    describePostEvent({ kind: "withdrawn", actor_kind: "assistant", actor_id: null, from_value: "in_review", to_value: "draft",
+      detail: { edit: { receipt: "r-1", executed_by: "Claude via Executive OS", channel: "claude", authorized_by: "tm-1" } } }, names),
+    "Claude via Executive OS (authorized by Tom Example): Withdrew it from review"
+  );
+  assert.equal(
+    describePostEvent({ kind: "submitted", actor_kind: "assistant", actor_id: null, from_value: "draft", to_value: "in_review", detail: {} }, names),
+    "An assistant: Submitted for review"
+  );
   const lapse = describePostEvent(
     { kind: "grounding_lapsed", actor_kind: "system", actor_id: null, from_value: "approved", to_value: "in_review", detail: { problems: ["The offer is not confirmed."] } },
     names

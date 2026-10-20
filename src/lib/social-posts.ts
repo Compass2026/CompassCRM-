@@ -241,18 +241,23 @@ const eventText: Record<string, string> = {
 };
 
 export function describePostEvent(e: PostEvent, names: Map<string, string>): string {
+  const d = (e.detail && typeof e.detail === "object" ? e.detail : {}) as Record<string, unknown>;
+  // 20261020200000: a delegated edit names the assistant and the admin who authorized it, never as their action.
+  const edit = (d.edit && typeof d.edit === "object" ? d.edit : {}) as Record<string, unknown>;
   const who =
     e.actor_kind === "team"
       ? (e.actor_id && names.get(e.actor_id)) || "A former teammate"
-      : e.actor_kind === "publisher"
-        ? "Publisher"
-        : e.actor_kind === "drafter"
-          ? "AI Drafter"
-          : e.actor_kind === "system"
-            ? "System"
-            : "Worker";
+      : e.actor_kind === "assistant"
+        ? `${typeof edit.executed_by === "string" ? edit.executed_by : "An assistant"}${
+            typeof edit.authorized_by === "string" ? ` (authorized by ${names.get(edit.authorized_by) ?? "a former teammate"})` : ""}`
+        : e.actor_kind === "publisher"
+          ? "Publisher"
+          : e.actor_kind === "drafter"
+            ? "AI Drafter"
+            : e.actor_kind === "system"
+              ? "System"
+              : "Worker";
   const base = eventText[e.kind] ?? e.kind;
-  const d = (e.detail && typeof e.detail === "object" ? e.detail : {}) as Record<string, unknown>;
   const extra: string[] = [];
   if (e.kind === "rejected" && typeof d.note === "string") extra.push(`“${d.note}”`);
   if (e.kind === "approved" && typeof d.note === "string") extra.push(`“${d.note}”`);
