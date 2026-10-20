@@ -12,12 +12,22 @@ export type GrowthRanking = {
   checked_at: string | null;
   previous_position: number | null;
   previous_checked_at: string | null;
+  // Organic: website | third_party | unverified | not_found. Map pack:
+  // listed | not_found. A position is only ever present for website/listed.
+  first_state: RankState | null;
+  state: RankState | null;
+  previous_state: RankState | null;
 };
+export type RankState = "website" | "third_party" | "unverified" | "not_found" | "listed";
+// A check that matched a directory/social page, or could not be verified as
+// the client's website, is excluded: neither a rank nor "not found".
+export const excludedState = (s: RankState | string | null | undefined) => s === "third_party" || s === "unverified";
 
 const uniqueKeywords = (rows: GrowthRanking[]) => new Set(rows.map(r => r.keyword_id)).size;
 export function rankingSummary(rows: GrowthRanking[], now = Date.now()) {
   const summarize = (type: "organic" | "map_pack") => {
-    const checked = rows.filter(r => r.result_type === type && r.checked_at);
+    const all = rows.filter(r => r.result_type === type && r.checked_at);
+    const checked = all.filter(r => !excludedState(r.state));
     const ranked = checked.filter(r => r.position !== null && r.position > 0);
     return {
       checked: uniqueKeywords(checked),
@@ -27,6 +37,7 @@ export function rankingSummary(rows: GrowthRanking[], now = Date.now()) {
       rankedChecks: ranked.length,
       checks: checked.length,
       stale: checked.filter(r => now - Date.parse(r.checked_at!) > 14 * 86400000).length,
+      excluded: uniqueKeywords(all.filter(r => excludedState(r.state))),
     };
   };
   return {
@@ -37,8 +48,9 @@ export function rankingSummary(rows: GrowthRanking[], now = Date.now()) {
   };
 }
 
-export function rankingMovement(first: number | null, latest: number | null, firstDate: string | null, latestDate: string | null) {
+export function rankingMovement(first: number | null, latest: number | null, firstDate: string | null, latestDate: string | null, firstState?: RankState | null, latestState?: RankState | null) {
   if (!firstDate || !latestDate || firstDate === latestDate) return "Awaiting another check";
+  if (excludedState(firstState) || excludedState(latestState)) return "Not comparable: not the website";
   if (first === null || latest === null) return "Not comparable";
   const change = first - latest;
   return change > 0 ? `Up ${change}` : change < 0 ? `Down ${-change}` : "No change";

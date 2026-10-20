@@ -95,3 +95,63 @@ The fix takes effect only once the function is deployed.
   `KEYWORD_REPORT_DATA=<export.json>` renders a read-only export instead. Use
   it for review screenshots and never commit them, because this repository is
   public.
+
+## Older ranking and search surfaces (review 2)
+
+Migration `20261020230000_organic_rank_website_only.sql` applies the same
+rule everywhere else that shows ranks.
+
+- `public.url_host(text)` and `public.organic_rank_state(source, position,
+  url, hosts)` are pure, immutable and invoker functions. Execute is granted
+  to `authenticated` and `service_role`, never to `anon`.
+  `src/lib/organic-rank.ts` mirrors them, and `tests/organic-rank.test.mjs`
+  pins both to one truth table. A client's hosts are its record, its `sites`
+  rows and its brand websites. A row on any other client's website is
+  `third_party`.
+- `client_growth_rankings`, `portal_growth_rankings` and `portal_rankings`
+  keep their columns, security options and grants. They gain
+  `first_state` / `state` / `previous_state` (`website`, `third_party`,
+  `unverified`, `not_found`, `listed`). An organic position is returned only
+  for `website`, so even an un-updated reader cannot count a third-party
+  page. Host sets are computed inline in each view: a function would run as
+  the portal user, who cannot read `clients` or `sites`.
+- `compute_location_index` (City Index) takes the latest in-period row per
+  P1 keyword first, then leaves it out if it is not the website. An older
+  website rank is never substituted for it. Stored `location_index` rows
+  are not rewritten; the next `rank-sync` run recomputes the current period.
+- The team Keywords page reads `url_ranked` and `source`. It shows **3P**
+  for an excluded latest result and keeps it out of best-rank and the City
+  Index.
+- The Growth page shows an excluded count, an "excluded" ranking bucket and
+  "Not comparable: not the website".
+- Search Console: the portal home and portal search headlines read the
+  verified property import (`portal_growth_measurements`, source "Google
+  Search Console property totals") through `propertySearchTotals`. Several
+  property scopes show as unavailable instead of being added together.
+  Query-row sums, including the unweighted average position headline, are
+  removed or labelled *sample*. This applies to Growth's "Search Console
+  query sample" too.
+- Rollback: `supabase/rollback/20261020230000_organic_rank_website_only.down.sql`
+  is tested by `organic_website_only_rollback.test.sql`. It restores the
+  previous views, grants and City Index function, drops the helpers and
+  touches no data.
+
+### Release order (after review)
+
+1. Merge PR #187 into main.
+2. Apply the migration to `iokcopiyzajigvhwexhe` (Supabase MCP
+   `apply_migration`). Then commit the recorded version, following the
+   repo's existing "Record the applied migration version" convention.
+3. Deploy `rank-sync` through the *Deploy Supabase Edge Function* workflow,
+   with `expected_sha` set to the resulting main SHA and `confirm` set to
+   `DEPLOY`. Read the deployed source back and confirm it contains
+   `organic: onSite`.
+4. Optionally recompute the current City Index period:
+   `select recompute_location_indexes(null, date_trunc('month', now())::date)`.
+   This is a derived cache, and the Oct 26 run recomputes it anyway.
+5. Live check after the Monday 06:00 UTC run: new DataForSEO organic rows
+   carry only client hosts, Growth and portal states match the report page,
+   and no paid scans are added.
+
+The app deploy can come before or after step 2. Readers treat a missing
+`state` as the old behaviour and do not fail.

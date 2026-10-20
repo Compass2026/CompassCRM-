@@ -96,6 +96,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/task_assignment.tes
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/report_measurements.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/growth_rankings.test.sql"
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/organic_website_only.test.sql"
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/organic_website_only_rollback.test.sql"
 # This suite explicitly switches session identity to test PostgREST and worker boundaries.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/gbp_performance.test.sql"
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/dashboard_reporting.test.sql"
