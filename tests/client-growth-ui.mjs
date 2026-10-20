@@ -161,24 +161,30 @@ try{
  assert.ok(await page.getByText('Not checked',{exact:true}).isVisible());
  await page.locator('summary').filter({hasText:'Verification & history'}).click();await page.getByRole('button',{name:'Record a link check',exact:true}).click();await page.locator('textarea[name="evidence"]').fill('PRIVATE screenshot evidence confirms exact target');await page.getByRole('button',{name:'Save link check',exact:true}).click();await page.getByText('Verified live',{exact:true}).waitFor();assert.equal(checks.length,1);
  await page.screenshot({path:`${shots}/backlinks-team.png`,fullPage:true});
- const portal=await context(portalId),clientPage=await portal.newPage();clientPage.on('pageerror',e=>errors.push(e.message));
- await clientPage.goto(`http://127.0.0.1:${port}/portal/growth`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:/Where we started.*How you're growing/}).waitFor();assert.equal(await clientPage.getByText('Record measurements & review reports',{exact:true}).count(),0);
+ const portal=await context(portalId);
+ // next dev compiles a route on its first request and can then full-reload pages already open,
+ // aborting an in-flight navigation (net::ERR_ABORTED on slower CI runners). Compile the portal
+ // routes with the portal session before any portal tab exists, and retry only that abort.
+ for(const route of ['/portal','/portal/growth','/portal/search','/portal/rankings','/portal/backlinks'])assert.equal((await portal.request.get(`http://127.0.0.1:${port}${route}`)).ok(),true,`warm ${route}`);
+ const visit=async(target,url)=>{for(let attempt=1;;attempt++){try{return await target.goto(url,{waitUntil:'networkidle'});}catch(e){if(attempt>=3||!String(e.message).includes('ERR_ABORTED'))throw e;}}};
+ const clientPage=await portal.newPage();clientPage.on('pageerror',e=>errors.push(e.message));
+ await visit(clientPage,`http://127.0.0.1:${port}/portal/growth`);await clientPage.getByRole('heading',{name:/Where we started.*How you're growing/}).waitFor();assert.equal(await clientPage.getByText('Record measurements & review reports',{exact:true}).count(),0);
  assert.match(await clientPage.getByTestId('tracked-keywords').innerText(),/Keywords tracked\s+4/);
- await clientPage.goto(`http://127.0.0.1:${port}/portal`,{waitUntil:'networkidle'});
+ await visit(clientPage,`http://127.0.0.1:${port}/portal`);
  const searchCard=clientPage.locator('div').filter({has:clientPage.getByText('Search traffic',{exact:true})}).filter({hasText:'clicks from Google Search'}).last();
  assert.match(await searchCard.innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280[\s\S]*Search Console totals for your website/);
  assert.doesNotMatch(await searchCard.innerText(),/\b27\b|13,408/,'query-row sums are not the website total');
- await clientPage.goto(`http://127.0.0.1:${port}/portal/search`,{waitUntil:'networkidle'});
+ await visit(clientPage,`http://127.0.0.1:${port}/portal/search`);
  assert.match(await clientPage.locator('main').innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280/);
  assert.match(await clientPage.locator('main').innerText(),/does not add up to your totals/);
  assert.equal(await clientPage.getByText('average position',{exact:true}).count(),0,'no unweighted average of query rows as a headline');
- await clientPage.goto(`http://127.0.0.1:${port}/portal/rankings`,{waitUntil:'networkidle'});
+ await visit(clientPage,`http://127.0.0.1:${port}/portal/rankings`);
  const rankRow=k=>clientPage.getByRole('row').filter({hasText:k});
  assert.match(await rankRow('fictional brand roofing').innerText(),/not available/);
  assert.doesNotMatch(await rankRow('fictional brand roofing').innerText(),/not in top 100|▼|▲/);
  assert.match(await rankRow('roof replacement').innerText(),/not in top 100/);
  assert.match(await rankRow('roof repair').first().innerText(),/2[\s\S]*▲ 3/);
- await clientPage.goto(`http://127.0.0.1:${port}/portal/backlinks`,{waitUntil:'networkidle'});await clientPage.getByRole('heading',{name:'Regional trade association'}).waitFor();assert.doesNotMatch(await clientPage.locator('body').innerText(),/PRIVATE/);assert.equal(await clientPage.getByRole('button',{name:'Save link check'}).count(),0);
+ await visit(clientPage,`http://127.0.0.1:${port}/portal/backlinks`);await clientPage.getByRole('heading',{name:'Regional trade association'}).waitFor();assert.doesNotMatch(await clientPage.locator('body').innerText(),/PRIVATE/);assert.equal(await clientPage.getByRole('button',{name:'Save link check'}).count(),0);
  await clientPage.setViewportSize({width:390,height:844});await clientPage.screenshot({path:`${shots}/backlinks-portal-mobile.png`,fullPage:true});assert.equal(await clientPage.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
  console.log('Growth UI passed: fixed baseline, date filters, mobile layout, retry retention, opportunity save, stage update, evidence check, portal rendering. Synthetic data only.');
