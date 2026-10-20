@@ -15,8 +15,41 @@ export type RankObservation = {
   keyword_id: string; location_id: string | null; result_type: "organic" | "map_pack";
   position: number | null; url_ranked: string | null; recorded_at: string; run_id: string | null;
 };
-export type RankRun = { id: string; status: string; started_at: string; completed_at: string | null; checks_count: number | null; error: string | null };
+export type RankRun = { id: string; status: string; started_at: string; completed_at: string | null; checks_count: number | null; error: string | null; triggered_by?: string | null };
 
+// ── Source identity ─────────────────────────────────────────────────────────
+// Every series is read for exactly one website, Search Console property,
+// Analytics property + host and Business Profile location. Anything the
+// pilot cannot resolve to one of each is unavailable, never a fallback.
+export type GbpBindingRow = { publish_account_id: string | null; publish_page_id: string | null; external_account_id: string | null };
+export type ReportScope = {
+  siteHost: string | null; gscProperty: string | null; ga4Property: string | null;
+  gbp: { accountId: string; locationId: string } | null;
+  problems: { site: string | null; gsc: string | null; ga4: string | null; gbp: string | null; brands: string | null };
+};
+export function resolveScope(input: { websiteUrl: string | null; gscProperty: string | null; ga4Property: string | null; siteUrls: (string | null)[]; brandCount: number; gbpBindings: GbpBindingRow[] }): ReportScope {
+  const brands = input.brandCount > 0 ? `This client reports per brand website (${input.brandCount}). The pilot covers single-website clients only, so website, Search Console, Analytics and Business Profile figures are not shown.` : null;
+  const hosts = [...new Set([input.websiteUrl, ...input.siteUrls].map(u => reportingHost(u)).filter((h): h is string => !!h))];
+  const siteHost = !brands && hosts.length === 1 ? hosts[0] : null;
+  const site = brands ?? (hosts.length === 0 ? "No website is recorded for this client." : hosts.length > 1 ? `The client record and site rows name ${hosts.length} different websites (${hosts.join(", ")}). Which one to report is unresolved.` : null);
+  const valid = input.gbpBindings.filter(r => /^[0-9a-f]{24}$/.test(r.publish_account_id ?? "") && /^locations\/[0-9]{1,30}$/.test(r.publish_page_id ?? "") && r.publish_page_id === r.external_account_id);
+  const locations = [...new Map(valid.map(r => [`${r.publish_account_id}|${r.publish_page_id}`, r])).values()];
+  const gbp = !brands && locations.length === 1 ? { accountId: locations[0].publish_account_id!, locationId: locations[0].publish_page_id! } : null;
+  return {
+    siteHost,
+    gscProperty: !brands ? input.gscProperty || null : null,
+    ga4Property: !brands && siteHost ? input.ga4Property || null : null,
+    gbp,
+    problems: {
+      site, brands,
+      gsc: brands ?? (input.gscProperty ? null : "No Search Console property is recorded for this client."),
+      ga4: brands ?? (!input.ga4Property ? "No Analytics property is recorded for this client." : !siteHost ? "Analytics needs one resolved website host." : null),
+      gbp: brands ?? (locations.length === 0 ? "No verified Business Profile connection." : locations.length > 1 ? `${locations.length} Business Profile locations are connected; the pilot reports one.` : null),
+    },
+  };
+}
+
+// ── Organic rank ────────────────────────────────────────────────────────────
 // ranked: the client's own website, position verified by host.
 // not_found: checked, and neither the site nor its name was in the top 100.
 // third_party: a directory, social or review page matched by business name;
@@ -63,6 +96,8 @@ export function organicMovement(base: { state: OrganicState; position: number | 
 export type KeywordRow = ReportKeyword & {
   location_id: string | null;
   baseline: (RankObservation & { state: OrganicState }) | null;
+  // The keyword has no observation in the baseline run (added later).
+  baselineLate: boolean;
   latest: (RankObservation & { state: OrganicState }) | null;
   movement: Movement;
   status: KeywordStatus;
@@ -71,7 +106,7 @@ export type KeywordRow = ReportKeyword & {
 };
 
 export type RunSummary = {
-  run: RankRun; keywords: number; verified: number; thirdParty: number; notFound: number;
+  run: RankRun; beforeBaseline: boolean; keywords: number; verified: number; thirdParty: number; notFound: number;
   top3: number; top10: number; top20: number;
 };
 
@@ -80,6 +115,14 @@ export type RunSummary = {
 export function trackerRuns(runs: RankRun[], observations: RankObservation[]) {
   const withRows = new Set(observations.map(o => o.run_id).filter(Boolean));
   return runs.filter(r => withRows.has(r.id) || /^dataforseo\b/.test(r.error ?? "")).toSorted((a, b) => time(a.started_at) - time(b.started_at));
+}
+
+// The baseline is the first complete SCHEDULED run. Request settings are not
+// stored per run, so a manual run posted while the tracker was being set up
+// cannot be shown to match later checks; it stays visible but is not the
+// baseline. With no scheduled run, the first complete run is used.
+export function baselineRun(complete: RankRun[]) {
+  return complete.find(r => r.triggered_by === "cron") ?? complete[0] ?? null;
 }
 
 export function keywordReport(input: { keywords: ReportKeyword[]; observations: RankObservation[]; runs: RankRun[]; siteHost: string | null; now: string }) {
@@ -99,18 +142,23 @@ export function keywordReport(input: { keywords: ReportKeyword[]; observations: 
   const complete = runs.filter(r => r.status === "complete");
   const running = runs.filter(r => r.status === "running");
   const latestRun = complete.at(-1) ?? null;
+  const base = baselineRun(complete);
+  const baseAt = base ? time(base.started_at) : -Infinity;
 
   const rows: KeywordRow[] = keywords.map(k => {
     const organic = observations.filter(o => o.keyword_id === k.id && o.result_type === "organic").map(o => ({ ...o, state: organicState(o, siteHost) }));
     const latest = organic.at(-1) ?? null;
-    // The baseline is the first observation from the same location as the latest.
-    const baseline = latest ? organic.find(o => o.location_id === latest.location_id)! : null;
-    const pack = observations.filter(o => o.keyword_id === k.id && o.result_type === "map_pack" && (!latest || o.location_id === latest.location_id));
+    // Baseline: this keyword's observation in the baseline run, else its first
+    // later one, always from the same location as the latest.
+    const sameLoc = latest ? organic.filter(o => o.location_id === latest.location_id) : [];
+    const baseline = sameLoc.find(o => time(o.recorded_at) >= baseAt) ?? null;
+    const pack = observations.filter(o => o.keyword_id === k.id && o.result_type === "map_pack" && (!latest || o.location_id === latest.location_id) && time(o.recorded_at) >= baseAt);
     const status: KeywordStatus = !latest ? (running.length ? "pending" : "not_checked")
       : now - time(latest.recorded_at) > RANK_STALE_DAYS * DAY ? "stale"
       : latestRun && latest.run_id && latest.run_id !== latestRun.id && time(latest.recorded_at) < time(latestRun.started_at) ? "stale" : "current";
     return {
       ...k, location_id: latest?.location_id ?? null, baseline, latest,
+      baselineLate: !!baseline && !!base && baseline.run_id !== base.id,
       movement: organicMovement(baseline, latest), status,
       pageMismatch: latest?.state === "ranked" && !!k.target_url && !samePage(latest.url_ranked, k.target_url),
       mapPack: { baseline: pack[0] ?? null, latest: pack.at(-1) ?? null },
@@ -121,7 +169,7 @@ export function keywordReport(input: { keywords: ReportKeyword[]; observations: 
     const obs = observations.filter(o => o.run_id === run.id && o.result_type === "organic");
     const ranked = obs.filter(o => organicState(o, siteHost) === "ranked");
     return {
-      run, keywords: new Set(obs.map(o => o.keyword_id)).size,
+      run, beforeBaseline: time(run.started_at) < baseAt, keywords: new Set(obs.map(o => o.keyword_id)).size,
       verified: obs.filter(o => organicState(o, siteHost) !== "third_party").length,
       thirdParty: obs.filter(o => organicState(o, siteHost) === "third_party").length,
       notFound: obs.filter(o => o.position === null).length,
@@ -131,14 +179,14 @@ export function keywordReport(input: { keywords: ReportKeyword[]; observations: 
     };
   });
 
-  // Stable cohort: keywords verified (ranked or not found) in BOTH the first
-  // and the latest complete run, from the same location. Anything else is
-  // disclosed as excluded rather than silently changing the denominator.
-  const first = complete[0] ?? null;
-  const cohort = { baselineRun: first, latestRun, size: 0, improved: 0, declined: 0, unchanged: 0, entered: 0, dropped: 0, absentBoth: 0, excludedThirdParty: 0, excludedMissing: 0, top10Before: 0, top10After: 0, top3Before: 0, top3After: 0 };
-  if (first && latestRun && first.id !== latestRun.id) {
+  // Stable cohort: keywords verified (ranked or not found) in BOTH the
+  // baseline and the latest complete run, from the same location record.
+  // Anything else is disclosed as excluded rather than silently changing the
+  // denominator.
+  const cohort = { baselineRun: base, latestRun, size: 0, improved: 0, declined: 0, unchanged: 0, entered: 0, dropped: 0, absentBoth: 0, excludedThirdParty: 0, excludedMissing: 0, top10Before: 0, top10After: 0, top3Before: 0, top3After: 0 };
+  if (base && latestRun && base.id !== latestRun.id) {
     for (const k of keywords) {
-      const a = observations.find(o => o.run_id === first.id && o.keyword_id === k.id && o.result_type === "organic");
+      const a = observations.find(o => o.run_id === base.id && o.keyword_id === k.id && o.result_type === "organic");
       const b = observations.find(o => o.run_id === latestRun.id && o.keyword_id === k.id && o.result_type === "organic");
       if (!a || !b || a.location_id !== b.location_id) { cohort.excludedMissing++; continue; }
       const sa = organicState(a, siteHost), sb = organicState(b, siteHost);
@@ -153,12 +201,15 @@ export function keywordReport(input: { keywords: ReportKeyword[]; observations: 
       else if (m.kind === "entered") cohort.entered++; else if (m.kind === "dropped") cohort.dropped++; else if (m.kind === "absent_both") cohort.absentBoth++;
     }
   }
-  const failed = runs.filter(r => r.status === "failed");
+  // Attempts for source health. A failed run that still stored some
+  // observations is partial, not a clean failure.
+  const answered = (id: string) => observations.some(o => o.run_id === id);
+  const attempts: Attempt[] = runs.map(r => ({ at: r.started_at, finishedAt: r.completed_at, outcome: r.status === "complete" ? "complete" : r.status === "running" ? "running" : answered(r.id) ? "partial" : "failed", detail: r.error }));
   return {
-    rows, perRun, cohort, duplicates,
+    rows, perRun, cohort, duplicates, attempts,
     tracked: keywords.length,
     lastSuccess: latestRun,
-    lastFailure: failed.at(-1) ?? null,
+    lastFailure: runs.filter(r => r.status === "failed").at(-1) ?? null,
     running: running.at(-1) ?? null,
     statusCounts: {
       current: rows.filter(r => r.status === "current").length, stale: rows.filter(r => r.status === "stale").length,
@@ -167,7 +218,27 @@ export function keywordReport(input: { keywords: ReportKeyword[]; observations: 
   };
 }
 
-// Next scheduled UTC slot for a weekly pg_cron job ("m h * * dow").
+// ── Source health ───────────────────────────────────────────────────────────
+// One state per tracker from its attempts. A failure newer than the last
+// success is "failed" even if that success is still recent; the last success
+// is kept alongside as evidence. Nothing here promises a future run.
+export type Attempt = { at: string; finishedAt: string | null; outcome: "complete" | "partial" | "failed" | "running"; detail: string | null };
+export type TrackerState = "current" | "stale" | "failed" | "partial" | "running" | "missing" | "unconfigured";
+export function trackerHealth(input: { attempts: Attempt[]; configured: boolean; staleDays: number; now: string }) {
+  const sorted = input.attempts.filter(a => Number.isFinite(time(a.at)) && time(a.at) <= time(input.now)).toSorted((a, b) => time(a.at) - time(b.at));
+  const lastSuccess = sorted.filter(a => a.outcome === "complete").at(-1) ?? null;
+  const lastProblem = sorted.filter(a => a.outcome === "failed" || a.outcome === "partial").at(-1) ?? null;
+  const latest = sorted.at(-1) ?? null;
+  const state: TrackerState = !input.configured && !latest ? "unconfigured"
+    : latest?.outcome === "running" ? "running"
+    : latest && (latest.outcome === "failed" || latest.outcome === "partial") ? latest.outcome
+    : !lastSuccess ? "missing"
+    : time(input.now) - time(lastSuccess.finishedAt ?? lastSuccess.at) > input.staleDays * DAY ? "stale" : "current";
+  return { state, lastSuccess, lastProblem, latest };
+}
+
+// Next slot of a weekly pg_cron schedule ("m h * * dow"), in UTC. This is the
+// configured schedule, not evidence that a run will happen.
 export function nextWeekly(dow: number, hourUtc: number, now: string) {
   const t = new Date(now);
   const d = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), hourUtc));
@@ -176,15 +247,41 @@ export function nextWeekly(dow: number, hourUtc: number, now: string) {
   return d.toISOString();
 }
 
-// Monthly series from import receipts: the newest receipt per period wins,
-// and a period is "complete" only when the provider said so (or it ends on
-// the month's last day for sources that import complete months only).
+// ── Maps grid ───────────────────────────────────────────────────────────────
+// Two scans are comparable only when every frozen input that shapes the
+// result is known and identical. Unknown is never treated as equal.
+export type ScanConfig = { target_place_id?: string | null; points?: unknown; keywords?: { id: string; keyword: string }[]; zoom?: number | null; search_this_area?: boolean | null; geometry?: unknown };
+export function scanComparability(a: { profile_id?: string; config: ScanConfig }, b: { profile_id?: string; config: ScanConfig }) {
+  // a is the earlier scan, b the later one.
+  const reasons: string[] = [];
+  const known = (v: unknown) => v !== undefined && v !== null;
+  const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+  if (a.profile_id !== undefined && b.profile_id !== undefined && a.profile_id !== b.profile_id) reasons.push("different scan profile");
+  const check = (label: string, x: unknown, y: unknown) => {
+    if (!known(x) || !known(y)) reasons.push(`${label} unknown for ${!known(x) && !known(y) ? "both scans" : !known(x) ? "the earlier scan" : "the later scan"}`);
+    else if (!same(x, y)) reasons.push(`different ${label}`);
+  };
+  check("business (place id)", a.config.target_place_id, b.config.target_place_id);
+  check("search mode", a.config.search_this_area, b.config.search_this_area);
+  check("map zoom", a.config.zoom, b.config.zoom);
+  check("grid geometry", a.config.geometry, b.config.geometry);
+  check("points", a.config.points, b.config.points);
+  check("keywords", a.config.keywords?.map(k => k.id), b.config.keywords?.map(k => k.id));
+  return { comparable: reasons.length === 0, reasons };
+}
+
+// ── Monthly provider imports ───────────────────────────────────────────────
+// Each series is filtered to its one resolved identity before months are
+// chosen, so two properties, hosts or locations can never overwrite each
+// other. The newest receipt per period wins. A period is "complete" only when
+// the provider said so (or it ends on the month's last day for sources that
+// import complete months only).
 export type MonthlyPoint = { period: string; period_end: string; created_at: string; values: Record<string, number>; complete: boolean };
-export function latestPerPeriod<T extends { period: string; period_end: string; created_at: string }>(rows: T[]) {
+export function latestPerPeriod<T extends { period: string; period_end: string; created_at: string }>(rows: T[], identity: (r: T) => string = () => "") {
   const by = new Map<string, T>();
   for (const r of rows) {
-    const cur = by.get(r.period);
-    if (!cur || r.period_end > cur.period_end || (r.period_end === cur.period_end && r.created_at > cur.created_at)) by.set(r.period, r);
+    const key = `${identity(r)}|${r.period}`, cur = by.get(key);
+    if (!cur || r.period_end > cur.period_end || (r.period_end === cur.period_end && r.created_at > cur.created_at)) by.set(key, r);
   }
   return [...by.values()].toSorted((a, b) => a.period.localeCompare(b.period));
 }
@@ -199,7 +296,7 @@ export function compareMonths(points: MonthlyPoint[], key: string) {
   return { first, previous, latest, vsPrevious: delta(latest, previous), vsFirst: delta(latest, first) };
 }
 
-export type GbpImport = { period: string; period_end: string; created_at: string; data: unknown };
+export type GbpImport = { account_id?: string | null; location_id?: string | null; period: string; period_end: string; created_at: string; data: unknown };
 const GBP_KEYS = {
   calls: ["CALL_CLICKS"], website: ["WEBSITE_CLICKS"], directions: ["BUSINESS_DIRECTION_REQUESTS"],
   views: ["BUSINESS_IMPRESSIONS_MOBILE_MAPS", "BUSINESS_IMPRESSIONS_DESKTOP_MAPS", "BUSINESS_IMPRESSIONS_MOBILE_SEARCH", "BUSINESS_IMPRESSIONS_DESKTOP_SEARCH"],
@@ -215,6 +312,26 @@ export function gbpTotals(data: unknown): Record<string, number> {
   return out;
 }
 
+type Receipt = { property?: string | null; period: string; period_end: string; created_at: string; data: unknown };
+const values = (data: unknown) => {
+  const v = data && typeof data === "object" ? (data as { values?: Record<string, unknown> }).values : null;
+  return Object.fromEntries(Object.entries(v ?? {}).filter(([, n]) => typeof n === "number" && Number.isFinite(n))) as Record<string, number>;
+};
+const bareHost = (h: unknown) => typeof h === "string" ? h.trim().toLowerCase().replace(/^www\./, "").replace(/\.$/, "") : null;
+// Search Console imports complete months only, for exactly this property.
+export const gscMonths = (rows: Receipt[], property: string | null): MonthlyPoint[] => !property ? [] :
+  latestPerPeriod(rows.filter(r => r.property === property), r => r.property ?? "").map(r => ({ ...r, values: values(r.data), complete: r.period_end === monthEnd(r.period) }));
+// Analytics: this property AND this website host. A month-to-date receipt is
+// written daily; only the provider's own "complete_month" counts as full.
+export const ga4Months = (rows: Receipt[], property: string | null, host: string | null): MonthlyPoint[] => !property || !host ? [] :
+  latestPerPeriod(rows.filter(r => r.property === property && bareHost((r.data as { host?: unknown } | null)?.host) === host), r => `${r.property}|${host}`)
+    .map(r => ({ ...r, values: values(r.data), complete: (r.data as { coverage?: string } | null)?.coverage === "complete_month" }));
+// Business Profile: exactly this account and location.
+export const gbpMonths = (rows: GbpImport[], binding: { accountId: string; locationId: string } | null): MonthlyPoint[] => !binding ? [] :
+  latestPerPeriod(rows.filter(r => r.account_id === binding.accountId && r.location_id === binding.locationId), r => `${r.account_id}|${r.location_id}`)
+    .map(r => ({ ...r, values: gbpTotals(r.data), complete: r.period_end === monthEnd(r.period) }));
+
+// ── Inquiries ───────────────────────────────────────────────────────────────
 export type InquiryRow = { submitted_at: string; service_type: string | null; page_url: string | null; source: string | null };
 export function inquirySummary(rows: InquiryRow[], timeZone = "America/Chicago") {
   const month = (s: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit" }).format(new Date(s));
@@ -229,18 +346,3 @@ export function inquirySummary(rows: InquiryRow[], timeZone = "America/Chicago")
     byForm: count(r => r.service_type || "Form not named"),
   };
 }
-
-type Receipt = { period: string; period_end: string; created_at: string; data: unknown };
-const values = (data: unknown) => {
-  const v = data && typeof data === "object" ? (data as { values?: Record<string, unknown> }).values : null;
-  return Object.fromEntries(Object.entries(v ?? {}).filter(([, n]) => typeof n === "number" && Number.isFinite(n))) as Record<string, number>;
-};
-// Search Console imports complete months only.
-export const gscMonths = (rows: Receipt[]): MonthlyPoint[] =>
-  latestPerPeriod(rows).map(r => ({ ...r, values: values(r.data), complete: r.period_end === monthEnd(r.period) }));
-// Analytics writes a month-to-date receipt daily; only the provider's own
-// "complete_month" coverage counts as a full month.
-export const ga4Months = (rows: Receipt[]): MonthlyPoint[] =>
-  latestPerPeriod(rows).map(r => ({ ...r, values: values(r.data), complete: (r.data as { coverage?: string } | null)?.coverage === "complete_month" }));
-export const gbpMonths = (rows: GbpImport[]): MonthlyPoint[] =>
-  latestPerPeriod(rows).map(r => ({ ...r, values: gbpTotals(r.data), complete: r.period_end === monthEnd(r.period) }));
