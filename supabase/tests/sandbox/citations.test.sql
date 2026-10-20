@@ -11,6 +11,8 @@ $$;
 -- Runs p_sql and returns the SQLSTATE it failed with ('' when it succeeded).
 create function ct.err(p_sql text) returns text language plpgsql as $$
 begin execute p_sql; return ''; exception when others then return sqlstate; end $$;
+-- Compass's day (America/Chicago), which the guards use; current_date is the server's (UTC in CI).
+create function ct.today() returns date language sql stable as $$ select (now() at time zone 'America/Chicago')::date $$;
 grant execute on all functions in schema ct to anon, authenticated;
 
 -- Fixtures, as the worker.
@@ -115,25 +117,29 @@ begin
   if ct.err($q$select citation_import('{"id": "c1000000-0000-4000-e000-000000000001", "client_id": "c1000000-0000-4000-b000-00000000000b", "provider": "x_csv", "file_sha256": "aaaa"}', '[]', '[]', true)$q$) <> '42501' then
     raise exception 'M10 an import id moved to another client'; end if;
 
-  -- Provider complete stays unverified; only a check verifies.
+  -- Provider complete stays unverified; only a check verifies, and verification is never stored on the listing.
   select id into l from citation_listings where listing_url = 'https://www.yelp.com/biz/sample-roofing';
-  if (select (fulfillment_status, verification_status) <> ('provider_complete', 'unverified') from citation_listings where id = l) then
+  if (select (fulfillment_status, verification_status) <> ('provider_complete', 'unverified') from citation_listing_overview where id = l) then
     raise exception 'V1 provider complete changed verification'; end if;
-  if ct.err(format($q$update citation_listings set verification_status = 'verified_accurate' where id = %L$q$, l)) <> '23514' then
-    raise exception 'V2 verification edited directly'; end if;
-  if ct.err(format($q$insert into citation_checks (listing_id, checked_on, method, result, evidence) values (%L, current_date, 'publisher_search', 'confirmed_absent', 'searched')$q$, l)) <> '23514' then
+  if exists (select 1 from pg_attribute where attrelid = 'public.citation_listings'::regclass and attname in ('verification_status', 'last_checked_on', 'last_check_id') and not attisdropped) then
+    raise exception 'V2 verification can be stored (and so edited) on the listing'; end if;
+  if ct.err(format($q$insert into citation_checks (listing_id, checked_on, method, result, evidence) values (%L, ct.today(), 'publisher_search', 'confirmed_absent', 'searched')$q$, l)) <> '23514' then
     raise exception 'V3 a search confirmed absence'; end if;
-  insert into citation_checks (listing_id, checked_on, method, result, evidence) values (l, current_date - 3, 'publisher_search', 'not_found', 'Searched Yelp for the name and phone (sample)');
-  if (select verification_status from citation_listings where id = l) <> 'unverified' then raise exception 'V4 not found counted as absent'; end if;
+  insert into citation_checks (listing_id, checked_on, method, result, evidence) values (l, ct.today(), 'publisher_search', 'not_found', 'Searched Yelp for the name and phone (sample)');
+  if (select verification_status from citation_listing_overview where id = l) <> 'unverified' then raise exception 'V4 not found counted as absent'; end if;
   insert into citation_checks (id, listing_id, checked_on, method, result, observed_phone, evidence) values
-    ('c1000000-0000-4000-f000-000000000001', l, current_date - 1, 'visited_url', 'discrepancy', '417-555-0100', 'Listing shows the old phone (sample screenshot ref S-1)');
-  insert into citation_checks (listing_id, checked_on, method, result, evidence) values (l, current_date - 10, 'visited_url', 'accurate', 'Backdated entry (sample)');
-  if (select (verification_status, last_checked_on) <> ('discrepancy', current_date - 1) from citation_listings where id = l) then
+    ('c1000000-0000-4000-f000-000000000001', l, ct.today(), 'visited_url', 'discrepancy', '417-555-0100', 'Listing shows the old phone (sample screenshot ref S-1)');
+  insert into citation_checks (id, listing_id, checked_on, method, result, observed_name, evidence) values
+    ('c1000000-0000-4000-f000-000000000003', l, ct.today() - 10, 'visited_url', 'accurate', 'Sample Roofing', 'Backdated entry (sample)');
+  if (select (verification_status, last_checked_on, current_phone) <> ('discrepancy', ct.today(), '417-555-0100') from citation_listing_overview where id = l) then
     raise exception 'V5 a backdated check overrode a newer one'; end if;
-  if (select identity_version from citation_checks where id = 'c1000000-0000-4000-f000-000000000001') <> 2 then raise exception 'V6 check not pinned to the identity'; end if;
-  if ct.err($q$update citation_checks set evidence = 'x'$q$) = '' or ct.err(format($q$insert into citation_checks (listing_id, checked_on, method, result, evidence) values (%L, current_date + 5, 'visited_url', 'accurate', 'x')$q$, l)) <> '23514' then
-    raise exception 'V7 checks editable or future-dated'; end if;
-
+  if (select identity_version from citation_checks where id = 'c1000000-0000-4000-f000-000000000001') <> 2
+    or (select identity_version from citation_checks where id = 'c1000000-0000-4000-f000-000000000003') <> 0 then
+    raise exception 'V6 checks not pinned to the identity in effect on their date'; end if;
+  if ct.err(format($q$insert into citation_checks (listing_id, checked_on, method, result, evidence) values (%L, ct.today(), 'visited_url', 'accurate', 'looked fine')$q$, l)) <> '23514' then
+    raise exception 'V7 an accurate verdict recorded nothing it saw'; end if;
+  if ct.err($q$update citation_checks set evidence = 'x'$q$) = '' or ct.err(format($q$insert into citation_checks (listing_id, checked_on, method, result, observed_name, evidence) values (%L, ct.today() + 5, 'visited_url', 'accurate', 'x', 'x')$q$, l)) <> '23514' then
+    raise exception 'V8 checks editable or future-dated'; end if;
 end $$;
 
 -- ── Correction task: assigned, dated, resolved only with evidence ─────────
@@ -143,25 +149,86 @@ declare l uuid := (select id from citation_listings where listing_url = 'https:/
   t uuid := 'c1000000-0000-4000-f000-0000000000a1';
 begin
   insert into citation_tasks (id, client_id, location_id, listing_id, kind, reason, assignee_id, due_on) values
-    (t, 'c1000000-0000-4000-b000-00000000000a', 'c1000000-0000-4000-d000-0000000000a1', l, 'correct', 'Phone mismatch on Yelp (sample)', member, current_date + 7);
+    (t, 'c1000000-0000-4000-b000-00000000000a', 'c1000000-0000-4000-d000-0000000000a1', l, 'correct', 'Phone mismatch on Yelp (sample)', member, ct.today() + 7);
   if ct.err(format($q$insert into citation_tasks (client_id, location_id, listing_id, kind, reason) values ('c1000000-0000-4000-b000-00000000000a', 'c1000000-0000-4000-d000-0000000000a1', %L, 'correct', 'again')$q$, l)) <> '23505' then
     raise exception 'T1 a second open task for the same correction'; end if;
   if ct.err(format($q$insert into citation_tasks (client_id, location_id, listing_id, kind, reason) values ('c1000000-0000-4000-b000-00000000000b', 'c1000000-0000-4000-d000-0000000000b1', %L, 'verify', 'cross')$q$, l)) <> '23514' then
     raise exception 'T2 a task joined another client''s listing'; end if;
   if ct.err(format($q$update citation_tasks set status = 'resolved', resolution = 'Fixed' where id = %L$q$, t)) <> '23514' then
     raise exception 'T3 resolved without a date or evidence'; end if;
-  if ct.err(format($q$update citation_tasks set status = 'resolved', resolution = 'Fixed', resolved_on = current_date - 30, evidence_ref = 'S-2' where id = %L$q$, t)) <> '23514' then
+  if ct.err(format($q$update citation_tasks set status = 'resolved', resolution = 'Fixed', resolved_on = ct.today() - 30, evidence_ref = 'S-2' where id = %L$q$, t)) <> '23514' then
     raise exception 'T4 resolved before it opened'; end if;
   insert into citation_checks (id, listing_id, checked_on, method, result, observed_phone, evidence) values
-    ('c1000000-0000-4000-f000-000000000002', l, current_date, 'visited_url', 'accurate', '(417) 555-0199', 'Phone corrected on Yelp (sample screenshot ref S-2)');
-  update citation_tasks set status = 'resolved', resolution = 'Yelp phone corrected by the owner (sample)', resolved_on = current_date,
+    ('c1000000-0000-4000-f000-000000000002', l, ct.today(), 'visited_url', 'accurate', '(417) 555-0199', 'Phone corrected on Yelp (sample screenshot ref S-2)');
+  update citation_tasks set status = 'resolved', resolution = 'Yelp phone corrected by the owner (sample)', resolved_on = ct.today(),
     check_id = 'c1000000-0000-4000-f000-000000000002' where id = t;
   if (select resolved_by is distinct from '00000000-0000-4000-a000-000000000001'::uuid or resolved_at is null from citation_tasks where id = t) then
     raise exception 'T5 resolution not stamped'; end if;
-  if (select verification_status from citation_listings where id = l) <> 'verified_accurate' then raise exception 'T6 the evidence check did not verify'; end if;
+  if (select verification_status from citation_listing_overview where id = l) <> 'verified_accurate' then raise exception 'T6 the evidence check did not verify'; end if;
   update citation_tasks set status = 'open' where id = t;
   if (select resolved_on is not null or resolution <> '' from citation_tasks where id = t) then raise exception 'T7 reopen kept the resolution'; end if;
   update citation_tasks set status = 'cancelled', resolution = 'Duplicate of an existing task (sample)' where id = t;
+end $$;
+
+-- ── One current-evidence projection (detail, overview, CSV read the same) ─
+-- The Yelp listing was imported with phone 417-555-0100 (2026-10-01, then a
+-- 2026-10-05 name). The latest check (T: accurate, (417) 555-0199) is current;
+-- the import stays as source_*, with its own date, never relabelled.
+do $$
+declare l uuid := (select id from citation_listings where listing_url = 'https://www.yelp.com/biz/sample-roofing');
+begin
+  if (select (current_phone, current_name, last_checked_on, source_phone, source_name, source_observed_on, source_provider)
+      <> ('(417) 555-0199', '', ct.today(), '417-555-0100', 'Sample Roofing', '2026-10-05'::date, 'sample_csv') from citation_listing_overview where id = l) then
+    raise exception 'E1 current vs imported %', (select to_jsonb(o) from citation_listing_overview o where id = l); end if;
+  -- An inaccessible check observes nothing: no current values, the import untouched.
+  insert into citation_checks (listing_id, checked_on, method, result, evidence) values (l, ct.today(), 'visited_url', 'inaccessible', 'Page returned an error (sample)');
+  if (select (verification_status, current_phone, current_name, source_phone) <> ('inaccessible', '', '', '417-555-0100') from citation_listing_overview where id = l) then
+    raise exception 'E2 an inaccessible check kept old values as current'; end if;
+  insert into citation_checks (listing_id, checked_on, method, result, observed_phone, observed_name, evidence) values
+    (l, ct.today(), 'visited_url', 'accurate', '(417) 555-0199', 'Sample Roofing', 'Back online and matching (sample)');
+end $$;
+
+-- ── Identity changes: earlier evidence is history, not current verification ─
+-- Back-date the existing versions (append-only guard lifted inside this
+-- rolled-back transaction only) so v1 was approved 10 days ago, v2 5 days ago.
+reset role;
+alter table citation_location_identities disable trigger citation_identities_append_only;
+update citation_location_identities set recorded_at = now() - interval '10 days' where location_id = 'c1000000-0000-4000-d000-0000000000a1' and version = 1;
+update citation_location_identities set recorded_at = now() - interval '5 days' where location_id = 'c1000000-0000-4000-d000-0000000000a1' and version = 2;
+alter table citation_location_identities enable trigger citation_identities_append_only;
+select ct.as_team('00000000-0000-4000-a000-000000000001');
+do $$
+declare l uuid := (select id from citation_listings where listing_url = 'https://www.yelp.com/biz/sample-roofing');
+  y uuid := (select id from citation_listings where listing_url = 'https://yelp.com/biz/sample-roofing-2');
+  c1 uuid := 'c1000000-0000-4000-f000-0000000000c1'; c2 uuid := 'c1000000-0000-4000-f000-0000000000c2'; c3 uuid := 'c1000000-0000-4000-f000-0000000000c3';
+begin
+  if (select verification_status from citation_listing_overview where id = l) <> 'verified_accurate' then raise exception 'R0 setup'; end if;
+  -- The version in effect on the check's date, not the one in force when it was typed in.
+  insert into citation_checks (id, listing_id, checked_on, method, result, observed_name, evidence) values
+    (c1, y, ct.today() - 7, 'visited_url', 'accurate', 'Sample Roofing', 'Seen a week ago (sample)'),
+    (c2, y, ct.today() - 3, 'visited_url', 'accurate', 'Sample Roofing', 'Seen three days ago (sample)');
+  if (select identity_version from citation_checks where id = c1) <> 1 or (select identity_version from citation_checks where id = c2) <> 2 then
+    raise exception 'R1 effective identity version'; end if;
+  if (select verification_status from citation_listing_overview where id = y) <> 'verified_accurate' then raise exception 'R2 a check against the current identity verifies'; end if;
+  -- A notes-only edit changes nothing.
+  update citation_locations set notes = 'Office hours confirmed (sample)' where id = 'c1000000-0000-4000-d000-0000000000a1';
+  if (select verification_status from citation_listing_overview where id = l) <> 'verified_accurate' then raise exception 'R3 a notes-only edit invalidated verification'; end if;
+  -- A phone change: version 3; earlier checks become history and need reverification.
+  update citation_locations set phone = '(417) 555-0123', identity_note = 'Client moved to a new main line (sample)' where id = 'c1000000-0000-4000-d000-0000000000a1';
+  if (select (identity_version, check_identity_version, verification_status) <> (3, 2, 'needs_reverification') from citation_listing_overview where id = l)
+    or (select verification_status from citation_listing_overview where id = y) <> 'needs_reverification' then
+    raise exception 'R4 an identity change left old verification current %', (select to_jsonb(o) from citation_listing_overview o where id = l); end if;
+  if (select count(*) from citation_checks where listing_id = l) < 5 then raise exception 'R5 history was dropped'; end if;
+  -- A check dated before the change cannot claim to have evaluated the new identity.
+  insert into citation_checks (id, listing_id, checked_on, method, result, observed_phone, evidence) values
+    (c3, y, ct.today() - 1, 'visited_url', 'accurate', '(417) 555-0123', 'Backdated after the change (sample)');
+  if (select identity_version from citation_checks where id = c3) <> 2 or (select verification_status from citation_listing_overview where id = y) <> 'needs_reverification' then
+    raise exception 'R6 a backdated check was counted against the new identity'; end if;
+  -- A new check today, against v3, restores current verification.
+  insert into citation_checks (listing_id, checked_on, method, result, observed_phone, evidence) values
+    (l, ct.today(), 'visited_url', 'accurate', '(417) 555-0123', 'New line shown on Yelp (sample)');
+  if (select (verification_status, check_identity_version, current_phone) <> ('verified_accurate', 3, '(417) 555-0123') from citation_listing_overview where id = l) then
+    raise exception 'R7 a current-identity check did not restore verification'; end if;
 end $$;
 
 -- ── Fulfillment requests: recorded, approved by an admin, never ordered ──
@@ -185,11 +252,11 @@ begin
   if ct.err(format($q$update citation_fulfillment_requests set approved_budget = 100 where id = %L$q$, q)) <> '42501' then
     raise exception 'F4 a member raised an approved budget'; end if;
   update citation_fulfillment_requests set status = 'provider_complete', provider_reference = 'SAMPLE-REF-1', actual_amount = 0, credits_used = 1 where id = q;
-  if (select (fulfillment_status, verification_status) <> ('provider_complete', 'unverified') from citation_listings where id = l) then
+  if (select (fulfillment_status, verification_status) <> ('provider_complete', 'unverified') from citation_listing_overview where id = l) then
     raise exception 'F5 provider complete must mirror fulfillment only'; end if;
-  insert into citation_credit_entries (provider, kind, credits, occurred_on, note) values ('sample_provider', 'opening_balance', 10, current_date, 'Sample opening balance');
-  insert into citation_credit_entries (provider, kind, credits, cash_amount, occurred_on) values ('sample_provider', 'purchase', 5, 12.00, current_date);
-  if ct.err($q$insert into citation_credit_entries (provider, kind, credits, cash_amount, occurred_on) values ('sample_provider', 'adjustment', -1, 5, current_date)$q$) <> '23514' then
+  insert into citation_credit_entries (provider, kind, credits, occurred_on, note) values ('sample_provider', 'opening_balance', 10, ct.today(), 'Sample opening balance');
+  insert into citation_credit_entries (provider, kind, credits, cash_amount, occurred_on) values ('sample_provider', 'purchase', 5, 12.00, ct.today());
+  if ct.err($q$insert into citation_credit_entries (provider, kind, credits, cash_amount, occurred_on) values ('sample_provider', 'adjustment', -1, 5, ct.today())$q$) <> '23514' then
     raise exception 'F6 cash on a non-purchase credit entry'; end if;
   if (select (credits_recorded, credits_used, credit_purchase_cash) <> (15, 1, 12.00) from citation_credit_balances where provider = 'sample_provider') then
     raise exception 'F7 credit balance %', (select to_jsonb(b) from citation_credit_balances b where provider = 'sample_provider'); end if;

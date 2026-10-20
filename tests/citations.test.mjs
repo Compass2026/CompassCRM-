@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   parseCsv, guessMapping, isCredentialHeader, prepareImport, listingKey, listingUrl, fulfillmentFromText, parseSourceDate,
-  compareListing, evidenceFreshness, csvCell, toCsv, exportRows, publicAddress, needsAction, rowHash, RESULT_METHODS,
+  compareListing, evidenceFreshness, csvCell, toCsv, exportRows, publicAddress, needsAction, rowHash, RESULT_METHODS, identityCurrent,
+  comparisonSource, EXPORT_HEADERS,
 } from "../src/lib/citations.ts";
 
 const LOC_A = "00000000-0000-4000-8000-0000000000a1";
@@ -77,6 +78,10 @@ test("dates: ISO and US forms, no future dates", () => {
   assert.throws(() => parseSourceDate("soon"), /not a date/);
 });
 
+const exportBase = { client_name: "Sandbox", location_label: "SAB", directory_name: "Yelp", listing_url: "https://yelp.com/biz/x", external_id: null,
+  fulfillment_status: "provider_complete", verification_status: "unverified", last_checked_on: null, last_check_result: null, check_identity_version: null, identity_version: 1,
+  current_name: "", current_address: "", current_phone: "", current_website: "", source_provider: "sample", source_observed_on: null, last_imported_at: null,
+  source_name: "", source_address: "", source_phone: "", source_website: "", open_tasks: 0, suspected_duplicate: false };
 const identity = { business_name: "Sample Roofing LLC", address_line1: "100 North Main Street", address_line2: "Suite 5", city: "Springfield",
   region: "MO", postal_code: "65806", country: "US", phone: "(417) 555-0100", website_url: "https://www.sample-roofing.example/", hide_address: false };
 
@@ -92,11 +97,9 @@ test("hidden address: any observed address is 'exposed'; public outputs never ca
   const hidden = { ...identity, hide_address: true };
   assert.equal(compareListing(hidden, { observed_name: "", observed_address: "100 N Main St", observed_phone: "", observed_website: "" }).address, "exposed");
   assert.ok(!publicAddress(hidden).includes("Main"));
-  const listing = { client_name: "Sandbox", location_label: "SAB", identity: hidden, directory_name: "Yelp", listing_url: "https://yelp.com/biz/x", external_id: null,
-    fulfillment_status: "provider_complete", verification_status: "unverified", last_checked_on: null, source_provider: "sample", source_observed_on: null,
-    last_imported_at: null, open_tasks: 0, suspected_duplicate: false, observed_name: "", observed_address: "100 N Main St", observed_phone: "", observed_website: "" };
+  const listing = { ...exportBase, identity: hidden, current_address: "100 N Main St", source_address: "100 North Main Street" };
   const client = toCsv(exportRows([listing], "client"));
-  assert.ok(!client.includes("Main"), "client-safe export has no street");
+  assert.ok(!client.includes("Main"), "client-safe export has no street, checked or imported");
   assert.match(client, /should be hidden/);
   assert.match(toCsv(exportRows([listing], "internal")), /HIDDEN — internal only/);
 });
@@ -114,8 +117,11 @@ test("provider complete is never verified; it is action required until someone c
   assert.ok(needsAction({ verification_status: "verified_accurate", fulfillment_status: "none", open_tasks: 1, suspected_duplicate: false }));
 });
 
-test("evidence freshness: current, stale after 90 days, none", () => {
+test("evidence freshness: current, stale after 90 days, superseded by an identity change, none", () => {
   assert.equal(evidenceFreshness("2026-10-01", "2026-10-20"), "current");
+  assert.equal(evidenceFreshness("2026-10-19", "2026-10-20", false), "superseded", "a fresh check against an older identity is not current");
+  assert.ok(identityCurrent({ check_identity_version: 3, identity_version: 3 }));
+  assert.ok(!identityCurrent({ check_identity_version: 2, identity_version: 3 }));
   assert.equal(evidenceFreshness("2026-06-01", "2026-10-20"), "stale");
   assert.equal(evidenceFreshness(null, "2026-10-20"), "none");
 });
@@ -131,4 +137,35 @@ test("the module is off unless CITATIONS_ENABLED is exactly \"true\"", async () 
   assert.equal(citationsEnabled({}), false);
   for (const v of ["", "1", "TRUE", "yes", "true "]) assert.equal(citationsEnabled({ CITATIONS_ENABLED: v }), false, v);
   assert.equal(citationsEnabled({ CITATIONS_ENABLED: "true" }), true);
+});
+
+const col = (rows, name) => rows[0].indexOf(name);
+test("export: current values come from the latest check, imported values stay separate with their own dates", () => {
+  const l = { ...exportBase, identity, verification_status: "verified_accurate", last_checked_on: "2026-10-20", last_check_result: "accurate", check_identity_version: 2, identity_version: 2,
+    current_phone: "(417) 555-0100", source_phone: "417-555-0199", source_observed_on: "2026-10-02", source_provider: "brightlocal" };
+  const rows = exportRows([l], "internal", "2026-10-20");
+  assert.equal(rows[1][col(rows, "Current phone")], "(417) 555-0100");
+  assert.equal(rows[1][col(rows, "Last checked")], "2026-10-20");
+  assert.equal(rows[1][col(rows, "Source phone")], "417-555-0199");
+  assert.equal(rows[1][col(rows, "Source observed")], "2026-10-02");
+  assert.equal(rows[1][col(rows, "Evidence")], "Current evidence");
+  assert.equal(rows[0].length, EXPORT_HEADERS.length);
+  const stale = exportRows([{ ...l, verification_status: "needs_reverification", identity_version: 3 }], "client", "2026-10-20");
+  assert.equal(stale[1][col(stale, "Verification")], "Needs reverification");
+  assert.equal(stale[1][col(stale, "Evidence")], "Identity changed since check");
+  assert.equal(stale[1][col(stale, "Checked against identity")], 2);
+  assert.equal(stale[1][col(stale, "Current identity")], 3);
+});
+
+test("needs reverification is action required", () => {
+  assert.ok(needsAction({ verification_status: "needs_reverification", fulfillment_status: "none", open_tasks: 0, suspected_duplicate: false }));
+});
+
+test("comparison uses the latest content check, else the import (flagged), never the import after a check", () => {
+  const base = { ...exportBase, last_check_id: null, source_phone: "417-555-0199" };
+  assert.equal(comparisonSource(base).from, "source");
+  const checked = { ...base, last_check_id: "c", last_check_result: "accurate", current_phone: "(417) 555-0100" };
+  assert.deepEqual([comparisonSource(checked).from, comparisonSource(checked).fields.observed_phone], ["check", "(417) 555-0100"]);
+  const inaccessible = { ...base, last_check_id: "c", last_check_result: "inaccessible" };
+  assert.deepEqual([comparisonSource(inaccessible).from, comparisonSource(inaccessible).fields.observed_phone], ["none", ""], "an inaccessible check does not fall back to the import");
 });

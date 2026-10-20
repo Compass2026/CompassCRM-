@@ -5,6 +5,7 @@ import { citationsEnabled } from "@/lib/citations-flag";
 import { isUuid } from "@/lib/tasks";
 import { loadListings, loadOpenTasks, summarize } from "@/lib/citations-data";
 import { publicAddress, type CitationImport, type CitationLocation } from "@/lib/citations";
+import { fetchAll } from "@/lib/fetch-all";
 import { PhaseNote, SummaryCards } from "@/components/citations/citation-bits";
 import { DirectoryForm, NewLocationForm } from "@/components/citations/citation-forms";
 
@@ -17,15 +18,16 @@ export default async function ClientCitationsPage({ params }: { params: Promise<
   const db = await createClient();
   const [{ listings, error }, tasksQ, locsQ, trackingQ, brandsQ, importsQ] = await Promise.all([
     loadListings(db, { clientId }), loadOpenTasks(db, { clientId }),
-    db.from("citation_locations").select("*").eq("client_id", clientId).order("status").order("label"),
+    fetchAll<CitationLocation>((from, to) => db.from("citation_locations").select("*", { count: "exact" }).eq("client_id", clientId).order("status").order("label").order("id").range(from, to)),
     db.from("locations").select("id, name").eq("client_id", clientId).order("sort_order"),
     db.from("client_brand_workspaces").select("id, name").eq("client_id", clientId).order("name"),
     db.from("citation_imports").select("id, client_id, file_name, file_sha256, provider, mapping, rows_total, added, updated, skipped, rejected, created_at, created_by")
       .eq("client_id", clientId).order("created_at", { ascending: false }).limit(10),
   ]);
-  const failure = error ?? (tasksQ.error || locsQ.error || importsQ.error ? "Citations could not be read. Refresh to retry." : null);
-  const locations = (locsQ.data ?? []) as CitationLocation[];
-  const tasks = tasksQ.data ?? [];
+  // Counts are shown only when every list was read completely.
+  const failure = error ?? tasksQ.error ?? locsQ.error ?? (importsQ.error ? "Recent imports could not be read. Refresh to retry." : null);
+  const locations = locsQ.rows;
+  const tasks = tasksQ.tasks;
   const imports = (importsQ.data ?? []) as CitationImport[];
   const base = `/clients/${clientId}/citations`;
 
@@ -39,10 +41,10 @@ export default async function ClientCitationsPage({ params }: { params: Promise<
       </div>
     </div>
     <PhaseNote />
-    {failure && <p role="alert" className="callout">{failure}</p>}
-    <SummaryCards s={summarize(listings, tasks.length)} />
+    {failure && <p role="alert" className="callout" data-incomplete>{failure} Counts are hidden until every record can be read.</p>}
+    {!failure && <SummaryCards s={summarize(listings, tasks.length)} />}
 
-    <section className="grid gap-4 lg:grid-cols-2" data-locations>
+    {!failure && <section className="grid gap-4 lg:grid-cols-2" data-locations>
       {locations.map((l) => {
         const s = summarize(listings.filter((x) => x.location_id === l.id), tasks.filter((t) => t.location_id === l.id).length);
         return <Link key={l.id} href={`${base}/${l.id}`} className="surface block p-5 transition-colors hover:bg-royal-50" data-location-card={l.label}>
@@ -53,8 +55,8 @@ export default async function ClientCitationsPage({ params }: { params: Promise<
           <p className="mt-3 text-xs text-muted-foreground">{s.total} listings · {s.byVerification.verified_accurate} verified · {s.byVerification.discrepancy} discrepancies · {s.openTasks} open tasks · <span className="font-semibold text-foreground">{s.action} need action</span></p>
         </Link>;
       })}
-      {!locations.length && !failure && <p className="surface p-8 text-center text-sm text-muted-foreground lg:col-span-2">No business locations yet. Add the approved identity of each real, listing-eligible location first.</p>}
-    </section>
+      {!locations.length && <p className="surface p-8 text-center text-sm text-muted-foreground lg:col-span-2">No business locations yet. Add the approved identity of each real, listing-eligible location first.</p>}
+    </section>}
 
     <NewLocationForm clientId={clientId} trackingLocations={(trackingQ.data ?? []).map((l) => ({ id: l.id, name: l.name }))} brands={brandsQ.data ?? []} />
 

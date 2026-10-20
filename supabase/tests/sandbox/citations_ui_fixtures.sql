@@ -14,6 +14,6 @@ insert into citation_locations (id, client_id, label, business_name, address_lin
   ('00000000-0000-4000-e000-0000000000a2', '00000000-0000-4000-b000-00000000000a', 'North branch (sample)', 'Sample Roofing North', '22 Hidden Way', 'Ozark', 'MO', '65721', '(417) 555-0101', true);
 insert into citation_locations (id, client_id, label, business_name, address_line1, city, region, phone) values
   ('00000000-0000-4000-e000-0000000000b1', '00000000-0000-4000-b000-00000000000b', 'Summit office (sample)', 'Summit Electric', '9 Elm Street', 'Columbia', 'MO', '(573) 555-0110');
-insert into citation_listings (client_id, location_id, directory_id, listing_url, fulfillment_status, source_provider, observed_name) values
+insert into citation_listings (client_id, location_id, directory_id, listing_url, fulfillment_status, source_provider, source_name) values
   ('00000000-0000-4000-b000-00000000000b', '00000000-0000-4000-e000-0000000000b1', (select id from citation_directories where key = 'yelp'),
    'https://www.yelp.com/biz/summit-electric-sample', 'provider_complete', 'manual', 'Summit Electric');

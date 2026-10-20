@@ -19,6 +19,8 @@ import { createHmac } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { parseCsv } from "../src/lib/citations.ts";
+import { agencyToday } from "../src/lib/reporting.ts";
 
 const { PGRST_URL, JWT_SECRET, PSQL_ADMIN } = process.env;
 assert.ok(PGRST_URL && JWT_SECRET && PSQL_ADMIN, "run through scripts/test-tasks-ui.sh");
@@ -95,6 +97,10 @@ async function contextFor(browser, user, viewport = { width: 1280, height: 900 }
 const shots = process.env.SCREENSHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const shot = async (page, name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true }); };
+const TODAY = agencyToday();
+// A CSV export as objects keyed by header.
+const table = (csv) => { const [head, ...rows] = parseCsv(csv); return rows.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]]))); };
+const exportOf = async (context, client, query) => (await context.request.get(`${base}/clients/${client}/citations/export?${query}`)).text();
 const checks = [];
 const ok = (name) => { checks.push(name); console.log(`  ✓ ${name}`); };
 const count = async (page, key) => Number(await page.locator(`[data-import-preview] [data-count=${key}], [data-import-done] [data-count=${key}]`).first().innerText());
@@ -142,7 +148,7 @@ try {
   assert.equal(await count(team, "added"), 6);
   assert.equal(sql(`select count(*) from citation_listings where client_id = '${CLIENT_A}'`), "6");
   assert.equal(sql(`select count(*) from citation_import_rows r join citation_imports i on i.id = r.import_id where i.client_id = '${CLIENT_A}'`), "10", "every row's outcome kept");
-  assert.equal(sql(`select count(*) from citation_listings where client_id = '${CLIENT_A}' and verification_status <> 'unverified'`), "0", "nothing imported is verified");
+  assert.equal(sql(`select count(*) from citation_listing_overview where client_id = '${CLIENT_A}' and verification_status <> 'unverified'`), "0", "nothing imported is verified");
   assert.ok(!sql(`select mapping::text from citation_imports where client_id = '${CLIENT_A}'`).includes("Login password"), "mapping keeps no credential header");
   ok("Import: login column refused, unmapped location and invalid rows rejected with reasons, 6 added, preview wrote nothing");
 
@@ -210,6 +216,56 @@ try {
   await shot(team, "location-resolved");
   ok("Location: provider complete stays unverified; discrepancy check; task opened with owner and due date; resolved with a dated check");
 
+  // ── One current-evidence projection: import wrong phone → corrected check ─
+  // Imported 417-555-0199 on 2026-10-02; checked today as (417) 555-0100. The
+  // page and the CSV agree on current values and date; the import is kept apart.
+  assert.equal(await yp.locator("[data-current-evidence]").getAttribute("data-current-evidence"), "check");
+  assert.equal(await yp.locator('[data-current="phone"]').innerText(), "(417) 555-0100");
+  assert.match(await yp.locator("[data-source-observation]").innerText(), /observed 2026-10-02.*417-555-0199/);
+  const ypRow = () => exportOf(context, CLIENT_A, `variant=internal&location=${MAIN}`).then((csv) => table(csv).find((r) => r["Listing URL"].includes("sample-roofing-1")));
+  let row = await ypRow();
+  assert.deepEqual([row["Verification"], row["Current phone"], row["Last checked"], row["Evidence"], row["Source phone"], row["Source observed"]],
+    ["Verified accurate", "(417) 555-0100", TODAY, "Current evidence", "417-555-0199", "2026-10-02"]);
+  ok("Current evidence: detail and CSV agree on the checked phone and date; the imported phone and its date are kept as the source");
+
+  // ── Identity change → needs reverification → a current check restores it ─
+  await team.getByText("Edit approved identity").click();
+  const identity = team.locator("[data-identity]");
+  await identity.getByLabel("Internal notes").fill("SAMPLE: office hours confirmed");
+  await identity.getByRole("button", { name: "Save identity" }).click();
+  // The form remounts on the saved row (its updated_at key), so wait for the row itself.
+  for (let i = 0; i < 75 && sql(`select notes from citation_locations where id = '${MAIN}'`) !== "SAMPLE: office hours confirmed"; i++) await new Promise((r) => setTimeout(r, 200));
+  await team.reload({ waitUntil: "networkidle" });
+  assert.equal(await team.locator("[data-identity-version]").getAttribute("data-identity-version"), "1", "a notes-only edit is not an identity change");
+  assert.equal(await yp.locator("[data-verification]").getAttribute("data-verification"), "verified_accurate");
+  if (!(await identity.getByLabel("Approved phone").isVisible())) await team.getByText("Edit approved identity").click();
+  await identity.getByLabel("Approved phone").fill("(417) 555-0123");
+  await identity.getByRole("button", { name: "Save identity" }).click();
+  await identity.getByText("Say why the approved identity changed.").waitFor();
+  await identity.getByLabel(/Why the identity changed/).fill("SAMPLE: client moved to a new main line");
+  await identity.getByRole("button", { name: "Save identity" }).click();
+  await team.locator('[data-identity-version="2"]').waitFor();
+  await yp.locator('[data-verification="needs_reverification"]').waitFor();
+  assert.match(await yp.locator("[data-reverify]").innerText(), /now v2; the latest check \(\d{4}-\d{2}-\d{2}\) was made against v1/);
+  assert.equal(await yp.locator("[data-freshness]").getAttribute("data-freshness"), "superseded");
+  row = await ypRow();
+  assert.deepEqual([row["Verification"], row["Evidence"], row["Checked against identity"], row["Current identity"]], ["Needs reverification", "Identity changed since check", "1", "2"]);
+  assert.equal(sql(`select count(*) from citation_checks c join citation_listings l on l.id = c.listing_id where l.listing_url like '%sample-roofing-1'`), "2", "history kept");
+  await shot(team, "location-needs-reverification");
+  await team.goto(`${base}/citations`, { waitUntil: "networkidle" });
+  assert.equal(await team.locator('[data-metric="Needs reverification"]').innerText(), "1");
+  assert.equal(await team.locator('[data-metric="Verified accurate"]').innerText(), "0");
+  await team.goto(loc, { waitUntil: "networkidle" });
+  await yp.getByText(/Checks & evidence/).click();
+  await yp.getByRole("button", { name: "Record a check" }).click();
+  await yp.getByLabel("Phone shown").fill("(417) 555-0123");
+  await yp.getByLabel("Evidence", { exact: true }).fill("SAMPLE: new main line shown on Yellow Pages (screenshot ref S-3)");
+  await yp.getByRole("button", { name: "Save check" }).click();
+  await yp.locator('[data-verification="verified_accurate"]').waitFor();
+  row = await ypRow();
+  assert.deepEqual([row["Verification"], row["Current phone"], row["Checked against identity"], row["Current identity"]], ["Verified accurate", "(417) 555-0123", "2", "2"]);
+  ok("Identity change: notes-only edit keeps verification; a phone change needs a reason, marks the check for reverification on page, overview and CSV; a new check restores it");
+
   // ── Fulfillment request, approval, credits ────────────────────────────
   const north = `${base}/clients/${CLIENT_A}/citations/${NORTH}`;
   await team.goto(north, { waitUntil: "networkidle" });
@@ -253,8 +309,8 @@ try {
   ok("Fulfillment: admin-approved request, provider complete mirrors to fulfillment only, credits apart from cash");
 
   // ── Exports ───────────────────────────────────────────────────────────
-  sql(`update citation_listings set observed_name = '=HYPERLINK(\\"http://evil.example.test\\")' where listing_url like '%mapquest%'`);
-  sql(`update citation_listings set observed_address = '22 Hidden Way, Ozark, MO' where listing_url like '%mapquest%'`);
+  sql(`update citation_listings set source_name = '=HYPERLINK(\\"http://evil.example.test\\")' where listing_url like '%mapquest%'`);
+  sql(`update citation_listings set source_address = '22 Hidden Way, Ozark, MO' where listing_url like '%mapquest%'`);
   const clientCsv = await (await context.request.get(`${base}/clients/${CLIENT_A}/citations/export?variant=client`)).text();
   assert.ok(!clientCsv.includes("22 Hidden Way"), "client-safe export has no hidden street");
   assert.match(clientCsv, /Address shown publicly \(should be hidden\)/);
@@ -280,6 +336,46 @@ try {
   assert.equal(portalExport.status(), 403);
   assert.equal(sql(`select count(*) from citation_listings where client_id = '${CLIENT_B}'`), "1", "client B untouched");
   ok("Boundaries: wrong-client location 404, portal contact redirected and refused the export");
+
+  // ── Capacity: 1,200 more listings behind a 1,000-row API cap ──────────
+  // PostgREST runs with db-max-rows = 1000 (npm run test:citations-ui). One
+  // quiet listing's only check is 61 days old; a busy one has 3,500 newer
+  // checks. Totals, export and each listing's latest evidence stay complete.
+  sql(`alter table citation_location_identities disable trigger citation_identities_append_only;
+    update citation_location_identities set recorded_at = now() - interval '120 days' where location_id = '${SUMMIT}';
+    alter table citation_location_identities enable trigger citation_identities_append_only;
+    insert into citation_listings (client_id, location_id, directory_id, listing_url, source_provider)
+      select '${CLIENT_B}', '${SUMMIT}', (select id from citation_directories where key = 'manta'), 'https://bulk.example.test/l/' || lpad(g::text, 4, '0'), 'sample_csv'
+      from generate_series(1, 1200) g;
+    insert into citation_checks (listing_id, checked_on, method, result, observed_name, evidence)
+      select id, (now() at time zone 'America/Chicago')::date - 61, 'visited_url', 'accurate', 'Summit Electric', 'SAMPLE quiet listing'
+      from citation_listings where listing_url = 'https://bulk.example.test/l/0001';
+    insert into citation_checks (listing_id, checked_on, method, result, evidence)
+      select (select id from citation_listings where listing_url = 'https://bulk.example.test/l/0002'), (now() at time zone 'America/Chicago')::date - (g % 60),
+        'publisher_search', 'not_found', 'SAMPLE busy listing ' || g from generate_series(1, 3500) g;`);
+  assert.equal(sql(`select count(*) from citation_listings where location_id = '${SUMMIT}'`), "1201");
+  const unpaged = await (await fetch(`${gatewayUrl}/rest/v1/citation_listing_overview?select=id`, { headers: { authorization: `Bearer ${tokenFor(TEAM)}` } })).json();
+  assert.equal(unpaged.length, 1000, "the API cap is in force: a single unpaged read stops at 1,000 of 1,207");
+  await team.goto(`${base}/citations`, { waitUntil: "networkidle" });
+  assert.equal(await team.locator('[data-location-row="Summit office (sample)"] td').nth(1).innerText(), "1201", "overview counts past the cap");
+  assert.equal(await team.locator('[data-location-row="Summit office (sample)"] td').nth(2).innerText(), "1", "the quiet listing's old check still counts");
+  assert.equal(await team.locator('[data-metric="Listings"]').innerText(), "1207");
+  const bulk = table(await exportOf(context, CLIENT_B, "variant=internal"));
+  assert.equal(bulk.length, 1201, "export carries every listing");
+  assert.equal(new Set(bulk.map((r) => r["Listing URL"])).size, 1201);
+  assert.deepEqual([bulk.find((r) => r["Listing URL"].endsWith("/l/0001"))["Verification"], bulk.find((r) => r["Listing URL"].endsWith("/l/0002"))["Last checked"]], ["Verified accurate", TODAY]);
+  const summit = `${base}/clients/${CLIENT_B}/citations/${SUMMIT}`;
+  await team.goto(summit, { waitUntil: "networkidle" });
+  assert.match(await team.locator("[data-listing-range]").innerText(), /Showing 1–100 of 1201/);
+  const quiet = team.locator('[data-listing-url="https://bulk.example.test/l/0001"]');
+  assert.equal(await quiet.locator("[data-verification]").getAttribute("data-verification"), "verified_accurate", "a busy listing never displaces another's latest check");
+  assert.equal(await quiet.locator("[data-freshness]").getAttribute("data-freshness"), "current");
+  const busy = team.locator('[data-listing-url="https://bulk.example.test/l/0002"]');
+  assert.match(await busy.getByText(/Checks & evidence/).innerText(), /\(3500\)/, "the busy listing's full history is read past the cap");
+  await team.goto(`${summit}?page=13`, { waitUntil: "networkidle" });
+  assert.match(await team.locator("[data-listing-range]").innerText(), /Showing 1201–1201 of 1201/);
+  assert.equal(await team.locator('[data-listing="Yelp"]').count(), 1, "the last page holds the last listing");
+  ok("Capacity: 1,200 listings through a 1,000-row API cap — complete totals, export and pages; a busy listing cannot displace another's latest check");
 
   // ── Phone-sized location page ─────────────────────────────────────────
   const phone = await (await contextFor(browser, TEAM, { width: 390, height: 844 })).newPage();

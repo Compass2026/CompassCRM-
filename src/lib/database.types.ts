@@ -108,8 +108,8 @@ export type Database = {
       }
       citation_listings: {
         Row: CitationListing
-        Insert: Pick<CitationListing, "client_id" | "location_id" | "directory_id"> & Partial<Pick<CitationListing, "id" | "listing_url" | "external_id" | "fulfillment_status" | "source_provider" | "source_observed_on" | "notes" | "observed_name" | "observed_address" | "observed_phone" | "observed_website">>
-        Update: Partial<Pick<CitationListing, "fulfillment_status" | "notes" | "archived" | "external_id" | "observed_name" | "observed_address" | "observed_phone" | "observed_website">>
+        Insert: Pick<CitationListing, "client_id" | "location_id" | "directory_id"> & Partial<Pick<CitationListing, "id" | "listing_url" | "external_id" | "fulfillment_status" | "source_provider" | "source_observed_on" | "notes" | "source_name" | "source_address" | "source_phone" | "source_website">>
+        Update: Partial<Pick<CitationListing, "fulfillment_status" | "notes" | "archived" | "external_id" | "source_name" | "source_address" | "source_phone" | "source_website">>
         Relationships: []
       }
       citation_checks: {

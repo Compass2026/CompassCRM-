@@ -27,6 +27,8 @@ export const VERIFICATION_STATUSES = {
   discrepancy: "Discrepancy",
   inaccessible: "Inaccessible",
   confirmed_absent: "Confirmed absent",
+  // Derived, never stored: the latest check was made against an older approved identity.
+  needs_reverification: "Needs reverification",
 } as const;
 export type VerificationStatus = keyof typeof VERIFICATION_STATUSES;
 
@@ -83,14 +85,23 @@ export const REQUEST_STATUSES = {
 } as const;
 export type RequestStatus = keyof typeof REQUEST_STATUSES;
 
-/** Evidence older than this is stale: reported, never counted as current. */
+/**
+ * Evidence is current only when the latest check is at most 90 days old AND
+ * was made against the location's current approved identity. Anything else is
+ * reported, never counted as current.
+ */
 export const CITATION_STALE_DAYS = 90;
-export type Freshness = "current" | "stale" | "none";
-export function evidenceFreshness(lastCheckedOn: string | null, today = agencyToday()): Freshness {
+export type Freshness = "current" | "stale" | "superseded" | "none";
+export function evidenceFreshness(lastCheckedOn: string | null, today = agencyToday(), identityCurrent = true): Freshness {
   if (!lastCheckedOn) return "none";
+  if (!identityCurrent) return "superseded";
   return (Date.parse(today) - Date.parse(lastCheckedOn)) / 86400000 > CITATION_STALE_DAYS ? "stale" : "current";
 }
-export const FRESHNESS_LABELS: Record<Freshness, string> = { current: "Current evidence", stale: "Stale evidence", none: "Never checked" };
+export const FRESHNESS_LABELS: Record<Freshness, string> = { current: "Current evidence", stale: "Stale evidence", superseded: "Identity changed since check", none: "Never checked" };
+/** The check behind the current status was made against the current approved identity. */
+export function identityCurrent(l: { check_identity_version: number | null; identity_version: number }) {
+  return l.check_identity_version === null || l.check_identity_version === l.identity_version;
+}
 
 // ── Identity and comparison ────────────────────────────────────────────────
 
@@ -365,46 +376,45 @@ export function toCsv(rows: unknown[][]) {
   return rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
-export type ExportListing = {
-  client_name: string;
-  location_label: string;
-  identity: CitationIdentity;
-  directory_name: string;
-  listing_url: string | null;
-  external_id: string | null;
-  fulfillment_status: FulfillmentStatus;
-  verification_status: VerificationStatus;
-  last_checked_on: string | null;
-  source_provider: string | null;
-  source_observed_on: string | null;
-  last_imported_at: string | null;
-  open_tasks: number;
-  suspected_duplicate: boolean;
-} & ObservedFields;
+/** The current-evidence projection (citation_listing_overview) plus what a report needs. */
+export type ExportListing = Pick<CitationListingOverview,
+  "client_name" | "location_label" | "directory_name" | "listing_url" | "external_id" | "fulfillment_status" | "verification_status"
+  | "last_checked_on" | "last_check_result" | "check_identity_version" | "identity_version" | "current_name" | "current_address" | "current_phone"
+  | "current_website" | "source_provider" | "source_observed_on" | "last_imported_at" | "source_name" | "source_address" | "source_phone"
+  | "source_website" | "open_tasks" | "suspected_duplicate"> & { identity: CitationIdentity };
 
 export const EXPORT_HEADERS = ["Client", "Location", "Directory", "Listing URL", "External id", "Provider status", "Verification", "Evidence",
-  "Last checked", "Source", "Source observed", "Imported at", "Open tasks", "Suspected duplicate", "Observed name", "Observed address",
-  "Observed phone", "Observed website", "Approved address"];
+  "Last checked", "Last check result", "Checked against identity", "Current identity", "Current name", "Current address", "Current phone",
+  "Current website", "Source", "Source observed", "Imported at", "Source name", "Source address", "Source phone", "Source website",
+  "Open tasks", "Suspected duplicate", "Approved address"];
 
 /**
- * Report rows. The client-safe variant never carries the street address of a
- * hidden-address business, approved or observed; the internal one marks it.
+ * Report rows from the same projection the pages read. "Current" values are
+ * the latest teammate check's observations (blank = not recorded, or the check
+ * could not observe the listing); "Source" values are the import's, with
+ * their own dates. The client-safe variant never carries the street address
+ * of a hidden-address business, approved, checked or imported; the internal
+ * one marks it.
  */
 export function exportRows(listings: ExportListing[], variant: "client" | "internal", today = agencyToday()) {
   return [EXPORT_HEADERS, ...listings.map((l) => {
     const hidden = l.identity.hide_address;
-    const observedAddress = hidden && variant === "client" ? (l.observed_address ? "Address shown publicly (should be hidden)" : "") : l.observed_address;
+    const address = (v: string) => hidden && variant === "client" ? (v ? "Address shown publicly (should be hidden)" : "") : v;
     const approved = variant === "client" ? publicAddress(l.identity) : `${identityAddress(l.identity)}${hidden ? " [HIDDEN — internal only]" : ""}`;
     return [l.client_name, l.location_label, l.directory_name, l.listing_url ?? "", l.external_id ?? "", FULFILLMENT_STATUSES[l.fulfillment_status],
-      VERIFICATION_STATUSES[l.verification_status], FRESHNESS_LABELS[evidenceFreshness(l.last_checked_on, today)], l.last_checked_on ?? "",
-      l.source_provider ?? "", l.source_observed_on ?? "", l.last_imported_at ?? "", l.open_tasks, l.suspected_duplicate ? "yes" : "",
-      l.observed_name, observedAddress, l.observed_phone, l.observed_website, approved];
+      VERIFICATION_STATUSES[l.verification_status], FRESHNESS_LABELS[evidenceFreshness(l.last_checked_on, today, identityCurrent(l))], l.last_checked_on ?? "",
+      l.last_check_result ? CHECK_RESULTS[l.last_check_result] : "", l.check_identity_version ?? "", l.identity_version,
+      l.current_name, address(l.current_address), l.current_phone, l.current_website,
+      l.source_provider ?? "", l.source_observed_on ?? "", l.last_imported_at ?? "",
+      l.source_name, address(l.source_address), l.source_phone, l.source_website,
+      l.open_tasks, l.suspected_duplicate ? "yes" : "", approved];
   })];
 }
 
-/** "Action required": a discrepancy, an inaccessible listing, an open task, or a provider claim nobody has verified. */
+/** "Action required": a discrepancy, an inaccessible listing, an identity change nobody has rechecked, an open task, or a provider claim nobody has verified. */
 export function needsAction(l: { verification_status: VerificationStatus; fulfillment_status: FulfillmentStatus; open_tasks: number; suspected_duplicate: boolean }) {
-  return l.verification_status === "discrepancy" || l.verification_status === "inaccessible" || l.open_tasks > 0 || l.suspected_duplicate
+  return l.verification_status === "discrepancy" || l.verification_status === "inaccessible" || l.verification_status === "needs_reverification"
+    || l.open_tasks > 0 || l.suspected_duplicate
     || (l.fulfillment_status === "provider_complete" && l.verification_status === "unverified");
 }
 
@@ -424,13 +434,29 @@ export type CitationLocation = CitationIdentity & {
 };
 export type CitationLocationIdentity = CitationIdentity & { id: string; location_id: string; version: number; note: string; recorded_at: string; recorded_by: string | null };
 export type CitationDirectory = { id: string; key: string; name: string; domain: string | null; kind: string; hidden_address_support: "unknown" | "supported" | "not_supported"; is_active: boolean; created_at: string; created_by: string | null };
-export type CitationListing = ObservedFields & {
+export type SourceFields = { source_name: string; source_address: string; source_phone: string; source_website: string };
+export type CitationListing = SourceFields & {
   id: string; client_id: string; location_id: string; directory_id: string; listing_url: string | null; external_id: string | null; listing_key: string;
-  fulfillment_status: FulfillmentStatus; verification_status: VerificationStatus; source_provider: string | null; source_observed_on: string | null;
-  last_import_id: string | null; last_imported_at: string | null; last_checked_on: string | null; last_check_id: string | null; archived: boolean;
+  fulfillment_status: FulfillmentStatus; source_provider: string | null; source_observed_on: string | null;
+  last_import_id: string | null; last_imported_at: string | null; archived: boolean;
   notes: string; created_at: string; updated_at: string; created_by: string | null;
 };
-export type CitationListingOverview = CitationListing & { directory_name: string; directory_key: string; location_label: string; hide_address: boolean; client_name: string; open_tasks: number; suspected_duplicate: boolean };
+/** citation_listing_overview: the listing, its latest check, the identity-aware status and the current observations. */
+export type CitationListingOverview = CitationListing & {
+  directory_name: string; directory_key: string; location_label: string; hide_address: boolean; identity_version: number; client_name: string;
+  last_check_id: string | null; last_checked_on: string | null; last_check_result: CheckResult | null; last_check_method: CheckMethod | null;
+  check_identity_version: number | null; verification_status: VerificationStatus;
+  current_name: string; current_address: string; current_phone: string; current_website: string;
+  open_tasks: number; suspected_duplicate: boolean;
+};
+/** The observation a comparison should use: the latest content check, else the import's (flagged as such), else nothing. */
+export function comparisonSource(l: CitationListingOverview): { from: "check" | "source" | "none"; fields: ObservedFields } {
+  if (l.last_check_result === "accurate" || l.last_check_result === "discrepancy")
+    return { from: "check", fields: { observed_name: l.current_name, observed_address: l.current_address, observed_phone: l.current_phone, observed_website: l.current_website } };
+  if (!l.last_check_id && (l.source_name || l.source_address || l.source_phone || l.source_website))
+    return { from: "source", fields: { observed_name: l.source_name, observed_address: l.source_address, observed_phone: l.source_phone, observed_website: l.source_website } };
+  return { from: "none", fields: { observed_name: "", observed_address: "", observed_phone: "", observed_website: "" } };
+}
 export type CitationCheck = ObservedFields & {
   id: string; listing_id: string; identity_version: number; checked_on: string; method: CheckMethod; result: CheckResult;
   evidence: string; evidence_url: string | null; recorded_at: string; recorded_by: string | null;

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { citationsEnabled } from "@/lib/citations-flag";
 import { inView, listingView, loadListings, loadOpenTasks, summarize, LISTING_VIEWS } from "@/lib/citations-data";
-import { REQUEST_STATUSES, type CitationCreditBalance, type CitationLocation, type CitationRequest, type CitationTask } from "@/lib/citations";
+import { REQUEST_STATUSES, type CitationCreditBalance, type CitationLocation, type CitationRequest } from "@/lib/citations";
+import { fetchAll } from "@/lib/fetch-all";
 import { FreshnessBadge, FulfillmentBadge, PhaseNote, SummaryCards, VerificationBadge, ViewNav } from "@/components/citations/citation-bits";
 import { CreditEntryForm, PROVIDERS } from "@/components/citations/citation-forms";
 
@@ -24,17 +25,18 @@ export default async function CitationsOverviewPage({ searchParams }: { searchPa
   const db = await createClient();
   const [{ listings, error }, tasksQ, locsQ, clientsQ, requestsQ, balancesQ] = await Promise.all([
     loadListings(db, {}), loadOpenTasks(db, {}),
-    db.from("citation_locations").select("*").eq("status", "active").order("label"),
-    db.from("clients").select("id, name").order("name"),
-    db.from("citation_fulfillment_requests").select("*").order("created_at", { ascending: false }).limit(1000),
-    db.from("citation_credit_balances").select("*"),
+    fetchAll<CitationLocation>((from, to) => db.from("citation_locations").select("*", { count: "exact" }).eq("status", "active").order("id").range(from, to)),
+    fetchAll<{ id: string; name: string }>((from, to) => db.from("clients").select("id, name", { count: "exact" }).order("id").range(from, to)),
+    fetchAll<CitationRequest>((from, to) => db.from("citation_fulfillment_requests").select("*", { count: "exact" }).order("created_at", { ascending: false }).order("id").range(from, to)),
+    fetchAll<CitationCreditBalance>((from, to) => db.from("citation_credit_balances").select("*", { count: "exact" }).order("provider").range(from, to)),
   ]);
-  const failure = error ?? (tasksQ.error || locsQ.error || clientsQ.error || requestsQ.error || balancesQ.error ? "Citations could not be read. Refresh to retry." : null);
-  const tasks = (tasksQ.data ?? []) as CitationTask[];
-  const locations = (locsQ.data ?? []) as CitationLocation[];
-  const clientName = new Map((clientsQ.data ?? []).map((c) => [c.id, c.name]));
-  const requests = (requestsQ.data ?? []) as CitationRequest[];
-  const balances = (balancesQ.data ?? []) as CitationCreditBalance[];
+  // Totals are shown only when every list was read completely.
+  const failure = error ?? tasksQ.error ?? locsQ.error ?? clientsQ.error ?? requestsQ.error ?? balancesQ.error;
+  const tasks = tasksQ.tasks;
+  const locations = locsQ.rows;
+  const clientName = new Map(clientsQ.rows.map((c) => [c.id, c.name]));
+  const requests = requestsQ.rows;
+  const balances = balancesQ.rows;
   const total = summarize(listings, tasks.length);
   const perLocation = locations.map((l) => ({ l, s: summarize(listings.filter((x) => x.location_id === l.id), tasks.filter((t) => t.location_id === l.id).length) }))
     .sort((a, b) => (clientName.get(a.l.client_id) ?? "").localeCompare(clientName.get(b.l.client_id) ?? "") || a.l.label.localeCompare(b.l.label));
@@ -48,21 +50,22 @@ export default async function CitationsOverviewPage({ searchParams }: { searchPa
       <p className="mt-2 text-sm text-blue-100">Every directory listing by client and business location, with provider status and independently verified accuracy kept apart.</p>
     </div>
     <PhaseNote />
-    {failure && <p role="alert" className="callout">{failure}</p>}
+    {failure && <p role="alert" className="callout" data-incomplete>{failure} Totals are hidden until every record can be read.</p>}
+    {!failure && <>
     <SummaryCards s={total} />
 
     <section className="surface overflow-x-auto p-0">
-      <table className="w-full min-w-[56rem] text-left text-sm" data-location-table>
+      <table className="w-full min-w-[62rem] text-left text-sm" data-location-table>
         <thead className="bg-royal-50/80 text-xs text-muted-foreground"><tr>
           <th className="px-4 py-2">Client · location</th><th className="px-2 py-2">Listings</th><th className="px-2 py-2">Verified</th><th className="px-2 py-2">Discrepancy</th>
-          <th className="px-2 py-2">Unverified</th><th className="px-2 py-2">Provider complete, unverified</th><th className="px-2 py-2">Open tasks</th><th className="px-2 py-2">Stale / never</th><th className="px-2 py-2">Action</th></tr></thead>
+          <th className="px-2 py-2">Needs reverification</th><th className="px-2 py-2">Unverified</th><th className="px-2 py-2">Provider complete, unverified</th><th className="px-2 py-2">Open tasks</th><th className="px-2 py-2">No current evidence</th><th className="px-2 py-2">Action</th></tr></thead>
         <tbody>{perLocation.map(({ l, s }) => <tr key={l.id} className="border-t" data-location-row={l.label}>
           <td className="px-4 py-2"><Link className="font-medium text-blue-700 underline" href={`/clients/${l.client_id}/citations/${l.id}`}>{clientName.get(l.client_id) ?? "Client"} · {l.label}</Link>
             {l.hide_address && <span className="ml-2 text-xs text-muted-foreground">address hidden</span>}</td>
           <td className="px-2 py-2">{s.total}</td><td className="px-2 py-2">{s.byVerification.verified_accurate}</td><td className="px-2 py-2">{s.byVerification.discrepancy}</td>
-          <td className="px-2 py-2">{s.byVerification.unverified}</td><td className="px-2 py-2">{s.providerCompleteUnverified}</td><td className="px-2 py-2">{s.openTasks}</td>
-          <td className="px-2 py-2">{s.stale + s.never}</td><td className="px-2 py-2 font-semibold">{s.action}</td></tr>)}
-          {!perLocation.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">No business locations yet. Open a client&apos;s Citations tab to add its approved identity.</td></tr>}
+          <td className="px-2 py-2">{s.byVerification.needs_reverification}</td><td className="px-2 py-2">{s.byVerification.unverified}</td><td className="px-2 py-2">{s.providerCompleteUnverified}</td><td className="px-2 py-2">{s.openTasks}</td>
+          <td className="px-2 py-2">{s.notCurrent}</td><td className="px-2 py-2 font-semibold">{s.action}</td></tr>)}
+          {!perLocation.length && <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">No business locations yet. Open a client&apos;s Citations tab to add its approved identity.</td></tr>}
         </tbody>
       </table>
     </section>
@@ -74,7 +77,7 @@ export default async function CitationsOverviewPage({ searchParams }: { searchPa
         : !matching.length ? <p className="surface p-6 text-center text-sm text-muted-foreground">No listings are {LISTING_VIEWS[view].toLowerCase()}.</p>
         : <ul className="space-y-2" data-filtered-listings>{matching.map((l) => <li key={l.id} className="surface flex flex-wrap items-center gap-2 p-3 text-sm">
           <Link className="font-medium text-blue-700 underline" href={`/clients/${l.client_id}/citations/${l.location_id}`}>{l.client_name} · {l.location_label}</Link>
-          <span>{l.directory_name}</span><VerificationBadge status={l.verification_status} /><FulfillmentBadge status={l.fulfillment_status} /><FreshnessBadge lastCheckedOn={l.last_checked_on} />
+          <span>{l.directory_name}</span><VerificationBadge status={l.verification_status} /><FulfillmentBadge status={l.fulfillment_status} /><FreshnessBadge listing={l} />
           {l.open_tasks > 0 && <span className="text-xs">{l.open_tasks} open task{l.open_tasks > 1 ? "s" : ""}</span>}</li>)}</ul>}
     </section>
 
@@ -100,5 +103,6 @@ export default async function CitationsOverviewPage({ searchParams }: { searchPa
         <CreditEntryForm />
       </div>
     </section>
+    </>}
   </div>;
 }

@@ -4,9 +4,13 @@
 --
 -- Three dimensions stay separate on every listing:
 --   fulfillment_status   what a provider (or a teammate) reports about a submission
---   verification_status  what a teammate independently observed, from the latest
---                        dated check only; an import or a provider never sets it
+--   verification_status  derived in citation_listing_overview from the latest
+--                        dated teammate check AND the identity version it was made
+--                        against; an import or a provider never sets it
 --   open issues          citation_tasks still open
+-- Observations are kept by provenance: source_* is what an import / provider
+-- saw (with source_observed_on); a check's observed_* is what a teammate saw.
+-- The overview's current_* columns come from the latest check only.
 -- A search that finds nothing is recorded as not_found and leaves the listing
 -- unverified: absence needs a publisher or owner-dashboard confirmation.
 
@@ -127,17 +131,15 @@ create table public.citation_listings (
   external_id text check (external_id is null or length(btrim(external_id)) between 1 and 200),
   listing_key text not null,
   fulfillment_status text not null default 'none' check (fulfillment_status in ('none','submitted','pending','provider_complete','failed')),
-  verification_status text not null default 'unverified' check (verification_status in ('unverified','verified_accurate','discrepancy','inaccessible','confirmed_absent')),
-  observed_name text not null default '' check (length(observed_name) <= 300),
-  observed_address text not null default '' check (length(observed_address) <= 500),
-  observed_phone text not null default '' check (length(observed_phone) <= 50),
-  observed_website text not null default '' check (length(observed_website) <= 2000),
+  -- What the import / provider observed (provenance: source_provider, source_observed_on, last_import_id).
+  source_name text not null default '' check (length(source_name) <= 300),
+  source_address text not null default '' check (length(source_address) <= 500),
+  source_phone text not null default '' check (length(source_phone) <= 50),
+  source_website text not null default '' check (length(source_website) <= 2000),
   source_provider text check (source_provider is null or source_provider ~ '^[a-z][a-z0-9_]{1,39}$'),
   source_observed_on date,
   last_import_id uuid,
   last_imported_at timestamptz,
-  last_checked_on date,
-  last_check_id uuid,
   archived boolean not null default false,
   notes text not null default '' check (length(notes) <= 2000),
   created_at timestamptz not null default now(),
@@ -147,7 +149,7 @@ create table public.citation_listings (
 );
 create index citation_listings_client on public.citation_listings(client_id, location_id);
 create index citation_listings_directory on public.citation_listings(directory_id);
-comment on table public.citation_listings is 'Directory listing inventory. fulfillment_status (provider claim) never sets verification_status (teammate evidence).';
+comment on table public.citation_listings is 'Directory listing inventory. source_* is the import / provider observation; verification is derived from teammate checks in citation_listing_overview, never stored here.';
 
 -- ── Checks: append-only teammate evidence ──────────────────────────────────
 create table public.citation_checks (
@@ -171,10 +173,12 @@ create table public.citation_checks (
     when 'discrepancy' then method in ('visited_url','owner_dashboard')
     when 'inaccessible' then method in ('visited_url','other')
     when 'not_found' then method in ('publisher_search','other')
-    when 'confirmed_absent' then method in ('owner_dashboard','publisher_confirmation') end)
+    when 'confirmed_absent' then method in ('owner_dashboard','publisher_confirmation') end),
+  -- A verdict on the listing's content records at least one thing that was seen.
+  check (result not in ('accurate','discrepancy') or btrim(observed_name || observed_address || observed_phone || observed_website) <> '')
 );
 create index citation_checks_latest on public.citation_checks(listing_id, checked_on desc, recorded_at desc, id desc);
-comment on table public.citation_checks is 'Append-only manual evidence. not_found is a search result, never proof of absence.';
+comment on table public.citation_checks is 'Append-only manual evidence. not_found is a search result, never proof of absence. identity_version is the approved identity in effect on checked_on (0 = before any approved identity).';
 
 -- ── Correction / verification queue ────────────────────────────────────────
 create table public.citation_tasks (
@@ -336,7 +340,6 @@ for each row execute function public.guard_append_only();
 
 create function public.guard_citation_listing() returns trigger
 language plpgsql security invoker set search_path = pg_catalog, public, pg_temp as $$
-declare person boolean := current_user in ('authenticated', 'anon');
 begin
   if tg_op = 'DELETE' then raise exception 'Archive a listing instead of deleting it.' using errcode = '23514'; end if;
   if not exists (select 1 from public.citation_locations where id = new.location_id and client_id = new.client_id) then
@@ -344,7 +347,6 @@ begin
   end if;
   if tg_op = 'INSERT' then
     new.listing_key := public.citation_listing_key(new.listing_url, new.external_id);
-    new.verification_status := 'unverified'; new.last_checked_on := null; new.last_check_id := null;
     new.created_at := clock_timestamp(); new.created_by := auth.uid();
   else
     if (new.id, new.client_id, new.location_id, new.directory_id, new.listing_url, new.listing_key, new.created_at, new.created_by)
@@ -353,11 +355,6 @@ begin
     end if;
     if old.listing_key like 'ext:%' and new.external_id is distinct from old.external_id then
       raise exception 'This listing is identified by its external id, which is fixed.' using errcode = '23514';
-    end if;
-    -- Verification follows teammate checks only (record_citation_check).
-    if person and (new.verification_status, new.last_checked_on, new.last_check_id)
-      is distinct from (old.verification_status, old.last_checked_on, old.last_check_id) then
-      raise exception 'Verification comes from a recorded check, not an edit.' using errcode = '23514';
     end if;
   end if;
   new.updated_at := clock_timestamp();
@@ -373,31 +370,18 @@ begin
   if new.checked_on > (current_timestamp at time zone 'America/Chicago')::date then
     raise exception 'A check cannot be dated in the future.' using errcode = '23514';
   end if;
-  select l.identity_version into new.identity_version
-  from public.citation_listings x join public.citation_locations l on l.id = x.location_id where x.id = new.listing_id;
+  -- The identity in effect on the day of the check: a check dated before an
+  -- identity change never counts as evaluating the new identity, and one dated
+  -- before any approved identity is version 0 (it needs reverification).
+  select coalesce(max(i.version), 0) into new.identity_version
+  from public.citation_listings x join public.citation_location_identities i on i.location_id = x.location_id
+  where x.id = new.listing_id and (i.recorded_at at time zone 'America/Chicago')::date <= new.checked_on;
   new.recorded_at := clock_timestamp(); new.recorded_by := auth.uid();
   return new;
 end $$;
 create trigger guard_citation_check before insert or update or delete on public.citation_checks
 for each row execute function public.guard_citation_check();
 
--- The latest check (by date, then entry time) decides verification. A
--- backdated check never overrides a newer one.
-create function public.record_citation_check() returns trigger
-language plpgsql security definer set search_path = pg_catalog, public, pg_temp as $$
-declare c public.citation_checks;
-begin
-  select * into c from public.citation_checks where listing_id = new.listing_id
-  order by checked_on desc, recorded_at desc, id desc limit 1;
-  update public.citation_listings set
-    verification_status = case c.result when 'accurate' then 'verified_accurate' when 'discrepancy' then 'discrepancy'
-      when 'inaccessible' then 'inaccessible' when 'confirmed_absent' then 'confirmed_absent' else 'unverified' end,
-    last_checked_on = c.checked_on, last_check_id = c.id
-  where id = new.listing_id;
-  return null;
-end $$;
-create trigger record_citation_check after insert on public.citation_checks
-for each row execute function public.record_citation_check();
 
 create function public.guard_citation_task() returns trigger
 language plpgsql security invoker set search_path = pg_catalog, public, pg_temp as $$
@@ -585,7 +569,7 @@ begin
               v_on := nullif(r->>'source_observed_on', '')::date;
               if v_listing.id is null then
                 insert into public.citation_listings (client_id, location_id, directory_id, listing_url, external_id, fulfillment_status,
-                  observed_name, observed_address, observed_phone, observed_website, source_provider, source_observed_on, last_import_id, last_imported_at, notes)
+                  source_name, source_address, source_phone, source_website, source_provider, source_observed_on, last_import_id, last_imported_at, notes)
                 values (v_client, (r->>'location_id')::uuid, v_dir, nullif(r->>'listing_url', ''), nullif(r->>'external_id', ''), coalesce(v_fs, 'none'),
                   coalesce(r->>'observed_name', ''), coalesce(r->>'observed_address', ''), coalesce(r->>'observed_phone', ''), coalesce(r->>'observed_website', ''),
                   v_provider, v_on, v_import, now(), coalesce(r->>'notes', ''))
@@ -595,19 +579,19 @@ begin
                 v_id := v_listing.id; v_outcome := 'skipped'; v_message := 'Older than the observation already recorded.';
               else
                 v_id := v_listing.id;
-                v_changed := (coalesce(v_fs, v_listing.fulfillment_status), coalesce(nullif(r->>'observed_name', ''), v_listing.observed_name),
-                    coalesce(nullif(r->>'observed_address', ''), v_listing.observed_address), coalesce(nullif(r->>'observed_phone', ''), v_listing.observed_phone),
-                    coalesce(nullif(r->>'observed_website', ''), v_listing.observed_website), coalesce(v_on, v_listing.source_observed_on),
+                v_changed := (coalesce(v_fs, v_listing.fulfillment_status), coalesce(nullif(r->>'observed_name', ''), v_listing.source_name),
+                    coalesce(nullif(r->>'observed_address', ''), v_listing.source_address), coalesce(nullif(r->>'observed_phone', ''), v_listing.source_phone),
+                    coalesce(nullif(r->>'observed_website', ''), v_listing.source_website), coalesce(v_on, v_listing.source_observed_on),
                     coalesce(nullif(r->>'external_id', ''), v_listing.external_id), coalesce(nullif(r->>'notes', ''), v_listing.notes))
-                  is distinct from (v_listing.fulfillment_status, v_listing.observed_name, v_listing.observed_address, v_listing.observed_phone,
-                    v_listing.observed_website, v_listing.source_observed_on, v_listing.external_id, v_listing.notes);
+                  is distinct from (v_listing.fulfillment_status, v_listing.source_name, v_listing.source_address, v_listing.source_phone,
+                    v_listing.source_website, v_listing.source_observed_on, v_listing.external_id, v_listing.notes);
                 if v_changed then
                   update public.citation_listings set
                     fulfillment_status = coalesce(v_fs, fulfillment_status),
-                    observed_name = coalesce(nullif(r->>'observed_name', ''), observed_name),
-                    observed_address = coalesce(nullif(r->>'observed_address', ''), observed_address),
-                    observed_phone = coalesce(nullif(r->>'observed_phone', ''), observed_phone),
-                    observed_website = coalesce(nullif(r->>'observed_website', ''), observed_website),
+                    source_name = coalesce(nullif(r->>'observed_name', ''), source_name),
+                    source_address = coalesce(nullif(r->>'observed_address', ''), source_address),
+                    source_phone = coalesce(nullif(r->>'observed_phone', ''), source_phone),
+                    source_website = coalesce(nullif(r->>'observed_website', ''), source_website),
                     source_observed_on = coalesce(v_on, source_observed_on),
                     external_id = case when listing_key like 'ext:%' then external_id else coalesce(nullif(r->>'external_id', ''), external_id) end,
                     notes = coalesce(nullif(r->>'notes', ''), notes),
@@ -651,15 +635,40 @@ begin
 end $$;
 
 -- ── Read models (invoker: RLS applies) ─────────────────────────────────────
+-- The one current-evidence projection read by the overview, the location
+-- page and the CSV. Current verification needs the latest check (by date,
+-- then entry time) AND that it was made against the location's current
+-- identity; otherwise it is needs_reverification. current_* are that check's
+-- observations, and only for a verdict on the listing's content (accurate /
+-- discrepancy): inaccessible, not found and confirmed absent observe nothing.
+-- A blank current_* field means "not recorded in that check"; the import's
+-- source_* values are never relabelled as checked.
 create view public.citation_listing_overview with (security_invoker = true) as
-select x.*, d.name as directory_name, d.key as directory_key, l.label as location_label, l.hide_address, c.name as client_name,
+select x.id, x.client_id, x.location_id, x.directory_id, x.listing_url, x.external_id, x.listing_key, x.fulfillment_status,
+  x.source_name, x.source_address, x.source_phone, x.source_website, x.source_provider, x.source_observed_on,
+  x.last_import_id, x.last_imported_at, x.archived, x.notes, x.created_at, x.updated_at, x.created_by,
+  d.name as directory_name, d.key as directory_key, l.label as location_label, l.hide_address, l.identity_version, c.name as client_name,
+  k.id as last_check_id, k.checked_on as last_checked_on, k.result as last_check_result, k.method as last_check_method,
+  k.identity_version as check_identity_version,
+  case when k.id is null then 'unverified'
+       when k.identity_version <> l.identity_version then 'needs_reverification'
+       when k.result = 'accurate' then 'verified_accurate'
+       when k.result = 'discrepancy' then 'discrepancy'
+       when k.result = 'inaccessible' then 'inaccessible'
+       when k.result = 'confirmed_absent' then 'confirmed_absent'
+       else 'unverified' end as verification_status,
+  case when k.result in ('accurate','discrepancy') then k.observed_name else '' end as current_name,
+  case when k.result in ('accurate','discrepancy') then k.observed_address else '' end as current_address,
+  case when k.result in ('accurate','discrepancy') then k.observed_phone else '' end as current_phone,
+  case when k.result in ('accurate','discrepancy') then k.observed_website else '' end as current_website,
   (select count(*) from public.citation_tasks t where t.listing_id = x.id and t.status in ('open','in_progress','waiting'))::int as open_tasks,
-  (select count(*) from public.citation_listings y where y.location_id = x.location_id and y.directory_id = x.directory_id
-     and not y.archived and y.listing_key <> 'none') > 1 and x.listing_key <> 'none' as suspected_duplicate
+  x.listing_key <> 'none' and count(*) filter (where x.listing_key <> 'none') over (partition by x.location_id, x.directory_id) > 1 as suspected_duplicate
 from public.citation_listings x
 join public.citation_directories d on d.id = x.directory_id
 join public.citation_locations l on l.id = x.location_id
 join public.clients c on c.id = x.client_id
+left join lateral (select * from public.citation_checks k where k.listing_id = x.id
+  order by k.checked_on desc, k.recorded_at desc, k.id desc limit 1) k on true
 where not x.archived;
 
 create view public.citation_credit_balances with (security_invoker = true) as
@@ -692,5 +701,5 @@ grant execute on function public.citation_import(jsonb, jsonb, jsonb, boolean) t
 revoke all on function public.citation_listing_key(text, text) from public, anon;
 grant execute on function public.citation_listing_key(text, text) to authenticated;
 revoke all on function public.guard_citation_location(), public.record_citation_identity(), public.guard_append_only(), public.guard_citation_listing(),
-  public.guard_citation_check(), public.record_citation_check(), public.guard_citation_task(), public.guard_citation_request(),
+  public.guard_citation_check(), public.guard_citation_task(), public.guard_citation_request(),
   public.mirror_citation_request(), public.stamp_citation_entry(), public.stamp_citation_directory() from public, anon, authenticated;

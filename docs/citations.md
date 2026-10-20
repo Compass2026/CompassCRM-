@@ -53,16 +53,27 @@ Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
   street and city; a hidden-address location may omit them. A change to any
   identity field needs `identity_note` and bumps `identity_version`.
 - `citation_location_identities`: append-only history of each approved version,
-  written only by the trigger. Checks record the version they compared against.
+  written only by the trigger. Each check records the version **in effect on its
+  date** (`checked_on`), not the one in force when it was typed in. A check dated
+  before any approved identity records version 0.
 - `citation_directories`: the shared publisher registry (17 seeded reference
   rows). `hidden_address_support` stays `unknown` until confirmed.
 - `citation_listings`: one row per location × directory × `listing_key`. The
   key is the normalized URL, else the external id, else the one URL-less slot.
   Several keys for one directory are flagged as suspected duplicates. URL,
-  location and directory are fixed after insert.
+  location and directory are fixed after insert. `source_name / address /
+  phone / website` are what the import or provider observed, with
+  `source_provider`, `source_observed_on` and `last_imported_at` as provenance.
+  Verification is **not stored** on the listing.
 - `citation_checks`: append-only teammate evidence (date, method, result,
   observed fields, evidence text, optional link). The database refuses
-  method/result pairs that cannot support each other.
+  method/result pairs that cannot support each other. An accurate or
+  discrepancy verdict must record at least one value that was seen.
+- `citation_listing_overview`: **the one current-evidence projection**. The
+  location page, the overview, the filters, the counts and the CSV all read it.
+  For each listing it carries the latest check (by date, then entry time), that
+  check's identity version, the identity-aware `verification_status`, the
+  `current_*` observations, and the import's `source_*` values beside them.
 - `citation_tasks`: the correction / verification queue: kind, reason,
   owner (`team_members`), due date, status. At most one open task per listing
   and kind. Resolving needs a resolution, a confirmation date between opening
@@ -88,7 +99,7 @@ Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
 | Dimension | Values | Set by |
 | --- | --- | --- |
 | Provider fulfillment | none, submitted, pending, provider complete, failed | import, manual entry, fulfillment request |
-| Independent verification | unverified, verified accurate, discrepancy, inaccessible, confirmed absent | only the latest dated check (trigger); a direct edit is refused |
+| Independent verification | unverified, verified accurate, discrepancy, inaccessible, confirmed absent, **needs reverification** | derived in `citation_listing_overview` from the latest dated check and its identity version; nothing can store or edit it |
 | Open issues | open / in progress / waiting tasks | the queue |
 
 - A provider's "complete" never verifies anything. "Provider complete,
@@ -98,8 +109,31 @@ Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
 - **Confirmed absent** needs `owner_dashboard` or `publisher_confirmation`.
 - The latest check by date decides verification; a backdated entry never
   overrides a newer one.
-- Evidence older than 90 days is **stale**. Reports show current, stale and
-  never checked separately.
+- **Identity changes.**
+  - A change to name, address, phone, website or the hidden-address setting
+    creates a new version.
+  - If the latest check was made against an older version, the listing becomes
+    **needs reverification**: on the page, in the overview counts and filters,
+    in "action required" and in the CSV. The check history is kept.
+  - A notes-only or label-only edit changes nothing.
+  - A new check dated on or after the change restores current verification.
+  - A check dated before the change records the older version, so it cannot
+    count for the new identity.
+- **Current evidence** is the latest check's observations, and only for a
+  verdict on the listing's content (accurate / discrepancy).
+  - A blank field means "not recorded in that check".
+  - An inaccessible, not found or confirmed absent check observes nothing, so
+    there are no current values.
+  - The import's values are never shown as checked. They stay in the
+    `Source *` columns with their own dates.
+  - The field-by-field comparison uses the latest content check. With no check
+    at all it uses the import, labelled "imported observation, not verified".
+- **Freshness.**
+  - Evidence is **current** when the latest check is under 90 days old and was
+    made against the current identity.
+  - Otherwise it is **stale** (over 90 days), **superseded** (identity changed
+    since the check) or **never checked**.
+  - Reports show each of these separately.
 
 ### Access
 
@@ -162,8 +196,13 @@ provider export).
 
 ## Exports
 
-- **Client-safe** (the default): a hidden-address location's street (approved
-  or observed) is never written. A public observed address becomes "Address
+- Columns come from the overview projection:
+  - verification, freshness, last checked, last check result;
+  - the identity version checked against, and the current version;
+  - current name / address / phone / website;
+  - source, source observed, imported at, source name / address / phone / website.
+- **Client-safe** (the default): a hidden-address location's street (approved,
+  checked or imported) is never written. A public observed address becomes "Address
   shown publicly (should be hidden)".
 - **Internal:** carries it, marked "[HIDDEN — internal only]".
 - Every cell is quoted, and a leading `= + - @`, tab or CR (after any spaces)
@@ -225,6 +264,26 @@ here.
 - **After real data:** turn the flag off only. The tables are append-only
   evidence; export them first if anything is ever dropped.
 
+## Complete reads
+
+PostgREST caps every response (`db-max-rows`), and a single `.limit(n)` returns
+at most the cap without saying so. Every Citations list (listings, tasks,
+locations, requests, credit balances, directories, a page's check history, the
+export) is read through `src/lib/fetch-all.ts`:
+- it asks for an exact count;
+- it advances by the rows actually received, so a cap below the page size cannot
+  skip rows;
+- it fails if the total is not reached, the count moves mid-read, or a page
+  comes back empty early.
+
+On failure the page hides its counts and tables and says why. It never shows a
+partial list as if it were complete.
+
+Latest evidence per listing comes from the overview projection (one lateral
+lookup per listing). A busy listing's history therefore cannot displace another
+listing's latest check. The location page pages its display at 100 listings;
+counts and filters always cover the whole location.
+
 ## Verification
 
 - `npm test`:
@@ -233,5 +292,9 @@ here.
   - `tests/citations-database.test.mjs`: PGlite replay plus
     `supabase/tests/sandbox/citations.test.sql`.
 - `scripts/test-portal-sandbox.sh` runs the same SQL suite on real Postgres.
-- `npm run test:citations-ui` drives the browser flows. Screenshots are in
-  `docs/screenshots/citations/`.
+- `tests/fetch-all.test.mjs`: complete reads through a 1,000-row cap and a cap
+  below the page size; partial, uncountable or moving data is an error.
+- `npm run test:citations-ui` drives the browser flows with PostgREST capped at
+  1,000 rows. It includes the identity-change sequence, current evidence vs.
+  the import, and 1,200 extra listings (one with 3,500 checks). Screenshots are
+  in `docs/screenshots/citations/`.

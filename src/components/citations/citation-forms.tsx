@@ -107,7 +107,7 @@ function Check({ id, again, clientId, listingId }: { id: string; again: () => vo
   const [result, setResult] = useState<CheckResult>("accurate");
   if (state.savedId) return <div className="space-y-2"><Outcome state={state} /><Button variant="outline" size="sm" onClick={again}>Record another check</Button></div>;
   return <form action={action} onReset={(e) => e.preventDefault()} className="space-y-3"><input type="hidden" name="id" value={id} />
-    <p className="text-xs text-muted-foreground">Open the listing yourself and record what you saw. This form does not crawl the directory.</p>
+    <p className="text-xs text-muted-foreground">Open the listing yourself and record what you saw; a matches / differs verdict needs at least one value. The check counts against today&apos;s approved identity only if it is dated on or after that identity was approved. This form does not crawl the directory.</p>
     <div className="grid gap-3 sm:grid-cols-3">
       <label className="space-y-1 text-sm">Checked on<Input name="checked_on" type="date" required defaultValue={agencyToday()} max={agencyToday()} /></label>
       <Select name="result" label="Result" value={result} onChange={(v) => setResult(v as CheckResult)} options={Object.entries(CHECK_RESULTS)} />

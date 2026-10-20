@@ -170,6 +170,8 @@ export async function recordCitationCheckAction(clientId: string, listingId: str
       evidence_url: evidenceUrl ? listingUrl(evidenceUrl) : null,
       observed_name: citationText(form, "observed_name", 300), observed_address: citationText(form, "observed_address", 500),
       observed_phone: citationText(form, "observed_phone", 50), observed_website: citationText(form, "observed_website", 2000) };
+    if ((result === "accurate" || result === "discrepancy") && !(row.observed_name || row.observed_address || row.observed_phone || row.observed_website))
+      throw new Error("Record at least one value you saw on the listing (name, address, phone or website).");
     const { error } = await db.from("citation_checks").insert(row);
     if (error?.code === "23505") {
       const { data } = await db.from("citation_checks").select("id").eq("id", id).eq("listing_id", listingId).maybeSingle();

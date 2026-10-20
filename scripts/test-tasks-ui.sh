@@ -61,6 +61,9 @@ jwt-secret = "$JWT_SECRET"
 server-host = "127.0.0.1"
 server-port = $PGRST_PORT
 CONF
+# PGRST_MAX_ROWS caps every response like a hosted API's db-max-rows, so a
+# spec can prove its reads are complete past the cap (citations-ui uses 1000).
+if [ -n "${PGRST_MAX_ROWS:-}" ]; then echo "db-max-rows = $PGRST_MAX_ROWS" >> "$WORK/postgrest.conf"; fi
 postgrest "$WORK/postgrest.conf" >"$WORK/postgrest.log" 2>&1 &
 PGRST_PID=$!
 for _ in $(seq 1 50); do curl -sf "http://127.0.0.1:$PGRST_PORT/" >/dev/null && break; sleep 0.2; done
