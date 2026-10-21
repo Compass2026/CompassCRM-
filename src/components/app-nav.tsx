@@ -16,12 +16,14 @@ const links = [
   { href: "/settings", label: "Settings" },
 ];
 
-export function AppNav({ className }: { className?: string }) {
+export function AppNav({ className, citations = false }: { className?: string; citations?: boolean }) {
   const pathname = usePathname();
+  // Citations appears only while its server-side flag is on (src/lib/citations-flag.ts).
+  const visible = citations ? [...links.slice(0, 4), { href: "/citations", label: "Citations" }, ...links.slice(4)] : links;
   const railRef = useActiveInView<HTMLElement>(pathname);
   return (
     <nav ref={railRef} aria-label="Main" className={cn(navTrack, "sm:w-auto", className)}>
-      {links.map((link) => {
+      {visible.map((link) => {
         const active =
           link.href === "/" ? pathname === "/" : link.href === "/production" ? pathname === "/production" : pathname.startsWith(link.href);
         return (

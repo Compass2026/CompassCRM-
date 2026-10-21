@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { clientStatusStyles } from "@/lib/labels";
 import { ClientTabs } from "@/components/client-tabs";
+import { citationsEnabled } from "@/lib/citations-flag";
 
 export default async function ClientLayout({
   children,
@@ -67,7 +68,7 @@ export default async function ClientLayout({
             )}
           </div>
         </div>
-        <ClientTabs clientId={client.id} />
+        <ClientTabs clientId={client.id} citations={citationsEnabled()} />
       </div>
       <div>{children}</div>
     </div>
