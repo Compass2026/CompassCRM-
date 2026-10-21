@@ -122,7 +122,24 @@ OSM standard tiles are fetched normally by the browser only for the current view
    - **Deployed version:** `status` mode returns `map-grid-v5`.
    - **Controlled, non-billable worker check:** send `{mode: "start", profile_id, request_key}` with the cron secret, using one completed run's own key (e.g. `initial-<key>-2026-10-15`). Expect `202` with that existing `run_id`; no new `map_grid_runs` row; the run's lease is not taken (it is not `running`); no `task_post` or `task_get` in the Edge logs; no `CPUTime` shutdown. This proves the deployed auth and key-reuse path cannot spend.
    - **Dispatcher check:** a `collect` tick with no running run dispatches nothing, so it does **not** prove child dispatch. Before the slot, only confirm `collect` answers 200 with `dispatched: []`.
+   - **CPU gate (required before weekly goes on).** The two checks above prove auth and key reuse only; neither measures CPU under full payloads or proves self-dispatch to a working child. Get controlled, non-billable evidence first: an isolated Supabase branch with the provider stubbed, never extra paid production scans or fake production ranking rows.
    - Then turn weekly on for the nine profiles under the existing authorization. Lucas stays on.
+
+   **Release record (2026-10-18).**
+   - **Merge and deploy.** PR #173 merged as `bdfd8f9`, with the reviewed head `1843d3a`. `map-grid-sync` was deployed from it by the Deploy Supabase Edge Function workflow (run 39172634299) as Edge version 8. `status` returns `map-grid-v5`.
+   - **No-cost replay.** `start` with MADHAIRLAB's stored key `initial-madhairlab-2026-10-15` returned 202 with the existing run `56e102a3…`. Nothing changed: 11 runs, run status, lease, 765 / 765 checks, $0.459 run cost and $4.4376 total. No provider call appears in the logs.
+   - **CPU gate, on a throwaway branch.**
+     - **Setup.** The branch had only the map-grid schema, with the provider stubbed by a `dfs-stub` function. It held ten profiles with production's keyword counts (7,191 checks) on MADHAIRLAB's 153-point grid; the point and geometry md5 hashes match production.
+     - **Stub payloads.** `task_get` returned 100 listings shaped like a real stored result. Each response was about 228 KB, against 200 KB in the production sample, so the test errs on the heavy side.
+     - **Dispatch.** `weekly` started 10 runs and dispatched 10 children, all 202, each in its own isolate.
+     - **Fleet CPU.** Across 56 `map-grid-sync` isolates (dispatchers and workers), observed `cpu_time_used` was 61–545 ms, with a median of 214 ms and no `CPUTime` shutdown. Each worker did up to 6 POSTs of 100 tasks plus about 30 full reads.
+     - **Paid-call safety.** 7,026 tasks were posted with no tag sent twice. Every lease was released, and no check was left in `posting`.
+     - **Full-read CPU.** A probe ran the worker's per-read work 60 times in one isolate, 10 lanes at a time: body decode, `parseMapsTask` and the results write. It used 160, 195 and 204 ms, and 284 ms for 150 reads, against a 55 ms baseline. That is about 1.5–2.5 ms per full read, observed, where the arithmetic model assumed 5.4 ms.
+   - **Edge-to-Edge rate limit, found in staging.** Supabase limits calls from one Edge Function to another per trace. About 30 go through, then calls fail with `RateLimitError: Rate limit exceeded for trace … Retry after ~59 s`.
+     - **Staging only.** This throttled the stub, which is itself a function. Half of each tick's reads failed and were retried. It also left 165 checks of one run `unknown` (two POSTs), correctly never reposted.
+     - **Production workers are unaffected.** They call `api.dataforseo.com`, not a function.
+     - **The dispatcher is affected.** Its self-dispatch is one function call per run in one trace: 10 today, `MAX_RUNS` 20 at most. Past about 25 weekly profiles, check this limit before raising `MAX_RUNS`; an undelivered dispatch is retried by the next tick.
+   - Weekly was then turned on for the nine profiles. All ten are now `weekly_enabled = true`.
    - **First scheduled live run (separate, still open):** Thursday 14:00 UTC. Check `map_grid_weekly_attempts` (one `started` row per weekly profile), `dispatched` statuses all 202, one child invocation per run in the Edge logs, no `CPUTime` shutdowns, and every leased run released. By about 15:30 UTC, every weekly profile should read *Complete* for its week in the Control Center, with posts = `ceil(checks / 100)` per run and no `unknown` checks. Alert on any `CPUTime` shutdown, any non-202 dispatch, or a run still `running` after three hours.
 
 Rollback: disable enabled/weekly_enabled on the pilot profile. Let queued paid tasks finish collecting. Revert UI code if necessary; retained tables and history are additive. Never delete prior source records.
