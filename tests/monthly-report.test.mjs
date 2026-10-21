@@ -186,6 +186,10 @@ test('maps grid: scans compare only when every setting matches; the map pack sta
   assert.equal(diff.current.points,153); assert.equal(diff.current.metrics.top3,40);
   const same=buildMonthlyReport(g(scan('p','2026-10-08T15:00:00Z',153,30)),'2026-10-01','2026-10-21T00:00:00Z').report.maps[0];
   assert.equal(same.comparable,true);
+  // A scan from another month is never this month's scan.
+  const later=buildMonthlyReport(g(scan('p','2026-10-08T15:00:00Z',153,30)),'2026-09-01','2026-10-21T00:00:00Z');
+  assert.equal(later.report.maps[0].current,null);
+  assert.ok(later.exceptions.some(e=>e.source==='Maps grid'));
   const none=buildMonthlyReport(base(),'2026-10-01','2026-10-21T00:00:00Z');
   assert.ok(none.exceptions.some(e=>e.source==='Maps grid'));
 });

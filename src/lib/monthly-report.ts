@@ -233,8 +233,13 @@ function rankings(input: MonthlyReportInput, month: ReturnType<typeof monthOfPer
 }
 
 // ── Maps grid ──────────────────────────────────────────────────────────────
-function grids(input: MonthlyReportInput) {
-  return input.grids.map(g => {
+function grids(input: MonthlyReportInput, month: ReturnType<typeof monthOfPeriod>, cutoff: string) {
+  const w = window(month, cutoff);
+  return input.grids.map(raw => {
+    // Only a scan started inside the month counts as the month's scan, and
+    // only an earlier one can be its comparison.
+    const current = raw.current && w.has(raw.current.started_at) ? raw.current : null;
+    const g = { ...raw, current, previous: current && raw.previous && time(raw.previous.started_at) < time(current.started_at) ? raw.previous : null, attempts: raw.attempts.filter(a => w.has(a.started_at)) };
     const geometry = (r: GridInput["current"]) => r && {
       startedAt: r.started_at, completedAt: r.completed_at,
       points: Array.isArray(r.config.points) ? r.config.points.length : null,
@@ -372,7 +377,7 @@ export function buildMonthlyReport(input: MonthlyReportInput, period: string, no
   const cutoff = reportCutoff(month.period, now);
   const partial = time(cutoff) < time(month.end);
   const rank = rankings(input, month, cutoff);
-  const maps = grids(input);
+  const maps = grids(input, month, cutoff);
   const t = traffic(input, month, cutoff);
   const inq = inquiries(input, month, cutoff);
   const w = work(input, month, cutoff);
@@ -383,7 +388,7 @@ export function buildMonthlyReport(input: MonthlyReportInput, period: string, no
   const cur = rank.organic.anchors[2];
   if (!input.keywords.length) exceptions.push({ source: "Organic rankings", problem: "No tracked keywords." });
   else if (!cur.eligible) exceptions.push({ source: "Organic rankings", problem: `No check within ${RANK_FRESH_DAYS} days of ${localDate(cutoff)}.` });
-  if (!input.grids.some(g => g.current)) exceptions.push({ source: "Maps grid", problem: "No complete scan in this month." });
+  if (!maps.some(g => g.current)) exceptions.push({ source: "Maps grid", problem: "No complete scan in this month." });
   if (t.gsc.problem) exceptions.push({ source: "Search Console", problem: t.gsc.problem });
   else if (!t.gsc.current.search_clicks) exceptions.push({ source: "Search Console", problem: partial ? "Imported after the month ends (complete months only)." : "No import for this month." });
   if (t.ga4.problem) exceptions.push({ source: "Google Analytics", problem: t.ga4.problem });
@@ -484,7 +489,7 @@ export function buildMonthlyReport(input: MonthlyReportInput, period: string, no
       keywordIds: input.keywords.map(k => k.id),
       rankObservations: input.observations.length,
       rankRunsUsed: rank.organic.anchors.map(a => ({ key: a.key, at: a.at, checkedOn: a.checkedOn })),
-      gridRuns: input.grids.map(g => ({ profile: g.profile.id, current: g.current?.id ?? null, previous: g.previous?.id ?? null })),
+      gridRuns: maps.map((g, i) => ({ profile: input.grids[i].profile.id, current: g.current ? input.grids[i].current?.id ?? null : null, previous: g.previous ? input.grids[i].previous?.id ?? null : null })),
       measurementIds: input.measurements.filter(m => m.client_id === input.client.id && (m.report_period === month.period || m.report_period === month.previous)).map(m => `${m.source}|${m.metric}|${m.sequence}`),
       foreignRowsDropped: input.measurements.filter(m => m.client_id !== input.client.id).length + input.inquiries.filter(i => i.client_id !== input.client.id).length
         + input.work.blogs.filter(b => b.client_id !== input.client.id).length + input.work.social.filter(s => s.client_id !== input.client.id).length
