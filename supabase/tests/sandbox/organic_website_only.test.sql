@@ -1,4 +1,4 @@
--- Organic rank counts only the client's own website (20261020230000).
+-- Organic rank counts only the client's own website (20261021163048).
 -- Full migration replay + shared fixtures; every write rolls back.
 begin;
 -- Fixture rows for client A: a keyword whose earlier check found the website

@@ -1,4 +1,4 @@
--- Rollback for 20261020230000_organic_rank_website_only.sql.
+-- Rollback for 20261021163048_organic_rank_website_only.sql.
 -- Restores the previous ranking views (20261012182258, 0037), their grants
 -- and the previous City Index function (0013), then drops the two helpers.
 -- No data is touched: rank_snapshots and location_index rows stay as they are.

@@ -17,7 +17,7 @@ const cases=[
 ];
 test('organic rank state matches the SQL truth table',()=>{
  for(const [source,position,url,hosts,expected] of cases) assert.equal(organicRankState(source,position,url,hosts),expected,`${source} ${position} ${url}`);
- const sql=readFileSync('supabase/migrations/20261020230000_organic_rank_website_only.sql','utf8');
+ const sql=readFileSync('supabase/migrations/20261021163048_organic_rank_website_only.sql','utf8');
  for(const [source,position,url,hosts,expected] of cases.filter(c=>c[3].length)){
   const call=`public.organic_rank_state('${source}', ${position??'null'}, ${url?`'${url}'`:'null'}, array['${hosts[0]}']) <> '${expected}'`;
   assert.ok(sql.includes(call),`SQL verify block covers: ${call}`);
@@ -28,7 +28,7 @@ test('upper-case WWW: the recorded client host and a bare-domain result agree (S
  assert.deepEqual(hosts,['site.test']);
  assert.equal(organicRankState('dataforseo',2,'https://site.test/page',hosts),'website');
  assert.equal(organicRankState('dataforseo',2,'https://WWW.SITE.TEST/page',['site.test']),'website');
- const sql=readFileSync('supabase/migrations/20261020230000_organic_rank_website_only.sql','utf8');
+ const sql=readFileSync('supabase/migrations/20261021163048_organic_rank_website_only.sql','utf8');
  assert.ok(sql.includes("public.url_host('https://WWW.Site.Test') is distinct from 'site.test'"),'migration verify block asserts the same normalisation');
  assert.ok(sql.includes("public.organic_rank_state('dataforseo', 2, 'https://site.test/page', array[public.url_host('https://WWW.Site.Test')]) <> 'website'"));
  // Executable SQL parity runs in supabase/tests/sandbox/organic_website_only.test.sql (O8, O10).

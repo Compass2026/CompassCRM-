@@ -98,7 +98,7 @@ The fix takes effect only once the function is deployed.
 
 ## Older ranking and search surfaces (review 2)
 
-Migration `20261020230000_organic_rank_website_only.sql` applies the same
+Migration `20261021163048_organic_rank_website_only.sql` applies the same
 rule everywhere else that shows ranks.
 
 - `public.url_host(text)` and `public.organic_rank_state(source, position,
@@ -137,7 +137,7 @@ rule everywhere else that shows ranks.
   Query-row sums, including the unweighted average position headline, are
   removed or labelled *sample*. This applies to Growth's "Search Console
   query sample" too.
-- Rollback: `supabase/rollback/20261020230000_organic_rank_website_only.down.sql`
+- Rollback: `supabase/rollback/20261021163048_organic_rank_website_only.down.sql`
   is tested by `organic_website_only_rollback.test.sql`. It restores the
   previous views, grants and City Index function, drops the helpers and
   touches no data.
