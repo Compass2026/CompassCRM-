@@ -169,3 +169,17 @@ test("comparison uses the latest content check, else the import (flagged), never
   const inaccessible = { ...base, last_check_id: "c", last_check_result: "inaccessible" };
   assert.deepEqual([comparisonSource(inaccessible).from, comparisonSource(inaccessible).fields.observed_phone], ["none", ""], "an inaccessible check does not fall back to the import");
 });
+
+test("public-address location: a listing showing the approved street matches; client-safe output shows it", () => {
+  // Synthetic, in the shape of Logic Overland Park's corrected identity (street + suite line, public).
+  const pub = { business_name: "Sample Solar", address_line1: "100 W 110th St", address_line2: "Plaza 1, 7th Floor", city: "Overland Park", region: "KS",
+    postal_code: "66210", country: "US", phone: "555-010-0000", website_url: "https://sample-solar.example.test", hide_address: false };
+  const seen = { observed_name: "Sample Solar", observed_address: "100 W 110th Street Plaza 1, 7th Floor, Overland Park, KS 66210", observed_phone: "(555) 010-0000", observed_website: "" };
+  assert.equal(compareListing(pub, seen).address, "match", "GBP-style formatting is the same address");
+  assert.equal(compareListing(pub, { ...seen, observed_address: "200 W 110th St, Overland Park, KS 66210" }).address, "mismatch");
+  assert.equal(compareListing({ ...pub, hide_address: true }, seen).address, "exposed", "the same text on a hidden-address location is still flagged");
+  assert.equal(publicAddress(pub), "100 W 110th St, Plaza 1, 7th Floor, Overland Park, KS 66210");
+  const rows = exportRows([{ ...exportBase, identity: pub, current_address: seen.observed_address }], "client");
+  assert.equal(rows[1][rows[0].indexOf("Approved address")], "100 W 110th St, Plaza 1, 7th Floor, Overland Park, KS 66210");
+  assert.equal(rows[1][rows[0].indexOf("Current address")], seen.observed_address, "not replaced by the hidden-address notice");
+});

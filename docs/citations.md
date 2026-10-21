@@ -277,7 +277,7 @@ single-cell "Aggregator/Network" footer that is not a listing.
 - The synthetic fixture `synthetic-brightlocal-campaign.csv` follows the
   contract exactly, including fake secrets in Notes.
 
-## Pilot: Logic Solar, Overland Park (sandbox rehearsal, Oct 20 2026)
+## Pilot: Logic Solar, Overland Park (sandbox rehearsal, Oct 20–21 2026)
 
 **Rehearsed:**
 - `npm run test:citations-pilot` replays the whole pilot in the sandbox with the
@@ -288,10 +288,13 @@ single-cell "Aggregator/Network" footer that is not a listing.
 - On Oct 20 it ran on the real 11 rows. They were rebuilt from ChatGPT's
   transcription of campaign 908272 (exact URLs and statuses, safe notes only),
   because the sanitized library file is not reachable from this machine.
+- On Oct 21 it ran again with the corrected public identity. It also took
+  `PILOT_HELD_CSV`, a campaign-format file of only the 4 historical attempts,
+  with Notes blank and kept outside the repository.
 
 **Steps and results:**
-1. **Identity.** The proposed identity was entered by hand as a hidden-address
-   location (sandbox only).
+1. **Identity.** The identity was entered by hand as a **public-address**
+   location (sandbox only), per the Oct 21 correction below.
 2. **Directory review, without creation.** 2 rows resolve (Yelp; Apple via the
    `maps.apple.com` alias). The 9 others are named and rejected:
    merchantcircle.com, provenexpert.com, brownbook.net, tupalo.com,
@@ -312,8 +315,12 @@ single-cell "Aggregator/Network" footer that is not a listing.
    - Yelp owner verification (personal + phone, flagged by BrightLocal);
    - Apple: find the current listing and who controls it;
    - Bing: presence / ownership investigation before any creation.
-8. **Export.** 11 rows, all Unverified / Never checked, street withheld in the
-   client-safe file.
+8. **Export.** 11 rows, all Unverified / Never checked. The client-safe file
+   shows the approved public address.
+9. **Public address compared normally** (synthetic listing only, so no evidence
+   is invented about real listings). A listing showing the approved street in
+   Google-style formatting **matches**; it is not flagged as exposed. The
+   client-safe file carries the observed street.
 
 **Reconciliation of campaign 908272** (15 directory rows + footer):
 
@@ -333,29 +340,52 @@ That is 11 active rows and 4 historical exceptions. No spend or credits were
 recorded for any of them. The raw export (SHA-256 `5c81a4d0…f6`) is held by
 Tom and is not in the repository.
 
-**Address decision (resolved Oct 20 2026):** `hide_address = true` for Logic
-Overland Park. Tom explicitly said Logic is a service-area business with no
-public address and chose Overland Park for this pilot. That takes precedence
-over the older brand-board text (approved Oct 19), which describes a public
-Google Business Profile street address.
-- The brand-board conflict is **recorded for later correction**, not silently
-  rewritten.
-- The decision does not verify current GBP visibility, and it does not approve
-  the proposed identity (Logic Solar, phone 816-300-5781, website
-  https://logic-solar.com, linked to the Overland Park tracking location,
-  BrightLocal 3895356). That identity is entered deliberately, never
-  auto-approved from `clients.address`.
-- Wichita stays separate.
-- Verification tasks for a hidden-address location say: if the listing shows a
-  street address, record a discrepancy, and never add the street.
+**Address decision: Overland Park is PUBLIC (`hide_address = false`), corrected
+Oct 21 2026.** The history of the instruction is kept:
+- **Oct 19:** Logic Solar's brand board (approved) says the Overland Park Google
+  Business Profile shows a public street address.
+- **Oct 20:** a general statement that Logic is a service-area business was
+  applied to this location, and the pilot was set to `hide_address = true`.
+- **Oct 21:** Tom corrected it: "we need to show the address for Overland
+  park". ChatGPT checked his GBP screenshot, which shows 7300 W 110th St Plaza 1,
+  7th Floor, Overland Park, KS 66210 and (816) 300-5781. This supersedes the
+  Oct 20 setting. The brand board already matched the evidence and is
+  **not rewritten**.
+
+**Pilot identity:**
+
+| Field | Value |
+| --- | --- |
+| business name | Logic Solar |
+| label | Logic Solar - Overland Park |
+| street | 7300 W 110th St |
+| suite / unit | Plaza 1, 7th Floor |
+| city, state, ZIP | Overland Park, KS 66210, US |
+| phone | 816-300-5781 |
+| website | https://logic-solar.com |
+| `hide_address` | false |
+| links | client `70211d71-d9f4-46ab-abe2-ef39c41591fb`; tracking location `289937c3-2c70-45ea-8ce3-d022964cd90a` (BrightLocal 3895356) |
+
+- It is entered deliberately, never auto-approved from `clients.address`.
+- No bulk change across Logic locations: Wichita is unchanged and separate.
+- A GBP screenshot verifies the GBP, not the other listings. All imported
+  directories remain independently **unverified**.
+- **Comparison for this location:** a listing's displayed address is compared
+  against the approved address. Showing the street is not a discrepancy; a
+  different address is. Verify tasks ask for name, phone, website and address
+  with no hidden-address wording.
+- **Hidden-address behavior is unchanged** for service-area locations of other
+  clients. On those, a shown street is recorded as a discrepancy and never
+  added, and client-safe output withholds it. `tests/citations-ui.mjs` and the
+  unit tests keep covering it.
 - The nine missing registry directories are created through the reviewed
   preview. `hidden_address_support` stays unknown until it is checked.
 
-**Before a production pilot:**
-- Who may approve spend: approval is admin-only in code; actual role
-  assignments need checking.
-- The production migration (`20261020230000`) and `CITATIONS_ENABLED`:
-  explicit approval.
+**Before launch:**
+- Approvers: admin-only in code. ChatGPT's read-only production preflight on
+  Oct 21 found one admin, Thomas.
+- The production migration (`20261020230000`) and `CITATIONS_ENABLED`: the
+  bounded rollout, after the final review of this correction.
 
 ## Exports
 

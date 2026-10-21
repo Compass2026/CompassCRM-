@@ -5,11 +5,15 @@
 // Default: the committed SYNTHETIC campaign export (real column contract and
 // status pattern, fictional business, FAKE credentials / token links in Notes).
 // PILOT_CSV=<sanitized generic CSV outside the repo> PILOT_IDENTITY=<json>
+// [PILOT_HELD_CSV=<campaign-format file of only the historical attempts, Notes blank>]
 // runs the same rehearsal on the real sanitized rows; nothing from that run is
 // written into the repository (point SCREENSHOTS outside it too).
 //
-//   - The proposed identity is entered as a hidden-address location (sandbox
-//     only; production identity awaits Tom's approval).
+//   - The identity is entered by hand with its address setting from the
+//     identity (Overland Park: PUBLIC, per Tom's Oct 21 GBP correction; the
+//     synthetic default mirrors it). Client-safe output shows the street and a
+//     listing's address is compared normally; hidden-address handling for
+//     service-area locations stays covered by tests/citations-ui.mjs.
 //   - Directory review: without creation, unknown directories are named and
 //     rejected, Apple resolves by alias; with creation, the preview lists the
 //     new directories and writes nothing.
@@ -28,14 +32,15 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { parseCsv } from "../src/lib/citations.ts";
 
-const { PGRST_URL, JWT_SECRET, PSQL_ADMIN, PILOT_CSV, PILOT_IDENTITY } = process.env;
+const { PGRST_URL, JWT_SECRET, PSQL_ADMIN, PILOT_CSV, PILOT_IDENTITY, PILOT_HELD_CSV } = process.env;
 assert.ok(PGRST_URL && JWT_SECRET && PSQL_ADMIN, "run through scripts/test-tasks-ui.sh");
 const REAL = !!PILOT_CSV;
 const FILE = REAL ? PILOT_CSV : new URL("./fixtures/citations/synthetic-brightlocal-campaign.csv", import.meta.url).pathname;
 const IDENTITY = REAL ? JSON.parse(readFileSync(PILOT_IDENTITY, "utf8")) : {
-  label: "Sample Solar - Overland Park (synthetic)", business_name: "Sample Solar (synthetic)", address_line1: "1 Synthetic Plaza, Floor 7",
-  city: "Overland Park", region: "KS", postal_code: "66210", phone: "555-010-0000", website_url: "https://sample-solar.example.test",
+  label: "Sample Solar - Overland Park (synthetic)", business_name: "Sample Solar (synthetic)", address_line1: "100 W 110th St", address_line2: "Plaza 1, 7th Floor",
+  city: "Overland Park", region: "KS", postal_code: "66210", phone: "555-010-0000", website_url: "https://sample-solar.example.test", hide_address: false,
 };
+const HIDDEN = IDENTITY.hide_address === true;
 // Throwaway synthetic files for the held-only and leakage checks (never in the repo).
 const TMP = mkdtempSync(join(tmpdir(), "citations-pilot-"));
 const synthetic = readFileSync(new URL("./fixtures/citations/synthetic-brightlocal-campaign.csv", import.meta.url), "utf8");
@@ -118,28 +123,33 @@ try {
   await team.goto(`${base}/clients/${CLIENT}/citations`, { waitUntil: "networkidle" });
   await team.getByText("Add a business location").click();
   await team.getByRole("button", { name: "Start a location" }).click();
-  for (const [label, key] of [["Location label", "label"], ["Approved business name", "business_name"], ["Street address", "address_line1"], ["City", "city"],
-    ["State", "region"], ["ZIP", "postal_code"], ["Approved phone", "phone"], ["Approved website", "website_url"]]) await team.getByLabel(label, { exact: true }).fill(IDENTITY[key] ?? "");
-  await team.getByLabel(/Hide the street address/).check();
-  await team.getByLabel("Internal notes").fill("PROPOSED identity for the pilot rehearsal. Production identity and the hidden-address decision await Tom's approval.");
+  for (const [label, key] of [["Location label", "label"], ["Approved business name", "business_name"], ["Street address", "address_line1"], ["Suite / unit", "address_line2"],
+    ["City", "city"], ["State", "region"], ["ZIP", "postal_code"], ["Approved phone", "phone"], ["Approved website", "website_url"]]) await team.getByLabel(label, { exact: true }).fill(IDENTITY[key] ?? "");
+  await team.getByLabel(/Hide the street address/).setChecked(HIDDEN);
+  await team.getByLabel("Internal notes").fill(HIDDEN ? "Pilot rehearsal identity (sandbox), hidden-address location."
+    : "Pilot rehearsal identity (sandbox). Public address shown on the Google Business Profile, per Tom's Oct 21 correction.");
   await team.getByRole("button", { name: "Save approved identity" }).click();
   await team.getByRole("status").waitFor();
   const location = sql(`select id from citation_locations where label = '${IDENTITY.label.replaceAll("'", "''")}'`);
   assert.match(location, /^[0-9a-f-]{36}$/);
-  ok("Identity: entered by hand as a hidden-address location (no clients.address auto-approval)");
+  assert.equal(sql(`select hide_address::text from citation_locations where id = '${location}'`), String(HIDDEN));
+  ok(`Identity: entered by hand as a ${HIDDEN ? "hidden" : "public"}-address location (no clients.address auto-approval)`);
 
   // ── Held-only history import (historical exceptions only, no listings) ─
-  if (!REAL) {
+  if (!REAL || PILOT_HELD_CSV) {
     const lines = synthetic.trim().split("\n");
-    const heldOnly = join(TMP, "held-only.csv");
-    writeFileSync(heldOnly, [lines[0], ...lines.filter((l) => /^1[2-5],/.test(l)), "Aggregator/Network"].join("\n"));
+    const heldOnly = PILOT_HELD_CSV ?? join(TMP, "held-only.csv");
+    if (!PILOT_HELD_CSV) writeFileSync(heldOnly, [lines[0], ...lines.filter((l) => /^1[2-5],/.test(l)), "Aggregator/Network"].join("\n"));
     await team.goto(`${base}/clients/${CLIENT}/citations/import`, { waitUntil: "networkidle" });
     await team.locator("input[type=file]").setInputFiles(heldOnly);
     await team.locator("[data-brightlocal-contract]").waitFor();
+    if (PILOT_HELD_CSV) await team.getByLabel("Campaign id").fill("908272");
     await team.getByLabel("Location for every row").selectOption(location);
     await team.getByRole("button", { name: "Preview import" }).click();
     await team.locator("[data-import-preview]").waitFor();
     assert.deepEqual(await counts(team), { rows: 4, added: 0, updated: 0, skipped: 0, rejected: 0, held: 4 });
+    const heldText = await team.locator("[data-import-preview]").innerText();
+    for (const d of ["manta.com", "bing.com", "all.biz", "clutch.co"]) assert.ok(heldText.includes(`(${d})`), d);
     const save = team.getByRole("button", { name: "Save import history (4 held, no listings)" });
     assert.ok(await save.isEnabled(), "a held-only file can be saved");
     await save.click();
@@ -210,7 +220,7 @@ try {
   noSecrets(sql(`select string_agg(notes, ' ') from citation_listings where location_id = '${location}'`) + sql(`select string_agg(message, ' ') from citation_import_rows`)
     + sql(`select string_agg(mapping::text, ' ') from citation_imports`), "the database");
   const heldRows = sql(`select coalesce(string_agg(message, ' | '), '') from citation_import_rows where outcome = 'held'`);
-  if (!REAL) for (const d of ["manta.com", "bing.com", "all.biz", "clutch.co"]) assert.ok(heldRows.includes(`(${d})`), d);
+  if (!REAL || PILOT_HELD_CSV) for (const d of ["manta.com", "bing.com", "all.biz", "clutch.co"]) assert.ok(heldRows.includes(`(${d})`), d);
   ok("State: 11 listings (9 provider complete, 2 submitted), all unverified, no check / observation dates, no NAP; held history kept on the import; no raw Notes");
 
   // ── Review queue (nothing corrected) ──────────────────────────────────
@@ -238,6 +248,9 @@ try {
   const tasks = JSON.parse(sql(`select json_build_object('open', count(*) filter (where status = 'open'), 'verify', count(*) filter (where kind = 'verify'),
     'investigate', count(*) filter (where kind = 'investigate'), 'resolved', count(*) filter (where status in ('resolved', 'cancelled'))) from citation_tasks where location_id = '${location}'`));
   assert.deepEqual(tasks, { open: 12, verify: 10, investigate: 2, resolved: 0 });
+  const verifyReasons = sql(`select string_agg(reason, ' | ') from citation_tasks where location_id = '${location}' and kind = 'verify' and listing_id in (select id from citation_listings where listing_url is not null)`);
+  assert.equal(/Hidden-address business/.test(verifyReasons), HIDDEN, HIDDEN ? "hidden wording" : "a public-address location's tasks never call the street a problem");
+  assert.match(verifyReasons, /record name, phone, website and address/);
   assert.equal(sql(`select count(*) from citation_listing_overview where location_id = '${location}' and verification_status <> 'unverified'`), "0", "nothing marked verified or corrected");
   await shot(team, "pilot-queue");
   ok("Queue: 9 verify (linked listings), Yelp owner verification, Apple and Bing investigations; repeat queue adds 0; nothing resolved");
@@ -246,8 +259,31 @@ try {
   const client = table(await (await context.request.get(`${base}/clients/${CLIENT}/citations/export?variant=client&location=${location}`)).text());
   assert.equal(client.length, 11);
   assert.ok(client.every((r) => r["Verification"] === "Unverified" && r["Evidence"] === "Never checked" && r["Last checked"] === "" && r["Source observed"] === ""));
-  assert.ok(client.every((r) => !r["Approved address"].includes(IDENTITY.address_line1.split(",")[0])), "client-safe export withholds the street");
-  ok("Export: 11 rows, all unverified / never checked, no observation date, street withheld in the client-safe file");
+  const street = IDENTITY.address_line1;
+  if (HIDDEN) assert.ok(client.every((r) => !r["Approved address"].includes(street)), "client-safe export withholds the street");
+  else assert.ok(client.every((r) => r["Approved address"] === [street, IDENTITY.address_line2, `${IDENTITY.city}, ${IDENTITY.region} ${IDENTITY.postal_code}`].filter(Boolean).join(", ")),
+    "client-safe export shows the approved public address");
+  ok(`Export: 11 rows, all unverified / never checked, no observation date, ${HIDDEN ? "street withheld" : "public address shown"} in the client-safe file`);
+
+  // ── A public address is compared normally (synthetic listing only: no invented evidence about real listings) ─
+  if (!REAL && !HIDDEN) {
+    await team.goto(page, { waitUntil: "networkidle" });
+    const mc = team.locator('[data-listing-url="https://www.merchantcircle.com/sample-solar-synthetic-ks"]');
+    await mc.getByText(/Checks & evidence/).click();
+    await mc.getByRole("button", { name: "Record a check" }).click();
+    await mc.getByLabel("Address shown").fill(`${street} ${IDENTITY.address_line2}, ${IDENTITY.city}, ${IDENTITY.region} ${IDENTITY.postal_code}`);
+    await mc.getByLabel("Phone shown").fill("(555) 010-0000");
+    await mc.getByLabel("Evidence", { exact: true }).fill("SYNTHETIC: listing shows the approved public address and phone");
+    await mc.getByRole("button", { name: "Save check" }).click();
+    await mc.locator('[data-verification="verified_accurate"]').waitFor();
+    assert.equal(await mc.locator('[data-field="address"]').getAttribute("data-compare"), "match", "the street is compared, not flagged as exposed");
+    assert.equal(await mc.locator('[data-field="phone"]').getAttribute("data-compare"), "match");
+    const row = table(await (await context.request.get(`${base}/clients/${CLIENT}/citations/export?variant=client&location=${location}`)).text())
+      .find((r) => r["Listing URL"].includes("merchantcircle"));
+    assert.match(row["Current address"], new RegExp(`^${street}`), "the client-safe file carries the observed public street");
+    assert.equal(row["Verification"], "Verified accurate");
+    ok("Public address: a listing showing the approved street matches (not 'exposed'); client-safe export shows it");
+  }
 
   // ── Leakage: secrets in Status / Site / No of held rows and in a location-map key ─
   if (!REAL) {
