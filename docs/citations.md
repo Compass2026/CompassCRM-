@@ -22,8 +22,9 @@ spends credits or sends mail.
 
 Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
 `src/lib/citations-data.ts` (reads), `src/app/citation-actions.ts` (writes),
-`src/components/citations/*`, migration
-`supabase/migrations/20261021160410_citations_foundation.sql`.
+`src/components/citations/*`, migrations
+`supabase/migrations/20261021160410_citations_foundation.sql` and
+`20261021230000_citation_enrichment_and_field_checks.sql` (follow-up, below).
 
 ## Overlap with what was already there
 
@@ -99,7 +100,7 @@ Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
 | Dimension | Values | Set by |
 | --- | --- | --- |
 | Provider fulfillment | none, submitted, pending, provider complete, failed | import, manual entry, fulfillment request |
-| Independent verification | unverified, verified accurate, discrepancy, inaccessible, confirmed absent, **needs reverification** | derived in `citation_listing_overview` from the latest dated check and its identity version; nothing can store or edit it |
+| Independent verification | unverified, verified accurate, **partially verified**, discrepancy, inaccessible, confirmed absent, **needs reverification** | derived in `citation_listing_overview` from the latest dated check and its identity version; nothing can store or edit it |
 | Open issues | open / in progress / waiting tasks | the queue |
 
 - A provider's "complete" never verifies anything. "Provider complete,
@@ -386,6 +387,142 @@ Oct 21 2026.** The history of the instruction is kept:
   Oct 21 found one admin, Thomas.
 - The production migration (`20261021160410`) and `CITATIONS_ENABLED`: the
   bounded rollout, after the final review of this correction.
+
+## Follow-up from the pilot audit (Oct 21 2026)
+
+Executive OS task `35a99cb0` (rollout `6e4a061f`; audit result `ef343683` in
+task `c0e9965e`). Migration `20261021230000_citation_enrichment_and_field_checks.sql`
+is additive and **not applied to production**; nothing here touches the live
+Logic Solar records. It writes no client row except the key history, which
+copies each existing listing's current key.
+
+### Adding a URL / external id to an existing listing
+
+The audit found Apple Maps and Yelp listings that were imported without URLs
+and had no way to record them without creating a second listing.
+
+- **Add URL / id** on a listing card fills only what the listing is missing:
+  its URL, its external id, or both. It never replaces one; a different URL is
+  a different listing.
+- Each one is an append-only `citation_listing_enrichments` record: before and
+  after URL / id / key, the reason (where it was found), who and when. It is
+  the only path that changes a listing's URL, external id or key: a direct
+  update is refused by the listing guard.
+- The listing keeps its id, import provenance (`source_*`, `last_import_id`),
+  provider status, checks, verification and task links.
+- `citation_listing_keys` keeps every key a listing has carried (its earlier
+  URL-less slot, its URL, its external id). Imports match against it, so
+  reimporting the **original** (URL-less) file and the **enriched** file both
+  land on the same listing.
+- Collision-safe: the same normalization as imports (case, `www.`, trailing
+  slash, fragment). A URL / id that another listing of the same directory at
+  the same location carries, now or earlier, is refused: open a "Resolve
+  suspected duplicate" task, nothing is merged. A URL / id already on a listing
+  elsewhere (another location, directory or client) is shown and saved only
+  after the teammate ticks that they reviewed it; the reviewed listing ids are
+  kept on the record.
+- Credentials (`user:pass@`) and tokenized verification links are refused, in
+  the form (`sensitiveContent`) and by the table's own checks.
+
+Import changes (no change for repeat imports of the same file):
+- An import never changes a listing's URL or external id. A row carrying one
+  the listing lacks is processed as before and its message says to add it with
+  **Add URL / id**.
+- Rows that cannot be placed without guessing are rejected with the way to
+  resolve them: a URL and id pointing at two listings; an id whose listing has
+  another URL, or another id than the one recorded; a URL / id the location
+  does not know while the directory has a listing without one (enrich it
+  first); no URL / id while the directory already has listings with one.
+- `suspected_duplicate` now also flags a URL-less listing beside another
+  listing of the same directory.
+
+### Address formatting vs. real discrepancies
+
+The listing card shows two things apart:
+- **Teammate verdict** (dated, against an identity version): the field
+  statuses below. This is the evidence.
+- **Automated text comparison** (dashed chips, "a suggestion, not a verdict"):
+  `match`, **`equivalent`** (with the reason), `differs`, `not recorded`, or
+  `shown but should be hidden`. The raw observation is shown as seen.
+
+`compareAddress` is conservative. **Equivalent** only when every approved part
+(street, each suite / floor / building part, city, ZIP) is present and nothing
+else is, and the text needed more than Phase 1 normalization: a state written
+out ("Kansas") or left out, parts in another order (building label first),
+ordinals, a country suffix. **Differs** for anything missing or extra: a
+missing or different suite / floor / building is always material ("Ste 1" for
+"Plaza 1, 7th Floor"), as are another street number, state or ZIP. A
+hidden-address business showing any address stays **exposed**, however
+equivalent. Notes use general words and never quote the address. The CSV adds
+"Address text comparison (automated, not a verdict)".
+
+### Field-level checks
+
+- A check is either a review of the listing's content or a listing-level
+  outcome that observes nothing (inaccessible, not found, confirmed absent).
+- A content review records each of name, address, phone and website as
+  **verified**, **discrepancy**, **not displayed**, **not checked** or **could
+  not view**, with the value kept exactly when the field was seen (verified or
+  discrepancy) and never otherwise.
+- The result is derived (in the form, and authoritatively by the check guard,
+  against the identity in effect on the check's date): any discrepancy →
+  discrepancy; every field correct → accurate; otherwise **partial**
+  (`partially_verified`). A name-only review is partial, never "verified
+  accurate". A listing with no public phone (ProvenExpert) is partial, not a
+  discrepancy.
+- A field the identity does not publish (hidden street, no approved phone or
+  website) is correct when not displayed and can never be "verified": a shown
+  hidden street is a discrepancy, and stays out of client-safe output.
+- Checks saved before this migration keep their verdict and evidence; their
+  `field_coverage` is `unrecorded` and they are shown as "which fields were
+  reviewed was not recorded". Nothing is inferred. Every new check is
+  `recorded` (the guard stamps it).
+- Identity changes still send every earlier check, partial or not, to needs
+  reverification.
+- Counts: "Verified accurate" means all four fields; "Partially verified" is a
+  separate card, column and filter, and is action required. A line under the
+  cards gives the listings whose current check verified each field, and how
+  many current verdicts predate field-level review. "Queue verification" also
+  queues partial listings that still have fields not checked.
+- CSV: Field coverage, Name / Address / Phone / Website check.
+- The agency overview says it covers only locations already added to
+  Citations (it is not a measure of overall client coverage).
+
+### Before applying
+
+- Apply `20261021230000` after review, then deploy the code: the old code
+  would insert checks without field statuses, which the new guard refuses.
+  Code and migration go together; `CITATIONS_ENABLED` can stay on.
+- The migration drops the three unnamed Phase 1 check rules by definition and
+  fails (changing nothing) if it does not find exactly three.
+- **Rollback:** after real enrichments or field-level checks exist, roll back
+  the code only, never the data (the history tables are append-only evidence).
+  Before any, the reverse is: restore the Phase 1 `guard_citation_listing`,
+  `guard_citation_check`, `citation_import` and `citation_listing_overview`
+  definitions from `20261021160410`, re-add its three check rules, then drop
+  `citation_listing_enrichments`, `citation_listing_keys`, the five check
+  columns and the functions `record_citation_listing_keys`,
+  `guard_citation_enrichment`, `apply_citation_enrichment`.
+
+### Verification
+
+- `tests/citations-database.test.mjs`: the SQL suite (new sections EN*:
+  enrichment of URL-less Apple / Yelp-style listings with a check and tasks,
+  reimport of the original and enriched source, conflicts, collisions,
+  tokenized / credentialed URLs, cross-client, append-only; FC*: partial,
+  not displayed, discrepancy, accurate, value rules, coverage rules, hidden
+  address, identity change) and a **migration test** that records Phase 1
+  checks, listings and tasks, applies the follow-up and proves them unchanged
+  with coverage `unrecorded`.
+- `tests/citations.test.mjs`: address equivalence on the audit's shapes
+  (synthetic values), derivation, coverage text, counts, CSV columns, hidden
+  street never in the client-safe file.
+- `npm run test:citations-ui`: field-by-field check, verdict vs. comparison,
+  Add URL / id (tokenized URL refused, reimports add nothing, a URL on another
+  location's listing needs review). Screenshots in `docs/screenshots/citations/`
+  (`location-verdict-vs-comparison`, `listing-verdict-vs-comparison`,
+  `overview-field-coverage`, `enrich-form`, `enrich-done`,
+  `enrich-duplicate-warning`).
 
 ## Exports
 

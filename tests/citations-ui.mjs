@@ -13,11 +13,19 @@
 //     a credit; the listing's provider status follows, verification does not.
 //   - Exports: the client-safe file has no hidden street; cells are safe.
 //   - Another client's location is a 404; a portal contact gets nothing.
+//   - Follow-up (pilot audit): checks are recorded field by field (a name-only
+//     review is "partially verified"); the teammate's verdict is shown apart
+//     from the automated text comparison, which calls equivalent formatting
+//     equivalent; a URL-less listing gains its URL through "Add URL / id"
+//     without losing anything, and reimporting the original or the enriched
+//     file adds nothing.
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createHmac } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { parseCsv } from "../src/lib/citations.ts";
 import { agencyToday } from "../src/lib/reporting.ts";
@@ -105,9 +113,20 @@ const checks = [];
 const ok = (name) => { checks.push(name); console.log(`  ✓ ${name}`); };
 const count = async (page, key) => Number(await page.locator(`[data-import-preview] [data-count=${key}], [data-import-done] [data-count=${key}]`).first().innerText());
 
-async function mapImport(page) {
+// Fills the field-by-field check form: { name: ["verified", "Sample Roofing"], phone: ["discrepancy", "417-…"] }; unnamed fields stay "not checked".
+async function fillFields(scope, fields) {
+  for (const [f, [status, value]] of Object.entries(fields)) {
+    const label = f[0].toUpperCase() + f.slice(1);
+    await scope.getByLabel(`${label} check`).selectOption(status);
+    if (value) await scope.getByLabel(`${label} shown`).fill(value);
+  }
+}
+const ALL_MAIN = (phone, address = "100 North Main Street, Springfield, MO 65806") => ({
+  name: ["verified", "Sample Roofing LLC"], address: ["verified", address], phone: ["verified", phone], website: ["verified", "https://sample-roofing.example.test"] });
+
+async function mapImport(page, file = FIXTURE) {
   await page.goto(`${base}/clients/${CLIENT_A}/citations/import`, { waitUntil: "networkidle" });
-  await page.locator("input[type=file]").setInputFiles(FIXTURE);
+  await page.locator("input[type=file]").setInputFiles(file);
   await page.locator("[data-credential-notice]").waitFor();
   await page.getByLabel("Location for Main office (sample)").selectOption(MAIN);
   await page.getByLabel("Location for North branch (sample)").selectOption(NORTH);
@@ -181,8 +200,8 @@ try {
   assert.equal(await yp.locator('[data-field="phone"]').getAttribute("data-compare"), "mismatch", "imported phone differs from the approved identity");
   await yp.getByText(/Checks & evidence/).click();
   await yp.getByRole("button", { name: "Record a check" }).click();
-  await yp.getByLabel("Result").selectOption("discrepancy");
-  await yp.getByLabel("Phone shown").fill("417-555-0199");
+  await fillFields(yp, { phone: ["discrepancy", "417-555-0199"] });
+  assert.match(await yp.locator("[data-derived-verdict]").innerText(), /Discrepancy/);
   await yp.getByLabel("Evidence", { exact: true }).fill("SAMPLE: listing shows 417-555-0199 (screenshot ref S-1)");
   await yp.getByRole("button", { name: "Save check" }).click();
   await yp.locator('[data-verification="discrepancy"]').waitFor();
@@ -199,7 +218,8 @@ try {
   const again = yp.getByRole("button", { name: /^Record (another|a) check$/ });
   if (!(await again.isVisible())) await yp.getByText(/Checks & evidence/).click();
   await again.click();
-  await yp.getByLabel("Phone shown").fill("(417) 555-0100");
+  await fillFields(yp, ALL_MAIN("(417) 555-0100"));
+  assert.match(await yp.locator("[data-derived-verdict]").innerText(), /Verified accurate/);
   await yp.getByLabel("Evidence", { exact: true }).fill("SAMPLE: phone corrected on Yellow Pages (screenshot ref S-2)");
   await yp.getByRole("button", { name: "Save check" }).click();
   await yp.locator('[data-verification="verified_accurate"]').waitFor();
@@ -258,7 +278,7 @@ try {
   await team.goto(loc, { waitUntil: "networkidle" });
   await yp.getByText(/Checks & evidence/).click();
   await yp.getByRole("button", { name: "Record a check" }).click();
-  await yp.getByLabel("Phone shown").fill("(417) 555-0123");
+  await fillFields(yp, ALL_MAIN("(417) 555-0123"));
   await yp.getByLabel("Evidence", { exact: true }).fill("SAMPLE: new main line shown on Yellow Pages (screenshot ref S-3)");
   await yp.getByRole("button", { name: "Save check" }).click();
   await yp.locator('[data-verification="verified_accurate"]').waitFor();
@@ -266,8 +286,82 @@ try {
   assert.deepEqual([row["Verification"], row["Current phone"], row["Checked against identity"], row["Current identity"]], ["Verified accurate", "(417) 555-0123", "2", "2"]);
   ok("Identity change: notes-only edit keeps verification; a phone change needs a reason, marks the check for reverification on page, overview and CSV; a new check restores it");
 
-  // ── Fulfillment request, approval, credits ────────────────────────────
+  // ── Follow-up: a partial check, and the verdict apart from the text comparison ─
+  await team.goto(loc, { waitUntil: "networkidle" });
+  const fb = team.locator('[data-listing="Facebook"]');
+  await fb.getByText(/Checks & evidence/).click();
+  await fb.getByRole("button", { name: "Record a check" }).click();
+  await fillFields(fb, { name: ["verified", "Sample Roofing"] });
+  assert.match(await fb.locator("[data-derived-verdict]").innerText(), /Partially verified/, "a name-only review is never verified accurate");
+  assert.ok(await fb.getByLabel("Address shown").isDisabled(), "no value can be kept for a field that was not seen");
+  await fb.getByLabel("Evidence", { exact: true }).fill("SAMPLE: only the page title was visible (screenshot ref S-4)");
+  await fb.getByRole("button", { name: "Save check" }).click();
+  await fb.locator('[data-verification="partially_verified"]').waitFor();
+  assert.deepEqual(await fb.locator("[data-field-check]").evaluateAll((els) => els.map((e) => `${e.dataset.fieldCheck}:${e.dataset.status}`)),
+    ["name:verified", "address:not_checked", "phone:not_checked", "website:not_checked"]);
+  const yelpMain = team.locator('[data-listing="Yelp"]');
+  await yelpMain.getByText(/Checks & evidence/).click();
+  await yelpMain.getByRole("button", { name: "Record a check" }).click();
+  await fillFields(yelpMain, ALL_MAIN("(417) 555-0123", "100 North Main Street, Springfield, Missouri 65806, United States"));
+  await yelpMain.getByLabel("Evidence", { exact: true }).fill("SAMPLE: Yelp shows the address with the state written out (screenshot ref S-5)");
+  await yelpMain.getByRole("button", { name: "Save check" }).click();
+  await yelpMain.locator('[data-verification="verified_accurate"]').waitFor();
+  assert.equal(await yelpMain.locator('[data-field="address"]').getAttribute("data-compare"), "equivalent", "equivalent formatting is not 'differs'");
+  assert.match(await yelpMain.locator("[data-address-notes]").innerText(), /state written out; country shown/);
+  assert.equal(await yelpMain.locator('[data-current="address"]').innerText(), "100 North Main Street, Springfield, Missouri 65806, United States", "raw observation kept");
+  assert.match(await yelpMain.locator("[data-manual-verdict]").innerText(), /Teammate verdict \(\d{4}-\d{2}-\d{2}, identity v2\)/);
+  await shot(team, "location-verdict-vs-comparison");
+  if (shots) { await team.evaluate(() => window.scrollTo(0, 0)); await yelpMain.screenshot({ path: `${shots}/listing-verdict-vs-comparison.png` }); }
+  let rows = table(await exportOf(context, CLIENT_A, `variant=client&location=${MAIN}`));
+  const fbRow = rows.find((r) => r["Directory"] === "Facebook"), yelpRow = rows.find((r) => r["Directory"] === "Yelp");
+  assert.deepEqual([fbRow["Verification"], fbRow["Field coverage"], fbRow["Address check"]], ["Partially verified", "Verified: name · Not checked: address, phone, website", "Not checked"]);
+  assert.deepEqual([yelpRow["Verification"], yelpRow["Address check"], yelpRow["Address text comparison (automated, not a verdict)"]],
+    ["Verified accurate", "Verified (matches)", "Equivalent formatting (state written out; country shown)"]);
+  await team.goto(`${base}/citations`, { waitUntil: "networkidle" });
+  assert.equal(await team.locator('[data-metric="Partially verified"]').innerText(), "1");
+  assert.equal(await team.locator('[data-field-verified="name"]').innerText(), "3", "name verified on Yellow Pages, Yelp and the name-only Facebook check");
+  assert.equal(await team.locator('[data-field-verified="phone"]').innerText(), "2", "the name-only check does not count for the phone");
+  assert.match(await team.locator("[data-coverage-scope]").innerText(), /only the business locations already added/);
+  await shot(team, "overview-field-coverage");
+  ok("Field-level checks: name-only is partially verified (page, overview, CSV); the dated verdict is shown apart from the automated comparison, which calls a written-out state equivalent and keeps the raw text");
+
+  // ── Follow-up: add a URL to an existing URL-less listing, then reimport ─
   const north = `${base}/clients/${CLIENT_A}/citations/${NORTH}`;
+  await team.goto(north, { waitUntil: "networkidle" });
+  const bingId = sql(`select id from citation_listings where location_id = '${NORTH}' and listing_url is null`);
+  const bingBefore = sql(`select concat_ws('|', id, source_provider, last_import_id, fulfillment_status, source_phone, created_at) from citation_listings where id = '${bingId}'`);
+  const bingCard = team.locator('[data-listing="Bing Places"]');
+  await bingCard.getByText("Add URL / external id").click();
+  await bingCard.getByRole("button", { name: "Add URL / id" }).click();
+  await bingCard.getByLabel("Public listing URL").fill("https://www.bing.com/maps/verify?token=abcdefghijklmnopqrstu");
+  await bingCard.getByLabel("Where you found it").fill("SAMPLE: Bing Maps search during the audit");
+  await bingCard.getByRole("button", { name: "Save URL / id" }).click();
+  await bingCard.getByText(/private account \/ verification link/).waitFor();
+  await bingCard.getByLabel("Public listing URL").fill("https://www.bing.com/maps?q=Sample+Roofing+North+Ozark");
+  await bingCard.getByLabel("External listing id").fill("YN0000SAMPLE0001");
+  await shot(team, "enrich-form");
+  await bingCard.getByRole("button", { name: "Save URL / id" }).click();
+  await team.locator('[data-listing="Bing Places"] [data-enrichments]').waitFor();
+  const enriched = team.locator('[data-listing="Bing Places"]');
+  assert.match(await enriched.locator("[data-enrichments]").innerText(), /Sam Team added the URL and id YN0000SAMPLE0001 \(was recorded without a URL or id\) · SAMPLE: Bing Maps search/);
+  assert.equal(await enriched.getAttribute("data-listing-url"), "https://www.bing.com/maps?q=Sample+Roofing+North+Ozark");
+  assert.equal(sql(`select concat_ws('|', id, source_provider, last_import_id, fulfillment_status, source_phone, created_at) from citation_listings where id = '${bingId}'`), bingBefore,
+    "same listing id, import provenance and provider status");
+  assert.equal(sql(`select concat_ws('|', before_key, after_key, (recorded_by is not null)::text) from citation_listing_enrichments where listing_id = '${bingId}'`),
+    "none|url:bing.com/maps?q=Sample+Roofing+North+Ozark|true");
+  await shot(team, "enrich-done");
+  // The original file (Bing without a URL) and an enriched copy (with it) both land on the same listing.
+  await mapImport(team);
+  assert.deepEqual([await count(team, "added"), await count(team, "skipped"), await count(team, "rejected")], [0, 6, 4], "original file after enrichment");
+  const dir = mkdtempSync(join(tmpdir(), "citations-ui-"));
+  const enrichedCsv = join(dir, "enriched-sample.csv");
+  writeFileSync(enrichedCsv, readFileSync(FIXTURE, "utf8").replace("North branch (sample),Bing Places,,", "North branch (sample),Bing Places,https://www.bing.com/maps?q=Sample+Roofing+North+Ozark,"));
+  await mapImport(team, enrichedCsv);
+  assert.deepEqual([await count(team, "added"), await count(team, "skipped"), await count(team, "rejected")], [0, 6, 4], "enriched file");
+  assert.equal(sql(`select count(*) from citation_listings where client_id = '${CLIENT_A}'`), "6", "no duplicate listing");
+  ok("Enrichment: tokenized URL refused; URL and id added to the URL-less Bing listing with before / after, actor and reason; id, provenance and provider status kept; original and enriched reimports add nothing");
+
+  // ── Fulfillment request, approval, credits ────────────────────────────
   await team.goto(north, { waitUntil: "networkidle" });
   assert.ok(!(await team.locator("[data-listings]").innerText()).includes("22 Hidden Way"));
   const requests = team.locator("[data-requests]");
@@ -347,8 +441,10 @@ try {
     insert into citation_listings (client_id, location_id, directory_id, listing_url, source_provider)
       select '${CLIENT_B}', '${SUMMIT}', (select id from citation_directories where key = 'manta'), 'https://bulk.example.test/l/' || lpad(g::text, 4, '0'), 'sample_csv'
       from generate_series(1, 1200) g;
-    insert into citation_checks (listing_id, checked_on, method, result, observed_name, evidence)
-      select id, (now() at time zone 'America/Chicago')::date - 61, 'visited_url', 'accurate', 'Summit Electric', 'SAMPLE quiet listing'
+    insert into citation_checks (listing_id, checked_on, method, result, observed_name, observed_address, observed_phone, evidence,
+        name_status, address_status, phone_status, website_status)
+      select id, (now() at time zone 'America/Chicago')::date - 61, 'visited_url', 'accurate', 'Summit Electric', '9 Elm Street, Columbia, MO', '(573) 555-0110', 'SAMPLE quiet listing',
+        'verified', 'verified', 'verified', 'not_displayed'
       from citation_listings where listing_url = 'https://bulk.example.test/l/0001';
     insert into citation_checks (listing_id, checked_on, method, result, evidence)
       select (select id from citation_listings where listing_url = 'https://bulk.example.test/l/0002'), (now() at time zone 'America/Chicago')::date - (g % 60),
@@ -376,6 +472,25 @@ try {
   assert.match(await team.locator("[data-listing-range]").innerText(), /Showing 1201–1201 of 1201/);
   assert.equal(await team.locator('[data-listing="Yelp"]').count(), 1, "the last page holds the last listing");
   ok("Capacity: 1,200 listings through a 1,000-row API cap — complete totals, export and pages; a busy listing cannot displace another's latest check");
+
+  // ── Follow-up: a URL already on another location's listing needs review ─
+  sql(`insert into citation_listings (client_id, location_id, directory_id, source_provider) values ('${CLIENT_A}', '${NORTH}', (select id from citation_directories where key = 'yelp'), 'manual_entry')`);
+  await team.goto(north, { waitUntil: "networkidle" });
+  const northYelp = team.locator('[data-listing="Yelp"]');
+  await northYelp.getByText("Add URL / external id").click();
+  await northYelp.getByRole("button", { name: "Add URL / id" }).click();
+  await northYelp.getByLabel("Public listing URL").fill("https://www.yelp.com/biz/sample-roofing-springfield/");
+  await northYelp.getByLabel("Where you found it").fill("SAMPLE: the branch shares the main office's Yelp page?");
+  await northYelp.getByRole("button", { name: "Save URL / id" }).click();
+  await northYelp.locator("[data-enrich-matches]").waitFor();
+  assert.match(await northYelp.locator("[data-enrich-matches]").innerText(), /Sample Roofing \(sample\) · Main office \(sample\) · Yelp · https:\/\/www\.yelp\.com\/biz\/sample-roofing-springfield/);
+  assert.equal(sql(`select count(*) from citation_listing_enrichments where listing_id in (select id from citation_listings where location_id = '${NORTH}' and listing_url is null)`), "0", "nothing saved before review");
+  await shot(team, "enrich-duplicate-warning");
+  await northYelp.locator("[data-enrich-matches] input[type=checkbox]").check();
+  await northYelp.getByRole("button", { name: "Save URL / id" }).click();
+  await team.locator('[data-listing="Yelp"] [data-enrichments]').waitFor();
+  assert.match(sql(`select array_length(acknowledged_listing_ids, 1)::text || ' ' || after_key from citation_listing_enrichments order by recorded_at desc limit 1`), /^1 url:yelp\.com\/biz\/sample-roofing-springfield$/);
+  ok("Enrichment: a URL already on another location's listing is shown and saved only after review, with the reviewed listing recorded");
 
   // ── Phone-sized location page ─────────────────────────────────────────
   const phone = await (await contextFor(browser, TEAM, { width: 390, height: 844 })).newPage();

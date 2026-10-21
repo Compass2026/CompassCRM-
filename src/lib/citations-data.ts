@@ -6,7 +6,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/fetch-all";
 import {
   OPEN_TASK_STATUSES, evidenceFreshness, exportRows, identityCurrent, needsAction, toCsv,
-  type CitationListingOverview, type CitationLocation, type CitationTask, type ExportListing, type VerificationStatus,
+  type CitationListingOverview, type CitationLocation, type CitationTask, type ExportListing,
 } from "@/lib/citations";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -16,6 +16,7 @@ export const LISTING_VIEWS = {
   action: "Action required",
   discrepancy: "Discrepancies",
   unverified: "Unverified",
+  partial: "Partially verified",
   reverify: "Needs reverification",
   inaccessible: "Inaccessible",
   stale: "Not current (stale, superseded or never checked)",
@@ -27,6 +28,7 @@ export function inView(l: CitationListingOverview, view: ListingView, today?: st
     case "action": return needsAction(l);
     case "discrepancy": return l.verification_status === "discrepancy";
     case "unverified": return l.verification_status === "unverified";
+    case "partial": return l.verification_status === "partially_verified";
     case "reverify": return l.verification_status === "needs_reverification";
     case "inaccessible": return l.verification_status === "inaccessible";
     case "stale": return evidenceFreshness(l.last_checked_on, today, identityCurrent(l)) !== "current";
@@ -34,25 +36,10 @@ export function inView(l: CitationListingOverview, view: ListingView, today?: st
   }
 }
 
-export type LocationSummary = {
-  total: number; byVerification: Record<VerificationStatus, number>; providerCompleteUnverified: number; openTasks: number;
-  notCurrent: number; duplicates: number; action: number; lastImport: string | null;
-};
-export function summarize(listings: CitationListingOverview[], openTasks: number, today?: string): LocationSummary {
-  const byVerification = { unverified: 0, verified_accurate: 0, discrepancy: 0, inaccessible: 0, confirmed_absent: 0, needs_reverification: 0 };
-  let providerCompleteUnverified = 0, notCurrent = 0, duplicates = 0, action = 0, lastImport: string | null = null;
-  for (const l of listings) {
-    byVerification[l.verification_status]++;
-    if (l.fulfillment_status === "provider_complete" && l.verification_status === "unverified") providerCompleteUnverified++;
-    if (evidenceFreshness(l.last_checked_on, today, identityCurrent(l)) !== "current") notCurrent++;
-    if (l.suspected_duplicate) duplicates++;
-    if (needsAction(l)) action++;
-    if (l.last_imported_at && (!lastImport || l.last_imported_at > lastImport)) lastImport = l.last_imported_at;
-  }
-  return { total: listings.length, byVerification, providerCompleteUnverified, openTasks, notCurrent, duplicates, action, lastImport };
-}
+// Pure, so the unit tests can run it; kept here for the pages' imports.
+export { summarize, type LocationSummary } from "@/lib/citations";
 
-export const OVERVIEW_COLUMNS = "id, client_id, location_id, directory_id, listing_url, external_id, listing_key, fulfillment_status, source_name, source_address, source_phone, source_website, source_provider, source_observed_on, last_import_id, last_imported_at, archived, notes, created_at, updated_at, created_by, directory_name, directory_key, location_label, hide_address, identity_version, client_name, last_check_id, last_checked_on, last_check_result, last_check_method, check_identity_version, verification_status, current_name, current_address, current_phone, current_website, open_tasks, suspected_duplicate";
+export const OVERVIEW_COLUMNS = "id, client_id, location_id, directory_id, listing_url, external_id, listing_key, fulfillment_status, source_name, source_address, source_phone, source_website, source_provider, source_observed_on, last_import_id, last_imported_at, archived, notes, created_at, updated_at, created_by, directory_name, directory_key, location_label, hide_address, identity_version, client_name, last_check_id, last_checked_on, last_check_result, last_check_method, check_identity_version, verification_status, current_name, current_address, current_phone, current_website, open_tasks, suspected_duplicate, check_field_coverage, name_check, address_check, phone_check, website_check";
 
 export async function loadListings(db: Supabase, filter: { clientId?: string; locationId?: string }) {
   const { rows, error } = await fetchAll<CitationListingOverview>((from, to) => {
