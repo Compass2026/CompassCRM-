@@ -69,7 +69,11 @@ test("the model request is vendor-neutral and carries the whole brief", () => {
 test("refused: brand board not approved", () => {
   const r = brief((x) => ({ ...x, board: { ...x.board, status: "draft" } }));
   assert.equal(r.ok, false);
-  assert.ok(r.refusals.some((f) => f.code === "brand_board_not_approved"));
+  const refusal = r.refusals.find((f) => f.code === "brand_board_not_approved");
+  assert.ok(refusal);
+  // Says where to fix it: the board is approved on the Foundation tab, not the
+  // Brand tab's profile stamp.
+  assert.match(refusal.message, /Approve brand board v\d+ on the Foundation tab\./);
 });
 
 test("refused: missing, off-site or unapproved target page", () => {

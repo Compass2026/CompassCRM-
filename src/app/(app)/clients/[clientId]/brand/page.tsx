@@ -6,12 +6,12 @@ import {
   addAssetLinkAction,
   addColorAction,
   addFontAction,
-  approveBrandBoardAction,
+  approveBrandProfileAction,
   deleteAssetAction,
   deleteColorAction,
   deleteFontAction,
   publishBrandBoardAction,
-  reopenBrandBoardAction,
+  reopenBrandProfileAction,
   setPrimaryAssetAction,
   updateAssetAction,
   updateColorAction,
@@ -37,6 +37,7 @@ import {
 import {
   brandAssetKindLabels,
   brandAssetKinds,
+  brandBoardStatusStyles,
   brandColorRoleLabels,
   brandColorRoles,
   brandFontRoleLabels,
@@ -63,6 +64,17 @@ export default async function BrandPage({
 
   const { client, brand, colors, fonts, assets, task } = data;
   const approved = !!brand.approved_at;
+  // The drafters gate on the brand board (brand_boards.status, latest
+  // version), which is approved on the Foundation tab, not on this profile.
+  const { data: board, error: boardError } = await supabase
+    .from("brand_boards")
+    .select("version, status, approved_by, approved_on")
+    .eq("client_id", clientId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (boardError) throw new Error(boardError.message);
+  const boardHref = `/clients/${clientId}/foundation#brand-board`;
   const creative = reviewCounts(
     (assets as unknown as ReviewAsset[]).filter((a) => a.kind === "photo" || a.kind.startsWith("logo") || a.kind === "wordmark"),
   );
@@ -71,8 +83,8 @@ export default async function BrandPage({
   const addColor = addColorAction.bind(null, clientId);
   const addFont = addFontAction.bind(null, clientId);
   const addLink = addAssetLinkAction.bind(null, clientId);
-  const approve = approveBrandBoardAction.bind(null, clientId);
-  const reopen = reopenBrandBoardAction.bind(null, clientId);
+  const approve = approveBrandProfileAction.bind(null, clientId);
+  const reopen = reopenBrandProfileAction.bind(null, clientId);
   const publish = publishBrandBoardAction.bind(null, clientId);
 
   return (
@@ -80,7 +92,8 @@ export default async function BrandPage({
       {/* ── Status & actions ─────────────────────────────────────────── */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" data-brand-profile-status>
+            <span className="text-sm font-medium">Brand profile</span>
             <Badge
               variant="outline"
               className={
@@ -116,14 +129,39 @@ export default async function BrandPage({
             {approved ? (
               <form action={reopen}>
                 <Button type="submit" variant="ghost">
-                  Reopen
+                  Reopen brand profile
                 </Button>
               </form>
             ) : (
               <form action={approve}>
-                <Button type="submit">Approve brand board</Button>
+                <Button type="submit">Approve brand profile</Button>
               </form>
             )}
+          </div>
+          <div
+            className="flex basis-full flex-wrap items-center gap-2 border-t pt-3 text-sm"
+            data-brand-board-status={board?.status ?? "missing"}
+          >
+            <span className="font-medium">Brand board</span>
+            {board ? (
+              <Badge variant="outline" className={brandBoardStatusStyles[board.status]}>
+                v{board.version} · {board.status}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
+                none
+              </Badge>
+            )}
+            <span className="text-muted-foreground">
+              {board?.status === "approved"
+                ? `approved by ${board.approved_by ?? "—"}${board.approved_on ? ` on ${board.approved_on.slice(0, 10)}` : ""} · AI drafting can use it`
+                : board
+                  ? `AI drafting is blocked until brand board v${board.version} is approved on the Foundation tab. Approving the profile above does not unblock it.`
+                  : "AI drafting is blocked until a brand board is started and approved on the Foundation tab."}
+            </span>
+            <Link href={boardHref} className="ml-auto underline underline-offset-2">
+              {board?.status === "approved" ? "View on Foundation tab →" : "Approve on Foundation tab →"}
+            </Link>
           </div>
         </CardContent>
       </Card>
