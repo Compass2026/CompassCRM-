@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { propertySearchTotals } from "@/lib/search-totals";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,11 +28,14 @@ export default async function PortalOverviewPage() {
     supabase.from("portal_client").select("*").maybeSingle(),
     supabase.from("portal_progress").select("*"),
     supabase.from("portal_rankings").select("*").eq("result_type", "organic"),
+    // Property totals from the verified Search Console imports; query rows
+    // in portal_search_performance are a sample and are never totals.
     supabase
-      .from("portal_search_performance")
-      .select("*")
-      .order("period_end", { ascending: false })
-      .limit(1),
+      .from("portal_growth_measurements")
+      .select("metric,scope,source,status,value,window_start,window_end,sequence")
+      .in("metric", ["search_clicks", "search_impressions"])
+      .order("sequence", { ascending: false })
+      .limit(500),
     supabase
       .from("portal_work_log")
       .select("*")
@@ -56,7 +60,7 @@ export default async function PortalOverviewPage() {
       r.previous_position > r.position
   ).length;
 
-  const latestSearch = (search ?? [])[0];
+  const searchTotals = propertySearchTotals(search ?? []);
   const latestReport = (reports ?? [])[0];
   const inProgress = (progress ?? []).filter((p) => p.status === "in_progress");
   const checkedAt = tracked
@@ -108,20 +112,20 @@ export default async function PortalOverviewPage() {
             <CardTitle className="text-base">Search traffic</CardTitle>
           </CardHeader>
           <CardContent>
-            {latestSearch ? (
+            {searchTotals.state === "ok" ? (
               <>
                 <div className="flex gap-8">
                   <div>
                     <div className="text-2xl font-heading font-semibold">
-                      {formatNumber(latestSearch.clicks)}
+                      {formatNumber(searchTotals.clicks)}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      visits from Google
+                      clicks from Google Search
                     </div>
                   </div>
                   <div>
                     <div className="text-2xl font-heading font-semibold">
-                      {formatNumber(latestSearch.impressions)}
+                      {formatNumber(searchTotals.impressions)}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       times you appeared
@@ -129,16 +133,21 @@ export default async function PortalOverviewPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
-                  {formatDate(latestSearch.period_start)} –{" "}
-                  {formatDate(latestSearch.period_end)} ·{" "}
+                  Search Console totals for your website,{" "}
+                  {formatDate(searchTotals.start)} – {formatDate(searchTotals.end)} ·{" "}
                   <Link href="/portal/search" className="underline">
-                    see the searches
+                    see the top searches
                   </Link>
                 </p>
               </>
+            ) : searchTotals.state === "several" ? (
+              <p className="text-sm text-muted-foreground">
+                Search Console totals are reported separately for each of your
+                websites; see Growth.
+              </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Google Search Console data lands here after the first full
+                Google Search Console totals land here after the first full
                 month of tracking.
               </p>
             )}

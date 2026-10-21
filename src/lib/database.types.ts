@@ -12528,7 +12528,9 @@ export type Database = {
           keyword: string | null
           position: number | null
           previous_position: number | null
+          previous_state: string | null
           result_type: string | null
+          state: string | null
         }
         Relationships: [
           {

@@ -126,11 +126,21 @@ Deno.serve(async (req) => {
     const site = client.sites?.find((s) => s.url)?.url ?? client.website_url;
     const ourHost = host(site);
     const ourNames = [client.name, client.dba].filter(Boolean).map((n) => norm(n));
-    return (it: Item) => {
+    const onSite = (it: Item) => {
       const d = (it.domain ?? host(it.url) ?? "").replace(/^www\./, "").toLowerCase();
-      if (ourHost && d && (d === ourHost || d.endsWith(`.${ourHost}`))) return true;
-      const t = norm(it.title);
-      return !!t && ourNames.some((n) => n && (t === n || t.includes(n)));
+      return !!ourHost && !!d && (d === ourHost || d.endsWith(`.${ourHost}`));
+    };
+    // Organic is the website only. A directory, social or review page titled
+    // with the business name (or another firm with the same name) is not the
+    // site's rank (Lucas, Oct 2026: Facebook, MapQuest, Angi in Washington).
+    // The map pack lists the business itself, so its name counts there.
+    return {
+      organic: onSite,
+      pack: (it: Item) => {
+        if (onSite(it)) return true;
+        const t = norm(it.title);
+        return !!t && ourNames.some((n) => n && (t === n || t.includes(n)));
+      },
     };
   };
   // Locations: the home row plus any row whose city matches a keyword's
@@ -293,7 +303,7 @@ Deno.serve(async (req) => {
     if(runsError)throw new Error(`run_lookup_failed: ${runsError.code}`);
     const runFor = new Map<string, { id: string; started_at: string; checks_count: number | null }>();
     for (const r of runs ?? []) if (!runFor.has(r.client_id)) runFor.set(r.client_id, r);
-    const isUsFor = new Map<string, (it: Item) => boolean>();
+    const isUsFor = new Map<string, ReturnType<typeof identity>>();
     const locFor = new Map<string, Awaited<ReturnType<typeof locationResolver>>>();
     for (const c of (clients ?? []) as ClientRow[]) {
       isUsFor.set(c.id, identity(c));
@@ -314,8 +324,8 @@ Deno.serve(async (req) => {
       const isUs = isUsFor.get(kw.client_id)!;
       const organic = items.filter((x) => x.type === "organic");
       const pack = items.filter((x) => x.type === "local_pack" || x.type === "map");
-      const org = organic.find(isUs);
-      const packHit = pack.find(isUs);
+      const org = organic.find(isUs.organic);
+      const packHit = pack.find(isUs.pack);
       const run = runFor.get(kw.client_id);
       const locs = locFor.get(kw.client_id)!;
       const coord: string | undefined = t.data?.location_coordinate;

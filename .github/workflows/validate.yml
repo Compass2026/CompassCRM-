@@ -134,6 +134,24 @@ jobs:
           name: control-center-screenshots
           path: docs/screenshots/control-center/
 
+  keyword-report-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Verify the keyword results report with fictional data (read-only stub, no provider calls, client-scoped reads)
+        run: CHROME_PATH=/usr/bin/google-chrome node --no-warnings tests/keyword-report-ui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: keyword-report-screenshots
+          path: docs/screenshots/keyword-report/
+
   map-grid-ui:
     runs-on: ubuntu-latest
     timeout-minutes: 10

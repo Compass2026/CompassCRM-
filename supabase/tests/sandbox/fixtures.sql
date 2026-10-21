@@ -23,12 +23,13 @@ insert into keywords (id, client_id, keyword, is_tracked, is_money) values
   ('00000000-0000-4000-d000-00000000001a', '00000000-0000-4000-b000-00000000000a', 'a untracked', false, false),
   ('00000000-0000-4000-d000-00000000000b', '00000000-0000-4000-b000-00000000000b', 'b electrician', true, true);
 
-insert into rank_snapshots (keyword_id, location_id, result_type, position, recorded_at, source) values
-  ('00000000-0000-4000-d000-00000000000a', '00000000-0000-4000-c000-00000000000a', 'organic', 9, now() - interval '7 days', 'dataforseo'),
-  ('00000000-0000-4000-d000-00000000000a', '00000000-0000-4000-c000-00000000000a', 'organic', 5, now(), 'dataforseo'),
-  ('00000000-0000-4000-d000-00000000000a', '00000000-0000-4000-c000-00000000000a', 'organic', 1, now(), 'brightlocal_report'),
-  ('00000000-0000-4000-d000-00000000001a', '00000000-0000-4000-c000-00000000000a', 'organic', 3, now(), 'dataforseo'),
-  ('00000000-0000-4000-d000-00000000000b', '00000000-0000-4000-c000-00000000000b', 'organic', 4, now(), 'dataforseo');
+-- DataForSEO stores the ranking URL with every found organic result.
+insert into rank_snapshots (keyword_id, location_id, result_type, position, url_ranked, recorded_at, source) values
+  ('00000000-0000-4000-d000-00000000000a', '00000000-0000-4000-c000-00000000000a', 'organic', 9, 'https://a.example.test/plumbing', now() - interval '7 days', 'dataforseo'),
+  ('00000000-0000-4000-d000-00000000000a', '00000000-0000-4000-c000-00000000000a', 'organic', 5, 'https://a.example.test/plumbing', now(), 'dataforseo'),
+  ('00000000-0000-4000-d000-00000000000a', '00000000-0000-4000-c000-00000000000a', 'organic', 1, null, now(), 'brightlocal_report'),
+  ('00000000-0000-4000-d000-00000000001a', '00000000-0000-4000-c000-00000000000a', 'organic', 3, 'https://a.example.test/', now(), 'dataforseo'),
+  ('00000000-0000-4000-d000-00000000000b', '00000000-0000-4000-c000-00000000000b', 'organic', 4, 'https://b.example.test/', now(), 'dataforseo');
 
 insert into gsc_snapshots (client_id, query, page, clicks, impressions, ctr, avg_position, period_start, period_end) values
   ('00000000-0000-4000-b000-00000000000a', 'a plumber', '/', 10, 100, 0.1, 5.2, '2026-08-01', '2026-08-28'),

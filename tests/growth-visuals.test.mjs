@@ -6,9 +6,9 @@ test('ranking pie partitions keywords once using best checked location, includin
  const r={keyword_id:'one',result_type:'organic',checked_at:'2026-10-01',position:2};
  const rows=[r,{...r,position:8},{...r,keyword_id:'two',position:6},{...r,keyword_id:'three',position:30},{...r,keyword_id:'four',position:null},{...r,keyword_id:'five',checked_at:null,position:null}];
  const slices=rankingDistribution(rows,'organic');
- assert.deepEqual(slices.map(s=>s.value),[1,1,1,1,1]);
+ assert.deepEqual(slices.map(s=>[s.key,s.value]),[['top3',1],['top10',1],['beyond',1],['missing',1],['excluded',0],['unchecked',1]]);
  assert.equal(slices.reduce((n,s)=>n+s.value,0),5);
- assert.deepEqual(rankingDistribution(rows,'map_pack').map(s=>s.value),[0,0,0,0,5]);
+ assert.deepEqual(rankingDistribution(rows,'map_pack').map(s=>s.value),[0,0,0,0,0,5]);
 });
 
 test('interaction pie requires all three action types from identical scope, source and dates; zero stays zero',()=>{

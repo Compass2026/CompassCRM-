@@ -17,8 +17,15 @@ type Row = {
   is_money: boolean;
   organic: number | null;
   organicPrev: number | null;
+  // website | third_party | unverified | not_found (see portal_rankings).
+  organicState: string | null;
+  organicPrevState: string | null;
   map: number | null;
 };
+// Only the client's own website is an organic ranking. A directory, social
+// or review page carrying the business name is shown as unavailable, never
+// as a position and never as "not in top 100".
+const excluded = (s: string | null) => s === "third_party" || s === "unverified";
 
 export default async function PortalRankingsPage() {
   const supabase = await createClient();
@@ -33,11 +40,15 @@ export default async function PortalRankingsPage() {
       is_money: r.is_money ?? false,
       organic: null,
       organicPrev: null,
+      organicState: null,
+      organicPrevState: null,
       map: null,
     };
     if (r.result_type === "organic") {
       row.organic = r.position;
       row.organicPrev = r.previous_position;
+      row.organicState = r.state;
+      row.organicPrevState = r.previous_state;
     } else {
       row.map = r.position;
     }
@@ -87,7 +98,9 @@ export default async function PortalRankingsPage() {
               </TableHeader>
               <TableBody>
                 {rows.map((row) => {
-                  const delta = rankDelta(row.organic, row.organicPrev);
+                  const delta = excluded(row.organicState) || excluded(row.organicPrevState)
+                    ? ({ direction: "flat", amount: 0 } as const)
+                    : rankDelta(row.organic, row.organicPrev);
                   return (
                     <TableRow key={`${row.keyword}-${row.city ?? ""}`}>
                       <TableCell className="font-medium">
@@ -105,7 +118,9 @@ export default async function PortalRankingsPage() {
                         {row.city ?? "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {row.organic ?? "not in top 100"}
+                        {excluded(row.organicState)
+                          ? <span className="text-muted-foreground">not available</span>
+                          : row.organic ?? "not in top 100"}
                       </TableCell>
                       <TableCell className="text-right">
                         {delta.direction === "up" && (
@@ -139,6 +154,9 @@ export default async function PortalRankingsPage() {
         &quot;Google&quot; is your position in the normal search results.
         &quot;Map results&quot; is your position in the map box that appears for
         local searches. Lower is better, and position 1–3 is the goal.
+        &quot;Not available&quot; means the result Google showed was not your
+        own website (for example a directory or social page with your name),
+        so it is not counted as your ranking.
       </p>
     </div>
   );

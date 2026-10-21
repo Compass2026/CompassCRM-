@@ -7,11 +7,11 @@ insert into keywords(id,client_id,keyword,is_tracked) values
  ('00000000-0000-4000-d000-00000000002a','00000000-0000-4000-b000-00000000000a','awaiting check',true);
 insert into locations(id,client_id,name,city,state) values
  ('00000000-0000-4000-c000-00000000002a','00000000-0000-4000-b000-00000000000a','A nearby','Nearby','MO');
-insert into rank_snapshots(keyword_id,location_id,result_type,position,recorded_at,source) values
- ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000002a','organic',2,now()-interval '1 day','dataforseo'),
- ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000000a','map_pack',3,now()-interval '2 days','dataforseo'),
- ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000000a','map_pack',null,now()-interval '1 day','dataforseo'),
- ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000000a','organic',1,now()+interval '1 day','dataforseo');
+insert into rank_snapshots(keyword_id,location_id,result_type,position,url_ranked,recorded_at,source) values
+ ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000002a','organic',2,'https://a.example.test/',now()-interval '1 day','dataforseo'),
+ ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000000a','map_pack',3,null,now()-interval '2 days','dataforseo'),
+ ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000000a','map_pack',null,null,now()-interval '1 day','dataforseo'),
+ ('00000000-0000-4000-d000-00000000000a','00000000-0000-4000-c000-00000000000a','organic',1,'https://a.example.test/',now()+interval '1 day','dataforseo');
 do $$ begin
  if (select count(distinct keyword_id) from client_growth_rankings where client_id='00000000-0000-4000-b000-00000000000a')<>2 then raise exception 'tracked total excluded unchecked or included untracked'; end if;
  if not exists(select 1 from client_growth_rankings where keyword='a plumber' and location_name='A home' and result_type='organic' and first_position=9 and position=5 and previous_position=9) then raise exception 'source, future date or first/latest comparison wrong'; end if;

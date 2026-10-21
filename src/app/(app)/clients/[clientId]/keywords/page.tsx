@@ -20,6 +20,7 @@ import {
 import { LocationsPanel } from "@/components/locations-panel";
 import { GridConfigCard } from "@/components/grid-config-card";
 import { cn } from "@/lib/utils";
+import { organicRankState, siteHosts } from "@/lib/organic-rank";
 
 const selectClass =
   "field-sm";
@@ -39,7 +40,7 @@ export default async function KeywordsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [{ data: keywords }, { data: locations }, { data: snapshots }] =
+  const [{ data: keywords }, { data: locations }, { data: snapshots }, { data: client }, { data: sites }, { data: brands }] =
     await Promise.all([
       supabase
         .from("keywords")
@@ -56,12 +57,18 @@ export default async function KeywordsPage({
       supabase
         .from("rank_snapshots")
         .select(
-          "keyword_id, location_id, result_type, position, recorded_at, keywords!inner(client_id)"
+          "keyword_id, location_id, result_type, position, url_ranked, source, recorded_at, keywords!inner(client_id)"
         )
         .eq("keywords.client_id", clientId)
         .order("recorded_at", { ascending: false })
         .limit(4000),
+      supabase.from("clients").select("website_url").eq("id", clientId).maybeSingle(),
+      supabase.from("sites").select("url").eq("client_id", clientId),
+      supabase.from("client_brand_workspaces").select("website_url").eq("client_id", clientId),
     ]);
+  // The client's own websites. An organic row on any other host (a directory,
+  // social or review page carrying the business name) is not a ranking.
+  const hosts = siteHosts([client?.website_url, ...(sites ?? []).map((s) => s.url), ...(brands ?? []).map((b) => b.website_url)]);
 
   const physicalLocations = (locations ?? []).filter(
     (l) => l.is_physical_location
@@ -154,15 +161,21 @@ export default async function KeywordsPage({
 
   // Latest position per keyword × location × result_type (snapshots are
   // ordered newest first, so first hit wins).
+  // An excluded latest organic row stays excluded; an older website rank is
+  // never substituted for it.
   const latest = new Map<string, number | null>();
+  const excluded = new Set<string>();
   for (const s of snapshots ?? []) {
     const key = `${s.keyword_id}:${s.location_id}:${s.result_type}`;
-    if (!latest.has(key)) latest.set(key, s.position);
+    if (latest.has(key) || excluded.has(key)) continue;
+    const state = s.result_type === "organic" ? organicRankState(s.source, s.position, s.url_ranked, hosts) : null;
+    if (state === "third_party" || state === "unverified") excluded.add(key);
+    else latest.set(key, s.position);
   }
 
   const activeKeywords = (keywords ?? []).filter((k) => k.is_active);
   const activeLocations = (locations ?? []).filter((l) => l.is_active);
-  const hasRankData = latest.size > 0;
+  const hasRankData = latest.size > 0 || excluded.size > 0;
 
   // City Index: per location, average of best positions across P1 keywords.
   function cityIndex(locationId: string, type: "organic" | "map_pack") {
@@ -478,9 +491,18 @@ export default async function KeywordsPage({
                         const map = latest.get(`${k.id}:${l.id}:map_pack`);
                         return (
                           <td key={l.id} className="px-2 py-1.5 text-center">
-                            <span className={cn("px-1.5 py-0.5 rounded", heat(org))}>
-                              {org ?? "—"}
-                            </span>
+                            {excluded.has(`${k.id}:${l.id}:organic`) ? (
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800"
+                                title="Latest organic result was not the client's website (directory, social or review page). Excluded from rankings and the City Index."
+                              >
+                                3P
+                              </span>
+                            ) : (
+                              <span className={cn("px-1.5 py-0.5 rounded", heat(org))}>
+                                {org ?? "—"}
+                              </span>
+                            )}
                             <span className="text-muted-foreground mx-0.5">/</span>
                             <span className={cn("px-1.5 py-0.5 rounded", heat(map))}>
                               {map ?? "—"}
@@ -492,7 +514,7 @@ export default async function KeywordsPage({
                   ))}
                   <tr className="border-t bg-muted/40">
                     <td className="py-1.5 pr-3 text-xs font-medium">
-                      City Index (P1 avg)
+                      City Index (P1 avg, website only)
                     </td>
                     {activeLocations.map((l) => (
                       <td key={l.id} className="px-2 py-1.5 text-center text-xs">
@@ -503,6 +525,14 @@ export default async function KeywordsPage({
                   </tr>
                 </tbody>
               </table>
+              {excluded.size > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  3P = the latest organic result was not this client&apos;s
+                  website (a directory, social or review page carrying the
+                  name). It is not a ranking and is left out of the City
+                  Index; the stored check is kept as recorded.
+                </p>
+              )}
             </div>
           )}
           {!hasRankData && activeKeywords.length > 0 && activeLocations.length > 0 && (
