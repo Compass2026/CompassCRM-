@@ -152,6 +152,24 @@ jobs:
           name: keyword-report-screenshots
           path: docs/screenshots/keyword-report/
 
+  monthly-report-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Verify the monthly report workflow with fictional data (stub API, function calls only, nothing sent)
+        run: CHROME_PATH=/usr/bin/google-chrome node --no-warnings tests/monthly-report-ui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: monthly-report-screenshots
+          path: docs/screenshots/monthly-report/
+
   map-grid-ui:
     runs-on: ubuntu-latest
     timeout-minutes: 10

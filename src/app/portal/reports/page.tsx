@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMonth, formatNumber } from "@/lib/portal";
@@ -10,10 +11,11 @@ type Summary = {
 
 export default async function PortalReportsPage() {
   const supabase = await createClient();
-  const { data: reports } = await supabase
-    .from("portal_reports")
-    .select("*")
-    .order("period", { ascending: false });
+  const [{ data: reports }, { data: published }] = await Promise.all([
+    supabase.from("portal_reports").select("*").order("period", { ascending: false }),
+    // Versioned monthly reports Compass approved and published to the portal.
+    supabase.from("portal_monthly_reports").select("id,period").order("period", { ascending: false }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -24,7 +26,26 @@ export default async function PortalReportsPage() {
         </p>
       </div>
 
-      {(reports ?? []).length === 0 ? (
+      {(published ?? []).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Monthly reports</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm">
+              {published!.map((p) => (
+                <li key={p.id}>
+                  <Link className="underline" href={`/portal/reports/monthly/${p.id}`}>
+                    {formatMonth(p.period)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {(reports ?? []).length === 0 && (published ?? []).length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
             Your first monthly report arrives at the start of next month.
