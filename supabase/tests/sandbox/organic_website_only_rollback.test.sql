@@ -1,7 +1,7 @@
 -- The rollback script restores the previous views, grants and City Index
 -- function and drops the helpers. Run inside a transaction and undone.
 begin;
-\ir ../../rollback/20261020230000_organic_rank_website_only.down.sql
+\ir ../../rollback/20261021163048_organic_rank_website_only.down.sql
 do $$ begin
  if exists(select 1 from pg_proc where proname in ('url_host','organic_rank_state')) then raise exception 'R1 helpers not dropped'; end if;
  if exists(select 1 from information_schema.columns where table_name in ('client_growth_rankings','portal_growth_rankings','portal_rankings') and column_name in ('state','first_state','previous_state')) then raise exception 'R2 state columns remain'; end if;
