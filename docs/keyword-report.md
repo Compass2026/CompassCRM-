@@ -102,7 +102,9 @@ Migration `20261020230000_organic_rank_website_only.sql` applies the same
 rule everywhere else that shows ranks.
 
 - `public.url_host(text)` and `public.organic_rank_state(source, position,
-  url, hosts)` are pure, immutable and invoker functions. Execute is granted
+  url, hosts)` are pure, immutable and invoker functions. `url_host`
+  lower-cases before removing `www.`, so `https://WWW.Site.Test` is
+  `site.test`, the same as the TypeScript mirror. Execute is granted
   to `authenticated` and `service_role`, never to `anon`.
   `src/lib/organic-rank.ts` mirrors them, and `tests/organic-rank.test.mjs`
   pins both to one truth table. A client's hosts are its record, its `sites`
@@ -115,15 +117,19 @@ rule everywhere else that shows ranks.
   for `website`, so even an un-updated reader cannot count a third-party
   page. Host sets are computed inline in each view: a function would run as
   the portal user, who cannot read `clients` or `sites`.
-- `compute_location_index` (City Index) takes the latest in-period row per
-  P1 keyword first, then leaves it out if it is not the website. An older
-  website rank is never substituted for it. Stored `location_index` rows
+- `compute_location_index` (City Index) takes the latest in-period organic
+  row per P1 keyword first, including a check that found nothing. It then
+  leaves the keyword out unless that row is the client's website, so an older
+  website rank is never substituted for a newer *not found* or third-party
+  result. The map pack keeps its existing rule. Stored `location_index` rows
   are not rewritten; the next `rank-sync` run recomputes the current period.
 - The team Keywords page reads `url_ranked` and `source`. It shows **3P**
   for an excluded latest result and keeps it out of best-rank and the City
   Index.
 - The Growth page shows an excluded count, an "excluded" ranking bucket and
   "Not comparable: not the website".
+- Search Console: the property totals on portal search render whether or
+  not a query sample exists; the sample has its own empty state.
 - Search Console: the portal home and portal search headlines read the
   verified property import (`portal_growth_measurements`, source "Google
   Search Console property totals") through `propertySearchTotals`. Several

@@ -48,53 +48,58 @@ export default async function PortalSearchPage() {
         </p>
       </div>
 
+      {/* Property totals and the query sample come from independent imports:
+          the totals card never depends on a sample existing. */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            {totals.state === "ok"
+              ? `Your website in Google Search, ${formatDate(totals.start)} – ${formatDate(totals.end)}`
+              : "Your website in Google Search"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {totals.state === "ok" ? (
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <div className="text-3xl font-heading font-semibold">
+                  {formatNumber(totals.clicks)}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  clicks from Google Search
+                </div>
+              </div>
+              <div>
+                <div className="text-3xl font-heading font-semibold">
+                  {formatNumber(totals.impressions)}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  times you appeared in results
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {totals.state === "several"
+                ? "Search Console totals are reported separately for each of your websites; see Growth."
+                : "Website totals are not available yet. Query samples are never shown as a total."}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {!latest ? (
         <Card>
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            Google reports this data about a month behind. Yours will appear
-            after the next monthly sync.
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Top searches</CardTitle>
+          </CardHeader>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            No search sample yet. Google reports search detail about a month
+            behind; it appears here after the next monthly sync.
           </CardContent>
         </Card>
       ) : (
         <>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                {totals.state === "ok"
-                  ? `Your website in Google Search, ${formatDate(totals.start)} – ${formatDate(totals.end)}`
-                  : "Your website in Google Search"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {totals.state === "ok" ? (
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <div>
-                    <div className="text-3xl font-heading font-semibold">
-                      {formatNumber(totals.clicks)}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      clicks from Google Search
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-heading font-semibold">
-                      {formatNumber(totals.impressions)}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      times you appeared in results
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {totals.state === "several"
-                    ? "Search Console totals are reported separately for each of your websites; see Growth."
-                    : "Website totals are not available yet. The searches below are a sample, not a total."}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Top searches</CardTitle>

@@ -23,6 +23,16 @@ test('organic rank state matches the SQL truth table',()=>{
   assert.ok(sql.includes(call),`SQL verify block covers: ${call}`);
  }
 });
+test('upper-case WWW: the recorded client host and a bare-domain result agree (SQL runs the same case)',()=>{
+ const hosts=siteHosts(['https://WWW.Site.Test']);
+ assert.deepEqual(hosts,['site.test']);
+ assert.equal(organicRankState('dataforseo',2,'https://site.test/page',hosts),'website');
+ assert.equal(organicRankState('dataforseo',2,'https://WWW.SITE.TEST/page',['site.test']),'website');
+ const sql=readFileSync('supabase/migrations/20261020230000_organic_rank_website_only.sql','utf8');
+ assert.ok(sql.includes("public.url_host('https://WWW.Site.Test') is distinct from 'site.test'"),'migration verify block asserts the same normalisation');
+ assert.ok(sql.includes("public.organic_rank_state('dataforseo', 2, 'https://site.test/page', array[public.url_host('https://WWW.Site.Test')]) <> 'website'"));
+ // Executable SQL parity runs in supabase/tests/sandbox/organic_website_only.test.sql (O8, O10).
+});
 test('hosts: scheme, credentials, port, www and case are normalised; junk is no host',()=>{
  assert.equal(urlHost('HTTPS://User:pw@WWW.Site.Test:8443/x?y#z'),'site.test');
  assert.equal(urlHost('site.test/no-scheme'),null);

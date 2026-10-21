@@ -18,7 +18,7 @@ const rankingRows=[ranking,{...ranking,result_type:'map_pack',position:1},{...ra
  // Latest organic result was a directory page carrying the business name: excluded, not a rank and not "not found".
  {...ranking,keyword_id:'fourth',keyword:'fictional brand roofing',first_position:3,first_state:'website',position:null,state:'third_party',previous_position:3,previous_state:'website'}];
 for(const [i,metric] of ['gbp_views','gbp_clicks','gbp_call_clicks','gbp_directions'].entries()) for(const [month,value] of [['08',10+i],['09',[524,37,15,45][i]]]) measurements.push({...fixture,id:`gbp-${i}-${month}`,metric,sequence:20+i*2+(month==='09'?1:0),source:'Google Business Profile via Zernio',window_start:`2026-${month}-01`,window_end:`2026-${month}-${month==='08'?'31':'30'}`,report_period:`2026-${month}-01`,value});
-const opportunities=[],checks=[],unexpected=[];let failInsert=true;
+const opportunities=[],checks=[],unexpected=[];let failInsert=true,searchSample=true;
 const upstream=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');
  let actor;try{actor=JSON.parse(Buffer.from((req.headers.authorization??'').split('.')[1]??'','base64url').toString()).sub;}catch{actor=teamId;}
@@ -61,7 +61,8 @@ const upstream=http.createServer(async(req,res)=>{
  if(url.pathname==='/rest/v1/portal_backlinks')return reply(opportunities.flatMap(o=>{const history=checks.filter(c=>c.opportunity_id===o.id),last=history.at(-1);return last?[{id:o.id,client_id:clientId,title:o.title,source_url:o.source_url,target_url:o.target_url,keyword:'roof repair',brand_name:null,observed_on:last.observed_on,result:last.result,rel:last.rel,anchor_text:last.anchor_text,first_live_on:history[0].observed_on}]:[];}));
  // Portal overview, search and rankings. Search Console headlines must come from the verified property
  // import (portal_growth_measurements); the query-row sample below sums to different, smaller numbers.
- if(url.pathname==='/rest/v1/portal_search_performance')return reply([{client_id:clientId,period_start:'2026-09-15',period_end:'2026-10-12',clicks:27,impressions:13408,avg_position:20.3,queries:935}]);
+ // The property import and the query-sample import are independent; searchSample=false models no sample yet.
+ if(url.pathname==='/rest/v1/portal_search_performance')return reply(searchSample?[{client_id:clientId,period_start:'2026-09-15',period_end:'2026-10-12',clicks:27,impressions:13408,avg_position:20.3,queries:935}]:[]);
  if(url.pathname==='/rest/v1/portal_search_queries')return reply([{query:'fictional roof repair',clicks:9,impressions:400,avg_position:3.2}]);
  if(url.pathname==='/rest/v1/portal_rankings')return reply([
   {client_id:clientId,keyword:'roof repair',city:'Springfield',is_money:true,result_type:'organic',position:2,previous_position:5,checked_at:'2026-10-19T06:00:00Z',state:'website',previous_state:'website'},
@@ -183,6 +184,13 @@ try{
  assert.match(await clientPage.locator('main').innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280/);
  assert.match(await clientPage.locator('main').innerText(),/does not add up to your totals/);
  assert.equal(await clientPage.getByText('average position',{exact:true}).count(),0,'no unweighted average of query rows as a headline');
+ // Valid property totals with zero query-sample rows: the totals still render; the sample has its own empty state.
+ searchSample=false;
+ await clientPage.goto(`http://127.0.0.1:${port}/portal/search`,{waitUntil:'networkidle'});
+ assert.match(await clientPage.locator('main').innerText(),/64[\s\S]*clicks from Google Search[\s\S]*14,280/);
+ assert.match(await clientPage.locator('main').innerText(),/No search sample yet/);
+ assert.equal(await clientPage.getByRole('table').count(),0,'no sample table without sample rows');
+ searchSample=true;
  await clientPage.goto(`http://127.0.0.1:${port}/portal/rankings`,{waitUntil:'networkidle'});
  const rankRow=k=>clientPage.getByRole('row').filter({hasText:k});
  assert.match(await rankRow('fictional brand roofing').innerText(),/not available/);

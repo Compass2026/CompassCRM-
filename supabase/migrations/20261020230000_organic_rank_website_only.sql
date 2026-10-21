@@ -30,9 +30,10 @@ create or replace function public.url_host(p_url text)
 returns text
 language sql immutable parallel safe set search_path = ''
 as $$
-  select nullif(lower(regexp_replace(
-    substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#@]*@)?([^/:?#]+)'),
-    '^www\.', '')), '')
+  -- Lower-case first, then drop www., matching src/lib/organic-rank.ts.
+  select nullif(regexp_replace(
+    lower(substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#@]*@)?([^/:?#]+)')),
+    '^www\.', ''), '')
 $$;
 
 create or replace function public.organic_rank_state(p_source text, p_position integer, p_url text, p_hosts text[])
@@ -197,10 +198,11 @@ begin
   from keywords k
   where k.client_id = v_client and k.is_active and k.priority = 'p1';
 
-  -- Latest in-period position per P1 keyword and result type; keywords with
-  -- no ranking in the period stay out of the average, as before. When that
-  -- latest organic row is not the client's website, the keyword is left out:
-  -- an older website rank is never substituted for the latest check.
+  -- Latest in-period organic row per P1 keyword, chosen BEFORE judging it:
+  -- when that latest check found nothing, or found a page that is not the
+  -- client's website, the keyword is left out. An older website rank is never
+  -- substituted for the latest check. Map pack keeps its existing rule (latest
+  -- found position in the period).
   with latest as (
     select distinct on (rs.keyword_id, rs.result_type)
       rs.result_type, rs.position as pos,
@@ -210,7 +212,7 @@ begin
     join keywords k on k.id = rs.keyword_id
     where rs.location_id = p_location_id
       and k.client_id = v_client and k.is_active and k.priority = 'p1'
-      and rs.position is not null
+      and (rs.result_type::text = 'organic' or rs.position is not null)
       and rs.recorded_at >= v_start and rs.recorded_at < v_end
     order by rs.keyword_id, rs.result_type, rs.recorded_at desc
   )
@@ -241,7 +243,9 @@ begin
      or public.organic_rank_state('dataforseo', 2, null, array['site.test']) <> 'unverified'
      or public.organic_rank_state('dataforseo', 2, 'https://site.test/', null) <> 'unverified'
      or public.organic_rank_state('brightlocal_report', 2, null, array['site.test']) <> 'website'
-     or public.organic_rank_state('dataforseo', null, null, array['site.test']) <> 'not_found' then
+     or public.organic_rank_state('dataforseo', null, null, array['site.test']) <> 'not_found'
+     or public.url_host('https://WWW.Site.Test') is distinct from 'site.test'
+     or public.organic_rank_state('dataforseo', 2, 'https://site.test/page', array[public.url_host('https://WWW.Site.Test')]) <> 'website' then
     raise exception 'organic_rank_state truth table failed';
   end if;
   select string_agg(c.relname, ', ') into v_bad
