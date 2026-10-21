@@ -92,7 +92,7 @@ export type Database = {
         Update: { finished_at?: string | null; status?: string; results?: Json }
         Relationships: []
       }
-      // Citations Phase 1 (20261020230000). Hand-written like the backlink tables; the guards stamp the omitted columns.
+      // Citations Phase 1 (20261021160410). Hand-written like the backlink tables; the guards stamp the omitted columns.
       citation_locations: {
         Row: CitationLocation
         Insert: Pick<CitationLocation, "client_id" | "label" | "business_name"> & Partial<Omit<CitationLocation, "client_id" | "label" | "business_name" | "identity_version" | "approved_at" | "approved_by" | "created_at" | "updated_at">>

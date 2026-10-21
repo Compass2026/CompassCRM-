@@ -1,4 +1,4 @@
--- Citations Phase 1 (20261020230000_citations_foundation.sql). Plain SQL, one
+-- Citations Phase 1 (20261021160410_citations_foundation.sql). Plain SQL, one
 -- transaction, rolled back: runs in scripts/test-portal-sandbox.sh and in
 -- tests/citations-database.test.mjs (PGlite). Fictional clients and
 -- example.test domains only; no provider is called.

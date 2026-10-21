@@ -23,7 +23,7 @@ spends credits or sends mail.
 Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
 `src/lib/citations-data.ts` (reads), `src/app/citation-actions.ts` (writes),
 `src/components/citations/*`, migration
-`supabase/migrations/20261020230000_citations_foundation.sql`.
+`supabase/migrations/20261021160410_citations_foundation.sql`.
 
 ## Overlap with what was already there
 
@@ -384,7 +384,7 @@ Oct 21 2026.** The history of the instruction is kept:
 **Before launch:**
 - Approvers: admin-only in code. ChatGPT's read-only production preflight on
   Oct 21 found one admin, Thomas.
-- The production migration (`20261020230000`) and `CITATIONS_ENABLED`: the
+- The production migration (`20261021160410`) and `CITATIONS_ENABLED`: the
   bounded rollout, after the final review of this correction.
 
 ## Exports
@@ -427,19 +427,22 @@ here.
   per-call cost on the run row (as `rank_runs` does for DataForSEO) before any
   schedule is turned on.
 
-## Turning it on (not done)
+## Turning it on (released Oct 21 2026)
 
-1. Review this PR.
-2. Apply `20261020230000_citations_foundation.sql` through the Supabase MCP
-   (`apply_migration`). It is additive: ten tables, two views, one function, and
-   seventeen reference directories. It inserts no client rows. Rename the file to
-   the recorded version.
-3. Set `CITATIONS_ENABLED=true` in the Vercel environment (server-only; anything
-   else is off). Until then the nav item and tab are hidden, every page is a
-   404, the export returns 404 and every action refuses. Merging without
-   the migration is therefore safe.
-4. Record each pilot location's approved identity, then import its first
-   file.
+The order used for the release:
+1. Review: PR #186, final review at 7ee4652, all required CI green.
+2. A rolled-back dry run in production, then `apply_migration`. The migration
+   is recorded as version **20261021160410**, and its stored SQL is
+   byte-identical to this file (MD5 `8be394134a98bf8e08438722eba39f9a`). It is
+   additive: ten tables, two views, one function and seventeen reference
+   directories, with no client rows. The file was renamed to the recorded
+   version.
+3. Merge and deploy with the flag still off; confirm the module answers 404.
+4. Set `CITATIONS_ENABLED=true` in Vercel Production (server-only; anything else
+   means off) and redeploy. Without it, the nav item and tab are hidden, every
+   page is a 404, the export returns 404 and every action refuses.
+5. Business data goes through the signed-in CRM UI only: the pilot identity,
+   then its imports, then its review queue.
 
 ### Rollback
 

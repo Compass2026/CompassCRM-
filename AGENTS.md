@@ -2240,7 +2240,7 @@ approved, scheduled and published posts. Full design: `docs/delegated-post-edits
   records, photos, pressing send on drafted mail, and the billable
   BrightLocal work. The open list is `docs/follow-ups.md`.
 
-## Citations Phase 1 (Oct 20 2026, draft — not in production)
+## Citations Phase 1 (released Oct 21 2026)
 
 Provider-neutral listing inventory: approved identity per actual business
 location (`citation_locations`, hidden-address flag, versioned history),
@@ -2249,7 +2249,9 @@ verification queue, manual fulfillment requests (admin approval, cash and
 prepaid credits apart) and a generic mapped CSV import with a rolled-back
 preview (`citation_import()`). Provider fulfillment never sets verification;
 "not found" is not absence. Behind the server-only `CITATIONS_ENABLED` flag
-(`src/lib/citations-flag.ts`); migration
-`20261020230000_citations_foundation.sql` is **not applied** remotely. No
-provider calls, crawling or spend. Full notes, mapping, rollback and cost
+(`src/lib/citations-flag.ts`), set to `true` in Vercel Production at the Oct 21
+release; migration `20261021160410_citations_foundation.sql` is applied
+(recorded version 20261021160410, byte-identical to the file). The pilot is
+Logic Solar Overland Park only (public address). No provider calls, crawling or
+spend; all imported listings stay independently unverified. Full notes, mapping, rollback and cost
 measurement points: `docs/citations.md`.
