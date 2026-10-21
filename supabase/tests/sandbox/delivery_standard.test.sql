@@ -294,6 +294,28 @@ begin
     (select brand_workspace_id from content_plan_items where id = moved) = '00000000-0000-4000-d504-00000000000e');
 end $$;
 
+-- 20261015200000: a second verified Business Profile location is a
+-- destination chosen per slot, never "none"; targets and slots are unchanged
+-- (binding a location never adds GBP work).
+do $$
+declare p constant uuid := '00000000-0000-4000-d500-00000000000d'; nm date := ds_test.nm(); before bigint; slots bigint;
+begin
+  select sum(target) into before from delivery_targets(p, nm) where deliverable = 'gbp_posts';
+  select count(*) into slots from content_plan_items where client_id = p and standard_month = nm and standard_key = 'gbp_posts';
+  perform set_config('session_replication_role', 'replica', true);
+  insert into social_accounts (id, client_id, platform, display_name, publish_account_name, publish_verified_at) values
+    ('00000000-0000-4000-d507-000000000003', p, 'google_business', 'DS Plan GBP 2', 'DS Plan GBP 2', now());
+  perform set_config('session_replication_role', 'origin', true);
+  perform ds_test.ok('ML1 two verified locations: destination chosen per slot, the same GBP target, no new slots',
+    (select bool_and(destination = '2 verified locations (chosen per slot)') from delivery_targets(p, nm) where deliverable = 'gbp_posts' and unit_kind = 'brand')
+    and (select sum(target) from delivery_targets(p, nm) where deliverable = 'gbp_posts') = before
+    and plan_delivery_month(p, nm) >= 0
+    and (select count(*) from content_plan_items where client_id = p and standard_month = nm and standard_key = 'gbp_posts') = slots);
+  perform set_config('session_replication_role', 'replica', true);
+  delete from social_accounts where id = '00000000-0000-4000-d507-000000000003';
+  perform set_config('session_replication_role', 'origin', true);
+end $$;
+
 -- The weekly beat: on the standard, one task per blog slot dated this week,
 -- naming the slot; rerun-safe. Off the standard, unchanged.
 insert into content_plan_items (client_id, week_start, deliverable, purpose, topic, service_id, planned_date, standard_key)

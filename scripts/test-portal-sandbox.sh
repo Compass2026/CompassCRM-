@@ -264,6 +264,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_draft_cla
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.test.sql"
 # New GBP drafts pin the existing client binding before human review.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_gbp_destination.test.sql"
+# Several Business Profile locations per client; slots and posts never redirected.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/gbp_location_per_post.test.sql"
 
 # Agency review ledger: human actor, versions, stage gates and portal isolation.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollout.test.sql"
