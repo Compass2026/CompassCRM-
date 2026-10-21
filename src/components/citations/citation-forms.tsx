@@ -1,13 +1,14 @@
 "use client";
 import { useActionState, useState } from "react";
 import {
-  addCitationDirectoryAction, addCitationListingAction, createCitationLocationAction, createCitationRequestAction, openCitationTaskAction,
+  addCitationDirectoryAction, addCitationListingAction, createCitationLocationAction, createCitationRequestAction, enrichCitationListingAction, openCitationTaskAction,
   queueVerificationAction, recordCitationCheckAction, recordCreditEntryAction, updateCitationLocationAction, updateCitationRequestAction, updateCitationTaskAction,
-  type CitationActionState,
+  type CitationActionState, type EnrichmentState,
 } from "@/app/citation-actions";
 import {
-  CHECK_METHODS, CHECK_RESULTS, FULFILLMENT_STATUSES, REQUEST_ACTIONS, REQUEST_STATUSES, RESULT_METHODS, TASK_KINDS, TASK_STATUSES,
-  type CheckResult, type CitationLocation, type CitationRequest, type CitationTask,
+  CHECK_FIELDS, CHECK_METHODS, CHECK_RESULTS, FIELD_STATUSES, FULFILLMENT_STATUSES, REQUEST_ACTIONS, REQUEST_STATUSES, RESULT_METHODS, TASK_KINDS, TASK_STATUSES,
+  VERIFICATION_STATUSES, deriveCheckResult, unpublishedFields,
+  type CheckField, type CitationIdentity, type CitationLocation, type CitationRequest, type CitationTask, type FieldStatus, type FieldStatuses,
 } from "@/lib/citations";
 import { agencyToday } from "@/lib/reporting";
 import { Input } from "@/components/ui/input";
@@ -99,29 +100,72 @@ function CreateListing({ id, again, clientId, locationId, directories }: { id: s
     <Outcome state={state} /><Button size="sm" disabled={pending}>{pending ? "Saving…" : "Save listing"}</Button></form>;
 }
 
-export function CheckForm({ clientId, listingId }: { clientId: string; listingId: string }) {
-  return <Fresh label="Record a check">{(id, again) => <Check id={id} again={again} clientId={clientId} listingId={listingId} />}</Fresh>;
+type CheckIdentity = Pick<CitationIdentity, "hide_address" | "phone" | "website_url">;
+export function CheckForm({ clientId, listingId, identity }: { clientId: string; listingId: string; identity: CheckIdentity }) {
+  return <Fresh label="Record a check">{(id, again) => <Check id={id} again={again} clientId={clientId} listingId={listingId} identity={identity} />}</Fresh>;
 }
-function Check({ id, again, clientId, listingId }: { id: string; again: () => void; clientId: string; listingId: string }) {
+const REVIEWS = {
+  content: "Reviewed the listing's fields",
+  inaccessible: CHECK_RESULTS.inaccessible,
+  not_found: CHECK_RESULTS.not_found,
+  confirmed_absent: CHECK_RESULTS.confirmed_absent,
+} as const;
+const FIELD_LABELS: Record<CheckField, string> = { name: "Name", address: "Address", phone: "Phone", website: "Website" };
+const OBSERVED_MAX: Record<CheckField, number> = { name: 300, address: 500, phone: 50, website: 2000 };
+function Check({ id, again, clientId, listingId, identity }: { id: string; again: () => void; clientId: string; listingId: string; identity: CheckIdentity }) {
   const [state, action, pending] = useActionState(recordCitationCheckAction.bind(null, clientId, listingId), {});
-  const [result, setResult] = useState<CheckResult>("accurate");
+  const [review, setReview] = useState<keyof typeof REVIEWS>("content");
+  const [statuses, setStatuses] = useState<FieldStatuses>({ name: "not_checked", address: "not_checked", phone: "not_checked", website: "not_checked" });
+  const unpublished = unpublishedFields(identity);
+  let verdict: string;
+  try { verdict = `This check will record: ${VERIFICATION_STATUSES[{ accurate: "verified_accurate", discrepancy: "discrepancy", partial: "partially_verified" }[deriveCheckResult(statuses, identity)] as keyof typeof VERIFICATION_STATUSES]}.`; }
+  catch (e) { verdict = e instanceof Error ? e.message : ""; }
   if (state.savedId) return <div className="space-y-2"><Outcome state={state} /><Button variant="outline" size="sm" onClick={again}>Record another check</Button></div>;
+  const methods = RESULT_METHODS[review === "content" ? "accurate" : review];
   return <form action={action} onReset={(e) => e.preventDefault()} className="space-y-3"><input type="hidden" name="id" value={id} />
-    <p className="text-xs text-muted-foreground">Open the listing yourself and record what you saw; a matches / differs verdict needs at least one value. The check counts against today&apos;s approved identity only if it is dated on or after that identity was approved. This form does not crawl the directory.</p>
+    <p className="text-xs text-muted-foreground">Open the listing yourself and record, field by field, what you saw. Only the fields you mark verified count as verified: a name-only review is &quot;partially verified&quot;, never &quot;verified accurate&quot;. The check counts against today&apos;s approved identity only if it is dated on or after that identity was approved. This form does not crawl the directory.</p>
     <div className="grid gap-3 sm:grid-cols-3">
       <label className="space-y-1 text-sm">Checked on<Input name="checked_on" type="date" required defaultValue={agencyToday()} max={agencyToday()} /></label>
-      <Select name="result" label="Result" value={result} onChange={(v) => setResult(v as CheckResult)} options={Object.entries(CHECK_RESULTS)} />
-      <Select key={result} name="method" label="How you checked" options={RESULT_METHODS[result].map((m): [string, string] => [m, CHECK_METHODS[m]])} />
+      <Select name="review" label="What you found" value={review} onChange={(v) => setReview(v as keyof typeof REVIEWS)} options={Object.entries(REVIEWS)} />
+      <Select key={review} name="method" label="How you checked" options={methods.map((m): [string, string] => [m, CHECK_METHODS[m]])} />
     </div>
-    <div className="grid gap-3 sm:grid-cols-2">
-      <label className="space-y-1 text-sm">Name shown<Input name="observed_name" maxLength={300} /></label>
-      <label className="space-y-1 text-sm">Address shown<Input name="observed_address" maxLength={500} /></label>
-      <label className="space-y-1 text-sm">Phone shown<Input name="observed_phone" maxLength={50} /></label>
-      <label className="space-y-1 text-sm">Website shown<Input name="observed_website" maxLength={2000} /></label>
-    </div>
+    {review === "content" && <div className="space-y-2" data-field-review>
+      {CHECK_FIELDS.map((f) => {
+        const seen = statuses[f] === "verified" || statuses[f] === "discrepancy";
+        const options = (Object.entries(FIELD_STATUSES) as [FieldStatus, string][]).filter(([k]) => !(k === "verified" && unpublished.has(f)));
+        return <div key={f} className="grid gap-2 sm:grid-cols-[12rem_1fr]">
+          <Select name={`${f}_status`} label={`${FIELD_LABELS[f]} check`} value={statuses[f]} onChange={(v) => setStatuses({ ...statuses, [f]: v as FieldStatus })} options={options} />
+          <label className="space-y-1 text-sm">{FIELD_LABELS[f]} shown<Input name={`observed_${f}`} maxLength={OBSERVED_MAX[f]} disabled={!seen} required={seen}
+            placeholder={seen ? "Exactly as the listing shows it" : "Kept only for a field you saw"} /></label>
+        </div>;
+      })}
+      {unpublished.has("address") && <p className="text-xs text-amber-800">Hidden-address business: choose &quot;not displayed&quot; when no street is shown. A shown street is a discrepancy; record it here only as evidence, it never appears in client-safe output.</p>}
+      <p className="text-sm font-medium" data-derived-verdict>{verdict}</p>
+    </div>}
     <label className="block space-y-1 text-sm">Evidence<Textarea name="evidence" required maxLength={2000} placeholder="What you saw, where, and the screenshot or audit reference" /></label>
     <label className="block space-y-1 text-sm">Evidence link (optional)<Input name="evidence_url" type="url" maxLength={2000} placeholder="https:// screenshot in Drive" /></label>
     <Outcome state={state} /><Button size="sm" disabled={pending}>{pending ? "Saving…" : "Save check"}</Button></form>;
+}
+
+/** Adds the URL and / or external id an existing listing is missing; never replaces one. */
+export function EnrichListingForm({ clientId, listingId, hasUrl, hasExternalId }: { clientId: string; listingId: string; hasUrl: boolean; hasExternalId: boolean }) {
+  return <Fresh label="Add URL / id">{(id, again) => <Enrich id={id} again={again} clientId={clientId} listingId={listingId} hasUrl={hasUrl} hasExternalId={hasExternalId} />}</Fresh>;
+}
+function Enrich({ id, again, clientId, listingId, hasUrl, hasExternalId }: { id: string; again: () => void; clientId: string; listingId: string; hasUrl: boolean; hasExternalId: boolean }) {
+  const [state, action, pending] = useActionState<EnrichmentState, FormData>(enrichCitationListingAction.bind(null, clientId, listingId), {});
+  if (state.savedId) return <div className="space-y-2"><Outcome state={state} /><Button variant="outline" size="sm" onClick={again}>Done</Button></div>;
+  return <form action={action} onReset={(e) => e.preventDefault()} className="space-y-3" data-enrich-form><input type="hidden" name="id" value={id} />
+    <div className="grid gap-3 sm:grid-cols-2">
+      {!hasUrl && <label className="space-y-1 text-sm">Public listing URL<Input name="listing_url" type="url" maxLength={2000} placeholder="https://" /></label>}
+      {!hasExternalId && <label className="space-y-1 text-sm">External listing id<Input name="external_id" maxLength={200} placeholder="The publisher's id for this listing" /></label>}
+    </div>
+    <label className="block space-y-1 text-sm">Where you found it<Textarea name="reason" required maxLength={1000} placeholder="e.g. Apple Maps directions link seen in the audit on (date)" /></label>
+    {state.matches && <fieldset className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm" data-enrich-matches>
+      <legend className="px-1 font-medium text-amber-900">Already on another listing</legend>
+      {state.matches.map((m) => <label key={m.id} className="flex items-start gap-2"><input type="checkbox" name="acknowledge" value={m.id} required className="mt-1" /><span>{m.label}: I reviewed it; this listing is a separate record.</span></label>)}
+    </fieldset>}
+    <p className="text-xs text-muted-foreground">Fills only what this listing is missing; its checks, tasks, provider status and import history stay as they are, and the before / after is kept. A public listing link only: no logins or private verification links. A different URL is a different listing.</p>
+    <Outcome state={state} /><Button size="sm" disabled={pending}>{pending ? "Saving…" : "Save URL / id"}</Button></form>;
 }
 
 export function OpenTaskForm({ clientId, locationId, listings, team, defaultListing }: { clientId: string; locationId: string; listings: Option[]; team: Option[]; defaultListing?: string }) {

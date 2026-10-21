@@ -271,8 +271,12 @@ try {
     const mc = team.locator('[data-listing-url="https://www.merchantcircle.com/sample-solar-synthetic-ks"]');
     await mc.getByText(/Checks & evidence/).click();
     await mc.getByRole("button", { name: "Record a check" }).click();
-    await mc.getByLabel("Address shown").fill(`${street} ${IDENTITY.address_line2}, ${IDENTITY.city}, ${IDENTITY.region} ${IDENTITY.postal_code}`);
-    await mc.getByLabel("Phone shown").fill("(555) 010-0000");
+    // Every field reviewed and verified (a partial review would be "partially verified").
+    for (const [field, value] of [["Name", IDENTITY.business_name], ["Address", `${street} ${IDENTITY.address_line2}, ${IDENTITY.city}, ${IDENTITY.region} ${IDENTITY.postal_code}`],
+      ["Phone", "(555) 010-0000"], ["Website", IDENTITY.website_url]]) {
+      await mc.getByLabel(`${field} check`).selectOption("verified");
+      await mc.getByLabel(`${field} shown`).fill(value);
+    }
     await mc.getByLabel("Evidence", { exact: true }).fill("SYNTHETIC: listing shows the approved public address and phone");
     await mc.getByRole("button", { name: "Save check" }).click();
     await mc.locator('[data-verification="verified_accurate"]').waitFor();

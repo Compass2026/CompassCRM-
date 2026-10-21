@@ -48,6 +48,7 @@ export default async function CitationsOverviewPage({ searchParams }: { searchPa
       <p className="text-xs uppercase tracking-widest text-blue-200">Local listings</p>
       <h1 className="mt-2 text-2xl font-semibold text-white">Citations</h1>
       <p className="mt-2 text-sm text-blue-100">Every directory listing by client and business location, with provider status and independently verified accuracy kept apart.</p>
+      <p className="mt-1 text-xs text-blue-200" data-coverage-scope>Covers only the business locations already added to Citations ({locsQ.rows.length}); clients without one are not counted here.</p>
     </div>
     <PhaseNote />
     {failure && <p role="alert" className="callout" data-incomplete>{failure} Totals are hidden until every record can be read.</p>}
@@ -55,17 +56,21 @@ export default async function CitationsOverviewPage({ searchParams }: { searchPa
     <SummaryCards s={total} />
 
     <section className="surface overflow-x-auto p-0">
-      <table className="w-full min-w-[62rem] text-left text-sm" data-location-table>
+      <table className="w-full min-w-[72rem] text-left text-sm" data-location-table>
         <thead className="bg-royal-50/80 text-xs text-muted-foreground"><tr>
-          <th className="px-4 py-2">Client · location</th><th className="px-2 py-2">Listings</th><th className="px-2 py-2">Verified</th><th className="px-2 py-2">Discrepancy</th>
+          <th className="px-4 py-2">Client · location</th><th className="px-2 py-2">Listings</th><th className="px-2 py-2">Verified (all fields)</th><th className="px-2 py-2">Partially verified</th>
+          <th className="px-2 py-2" title="Listings whose current check verified the name / address / phone / website">Fields verified N / A / P / W</th><th className="px-2 py-2">Discrepancy</th>
           <th className="px-2 py-2">Needs reverification</th><th className="px-2 py-2">Unverified</th><th className="px-2 py-2">Provider complete, unverified</th><th className="px-2 py-2">Open tasks</th><th className="px-2 py-2">No current evidence</th><th className="px-2 py-2">Action</th></tr></thead>
         <tbody>{perLocation.map(({ l, s }) => <tr key={l.id} className="border-t" data-location-row={l.label}>
           <td className="px-4 py-2"><Link className="font-medium text-blue-700 underline" href={`/clients/${l.client_id}/citations/${l.id}`}>{clientName.get(l.client_id) ?? "Client"} · {l.label}</Link>
             {l.hide_address && <span className="ml-2 text-xs text-muted-foreground">address hidden</span>}</td>
-          <td className="px-2 py-2">{s.total}</td><td className="px-2 py-2">{s.byVerification.verified_accurate}</td><td className="px-2 py-2">{s.byVerification.discrepancy}</td>
+          <td className="px-2 py-2">{s.total}</td><td className="px-2 py-2">{s.byVerification.verified_accurate}</td><td className="px-2 py-2">{s.byVerification.partially_verified}</td>
+          <td className="px-2 py-2 whitespace-nowrap" data-field-evidence>{s.fieldVerified.name} / {s.fieldVerified.address} / {s.fieldVerified.phone} / {s.fieldVerified.website}
+            {s.coverageUnrecorded > 0 && <span className="block text-xs text-muted-foreground">{s.coverageUnrecorded} not recorded</span>}</td>
+          <td className="px-2 py-2">{s.byVerification.discrepancy}</td>
           <td className="px-2 py-2">{s.byVerification.needs_reverification}</td><td className="px-2 py-2">{s.byVerification.unverified}</td><td className="px-2 py-2">{s.providerCompleteUnverified}</td><td className="px-2 py-2">{s.openTasks}</td>
           <td className="px-2 py-2">{s.notCurrent}</td><td className="px-2 py-2 font-semibold">{s.action}</td></tr>)}
-          {!perLocation.length && <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">No business locations yet. Open a client&apos;s Citations tab to add its approved identity.</td></tr>}
+          {!perLocation.length && <tr><td colSpan={12} className="px-4 py-8 text-center text-muted-foreground">No business locations yet. Open a client&apos;s Citations tab to add its approved identity.</td></tr>}
         </tbody>
       </table>
     </section>

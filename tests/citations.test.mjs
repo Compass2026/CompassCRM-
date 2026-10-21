@@ -6,8 +6,9 @@ import { readFileSync } from "node:fs";
 import {
   parseCsv, guessMapping, isCredentialHeader, prepareImport, listingKey, listingUrl, fulfillmentFromText, parseSourceDate,
   compareListing, evidenceFreshness, csvCell, toCsv, exportRows, publicAddress, needsAction, rowHash, RESULT_METHODS, identityCurrent,
-  comparisonSource, EXPORT_HEADERS,
+  comparisonSource, EXPORT_HEADERS, compareAddress, deriveCheckResult, coverageText, unpublishedFields, listingKey as keyOf, summarize,
 } from "../src/lib/citations.ts";
+
 
 const LOC_A = "00000000-0000-4000-8000-0000000000a1";
 const LOC_B = "00000000-0000-4000-8000-0000000000b1";
@@ -182,4 +183,105 @@ test("public-address location: a listing showing the approved street matches; cl
   const rows = exportRows([{ ...exportBase, identity: pub, current_address: seen.observed_address }], "client");
   assert.equal(rows[1][rows[0].indexOf("Approved address")], "100 W 110th St, Plaza 1, 7th Floor, Overland Park, KS 66210");
   assert.equal(rows[1][rows[0].indexOf("Current address")], seen.observed_address, "not replaced by the hidden-address notice");
+});
+
+// ── Follow-up from the pilot audit: address equivalence, field-level checks, enrichment ─
+// Synthetic identity in the shape of the pilot's public address (street + building / floor line).
+const plaza = { business_name: "Sample Solar", address_line1: "7300 W 110th St", address_line2: "Plaza 1, 7th Floor", city: "Overland Park", region: "KS",
+  postal_code: "66210", country: "US", phone: "555-010-0000", website_url: "https://sample-solar.example.test", hide_address: false };
+
+test("address text comparison: equivalent formatting is separate from a real discrepancy, with the reason", () => {
+  const eq = (a) => compareAddress(plaza, a);
+  // State written out and a country suffix (the Trepup shape).
+  assert.deepEqual(eq("7300 W 110th St, Plaza 1, 7th Floor, Overland Park, Kansas 66210, United States"), { value: "equivalent", notes: ["state written out", "country shown"] });
+  // State outside the address block (the Brownbook shape): city and ZIP still match.
+  assert.deepEqual(eq("7300 W 110th St, Plaza 1, 7th Floor, Overland Park 66210"), { value: "equivalent", notes: ["state not shown"] });
+  // Building label first (the Cybo shape).
+  assert.deepEqual(eq("Plaza 1, 7th Floor, 7300 W 110th St, Overland Park, KS 66210"), { value: "equivalent", notes: ["parts in a different order"] });
+  // Phase 1 normalization still says "matches" for abbreviations, punctuation, ZIP+4 and a country suffix.
+  assert.equal(eq("7300 West 110th Street, Plaza 1, 7th Fl., Overland Park, KS 66210-1234, USA").value, "match");
+  // Material: a different suite (the Apple / Yelp "Ste 1" shape), a missing building / floor (MerchantCircle, Bing), another street number, state, ZIP.
+  for (const a of ["7300 W 110th St Ste 1, Overland Park, KS 66210", "7300 W 110th St, Overland Park, KS 66210", "7300 W 110th St, Plaza 1, Overland Park, KS 66210",
+    "7310 W 110th St, Plaza 1, 7th Floor, Overland Park, KS 66210", "7300 W 110th St, Plaza 1, 7th Floor, Overland Park, MO 66210",
+    "7300 W 110th St, Plaza 1, 7th Floor, Overland Park, KS", "7300 W 110th St, Plaza 1, 7th Floor, Suite 200, Overland Park, KS 66210", "Plaza One, 7th Floor, 7300 W 110th St, Overland Park, KS 66210"])
+    assert.equal(eq(a).value, "mismatch", a);
+  assert.deepEqual(eq("7300 W 110th St Ste 1, Overland Park, KS 66210").notes[0], "suite / floor / building missing or different");
+  // The notes never quote the address.
+  for (const a of ["7300 W 110th St Ste 1, Overland Park, KS 66210", "Plaza 1, 7th Floor, 7300 W 110th St, Overland Park, KS 66210"])
+    assert.ok(!/7300|110|plaza|overland/i.test(eq(a).notes.join(" ")), a);
+  // A hidden-address business: any shown address is exposed, however equivalent its text.
+  const hidden = { ...plaza, hide_address: true };
+  assert.deepEqual(compareAddress(hidden, "Plaza 1, 7th Floor, 7300 W 110th St, Overland Park, KS 66210"), { value: "exposed", notes: ["an address is shown for a hidden-address business"] });
+  assert.equal(compareListing(hidden, { observed_name: "", observed_address: "7300 W 110th St, Plaza 1, 7th Floor, Overland Park, KS 66210", observed_phone: "", observed_website: "" }).address, "exposed");
+  assert.equal(compareAddress(plaza, "  ").value, "not_observed");
+});
+
+test("field-level checks: the verdict follows the fields; a name-only review is partial, never verified accurate", () => {
+  const f = (name, address, phone, website) => ({ name, address, phone, website });
+  assert.equal(deriveCheckResult(f("verified", "not_checked", "not_checked", "not_checked"), plaza), "partial");
+  assert.equal(deriveCheckResult(f("verified", "verified", "not_displayed", "verified"), plaza), "partial", "no phone on the page (ProvenExpert shape) is not a discrepancy");
+  assert.equal(deriveCheckResult(f("verified", "discrepancy", "inaccessible", "not_checked"), plaza), "discrepancy");
+  assert.equal(deriveCheckResult(f("verified", "verified", "verified", "verified"), plaza), "accurate");
+  assert.throws(() => deriveCheckResult(f("not_checked", "not_displayed", "inaccessible", "not_checked"), plaza), /at least one field/);
+  // Fields the identity does not publish: correct when not displayed, never verified.
+  const sab = { ...plaza, hide_address: true, website_url: null };
+  assert.deepEqual([...unpublishedFields(sab)].sort(), ["address", "website"]);
+  assert.equal(deriveCheckResult(f("verified", "not_displayed", "verified", "not_displayed"), sab), "accurate");
+  assert.throws(() => deriveCheckResult(f("verified", "verified", "verified", "not_displayed"), sab), /hidden-address/);
+  assert.throws(() => deriveCheckResult(f("verified", "not_displayed", "verified", "verified"), sab), /no website/);
+  assert.equal(deriveCheckResult(f("verified", "discrepancy", "verified", "not_displayed"), sab), "discrepancy", "a shown hidden street is a discrepancy");
+});
+
+test("coverage: exact fields when recorded, 'not recorded' for checks made before field-level review, never inferred", () => {
+  assert.equal(coverageText({ check_field_coverage: "recorded", name_check: "verified", address_check: "not_checked", phone_check: "not_checked", website_check: "not_checked" }),
+    "Verified: name · Not checked: address, phone, website");
+  assert.equal(coverageText({ check_field_coverage: "unrecorded", name_check: null, address_check: null, phone_check: null, website_check: null }),
+    "Not recorded (check made before field-level review)");
+  assert.equal(coverageText({ check_field_coverage: null, name_check: null, address_check: null, phone_check: null, website_check: null }), "");
+  assert.ok(needsAction({ verification_status: "partially_verified", fulfillment_status: "none", open_tasks: 0, suspected_duplicate: false }), "a partial review still needs action");
+});
+
+const fieldsNone = { check_field_coverage: null, name_check: null, address_check: null, phone_check: null, website_check: null };
+const listing = (over) => ({ ...exportBase, ...fieldsNone, id: Math.random().toString(36), location_id: "L", last_check_id: "c", hide_address: false, ...over });
+test("counts and reports are honest about partial and legacy checks", () => {
+  const nameOnly = listing({ verification_status: "partially_verified", last_check_result: "partial", last_checked_on: "2026-10-20", check_identity_version: 1,
+    check_field_coverage: "recorded", name_check: "verified", address_check: "not_checked", phone_check: "not_checked", website_check: "not_checked", current_name: "Sample Solar" });
+  const full = listing({ verification_status: "verified_accurate", last_check_result: "accurate", last_checked_on: "2026-10-20", check_identity_version: 1,
+    check_field_coverage: "recorded", name_check: "verified", address_check: "verified", phone_check: "verified", website_check: "verified" });
+  const legacy = listing({ verification_status: "verified_accurate", last_check_result: "accurate", last_checked_on: "2026-10-20", check_identity_version: 1,
+    check_field_coverage: "unrecorded", current_name: "Sample Solar" });
+  const stale = { ...nameOnly, verification_status: "needs_reverification", identity_version: 2 };
+  const s = summarize([nameOnly, full, legacy, stale], 0, "2026-10-21");
+  assert.deepEqual([s.byVerification.verified_accurate, s.byVerification.partially_verified, s.byVerification.needs_reverification], [2, 1, 1]);
+  assert.deepEqual(s.fieldVerified, { name: 2, address: 1, phone: 1, website: 1 }, "only current checks count, and only for the fields they verified");
+  assert.equal(s.coverageUnrecorded, 1, "a legacy verdict is counted apart, its fields never assumed");
+  const rows = exportRows([{ ...nameOnly, identity: plaza }, { ...legacy, identity: plaza }, { ...full, identity: plaza }], "client", "2026-10-21");
+  const at = (r, h) => r[rows[0].indexOf(h)];
+  assert.deepEqual([at(rows[1], "Verification"), at(rows[1], "Field coverage"), at(rows[1], "Name check"), at(rows[1], "Phone check")],
+    ["Partially verified", "Verified: name · Not checked: address, phone, website", "Verified (matches)", "Not checked"]);
+  assert.deepEqual([at(rows[2], "Verification"), at(rows[2], "Field coverage"), at(rows[2], "Address check")],
+    ["Verified accurate", "Not recorded (check made before field-level review)", "Not recorded"]);
+  assert.equal(at(rows[3], "Field coverage"), "Verified: name, address, phone, website");
+  assert.equal(rows[0].length, EXPORT_HEADERS.length);
+});
+
+test("export: the automated address comparison is labelled and never leaks a hidden street", () => {
+  const seen = "7300 W 110th St, Plaza 1, 7th Floor, Overland Park, Kansas 66210";
+  const checked = listing({ verification_status: "verified_accurate", last_check_result: "accurate", last_checked_on: "2026-10-20", check_identity_version: 1,
+    check_field_coverage: "recorded", name_check: "verified", address_check: "verified", phone_check: "verified", website_check: "verified", current_address: seen });
+  const col = "Address text comparison (automated, not a verdict)";
+  let rows = exportRows([{ ...checked, identity: plaza }], "client", "2026-10-21");
+  assert.equal(rows[1][rows[0].indexOf(col)], "Equivalent formatting (state written out)");
+  assert.equal(rows[1][rows[0].indexOf("Current address")], seen, "the raw observation is kept as seen");
+  rows = exportRows([{ ...checked, identity: { ...plaza, hide_address: true }, address_check: "discrepancy", verification_status: "discrepancy" }], "client", "2026-10-21");
+  assert.equal(rows[1][rows[0].indexOf(col)], "Shown but should be hidden");
+  assert.ok(!toCsv(rows).includes("7300"), "client-safe file never carries the hidden street");
+  rows = exportRows([{ ...listing({ last_check_id: null, last_check_result: null }), source_address: "7300 W 110th St Ste 1, Overland Park, KS 66210", identity: plaza }], "client", "2026-10-21");
+  assert.match(rows[1][rows[0].indexOf(col)], /^Differs \(suite \/ floor \/ building missing or different.*imported value, not checked$/);
+});
+
+test("enrichment keys use the import's normalization, so the enriched source reimports onto the same listing", () => {
+  assert.equal(keyOf(listingUrl("https://WWW.Yelp.com/biz/sample-solar-overland-park/#reviews"), null), keyOf("https://yelp.com/biz/sample-solar-overland-park", null));
+  assert.equal(keyOf(null, " SampleYelpBizId01 "), "ext:sampleyelpbizid01");
+  assert.throws(() => listingUrl("https://owner:pw@www.yelp.com/biz/x"), /credentials/);
 });

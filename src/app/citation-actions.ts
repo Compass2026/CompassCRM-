@@ -14,12 +14,14 @@ import { citationsEnabled } from "@/lib/citations-flag";
 import { GENERIC_MAPPING, prepareBrightLocalCampaign } from "@/lib/citations-brightlocal";
 import { loadListings } from "@/lib/citations-data";
 import {
-  CHECK_METHODS, CHECK_RESULTS, FULFILLMENT_STATUSES, IMPORT_MAX_BYTES, REQUEST_ACTIONS, REQUEST_STATUSES, RESULT_METHODS, TASK_KINDS, TASK_STATUSES,
-  citationText, isCredentialHeader, listingUrl, parseCsv, prepareImport, storedFileName, storedLocationMapping,
-  type CheckMethod, type CheckResult, type ColumnMapping, type ImportField, type LocationMapping,
+  CHECK_FIELDS, CHECK_METHODS, FIELD_STATUSES, FULFILLMENT_STATUSES, IMPORT_MAX_BYTES, REQUEST_ACTIONS, REQUEST_STATUSES, RESULT_METHODS, TASK_KINDS, TASK_STATUSES,
+  citationText, coverageText, deriveCheckResult, fieldChecks, isCredentialHeader, listingKey, listingUrl, parseCsv, prepareImport, storedFileName, storedLocationMapping,
+  type CheckMethod, type CheckResult, type ColumnMapping, type FieldStatus, type FieldStatuses, type ImportField, type LocationMapping,
 } from "@/lib/citations";
 
 export type CitationActionState = { error?: string; savedId?: string };
+/** An enrichment whose URL / id is already on listings elsewhere waits for the teammate to review them. */
+export type EnrichmentState = CitationActionState & { matches?: { id: string; label: string }[] };
 
 const PROVIDER = /^[a-z][a-z0-9_]{1,39}$/;
 
@@ -154,32 +156,109 @@ export async function addCitationListingAction(clientId: string, locationId: str
   } catch (e) { return failure(e); }
 }
 
+const OBSERVED_MAX: Record<(typeof CHECK_FIELDS)[number], number> = { name: 300, address: 500, phone: 50, website: 2000 };
+const REVIEWS = ["content", "inaccessible", "not_found", "confirmed_absent"] as const;
+
+/**
+ * A check is either a review of the listing's content, field by field, or a
+ * listing-level outcome that observes nothing (inaccessible, not found,
+ * confirmed absent). For a content review each field is verified, a
+ * discrepancy, not displayed, not checked or could not be viewed, with the
+ * value as shown kept exactly when the field was seen. The result follows from
+ * the fields (the database derives it the same way): a name-only review is
+ * partial, never "verified accurate".
+ */
 export async function recordCitationCheckAction(clientId: string, listingId: string, _s: CitationActionState, form: FormData): Promise<CitationActionState> {
   try {
     const db = await team(clientId); uuid(listingId);
     const { data: listing } = await db.from("citation_listings").select("id, location_id").eq("client_id", clientId).eq("id", listingId).maybeSingle();
     if (!listing) throw new Error("Listing unavailable for this client.");
-    const checked_on = citationText(form, "checked_on", 10), method = citationText(form, "method", 30), result = citationText(form, "result", 30);
+    const { data: loc } = await db.from("citation_locations").select("hide_address, phone, website_url").eq("client_id", clientId).eq("id", listing.location_id).maybeSingle();
+    if (!loc) throw new Error("Location unavailable for this client.");
+    const checked_on = citationText(form, "checked_on", 10), method = citationText(form, "method", 30), review = citationText(form, "review", 30) || "content";
     if (!validDate(checked_on) || checked_on > agencyToday()) throw new Error("Choose a check date ending today or earlier.");
-    if (!Object.hasOwn(CHECK_METHODS, method) || !Object.hasOwn(CHECK_RESULTS, result)) throw new Error("Choose how you checked and what you found.");
-    if (!RESULT_METHODS[result as CheckResult].includes(method as CheckMethod))
+    if (!(REVIEWS as readonly string[]).includes(review) || !Object.hasOwn(CHECK_METHODS, method)) throw new Error("Choose how you checked and what you found.");
+    const observed = { observed_name: "", observed_address: "", observed_phone: "", observed_website: "" };
+    const statuses: Record<(typeof CHECK_FIELDS)[number], FieldStatus | null> = { name: null, address: null, phone: null, website: null };
+    let result: CheckResult;
+    if (review === "content") {
+      for (const f of CHECK_FIELDS) {
+        const status = citationText(form, `${f}_status`, 20);
+        if (!Object.hasOwn(FIELD_STATUSES, status)) throw new Error(`Choose what you found for the ${f}.`);
+        const value = citationText(form, `observed_${f}`, OBSERVED_MAX[f]);
+        const seen = status === "verified" || status === "discrepancy";
+        if (seen && !value) throw new Error(`Record the ${f} exactly as the listing shows it: a verified or differing field keeps the value you saw.`);
+        if (!seen && value) throw new Error(`Clear the ${f} you typed, or mark it verified or a discrepancy: a value is kept only for a field you saw.`);
+        statuses[f] = status as FieldStatus;
+        observed[`observed_${f}`] = value;
+      }
+      result = deriveCheckResult(statuses as FieldStatuses, loc);
+    } else result = review as CheckResult;
+    if (!RESULT_METHODS[result].includes(method as CheckMethod))
       throw new Error(result === "confirmed_absent" ? "Absence needs the publisher's confirmation or the owner dashboard; a search that finds nothing is \"not found\"."
         : "That method cannot support that result. Choose how you actually checked.");
     const evidence = citationText(form, "evidence", 2000);
     if (!evidence) throw new Error("Record the evidence: what you saw and where (screenshot or reference).");
     const evidenceUrl = citationText(form, "evidence_url", 2000);
     const id = uuid(citationText(form, "id", 36));
-    const row = { id, listing_id: listingId, checked_on, method: method as CheckMethod, result: result as CheckResult, evidence,
-      evidence_url: evidenceUrl ? listingUrl(evidenceUrl) : null,
-      observed_name: citationText(form, "observed_name", 300), observed_address: citationText(form, "observed_address", 500),
-      observed_phone: citationText(form, "observed_phone", 50), observed_website: citationText(form, "observed_website", 2000) };
-    if ((result === "accurate" || result === "discrepancy") && !(row.observed_name || row.observed_address || row.observed_phone || row.observed_website))
-      throw new Error("Record at least one value you saw on the listing (name, address, phone or website).");
+    const row = { id, listing_id: listingId, checked_on, method: method as CheckMethod, result, evidence, evidence_url: evidenceUrl ? listingUrl(evidenceUrl) : null, ...observed,
+      name_status: statuses.name, address_status: statuses.address, phone_status: statuses.phone, website_status: statuses.website };
     const { error } = await db.from("citation_checks").insert(row);
     if (error?.code === "23505") {
       const { data } = await db.from("citation_checks").select("id").eq("id", id).eq("listing_id", listingId).maybeSingle();
       if (!data) throw new Error("This check was already saved with different data. Start a new check.");
     } else dbError(error, "The check could not be saved. Your entry is kept for retry.");
+    refresh(clientId, listing.location_id);
+    return { savedId: id };
+  } catch (e) { return failure(e); }
+}
+
+/**
+ * Adds a public URL and / or an external id to an existing listing that lacks
+ * them, as an append-only enrichment record (before, after, reason, who, when).
+ * The listing keeps its id, import provenance, provider status, checks and
+ * tasks; its earlier key stays on record, so reimporting the original or the
+ * enriched source finds the same listing. Uses the import's normalization:
+ * - another listing of this directory at this location already carrying the
+ *   URL / id is refused: that is a suspected duplicate to resolve, not merge;
+ * - listings elsewhere (another location, directory or client) carrying it are
+ *   shown and must be reviewed before the enrichment is saved.
+ * Credentials and tokenized verification links are refused (citationText).
+ */
+export async function enrichCitationListingAction(clientId: string, listingId: string, _s: EnrichmentState, form: FormData): Promise<EnrichmentState> {
+  try {
+    const db = await team(clientId); uuid(listingId);
+    const id = uuid(citationText(form, "id", 36));
+    const { data: saved } = await db.from("citation_listing_enrichments").select("id").eq("client_id", clientId).eq("id", id).maybeSingle();
+    if (saved) return { savedId: id };
+    const { data: listing } = await db.from("citation_listings").select("id, location_id, directory_id, listing_url, external_id, archived")
+      .eq("client_id", clientId).eq("id", listingId).maybeSingle();
+    if (!listing || listing.archived) throw new Error("Listing unavailable for this client.");
+    const rawUrl = citationText(form, "listing_url", 2000), ext = citationText(form, "external_id", 200), reason = citationText(form, "reason", 1000);
+    if (!rawUrl && !ext) throw new Error("Add the listing URL, the external id, or both.");
+    if (rawUrl && listing.listing_url) throw new Error("This listing already has a URL. A different URL is a different listing: add it separately and resolve the suspected duplicate.");
+    if (ext && listing.external_id) throw new Error("This listing already has an external id, which is fixed.");
+    if (!reason) throw new Error("Say where you found the URL / id (the evidence) before saving.");
+    const url = rawUrl ? listingUrl(rawUrl) : null;
+    const afterExt = ext || listing.external_id;
+    const keys = [...new Set([listingKey(url ?? listing.listing_url, afterExt), ...(afterExt ? [listingKey(null, afterExt)] : [])])];
+    const { data: owners, error: ownersError } = await db.from("citation_listing_keys").select("listing_id, location_id, directory_id").in("listing_key", keys).neq("listing_id", listingId);
+    if (ownersError) throw new Error("Existing listings could not be checked for this URL / id. Retry.");
+    if ((owners ?? []).some((o) => o.location_id === listing.location_id && o.directory_id === listing.directory_id))
+      throw new Error("That URL or id already identifies another listing of this directory at this location. Open a \"Resolve suspected duplicate\" task for the two listings instead of enriching.");
+    const elsewhere = [...new Set((owners ?? []).map((o) => o.listing_id))];
+    const acknowledged = new Set(form.getAll("acknowledge").filter((v): v is string => typeof v === "string"));
+    if (elsewhere.some((o) => !acknowledged.has(o))) {
+      const { data: others } = await db.from("citation_listing_overview").select("id, client_name, location_label, directory_name, listing_url, external_id").in("id", elsewhere);
+      return { error: "This URL or id is already on another listing. Review it below and confirm before saving.",
+        matches: elsewhere.map((o) => { const x = others?.find((r) => r.id === o); return { id: o, label: x ? `${x.client_name} · ${x.location_label} · ${x.directory_name}${x.listing_url ? ` · ${x.listing_url}` : x.external_id ? ` · id ${x.external_id}` : ""}` : "An archived listing" }; }) };
+    }
+    const { error } = await db.from("citation_listing_enrichments").insert({ id, client_id: clientId, listing_id: listingId, listing_url: url, external_id: ext || null, reason,
+      acknowledged_listing_ids: elsewhere });
+    if (error?.code === "23505") {
+      const { data } = await db.from("citation_listing_enrichments").select("id").eq("client_id", clientId).eq("id", id).maybeSingle();
+      if (!data) throw new Error("This listing changed. Refresh before adding its URL / id.");
+    } else dbError(error, "The URL / id could not be saved. Your entry is kept for retry.");
     refresh(clientId, listing.location_id);
     return { savedId: id };
   } catch (e) { return failure(e); }
@@ -230,7 +309,8 @@ export async function updateCitationTaskAction(clientId: string, taskId: string,
 
 /**
  * One verify task for every listing with a URL that is not currently verified
- * (unverified or needs reverification) and has no open verify task. A listing
+ * (unverified, needs reverification, or partially verified with fields not yet
+ * checked) and has no open verify task. A listing
  * without a URL needs an investigation first, which a person opens. Safe to
  * repeat: the one-open-task index makes a second run add nothing.
  */
@@ -243,12 +323,17 @@ export async function queueVerificationAction(clientId: string, locationId: stri
     if (error) throw new Error(error);
     const { data: open } = await db.from("citation_tasks").select("listing_id").eq("location_id", locationId).eq("kind", "verify").in("status", ["open", "in_progress", "waiting"]);
     const busy = new Set((open ?? []).map((t) => t.listing_id));
-    const due = listings.filter((l) => l.listing_url && ["unverified", "needs_reverification"].includes(l.verification_status) && !busy.has(l.id));
+    const unchecked = (l: (typeof listings)[number]) => Object.entries(fieldChecks(l)).filter(([, v]) => v === "not_checked").map(([f]) => f);
+    const due = listings.filter((l) => l.listing_url && !busy.has(l.id)
+      && (["unverified", "needs_reverification"].includes(l.verification_status) || (l.verification_status === "partially_verified" && unchecked(l).length > 0)));
     let created = 0;
+    const hidden = loc.hide_address ? ". Hidden-address business: if the listing shows a street address, record that as a discrepancy; never add the street" : "";
     for (const l of due) {
-      const reason = `Verify ${l.directory_name} against approved identity v${loc.identity_version}: open the listing URL and record name, phone, website and address`
-        + `${loc.hide_address ? ". Hidden-address business: if the listing shows a street address, record that as a discrepancy; never add the street" : ""}. Provider status: ${l.fulfillment_status.replace("_", " ")}; never independently checked`
-        + `${l.verification_status === "needs_reverification" ? " against the current identity" : ""}.`;
+      const reason = l.verification_status === "partially_verified"
+        ? `Finish verifying ${l.directory_name} against approved identity v${loc.identity_version}: the ${l.last_checked_on} check covered ${coverageText(l)}. Open the listing URL and record ${unchecked(l).join(", ")}${hidden}.`
+        : `Verify ${l.directory_name} against approved identity v${loc.identity_version}: open the listing URL and record name, phone, website and address`
+          + `${hidden}. Provider status: ${l.fulfillment_status.replace("_", " ")}; never independently checked`
+          + `${l.verification_status === "needs_reverification" ? " against the current identity" : ""}.`;
       const { error: e } = await db.from("citation_tasks").insert({ client_id: clientId, location_id: locationId, listing_id: l.id, kind: "verify", reason });
       if (!e) created++;
       else if (e.code !== "23505") throw new Error("Some verification tasks could not be opened. Retry; the ones already opened are kept.");
