@@ -123,7 +123,7 @@ try {
   assert.equal((await call({ mode: "version" }, { Authorization: `Bearer ${teamToken}` })).status, 200);
   const v = await call({ mode: "version" });
   assert.equal(v.status, 200);
-  assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version"]);
+  assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version", "revision_brief", "revision_check", "revision_submit"]);
   ok("Callers: the worker's cron secret or a team member; anon refused; no approve / schedule / publish mode");
 
   // 2. The canonical loader feeds the brief: what the function builds is

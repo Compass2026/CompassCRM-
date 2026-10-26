@@ -22,6 +22,7 @@ revised post in Compass.
 | Migration | Scope |
 | --- | --- |
 | `20261020200000` | Facebook and Business Profile posts in review; one operation, `replace_media`. |
+| `20261026200000` | Also a rejected or draft post with an open automatic revision request, and `replace_copy` (`{copy, previous_copy_hash}`); see `docs/post-revisions.md`. |
 
 The Edge Function is `content-approvals` (handler v3), with the same
 delegation key as approvals. The Executive OS tools are `content_stage_media`,

@@ -8902,6 +8902,249 @@ export type Database = {
           },
         ]
       }
+      post_revision_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          created_at: string
+          detail: Json | null
+          id: number
+          kind: string
+          obligation: string | null
+          post_id: string
+          request_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind: string
+          client_id: string
+          created_at?: string
+          detail?: Json | null
+          id?: never
+          kind: string
+          obligation?: string | null
+          post_id: string
+          request_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          created_at?: string
+          detail?: Json | null
+          id?: never
+          kind?: string
+          obligation?: string | null
+          post_id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_revision_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_revision_events_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "post_revision_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_revision_outbox: {
+        Row: {
+          client_id: string
+          created_at: string
+          delivered_at: string | null
+          generation: number
+          id: string
+          obligation: string
+          post_id: string
+          receipt: Json | null
+          request_id: string
+          status: string
+          target: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          delivered_at?: string | null
+          generation?: number
+          id?: string
+          obligation?: string
+          post_id: string
+          receipt?: Json | null
+          request_id: string
+          status?: string
+          target?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          generation?: number
+          id?: string
+          obligation?: string
+          post_id?: string
+          receipt?: Json | null
+          request_id?: string
+          status?: string
+          target?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_revision_outbox_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "post_revision_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_revision_requests: {
+        Row: {
+          category: string
+          client_id: string
+          closed_at: string | null
+          copy_assignee: string
+          copy_claimed_at: string | null
+          copy_claimed_by: string | null
+          copy_detail: string | null
+          copy_result_hash: string | null
+          copy_state: string
+          created_at: string
+          destination: string | null
+          feedback: string
+          id: string
+          image_assignee: string
+          image_detail: string | null
+          image_result_hash: string | null
+          image_state: string
+          keyword_id: string | null
+          legacy: boolean
+          mode: string
+          original_category: string
+          original_copy_hash: string
+          original_media: Json
+          original_media_hash: string
+          original_review_hash: string | null
+          platform: string
+          post_id: string
+          rejected_at: string
+          rejected_by: string | null
+          rejection_event_id: number
+          returned_at: string | null
+          service_id: string | null
+          status: string
+          task_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          client_id: string
+          closed_at?: string | null
+          copy_assignee?: string
+          copy_claimed_at?: string | null
+          copy_claimed_by?: string | null
+          copy_detail?: string | null
+          copy_result_hash?: string | null
+          copy_state: string
+          created_at?: string
+          destination?: string | null
+          feedback: string
+          id?: string
+          image_assignee: string
+          image_detail?: string | null
+          image_result_hash?: string | null
+          image_state: string
+          keyword_id?: string | null
+          legacy?: boolean
+          mode?: string
+          original_category: string
+          original_copy_hash: string
+          original_media?: Json
+          original_media_hash: string
+          original_review_hash?: string | null
+          platform: string
+          post_id: string
+          rejected_at: string
+          rejected_by?: string | null
+          rejection_event_id: number
+          returned_at?: string | null
+          service_id?: string | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          client_id?: string
+          closed_at?: string | null
+          copy_assignee?: string
+          copy_claimed_at?: string | null
+          copy_claimed_by?: string | null
+          copy_detail?: string | null
+          copy_result_hash?: string | null
+          copy_state?: string
+          created_at?: string
+          destination?: string | null
+          feedback?: string
+          id?: string
+          image_assignee?: string
+          image_detail?: string | null
+          image_result_hash?: string | null
+          image_state?: string
+          keyword_id?: string | null
+          legacy?: boolean
+          mode?: string
+          original_category?: string
+          original_copy_hash?: string
+          original_media?: Json
+          original_media_hash?: string
+          original_review_hash?: string | null
+          platform?: string
+          post_id?: string
+          rejected_at?: string
+          rejected_by?: string | null
+          rejection_event_id?: number
+          returned_at?: string | null
+          service_id?: string | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_revision_requests_post_id_client_id_fkey"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "post_revision_requests_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_revision_requests_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       publisher_client_transport_events: {
         Row: {
           actor_id: string | null
@@ -13705,6 +13948,17 @@ export type Database = {
         Args: { p_client_id?: string; p_period?: string }
         Returns: number
       }
+      post_revision_media: { Args: { p_post: string }; Returns: Json }
+      post_revision_reclassify: {
+        Args: { p_category: string; p_id: string; p_note: string }
+        Returns: Json
+      }
+      post_revision_reopen_manual: { Args: { p_id: string }; Returns: Json }
+      post_revision_request_correction: { Args: { p_id: string }; Returns: Json }
+      post_revision_resolve: {
+        Args: { p_id: string; p_note: string; p_obligation: string }
+        Returns: Json
+      }
       request_new_creative: {
         Args: { p_note: string; p_post_id: string }
         Returns: Json
@@ -13797,6 +14051,10 @@ export type Database = {
           p_reason: string
         }
         Returns: string
+      }
+      social_post_edit_caption: {
+        Args: { p_copy: string; p_expected_copy_hash: string; p_post: string }
+        Returns: Json
       }
       social_post_readiness: { Args: { p_post_id: string }; Returns: string[] }
       social_post_snapshot: {

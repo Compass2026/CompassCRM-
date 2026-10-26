@@ -48,6 +48,9 @@ function fakeStore(o = {}) {
       return o.execute ?? { data: { id, status: "executed", result: { review_status: "in_review", publish_status: "not_scheduled" } }, error: null }; },
     async editRefuse(id, code, message) { calls.push(["editRefuse", id, code, message]); return { data: { id, status: "refused", refusal_code: code }, error: null }; },
     async editStatus(op) { calls.push(["editStatus", op]); return o.status ?? { data: null, error: null }; },
+    async revisionQueue(limit) { calls.push(["revisionQueue", limit]); return o.queue ?? { data: [], error: null }; },
+    async revisionAck(id, gen, receipt) { calls.push(["revisionAck", id, gen, receipt]); if (o.ackThrows) throw new Error("fetch failed");
+      return o.ack ?? { data: { id, status: "delivered", generation: gen, receipt, replayed: false }, error: null }; },
   };
   return s;
 }
@@ -76,8 +79,8 @@ const reviseBody = (o = {}) => ({
 test("version lists the edit modes; only the delegation key opens them", async () => {
   const r = await call(fakeStore(), post({ mode: "version" }));
   const v = await r.json();
-  assert.equal(v.version, 3);
-  for (const m of ["stage_media", "revise", "revise_status"]) assert.ok(v.modes.includes(m), m);
+  assert.equal(v.version, 4);
+  for (const m of ["stage_media", "revise", "revise_status", "revision_queue", "revision_ack"]) assert.ok(v.modes.includes(m), m);
   assert.equal((await call(fakeStore(), post(stageBody(), "wrong"))).status, 403);
   assert.equal((await call(fakeStore(), post(reviseBody(), null))).status, 403);
 });
@@ -236,4 +239,68 @@ test("revise_status returns the receipt and the post now, or 404", async () => {
   assert.equal(r.status, 200);
   assert.equal((await r.json()).receipt.post_now.review_status, "in_review");
   assert.equal((await call(fakeStore(), post({ mode: "revise_status" }))).status, 400);
+});
+
+// ── Rejection corrections (20261026200000): replace_copy, the ChatGPT outbox ──
+const OUTBOX = "0b0b0000-0000-4000-8000-000000000001";
+const copyBody = (o = {}) => reviseBody({
+  change: { kind: "replace_copy", copy: "Siding Installation and Repair in Wentzville.", previous_copy_hash: "b".repeat(64) },
+  authority: { ...reviseBody().authority, operations: ["replace_copy"] }, ...o,
+});
+
+test("replace_copy: validated, recorded and executed without reading any bytes", async () => {
+  assert.equal(typeof parseRevise(copyBody()), "object");
+  for (const bad of [
+    copyBody({ change: { kind: "replace_copy", copy: "", previous_copy_hash: "b".repeat(64) } }),
+    copyBody({ change: { kind: "replace_copy", copy: "x".repeat(3001), previous_copy_hash: "b".repeat(64) } }),
+    copyBody({ change: { kind: "replace_copy", copy: "New caption." } }),
+    copyBody({ change: { kind: "replace_caption", copy: "New caption.", previous_copy_hash: "b".repeat(64) } }),
+  ]) assert.equal(typeof parseRevise(bad), "string");
+  const p = parseRevise(copyBody());
+  assert.deepEqual(p.change, { kind: "replace_copy", copy: "Siding Installation and Repair in Wentzville.", previous_copy_hash: "b".repeat(64) });
+  const s = fakeStore();
+  const r = await call(s, post(copyBody()));
+  assert.equal(r.status, 201);
+  assert.deepEqual(s.calls.map((c) => c[0]), ["editRecord", "editExecute"]);
+  assert.deepEqual(s.calls[1][2], {});
+});
+
+test("replace_copy: a database refusal is recorded as refused; an unconfirmed execution is unknown", async () => {
+  const refused = fakeStore({ execute: { data: null, error: { code: "23514", message: "content_changed: the caption changed since it was read; read it again" } } });
+  const r = await call(refused, post(copyBody()));
+  assert.equal(r.status, 422);
+  assert.equal((await r.json()).error, "content_changed");
+  assert.ok(refused.calls.some((c) => c[0] === "editRefuse" && c[2] === "content_changed"));
+  const unknown = fakeStore({ executeThrows: true });
+  assert.equal((await call(unknown, post(copyBody()))).status, 503);
+  assert.ok(!unknown.calls.some((c) => c[0] === "editRefuse"));
+});
+
+test("revision_queue: Executive OS reads the queued image work; nothing is written", async () => {
+  const item = { outbox_id: OUTBOX, generation: 1, target: "chatgpt", post_id: POST, review_hash: HASH, feedback: "Remove the blue line." };
+  const s = fakeStore({ queue: { data: [item], error: null } });
+  const r = await call(s, post({ mode: "revision_queue", limit: 5 }));
+  assert.equal(r.status, 200);
+  assert.deepEqual((await r.json()).items, [item]);
+  assert.deepEqual(s.calls, [["revisionQueue", 5]]);
+  assert.equal((await call(fakeStore(), post({ mode: "revision_queue", limit: 500 }))).status, 400);
+  assert.equal((await call(fakeStore(), post({ mode: "revision_queue" }, "wrong"))).status, 403);
+});
+
+test("revision_ack: one receipt per delivery; refusals and unknown outcomes are kept apart", async () => {
+  const body = { mode: "revision_ack", outbox_id: OUTBOX, generation: 1, receipt: { id: "eos-task-1", handoff_id: "h-1" } };
+  const ok = fakeStore();
+  const r = await call(ok, post(body));
+  assert.equal(r.status, 201);
+  assert.deepEqual(ok.calls[0], ["revisionAck", OUTBOX, 1, { id: "eos-task-1", handoff_id: "h-1" }]);
+  const replay = fakeStore({ ack: { data: { id: OUTBOX, status: "delivered", replayed: true }, error: null } });
+  assert.equal((await call(replay, post(body))).status, 200);
+  const conflict = fakeStore({ ack: { data: null, error: { code: "CD409", message: "already_delivered: delivered with receipt eos-task-1" } } });
+  const c = await call(conflict, post({ ...body, receipt: { id: "eos-task-2" } }));
+  assert.equal(c.status, 409);
+  assert.equal((await c.json()).error, "already_delivered");
+  assert.equal((await call(fakeStore({ ackThrows: true }), post(body))).status, 503);
+  for (const bad of [{ ...body, outbox_id: "x" }, { ...body, generation: 0 }, { ...body, receipt: {} }, { ...body, receipt: "eos-task-1" }]) {
+    assert.equal((await call(fakeStore(), post(bad))).status, 400);
+  }
 });

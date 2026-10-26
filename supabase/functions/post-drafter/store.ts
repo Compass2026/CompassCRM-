@@ -6,6 +6,7 @@
 // read-only load of the opportunity's state; it writes no Authority record
 // (drafter_write links the post in its own transaction, 0053).
 import type { AuthorityState } from "./authority.ts";
+import type { RevisionState } from "./revision.ts";
 import { DUPLICATE_WINDOW_DAYS } from "./authority.ts";
 import type { Brief, DrafterInput, LintResult, SocialAccountRow } from "./types.ts";
 
@@ -52,6 +53,29 @@ export type WritePayload = {
   authority_run_id?: string;
 };
 export type WriteError = { code: string | null; message: string };
+// v9: a corrected caption for a revision request (post_revision_write_copy).
+export type RevisePayload = {
+  request_id: string;
+  client_id: string;
+  claimant: string;
+  expected_copy_hash: string;
+  copy: string;
+  runtime: string;
+  brief_hash: string;
+  lint: LintResult;
+};
+export type Revised = {
+  request_id: string;
+  post_id: string;
+  review_status: string;
+  request_status: string;
+  copy_state: string;
+  image_state: string;
+  resubmitted: boolean;
+  waiting_for?: string[];
+  error?: string;
+  review_task_id: string | null;
+};
 export type Written = { run_id: string; post_id: string; review_task_id: string | null };
 
 export function createStore(supabase: Client) {
@@ -143,6 +167,48 @@ export function createStore(supabase: Client) {
         request,
         recent_posts: recent ?? [],
       };
+    },
+
+    // v9: a revision request and the post it is for, read-only. The
+    // destination key is built as content_social_destination() builds it.
+    async revision(clientId: string, requestId: string): Promise<RevisionState | null> {
+      const must = <T>(r: { data: T; error: { message: string } | null }): T => {
+        if (r.error) throw new Error(r.error.message);
+        return r.data;
+      };
+      const request = must(await supabase.from("post_revision_requests")
+        .select("id, client_id, post_id, status, mode, category, feedback, platform, service_id, keyword_id, destination, original_copy_hash, copy_state, copy_claimed_by, copy_claimed_at, image_state")
+        .eq("id", requestId).eq("client_id", clientId).maybeSingle());
+      if (!request) return null;
+      const post = must(await supabase.from("social_posts")
+        .select("id, client_id, platform, post_type, search_intent, service_id, keyword_id, offer_id, cta_type, cta_url, social_account_id, copy, review_status, publish_status, approved_hash")
+        .eq("id", request.post_id).eq("client_id", clientId).maybeSingle());
+      if (!post) return null;
+      const account = post.social_account_id
+        ? must(await supabase.from("social_accounts").select("id, publish_page_id, external_account_id")
+            .eq("id", post.social_account_id).eq("client_id", clientId).maybeSingle())
+        : null;
+      const claims = must(await supabase.from("post_claims").select("claim_id").eq("post_id", post.id).order("claim_id"));
+      const assets = must(await supabase.from("post_assets").select("brand_asset_id, sort_order")
+        .eq("post_id", post.id).not("brand_asset_id", "is", null).order("sort_order"));
+      const bytes = new TextEncoder().encode(post.copy ?? "");
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      return {
+        request, post,
+        destination: account ? `${post.platform}:${account.publish_page_id ?? account.external_account_id ?? account.id}` : null,
+        // deno-lint-ignore no-explicit-any
+        claim_ids: (claims ?? []).map((c: any) => c.claim_id),
+        // deno-lint-ignore no-explicit-any
+        asset_ids: (assets ?? []).map((a: any) => a.brand_asset_id),
+        copy_hash: [...digest].map((b) => b.toString(16).padStart(2, "0")).join(""),
+      };
+    },
+
+    // v9: one call, one transaction (post_revision_write_copy).
+    async reviseWrite(p: RevisePayload): Promise<Revised | { error: WriteError }> {
+      const { data, error } = await supabase.rpc("post_revision_write_copy", { p });
+      if (error) return { error: { code: error.code ?? null, message: error.message } };
+      return data as Revised;
     },
 
     // One call, one transaction (drafter_write in 0047).

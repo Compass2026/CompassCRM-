@@ -294,13 +294,14 @@ export function ReviewForms({
   postId,
   submittedAt,
   ready,
-  hasCreative = false,
+  hasMedia = false,
 }: {
   clientId: string;
   postId: string;
   submittedAt: string;
   ready: boolean;
-  hasCreative?: boolean;
+  // Any image on the post (attached or a rendered graphic) can be rejected (20261026200000).
+  hasMedia?: boolean;
 }) {
   const [approveState, approve, approving] = useActionState(
     approvePostAction.bind(null, clientId, postId, submittedAt),
@@ -327,7 +328,7 @@ export function ReviewForms({
       <form action={reject} className="space-y-2">
         <Label htmlFor="reject_note">Reject</Label>
         <Textarea id="reject_note" name="review_note" rows={2} placeholder="What needs to change (required)" required />
-        {hasCreative && (
+        {hasMedia && (
           <fieldset className="space-y-1 text-sm" data-rejection-category>
             <legend className="text-xs text-muted-foreground">What is rejected</legend>
             <div className="flex flex-wrap gap-3">
@@ -339,6 +340,10 @@ export function ReviewForms({
             </div>
           </fieldset>
         )}
+        <p className="text-xs text-muted-foreground">
+          Rejecting starts the correction: the caption goes to Claude{hasMedia ? ", the image to ChatGPT" : ""}. The post comes back for
+          a fresh review once every rejected part is corrected. Nothing is approved or published automatically.
+        </p>
         <Button type="submit" variant="outline" disabled={rejecting}>
           Reject
         </Button>
