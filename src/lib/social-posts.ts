@@ -238,6 +238,8 @@ const eventText: Record<string, string> = {
   published: "Published",
   failed: "Publishing failed",
   retried: "Scheduled a retry",
+  rejection_classified: "Recorded what was rejected",
+  rejection_reclassified: "Corrected what was rejected",
 };
 
 export function describePostEvent(e: PostEvent, names: Map<string, string>): string {
@@ -269,7 +271,16 @@ export function describePostEvent(e: PostEvent, names: Map<string, string>): str
   if (e.kind === "published" && d.manual === true) extra.push("by hand");
   if (e.kind === "published" && typeof d.published_url === "string") extra.push(d.published_url);
   if (e.kind === "edited" && Array.isArray(d.fields)) extra.push(`(${d.fields.join(", ")})`);
+  if (e.kind === "rejection_classified" && e.to_value) extra.push(rejectedPart(e.to_value));
+  if (e.kind === "rejection_reclassified") {
+    extra.push(`${rejectedPart(e.from_value)} → ${rejectedPart(e.to_value)}`);
+    if (typeof d.note === "string") extra.push(`“${d.note}”`);
+  }
   return [`${who}: ${base}`, ...extra].join(" — ");
+}
+
+function rejectedPart(v: string | null): string {
+  return v === "creative" ? "the image" : v === "both" ? "the caption and the image" : v === "copy" ? "the caption" : String(v ?? "?");
 }
 
 // Postgres words the triggers raise, shown as they are (they are written for

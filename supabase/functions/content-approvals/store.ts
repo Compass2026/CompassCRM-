@@ -41,6 +41,11 @@ export function createStore(supabase: Client): Store {
     async editRefuse(id, code, message) { return wrap<Json>(await supabase.rpc("content_edit_refuse", { p_id: id, p_code: code, p_message: message })); },
     async editStatus(operationId) { return wrap<Json>(await supabase.rpc("content_edit_status", { p_operation_id: operationId })); },
 
+    async revisionQueue(limit) { return wrap<Json[]>(await supabase.rpc("post_revision_outbox_pending", { p_limit: limit })); },
+    async revisionAck(outboxId, generation, receipt) {
+      return wrap<Json>(await supabase.rpc("post_revision_outbox_ack", { p_outbox: outboxId, p_generation: generation, p_receipt: receipt }));
+    },
+
     async uploadSlot(storagePath) {
       const dir = storagePath.slice(0, storagePath.lastIndexOf("/"));
       const name = storagePath.slice(storagePath.lastIndexOf("/") + 1);

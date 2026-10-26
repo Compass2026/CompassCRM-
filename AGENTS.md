@@ -10,6 +10,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Compass Client Platform
 
+## Rejection corrections (October 26, 2026; `20261026200000` written, **not applied**)
+
+See `docs/post-revisions.md`. A rejection opens one revision request (exact
+feedback, hashes, destination). The caption goes to Claude: a worker Routine
+fire, then `post-drafter` v9 `revision_*` and `post_revision_write_copy`. An
+image goes to ChatGPT: the `post_revision_outbox`, read and acknowledged by
+Executive OS through `content-approvals` v4. A Creative Engine graphic goes
+to a teammate's re-render. An unchanged resubmission is refused until each
+rejected part changes or a teammate records "no change needed". Corrections
+return for a fresh review and never approve, schedule or publish. Nothing
+wakes an idle ChatGPT.
+
 ## Agency rollout reviews (October 14, 2026)
 
 See `docs/agency-rollout.md`. The team-only append-only review ledger keeps

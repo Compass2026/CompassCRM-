@@ -43,7 +43,7 @@ test("callers: the worker's cron secret or a team member; nobody else", async ()
   assert.equal((await call(d, { mode: "version" }, { Authorization: "Bearer anon-key" })).status, 403);
   assert.equal((await call(d, { mode: "version" }, { Authorization: "Bearer team-jwt" })).status, 200);
   const v = await call(d, { mode: "version" });
-  assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version"]);
+  assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version", "revision_brief", "revision_check", "revision_submit"]);
   assert.equal(v.body.max_attempts, 3);
 });
 

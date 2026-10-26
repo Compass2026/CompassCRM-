@@ -31,6 +31,20 @@
 //                   replace its media and resubmit it for a fresh review.
 //   revise_status → the receipt and the post now.
 //
+// Rejection corrections (20261026200000, docs/post-revisions.md), v4:
+//   revise        → also change.kind replace_copy {copy, previous_copy_hash}:
+//                   a chat-requested caption edit, bound to the caption the
+//                   assistant read. A rejected or draft post is revised only
+//                   for its open automatic revision request (the database
+//                   decides); it goes back to review once every rejected part
+//                   is corrected.
+//   revision_queue → image corrections queued for ChatGPT (the outbox), with
+//                   what stage_media / revise need. Writes nothing.
+//   revision_ack  → Executive OS records that it delivered one item (its own
+//                   receipt: the task / handoff it created). Idempotent per
+//                   outbox item and generation. Nothing here wakes an
+//                   assistant.
+//
 // Auth: the x-compass-delegation-key header must equal the Vault secret
 // EXECUTIVE_OS_DELEGATION_SECRET (constant-time). Nothing else is accepted —
 // not a team JWT, not the cron secret. Executive OS never touches the database.
@@ -42,8 +56,9 @@
 
 import { measure, sha256Hex } from "../_shared/image-meta.ts";
 
-export const HANDLER_VERSION = 3;
-export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status"] as const;
+export const HANDLER_VERSION = 4;
+export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status", "revision_queue", "revision_ack"] as const;
+export const EDIT_KINDS = ["replace_media", "replace_copy"] as const;
 const ACTIONS = ["approve", "publish", "approve_and_publish"] as const;
 const CHANNELS = ["chatgpt", "claude"] as const;
 export const CONTENT_CHANNELS = ["blog", "facebook", "google_business"] as const;
@@ -80,6 +95,9 @@ export type Store = {
   editExecute(id: string, measured: Json): Promise<DbResult<Json>>;
   editRefuse(id: string, code: string, message: string): Promise<DbResult<Json>>;
   editStatus(operationId: string): Promise<DbResult<Json>>;
+  // Rejection corrections: the ChatGPT outbox.
+  revisionQueue(limit: number): Promise<DbResult<Json[]>>;
+  revisionAck(outboxId: string, generation: number, receipt: Json): Promise<DbResult<Json>>;
 };
 
 const reply = (status: number, body: Json) => Response.json(body, { status });
@@ -186,11 +204,16 @@ export function parseRevise(b: Json): Json | string {
   if (!isStr(post.service_id) || !UUID.test(post.service_id)) return "post.service_id is the post's service from batch";
   if (!isStr(post.review_hash) || !HASH.test(post.review_hash)) return "post.review_hash is the review_hash from batch";
   if (!str(post.destination, 300)) return "post.destination is the destination from batch";
-  if (change.kind !== "replace_media") return "change.kind is replace_media";
-  if (!isStr(change.stage_id) || !UUID.test(change.stage_id)) return "change.stage_id is the stage from stage_media";
-  if (!isStr(change.sha256) || !HEX.test(change.sha256)) return "change.sha256 is the staged file's sha256";
-  if (!str(change.label, 200)) return "change.label names the asset";
-  if (!str(change.provenance, 1000)) return "change.provenance says how the image was made";
+  if (!EDIT_KINDS.includes(change.kind as typeof EDIT_KINDS[number])) return `change.kind is one of ${EDIT_KINDS.join(", ")}`;
+  if (change.kind === "replace_media") {
+    if (!isStr(change.stage_id) || !UUID.test(change.stage_id)) return "change.stage_id is the stage from stage_media";
+    if (!isStr(change.sha256) || !HEX.test(change.sha256)) return "change.sha256 is the staged file's sha256";
+    if (!str(change.label, 200)) return "change.label names the asset";
+    if (!str(change.provenance, 1000)) return "change.provenance says how the image was made";
+  } else {
+    if (!str(change.copy, 3000)) return "change.copy is the new caption (1–3000 characters)";
+    if (!isStr(change.previous_copy_hash) || !HEX.test(change.previous_copy_hash)) return "change.previous_copy_hash is the sha256 of the caption you read";
+  }
   if (!CHANNELS.includes(ex.channel as typeof CHANNELS[number])) return "executor.channel is chatgpt or claude";
   if (!str(ex.executed_by, 120)) return "executor.executed_by names the assistant";
   if (!isStr(ex.account_email) || !/^[^@\s]+@[^@\s]+$/.test(ex.account_email)) return "executor.account_email is the authorizing owner";
@@ -205,8 +228,10 @@ export function parseRevise(b: Json): Json | string {
     operation_id: b.operation_id, client_id: b.client_id,
     post: { channel: post.channel, id: post.id, service_id: (post.service_id as string).toLowerCase(), review_hash: post.review_hash,
             destination: (post.destination as string).trim() },
-    change: { kind: "replace_media", stage_id: change.stage_id, sha256: change.sha256, label: (change.label as string).trim(),
-              provenance: (change.provenance as string).trim() },
+    change: change.kind === "replace_media"
+      ? { kind: "replace_media", stage_id: change.stage_id, sha256: change.sha256, label: (change.label as string).trim(),
+          provenance: (change.provenance as string).trim() }
+      : { kind: "replace_copy", copy: (change.copy as string).trim(), previous_copy_hash: change.previous_copy_hash },
     executor: { channel: ex.channel, executed_by: (ex.executed_by as string).trim(), account_email: ex.account_email },
     authority: { kind: au.kind, id: au.id, channels: au.channels, service_ids: au.service_ids, operations: au.operations },
     reason: (b.reason as string).trim(),
@@ -300,6 +325,28 @@ export function createContentApprovals(deps: { store: Store }) {
       return reply(200, { receipt: r.data });
     }
 
+    if (mode === "revision_queue") {
+      const limit = body.limit == null ? 20 : Number(body.limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) return reply(400, { error: "limit is 1–50" });
+      const r = await store.revisionQueue(limit);
+      if (r.error) return reply(500, { error: "queue_failed", message: r.error.message });
+      return reply(200, { items: r.data ?? [] });
+    }
+    if (mode === "revision_ack") {
+      const receipt = body.receipt as Json | null;
+      if (!isStr(body.outbox_id) || !UUID.test(body.outbox_id)) return reply(400, { error: "outbox_id must be a uuid" });
+      if (!Number.isInteger(body.generation) || (body.generation as number) < 1) return reply(400, { error: "generation is the item's generation" });
+      if (!receipt || typeof receipt !== "object" || Array.isArray(receipt) || !str(receipt.id, 200)) {
+        return reply(400, { error: "receipt is {id, ...}: the Executive OS task or handoff that carries the work" });
+      }
+      const r = await store.revisionAck(body.outbox_id, body.generation as number, receipt).catch(unconfirmed);
+      if (r.error) {
+        if (r.error.code && REFUSAL.test(r.error.code)) return refusedAtDb(r.error);
+        return reply(503, { error: "outcome_unknown", message: "The acknowledgement did not confirm; retry with the same receipt." });
+      }
+      return reply((r.data as Json)?.replayed ? 200 : 201, { item: r.data });
+    }
+
     return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
   }
 
@@ -343,6 +390,7 @@ export function createContentApprovals(deps: { store: Store }) {
     const receipt = rec.data as Json;
     if (receipt.status === "executed" || receipt.status === "refused") return reply(200, { receipt, replayed: true });
     const id = receipt.id as string;
+    if ((p.change as Json).kind === "replace_copy") return execute(id, {}, receipt);
 
     // The bytes as stored, measured here: the database never trusts a declared hash.
     let read: StoredRead;
@@ -363,7 +411,10 @@ export function createContentApprovals(deps: { store: Store }) {
     const meta = measure(read.bytes);
     if (!meta) return refuse("bytes_mismatch", "the stored file is not a PNG, JPEG or WebP image");
     const measured = { content_hash: await sha256Hex(read.bytes), ...meta };
+    return execute(id, measured, receipt);
+  }
 
+  async function execute(id: string, measured: Json, receipt: Json): Promise<Response> {
     const ex = await store.editExecute(id, measured).catch(unconfirmed);
     if (ex.error) {
       if (ex.error.code && REFUSAL.test(ex.error.code)) {

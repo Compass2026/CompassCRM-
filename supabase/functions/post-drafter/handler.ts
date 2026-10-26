@@ -39,6 +39,14 @@ import { workspaceAccounts } from "./workspace.ts";
 // the same rule under its lock (CD409). An unclaimed request, and every draft
 // without an opportunity, works exactly as before.
 //
+// v9, revisions (20261026200000): revision_brief / revision_check /
+// revision_submit correct the caption of a REJECTED post for its revision
+// request. The target is the post's own (revision.ts); the claimant must hold
+// the request's caption (post_revision_claim); the linked claims stay fixed;
+// a caption identical to the rejected one is refused; the write is ONE call
+// to post_revision_write_copy, which re-checks everything under a row lock
+// and sends the post back for a fresh review once every obligation is met.
+//
 // Callers: the worker (x-cron-secret) or a signed-in team member (JWT on
 // team_members). Nothing else.
 import {
@@ -54,14 +62,23 @@ import {
 } from "./authority.ts";
 import { buildBrief, briefHash } from "./brief.ts";
 import { claimedByOther, parseClaimant } from "./claims.ts";
+import {
+  revisionConflicts,
+  revisionContext,
+  revisionDraft,
+  revisionModelRequest,
+  targetFromPost,
+  withUnchangedRule,
+  writeRefusal,
+} from "./revision.ts";
 import { lintDraft } from "./lint.ts";
 import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 8;
-export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims"] as const;
+export const HANDLER_VERSION = 9;
+export const MODES = ["brief", "check", "submit", "version", "revision_brief", "revision_check", "revision_submit"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims", "revisions"] as const;
 
 export type Deps = {
   store: Store;
@@ -160,6 +177,63 @@ export function createPostDrafter(deps: Deps) {
   const claimedReply = (opportunityId: string, message: string, holder: Json = {}) =>
     reply(409, { error: "claimed_by_other", authority_opportunity_id: opportunityId, message, ...holder });
 
+  // ── v9: correcting a rejected post's caption ──
+  async function revision(mode: "revision_brief" | "revision_check" | "revision_submit", body: Record<string, unknown>): Promise<Response> {
+    const clientId = body.client_id;
+    const requestId = body.revision_request_id;
+    if (typeof clientId !== "string" || !UUID.test(clientId)) return reply(400, { error: "client_id must be a uuid" });
+    if (typeof requestId !== "string" || !UUID.test(requestId)) return reply(400, { error: "revision_request_id must be a uuid" });
+    const parsedClaimant = parseClaimant(body.claimant);
+    if ("error" in parsedClaimant) return reply(400, { error: parsedClaimant.error });
+    const claimant = parsedClaimant.claimant;
+    if (!claimant) return reply(400, { error: "claimant is required: the label that claimed the caption (post_revision_claim)" });
+
+    const state = await store.revision(clientId, requestId);
+    if (!state) return reply(404, { error: "revision_not_found", revision_request_id: requestId });
+    const now = deps.now?.() ?? new Date();
+    const conflicts = revisionConflicts(state, claimant, now.getTime());
+    if (conflicts.length) {
+      return reply(409, { error: "revision_conflict", code: conflicts[0].code, conflicts, message: conflicts.map((c) => c.message).join(" "), revision_request_id: requestId });
+    }
+    const built = await rebuild(clientId, targetFromPost(state));
+    if (!built.ok) return reply(built.status, { ...built.body, revision_request_id: requestId });
+    const ctx = revisionContext(state);
+    const hash = built.hash;
+    if (mode === "revision_brief") {
+      return reply(200, { eligible: true, brief_hash: hash, brief: built.brief, revision: ctx,
+        model_request: revisionModelRequest(built.brief, ctx), revision_request_id: requestId });
+    }
+
+    const copy = typeof body.copy === "string" ? body.copy : (body.draft as { copy?: unknown } | null)?.copy;
+    if (typeof copy !== "string" || !copy.trim()) return reply(400, { error: "copy is required (the corrected caption)" });
+    if (body.brief_hash !== hash) {
+      return reply(409, { error: "stale_brief", brief_hash: hash, message: "The brief changed; rebuild it (revision_brief) and write again.", revision_request_id: requestId });
+    }
+    if (body.expected_copy_hash !== ctx.expected_copy_hash) {
+      return reply(409, { error: "revision_conflict", code: "content_changed", message: "The caption changed since it was read; read it again (revision_brief).", revision_request_id: requestId });
+    }
+    const result = withUnchangedRule(
+      lintDraft(built.brief, revisionDraft(copy, ctx), { gazetteer: (built.state && deps.gazetteer?.[built.state]) || [] }), copy, ctx);
+    if (mode === "revision_check") {
+      return reply(200, {
+        brief_hash: hash, characters: copy.trim().length, ...result, revision_request_id: requestId,
+        ...(result.ok ? {} : { revision_request: revisionModelRequest(built.brief, ctx, { copy, problems: result.problems }) }),
+      });
+    }
+    const runtime = typeof body.runtime === "string" ? body.runtime.trim() : "";
+    if (runtime.length < 1 || runtime.length > 80) return reply(400, { error: "runtime (a 1–80 character label for the model runtime) is required" });
+    if (!result.ok) return reply(422, { error: "lint_failed", brief_hash: hash, ...result, revision_request_id: requestId });
+    const written = await store.reviseWrite({
+      request_id: requestId, client_id: clientId, claimant, expected_copy_hash: ctx.expected_copy_hash,
+      copy, runtime, brief_hash: hash, lint: result,
+    });
+    if ("error" in written) {
+      const r = writeRefusal(written.error);
+      return reply(r.status, { error: r.status === 404 ? "revision_not_found" : "revision_conflict", code: r.code, message: r.message, revision_request_id: requestId });
+    }
+    return reply(201, { ...written, brief_hash: hash, warnings: result.warnings });
+  }
+
   async function handle(req: Request): Promise<Response> {
     if (req.method !== "POST") return reply(405, { error: "POST only" });
     const who = await caller(req);
@@ -171,6 +245,7 @@ export function createPostDrafter(deps: Deps) {
     if (mode === "version") {
       return reply(200, { version: HANDLER_VERSION, drafter: DRAFTER_VERSION, modes: MODES, features: FEATURES, max_attempts: MAX_ATTEMPTS });
     }
+    if (mode === "revision_brief" || mode === "revision_check" || mode === "revision_submit") return revision(mode, body);
     if (mode !== "brief" && mode !== "check" && mode !== "submit") {
       return reply(400, { error: `mode is one of ${MODES.join(", ")}` });
     }

@@ -47,6 +47,8 @@ import { mediaPreview, noGraphicLine } from "@/lib/post-media";
 import { BRAND_BUCKET, SIGNED_URL_TTL } from "@/lib/brand";
 import { CreativePolicyForm, GenerateCreativeForm, RequestNewCreativeForm } from "@/components/creative/post-creative-forms";
 import { CopyTextButton } from "@/components/copy-text-button";
+import { EditCaptionForm, PostRevisionPanel } from "@/components/post-revision-panel";
+import { describeRevisionEvent, type RevisionRequest } from "@/lib/post-revisions";
 import { cn } from "@/lib/utils";
 
 const claimStyles: Record<string, string> = {
@@ -173,6 +175,23 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
     .order("sort_order");
 
   const names = new Map(members.map((m) => [m.id, m.name]));
+  // The latest rejection's correction (20261026200000): its feedback stays
+  // visible through reopening and review, whatever review_note says now.
+  const { data: revision } = await supabase
+    .from("post_revision_requests")
+    .select("id, status, mode, category, original_category, feedback, rejected_by, rejected_at, legacy, copy_state, copy_detail, image_state, image_assignee, image_detail, task_id")
+    .eq("post_id", postId)
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { data: revisionEvents } = revision
+    ? await supabase.from("post_revision_events").select("id, kind, obligation, actor_kind, actor_id, detail, created_at")
+        .eq("request_id", revision.id).order("id")
+    : { data: null };
+  const showRevision = !!revision && (revision.status === "open" || revision.status === "returned"
+    || post.review_status === "rejected" || post.review_status === "draft");
+  const copyHash = createHash("sha256").update(post.copy ?? "", "utf8").digest("hex");
   const problems = readiness.data ?? [];
   const actions = availableActions({ ...post, zernio_ready: zernio.ready });
   const topic = topicProblem(post);
@@ -322,12 +341,23 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
         </section>
       )}
 
-      {post.review_status === "rejected" && post.review_note && (
+      {revision && showRevision && (
+        <PostRevisionPanel
+          clientId={clientId}
+          postId={postId}
+          request={revision as RevisionRequest}
+          reviewStatus={post.review_status}
+          rejectedByName={actorName(revision.rejected_by, names)}
+          hasMedia={!!creative || brandLinks.length > 0}
+          history={(revisionEvents ?? []).map((e) => ({ id: e.id, text: describeRevisionEvent(e, names), at: formatStamp(e.created_at) }))}
+        />
+      )}
+      {!revision && post.review_status === "rejected" && post.review_note && (
         <div role="note" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
           Rejected by {actorName(post.reviewed_by, names)}: “{post.review_note}”
         </div>
       )}
-      {post.review_status === "draft" && post.review_note && (
+      {!revision && post.review_status === "draft" && post.review_note && (
         <div role="note" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           Last review note: “{post.review_note}”
         </div>
@@ -358,6 +388,9 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           <div className="space-y-2 text-sm">
             <p className="whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-3">{post.copy}</p>
             {post.review_status === "approved" && post.copy && <CopyTextButton text={post.copy} />}
+            {(post.review_status === "in_review" || post.review_status === "rejected") && post.publish_status === "not_scheduled" && (
+              <EditCaptionForm clientId={clientId} postId={postId} copy={post.copy ?? ""} copyHash={copyHash} reviewStatus={post.review_status} />
+            )}
             <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-1 text-xs [&>dd]:[overflow-wrap:anywhere]">
               {accountLabel && (<><dt className="text-muted-foreground">Account</dt><dd>{accountLabel}</dd></>)}
               {post.cta_type && (<><dt className="text-muted-foreground">Button</dt><dd>{post.cta_type.replace("_", " ").toLowerCase()} → {post.cta_url ?? "—"}</dd></>)}
@@ -560,8 +593,8 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           {actions.includes("withdraw") && (
             <PostStepButton action={withdrawPostAction.bind(null, clientId, postId)} label="Withdraw to edit" variant="outline" />
           )}
-          {actions.includes("revise") && (
-            <PostStepButton action={revisePostAction.bind(null, clientId, postId)} label="Revise" />
+          {actions.includes("revise") && !(revision && revision.status === "open") && (
+            <PostStepButton action={revisePostAction.bind(null, clientId, postId)} label="Reopen to edit" />
           )}
           {actions.includes("publish_now") && (
             <PostStepButton
@@ -587,7 +620,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           )}
         </div>
         {actions.includes("approve") && post.submitted_at && (
-          <ReviewForms clientId={clientId} postId={postId} submittedAt={post.submitted_at} ready={problems.length === 0} hasCreative={!!creative} />
+          <ReviewForms clientId={clientId} postId={postId} submittedAt={post.submitted_at} ready={problems.length === 0} hasMedia={!!creative || brandLinks.length > 0} />
         )}
         {actions.includes("schedule") && (
           <ScheduleForm clientId={clientId} postId={postId} fromPublish={post.publish_status} />

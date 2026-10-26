@@ -24,8 +24,8 @@ export const creativeStatusLabels: Record<string, { label: string; className: st
 export const REJECTION_CATEGORIES = ["copy", "creative", "both"] as const;
 export type RejectionCategory = (typeof REJECTION_CATEGORIES)[number];
 export const rejectionLabels: Record<RejectionCategory, string> = {
-  copy: "The copy",
-  creative: "The graphic",
+  copy: "The caption",
+  creative: "The image",
   both: "Both",
 };
 
