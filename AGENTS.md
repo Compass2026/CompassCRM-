@@ -946,18 +946,40 @@ Migration `20261027160000_weekly_social_slots.sql` (sandbox suite
   Anything else is skipped with the first reason, logged in
   `delivery_queue_log` (team read-only).
 - **Core keyword list** (Tom, Oct 27: every program derives from its
-  approved core 50). `core_keyword_lists` holds versioned lists of at most
-  50 keyword ids per client: proposed → approved only by a signed-in
-  teammate (Keywords tab › Core keyword list), never edited or deleted, a
-  new approval supersedes the old. A long-tail keyword counts only through
-  `keywords.core_parent_keyword_id`. No approved list → no weekly blog or
-  social drafting for that client, with the reason logged. Proposals from
-  the current `is_tracked` 50 are a data step
-  (`supabase/seeds/core-keyword-lists-v1-proposed.sql`), not an approval.
-  Enforced at queue, claim and link, in `drafter_write` for unattended runs
-  (claimant `worker-routine:<run id>`) and in `content_draft_open_weekly`
-  for standard blog slots; `core_keyword_links` records list, version and
-  core keyword per draft (and per refresh, via `core_keyword_record`).
+  approved core 50, **per site**). `core_keyword_lists` holds versioned
+  lists per site program (`brand_workspace_id`: each brand site of a
+  multi-brand client — BHG has three — else the client): proposed →
+  approved only by a signed-in teammate (Keywords tab › Core keyword list)
+  and only with **exactly 50 valid keywords** (active, intent recorded, a
+  service of that site; judged at approval, `core_list_incomplete`
+  otherwise — an incomplete list stays a proposal). Never edited or
+  deleted; a new approval supersedes the old. A long-tail keyword counts
+  only through `keywords.core_parent_keyword_id`. Approving a list sets
+  `is_tracked` to the union of the client's approved site lists
+  (`normalize_tracked_keywords` keeps the 0033 top-50 rule only for
+  clients with none); `core_keyword_site_coverage` reports per site.
+  Proposals are data steps (`supabase/seeds/core-keyword-lists-v1-proposed.sql`,
+  `bhg-core-keyword-lists-v1-proposed.sql`), not approvals.
+- **No fail-open.** Every content path is gated, whoever writes it: the
+  weekly queue (per site: one site's missing list never stops its sister),
+  claim and link, `drafter_write`, `content_draft_open_weekly`, any social
+  post or content draft (blog or page) entering review **or revised while
+  in review** (keyword, service, destination, plan item), and every
+  `page_rewrite` / `page_added` / `blog_post` change_log row, which must
+  name its `sites` row (`object_type 'site'`), the site's program
+  (`client_brand_workspaces.blog_site_id`) and `after.keyword_id`, with
+  `after.url` on that site. No approved list, or a revoked one → refused.
+  `core_keyword_links` records keyword, list and version for each entry
+  and each revision. The only bypass is a recorded exception
+  (`core_keyword_exemptions`, granted by a signed-in team admin with a
+  reason; production has none).
+- **Location markets.** `gbp_location_markets` says which city keywords a
+  Business Profile location takes (`office` / `service_area` / `all` for a
+  shared profile). A city keyword posted to a location must be one of its
+  markets (`market_not_applicable`); a client with a single verified
+  location and no rows is unaffected, which is every client today.
+  `supabase/seeds/gbp-location-markets-v1-proposed.sql` proposes Logic
+  Wichita (office) and BHG's shared HQ (all).
 - **Worker:** one token per run (`worker-routine:<run id>`, reused on
   retries) → `social_slot_claim` (the binding one-hour claim, same door as
   `authority_draft_claim`; refuses a slot no longer eligible) →
@@ -968,7 +990,7 @@ Migration `20261027160000_weekly_social_slots.sql` (sandbox suite
   closes the task. The skill's "Weekly social slot" playbook.
 - **Launching clients:** readiness, not lifecycle. A launching client
   whose brand is approved now gets its standard blog tasks (from this week
-  on, `queue_standard_blog_tasks_from`, so no backlog) and its social
+  on, `queue_standard_blog_tasks_site`, so no backlog) and its social
   tasks. Lifecycle and publishing are untouched: drafts wait for review,
   and the publisher still needs Tom's approval, the account switch and the
   pilot list.

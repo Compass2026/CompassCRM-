@@ -1700,9 +1700,15 @@ long-tail keyword whose `core_parent_keyword_id` is in it. No approved list
 → change nothing, leave `site_updates` open with the note "No approved core
 keyword list; left for Tom", stop. Every `change_log` row for a
 `page_rewrite`, `page_added` or `blog_post` carries its keyword as
-`after.keyword_id`; the database refuses one without a keyword of the site's
-approved list (`core_keyword_required`) and records the grounding itself. A
-refusal means the keyword was not core: pick a core keyword.
+`after.keyword_id`, names the `sites` row it changes (`object_type =
+'site'`, `object_id`; for a multi-brand client the site must be a brand
+site's `blog_site_id`) and keeps `after.url` on that site's host. The
+database refuses anything else (`core_keyword_required` /
+`keyword_not_eligible`), also when the list was revoked, and records keyword,
+list and version itself, again on any later change of keyword or URL. A
+refusal means the keyword was not core for that site: pick one that is. A
+client with no `sites` row gets no change_log page row: leave `site_updates`
+open with the note "No sites row; left for Tom".
 
 `remaining` is this run's cap for each kind (pages already added or
 proposed this month count). `website` not enabled, or both allocations 0 →
@@ -1798,7 +1804,7 @@ and say so; record the revert as a `change_log` row `change_type =
 change one `change_log` row: `object_type = 'site'`, `object_id` = the
 `sites.id` you pushed to, `change_type` in `page_added` / `page_rewrite` /
 `faq_added` / `pull_request`, `before` (old entry or `{}`), `after` `{url,
-title, keyword, commit, pull_request_url}`, `reasoning` (the evidence: rank,
+title, keyword, keyword_id, commit, pull_request_url}`, `reasoning` (the evidence: rank,
 impressions, missing page), `status = 'approved'` for a published change,
 `'proposed'` for a PR or a Doc. A published refresh (`page_rewrite`) also
 carries its live receipt in `after`: `verified_at` (ISO time of the check

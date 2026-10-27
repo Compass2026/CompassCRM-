@@ -5,8 +5,11 @@
 -- rows are PROPOSALS (status 'proposed'): nothing here approves a list,
 -- deletes or untracks a keyword, or touches an existing draft or
 -- publication. Until a signed-in teammate approves a client's list
--- (Keywords tab › Core keyword list), the weekly path drafts nothing for that
--- client and says so in delivery_queue_log.
+-- (Keywords tab › Core keyword list), nothing new enters review for that
+-- client — weekly or by hand — and the queue says so in delivery_queue_log.
+-- A list is approvable only with exactly 50 valid keywords (active, intent
+-- recorded); on Oct 27 that is Ginger, Logic, Lucas, Pensacola and Show Me
+-- Design. The others stay visible proposals until their intents are set.
 --
 -- Source: the selection that already exists, keywords.is_tracked, which
 -- normalize_tracked_keywords (0033) keeps at the top 50 active keywords per

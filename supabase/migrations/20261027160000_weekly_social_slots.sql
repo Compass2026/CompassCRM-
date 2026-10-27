@@ -126,12 +126,29 @@ begin
     if not post_caller_is_human() then
       raise exception 'Only a signed-in teammate approves a core keyword list' using errcode = '42501';
     end if;
+    -- Exactly 50 valid keywords, judged now (not at proposal): distinct,
+    -- active, with a recorded intent, and for a brand site a service that
+    -- site owns. An incomplete list stays a visible proposal.
+    select count(distinct k.id) into n from keywords k
+     where k.id = any(new.keyword_ids) and k.client_id = new.client_id and k.is_active and k.intent is not null
+       and (new.brand_workspace_id is null or exists (
+             select 1 from client_brand_workspaces w where w.id = new.brand_workspace_id and k.service_id = any(w.service_ids)));
+    if cardinality(new.keyword_ids) <> 50 or n <> 50 then
+      raise exception 'core_list_incomplete: a core keyword list is approved with exactly 50 valid keywords (active, intent recorded, the site''s own services); this one has % valid of %',
+        n, cardinality(new.keyword_ids) using errcode = '23514';
+    end if;
     new.approved_by := task_actor(); new.approved_at := now();
     perform set_config('compass.core_supersede', 'on', true);
     update core_keyword_lists set status = 'superseded'
      where client_id = new.client_id and brand_workspace_id is not distinct from new.brand_workspace_id
        and status = 'approved' and id <> new.id;
     perform set_config('compass.core_supersede', '', true);
+    -- Weekly rank tracking follows the approved site lists: the union of
+    -- this client's approved lists (this one included). Nothing is deleted.
+    update keywords k set is_tracked = (k.id = any(new.keyword_ids) or exists (
+             select 1 from core_keyword_lists l where l.client_id = new.client_id and l.status = 'approved'
+               and l.id <> new.id and l.brand_workspace_id is distinct from new.brand_workspace_id and k.id = any(l.keyword_ids)))
+     where k.client_id = new.client_id and k.is_active;
   elsif new.status = 'superseded' then
     -- Withdrawn proposal or revoked approval (a teammate), or replaced by a newer approval.
     if not post_caller_is_human() and coalesce(current_setting('compass.core_supersede', true), '') <> 'on' then
@@ -280,24 +297,110 @@ end $$;
 revoke all on function core_keyword_record(uuid, uuid, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function core_keyword_record(uuid, uuid, text, uuid, uuid) to service_role;
 
--- Does work for this service's site have to trace to an approved core list?
--- Yes once that site (the brand site owning the service for multi-brand
--- clients, else the client) has an approved list. Before that, a person's
--- own drafting is unchanged; unattended worker runs are always held to it.
-create function core_keyword_required_for(p_client_id uuid, p_service_id uuid) returns boolean
+-- The site program a service belongs to: the brand site owning it for a
+-- multi-brand client (null when none does), the client (null) otherwise.
+create function core_site_of_service(p_client_id uuid, p_service_id uuid) returns uuid
 language sql stable security invoker set search_path = public, pg_temp as $$
-  select exists (
-    select 1 from core_keyword_lists l
-    where l.client_id = p_client_id and l.status = 'approved'
-      and l.brand_workspace_id is not distinct from (
-        case when exists (select 1 from client_brand_workspaces x where x.client_id = p_client_id)
-             then (select w.id from client_brand_workspaces w where w.client_id = p_client_id and p_service_id = any(w.service_ids)) end))
-  or (exists (select 1 from client_brand_workspaces x where x.client_id = p_client_id)
-      and p_service_id is null
-      and exists (select 1 from core_keyword_lists l where l.client_id = p_client_id and l.status = 'approved'))
+  select w.id from client_brand_workspaces w where w.client_id = p_client_id and p_service_id = any(w.service_ids)
 $$;
-revoke all on function core_keyword_required_for(uuid, uuid) from public, anon;
-grant execute on function core_keyword_required_for(uuid, uuid) to authenticated, service_role;
+revoke all on function core_site_of_service(uuid, uuid) from public, anon;
+grant execute on function core_site_of_service(uuid, uuid) to authenticated, service_role;
+
+-- Approved markets per Business Profile location: the cities a location may
+-- carry location-specific content for. 'office' (its own city), 'service_area'
+-- (a city it serves) or 'all' (a shared headquarters profile that serves every
+-- market of the client, e.g. BHG's Hannibal profile). Team-managed records,
+-- each with its source; nothing here binds, unholds or edits a profile.
+create table gbp_location_markets (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references clients(id) on delete cascade,
+  social_account_id uuid not null references social_accounts(id) on delete cascade,
+  market text not null check (length(btrim(market)) between 1 and 120),
+  kind text not null check (kind in ('office', 'service_area', 'all')),
+  source_ref text not null check (length(btrim(source_ref)) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+create unique index gbp_location_markets_key on gbp_location_markets (social_account_id, lower(btrim(market)));
+create function gbp_location_markets_guard() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if not exists (select 1 from social_accounts sa where sa.id = new.social_account_id and sa.client_id = new.client_id
+                  and sa.platform::text = 'google_business') then
+    raise exception 'A market belongs to one of this client''s Business Profile locations' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+revoke all on function gbp_location_markets_guard() from public, anon, authenticated;
+create trigger gbp_location_markets_guard before insert or update on gbp_location_markets
+  for each row execute function gbp_location_markets_guard();
+alter table gbp_location_markets enable row level security;
+create policy "team gbp location markets" on gbp_location_markets to authenticated
+  using ((select is_team())) with check ((select is_team()));
+revoke all on gbp_location_markets from public, anon, authenticated;
+grant select, insert, update, delete on gbp_location_markets to authenticated;
+grant select on gbp_location_markets to service_role;
+
+-- Is a keyword's market right for this destination? null = yes. Only a
+-- Business Profile destination and a keyword that names a city are judged:
+-- the city must be one of the location's approved markets, unless the
+-- location serves 'all'. A client with one location and no market records
+-- keeps today's behaviour; with several locations, a city keyword needs the
+-- location's markets recorded. Facebook Pages are not market-bound.
+create function core_market_problem(p_client_id uuid, p_account_id uuid, p_keyword_id uuid) returns text
+language sql stable security invoker set search_path = public, pg_temp as $$
+  select case
+    when sa.id is null or k.city is null or btrim(k.city) = '' then null
+    when exists (select 1 from gbp_location_markets m where m.social_account_id = sa.id and m.kind = 'all') then null
+    when exists (select 1 from gbp_location_markets m where m.social_account_id = sa.id
+                  and lower(btrim(m.market)) = lower(btrim(k.city))) then null
+    when not exists (select 1 from gbp_location_markets m where m.social_account_id = sa.id)
+     and (select count(*) from social_accounts x where x.client_id = p_client_id and x.platform::text = 'google_business'
+            and x.publish_verified_at is not null) <= 1 then null
+    else 'market_not_applicable: ' || k.city || ' is not an approved market of the Business Profile location ' || coalesce(sa.display_name, sa.publish_page_id, sa.id::text) || '.'
+  end
+  from keywords k
+  left join social_accounts sa on sa.id = p_account_id and sa.client_id = p_client_id and sa.platform::text = 'google_business'
+  where k.id = p_keyword_id and k.client_id = p_client_id
+$$;
+revoke all on function core_market_problem(uuid, uuid, uuid) from public, anon;
+grant execute on function core_market_problem(uuid, uuid, uuid) to authenticated, service_role;
+
+-- An explicit exception Tom grants (the review allowed one): a client exempt
+-- from the core-keyword gates on manual / nonstandard / refresh paths. Only a
+-- signed-in team admin grants or revokes it, with a reason; production starts
+-- with none. The weekly queue never uses it: it always needs approved lists.
+create table core_keyword_exemptions (
+  client_id uuid primary key references clients(id) on delete cascade,
+  reason text not null check (length(btrim(reason)) between 1 and 500),
+  granted_by uuid references team_members(id),
+  granted_at timestamptz not null default now()
+);
+create function core_keyword_exemptions_guard() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if not (post_caller_is_human() and is_team_admin()) then
+    raise exception 'Only a signed-in team admin grants or revokes a core keyword exemption' using errcode = '42501';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  new.granted_by := task_actor(); new.granted_at := now();
+  return new;
+end $$;
+revoke all on function core_keyword_exemptions_guard() from public, anon, authenticated;
+create trigger core_keyword_exemptions_guard before insert or update or delete on core_keyword_exemptions
+  for each row execute function core_keyword_exemptions_guard();
+alter table core_keyword_exemptions enable row level security;
+create policy "team core keyword exemptions" on core_keyword_exemptions to authenticated
+  using ((select is_team())) with check ((select is_team()));
+revoke all on core_keyword_exemptions from public, anon, authenticated;
+grant select, insert, delete on core_keyword_exemptions to authenticated;
+grant select on core_keyword_exemptions to service_role;
+
+create function core_keyword_exempt(p_client_id uuid) returns boolean
+language sql stable security invoker set search_path = public, pg_temp as $$
+  select exists (select 1 from core_keyword_exemptions e where e.client_id = p_client_id)
+$$;
+revoke all on function core_keyword_exempt(uuid) from public, anon;
+grant execute on function core_keyword_exempt(uuid) to authenticated, service_role;
 
 -- ── 2. Decision log ─────────────────────────────────────────────────────────
 create table delivery_queue_log (
@@ -605,7 +708,18 @@ begin
   if v_problem is not null then
     raise exception '%', v_problem using errcode = '22023';
   end if;
-  g := core_keyword_record(t.client_id, p.keyword_id, 'social_post', p.id, i.id);
+  v_problem := core_market_problem(t.client_id, p.social_account_id, p.keyword_id);
+  if v_problem is not null then
+    raise exception '%', v_problem using errcode = '22023';
+  end if;
+  -- Evidence for the current approved version (the review gate recorded it on
+  -- entry; a newer version since then gets its own row).
+  select jsonb_build_object('list_id', x.list_id, 'list_version', x.list_version, 'core_keyword_id', x.core_keyword_id) into g
+    from core_keyword_grounding(t.client_id, p.keyword_id) x;
+  if not exists (select 1 from core_keyword_links c where c.social_post_id = p.id
+                  and c.list_id = (g->>'list_id')::uuid and c.list_version = (g->>'list_version')::int) then
+    g := core_keyword_record(t.client_id, p.keyword_id, 'social_post', p.id, i.id);
+  end if;
   select coalesce(case when p.cta_url ~ '^https?://\S+$' then p.cta_url end,
                   case when k.target_url ~ '^https?://\S+$' then k.target_url end,
                   case when v.page_url ~ '^https?://\S+$' then v.page_url end)
@@ -635,14 +749,20 @@ declare
   definition text := pg_get_functiondef('public.drafter_write(jsonb)'::regprocedure);
   anchor text := $anchor$  -- Claims: only ones the brief allowed.
 $anchor$;
-  gate text := $gate$  -- core_keyword_gate_v1: unattended runs write only core-grounded keywords; every
-  -- other caller too once the target service's site has an approved core list.
-  if (coalesce(p->>'claimant', '') like 'worker-routine:%' or core_keyword_required_for(v_client, v_service))
-     and not exists (
-       select 1 from core_keyword_grounding(v_client, nullif(v_target->'keyword'->>'id', '')::uuid)) then
-    raise exception 'core_keyword_required: an unattended draft needs a keyword of the approved core keyword list (or its named long-tail child)'
-      using errcode = 'check_violation';
-  end if;
+  gate text := $gate$  -- core_keyword_gate_v1: every draft (worker, operator or teammate) is for a
+  -- keyword of its target site's approved core list, with that keyword's own
+  -- service, page and site; no approved list (absent, proposed or revoked) → refused.
+  declare v_core_problem text := core_keyword_eligibility(v_client, core_site_of_service(v_client, v_service),
+                                                          nullif(v_target->'keyword'->>'id', '')::uuid, v_service);
+  begin
+    if core_keyword_exempt(v_client) and coalesce(p->>'claimant', '') not like 'worker-routine:%' then
+      null;  -- Tom's recorded exception; unattended runs are never exempt
+    elsif nullif(v_target->'keyword'->>'id', '') is null then
+      raise exception 'core_keyword_required: a draft names a keyword of its site''s approved core keyword list' using errcode = 'check_violation';
+    elsif v_core_problem is not null then
+      raise exception '%', v_core_problem using errcode = 'check_violation';
+    end if;
+  end;
 $gate$;
 begin
   if strpos(definition, 'core_keyword_gate_v1') > 0 then return; end if;
@@ -686,31 +806,33 @@ begin
 end;
 $migration$;
 
--- ── 10. Blog slots from a date ──────────────────────────────────────────────
--- queue_standard_blog_tasks() with a lower bound: a launching client that
--- becomes eligible is queued from this week on, never for the months it was
--- not eligible (no October backlog). Active clients keep the unbounded call.
-create function queue_standard_blog_tasks_from(p_client_id uuid, p_from date, p_through date) returns integer
+-- ── 10. Blog slots of one site ─────────────────────────────────────────────
+-- queue_standard_blog_tasks() for one site program (p_site: the brand site,
+-- or null for a single-site client) and, optionally, from a date: a launching
+-- client that becomes eligible is queued from this week on (no backlog).
+create function queue_standard_blog_tasks_site(p_client_id uuid, p_site uuid, p_from date, p_through date) returns integer
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare s record; made int := 0;
 begin
   perform pg_advisory_xact_lock(hashtextextended('blog:'||p_client_id::text,0));
   for s in select i.id, i.planned_date, coalesce(w.name, 'the client') as unit
     from content_plan_items i left join client_brand_workspaces w on w.id = i.brand_workspace_id
-    where i.client_id = p_client_id and i.standard_key = 'blog_posts' and i.planned_date between p_from and p_through
+    where i.client_id = p_client_id and i.standard_key = 'blog_posts'
+      and i.brand_workspace_id is not distinct from p_site
+      and (p_from is null or i.planned_date >= p_from) and i.planned_date <= p_through
       and i.content_post_id is null and i.hold is null
       and not exists (select 1 from content_drafts d where d.plan_item_id = i.id)
       and not exists (select 1 from tasks t where t.client_id = p_client_id and t.key = 'blog_post' and t.notes like '%plan_item:' || i.id::text || '%')
     order by i.planned_date, i.id loop
     insert into tasks(client_id,title,owner,status,playbook_step,autonomy_level,key,due_date,notes)
-      values(p_client_id, left('Blog slot for '||s.unit||': governed keyword, sourced article, team review',200),
+      values(p_client_id, left('Blog slot for '||s.unit||': core keyword, sourced article, team review',200),
         'CLAUDE','open','PB7','run_flag','blog_post',s.planned_date,
-        'plan_item:'||s.id||' (monthly delivery standard). Choose a keyword and service of '||s.unit||'.');
+        'plan_item:'||s.id||' (monthly delivery standard). Choose a keyword of '||s.unit||'''s approved core list and its service.');
     made := made + 1;
   end loop;
   return made;
 end $$;
-revoke all on function queue_standard_blog_tasks_from(uuid, date, date) from public, anon, authenticated, service_role;
+revoke all on function queue_standard_blog_tasks_site(uuid, uuid, date, date) from public, anon, authenticated, service_role;
 
 -- ── 11. The weekly beat ─────────────────────────────────────────────────────
 -- As 20261015150000, with these changes for clients on a standard:
@@ -723,7 +845,7 @@ revoke all on function queue_standard_blog_tasks_from(uuid, date, date) from pub
 -- queued. Clients without a standard run the previous body unchanged.
 create or replace function create_weekly_blog_tasks() returns integer
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare c record; u record; made int:=0; existing int; slots int; n int; opened int; social int; brand_ok boolean; core_ok boolean;
+declare c record; u record; site record; made int:=0; existing int; slots int; n int; opened int; social int; core_ok boolean;
   week date:=date_trunc('week',now() at time zone 'America/Chicago')::date;
 begin
   for c in select cl.id, cl.status from clients cl where cl.status in ('active','launching')
@@ -733,20 +855,24 @@ begin
     perform plan_delivery_month(c.id, week);
     if date_trunc('month', week+6) <> date_trunc('month', week) then perform plan_delivery_month(c.id, week+6); end if;
     opened := 0;
-    brand_ok := exists (select 1 from brand_boards b where b.client_id = c.id and b.status = 'approved')
-             or exists (select 1 from client_brand_workspaces w where w.client_id = c.id and w.status = 'approved');
-    core_ok := exists (select 1 from core_keyword_lists l where l.client_id = c.id and l.status = 'approved');
-    if not core_ok then
-      insert into delivery_queue_log (client_id, deliverable, decision, reason)
-      values (c.id, 'blog_posts', 'skipped', 'No approved core keyword list.');
-    elsif c.status = 'active' then
-      opened := queue_standard_blog_tasks(c.id, week+6);
-    elsif brand_ok then
-      opened := queue_standard_blog_tasks_from(c.id, week, week+6);
-    else
-      insert into delivery_queue_log (client_id, deliverable, decision, reason)
-      values (c.id, 'blog_posts', 'skipped', 'Launching client without an approved brand board or brand site.');
-    end if;
+    -- Per site program: each brand site of a multi-brand client, else the client.
+    for site in select w.id, w.name, w.status = 'approved' as brand_ok from client_brand_workspaces w where w.client_id = c.id
+                union all
+                select null::uuid, null::text, exists (select 1 from brand_boards b where b.client_id = c.id and b.status = 'approved')
+                where not exists (select 1 from client_brand_workspaces w where w.client_id = c.id) loop
+      core_ok := exists (select 1 from core_keyword_lists l where l.client_id = c.id and l.status = 'approved'
+                          and l.brand_workspace_id is not distinct from site.id);
+      if c.status <> 'active' and not site.brand_ok then
+        insert into delivery_queue_log (client_id, deliverable, decision, reason)
+        values (c.id, 'blog_posts', 'skipped', left(coalesce('Launching client without an approved brand site: ' || site.name || '.',
+                                                             'Launching client without an approved brand board or brand site.'), 300));
+      elsif not core_ok then
+        insert into delivery_queue_log (client_id, deliverable, decision, reason)
+        values (c.id, 'blog_posts', 'skipped', left('No approved core keyword list' || coalesce(' for ' || site.name, '') || '.', 300));
+      else
+        opened := opened + queue_standard_blog_tasks_site(c.id, site.id, case when c.status = 'active' then null else week end, week+6);
+      end if;
+    end loop;
     social := queue_standard_social_tasks(c.id, week+6);
     made := made + opened + social;
     if opened + social > 0 then
@@ -794,93 +920,231 @@ begin
 end $$;
 revoke all on function create_weekly_blog_tasks() from public,anon,authenticated,service_role;
 
--- ── 12. Every path into review, once the site's list is approved ───────────
--- The weekly path is gated above. These close the other doors: a social post
--- entering review (drafter, operator or hand-typed), a blog draft entering
--- review (weekly, Generate draft or any other request) and a website change
--- that adds or rewrites content (refresh, new page, blog filing). Each must
--- name a keyword that traces to its site's approved core list; the grounding
--- is recorded once in core_keyword_links. History is untouched: only a
--- transition into review, or a new change_log row, is checked.
+-- ── 12. Every path into review ─────────────────────────────────────────────
+-- Tom, Oct 27: every blog, Facebook post, Business Profile post and webpage
+-- refresh traces to its site's approved core 50. The weekly path is gated
+-- above; these close the other doors, always (no approved list — absent,
+-- proposed or revoked — means refused):
+--   * a social post entering review (drafter, operator, hand-typed, revision)
+--   * a blog draft entering review (weekly, Generate draft, any request)
+--   * a change_log row that adds or rewrites content (page_rewrite,
+--     page_added, blog_post) on a site
+-- Each is judged on its exact target: the keyword must be eligible for the
+-- site of the item's own service (or the site the change is on), with the
+-- keyword's own service and page, and a Business Profile post's keyword
+-- market must suit its location. Every entry into review records the
+-- keyword, site list and version in core_keyword_links (a re-review under a
+-- new version adds a row; history stays). Drafts may be prepared freely;
+-- only entering review or delivery is gated, and nothing historical changes.
+-- Every entry into review, and every revision while in review (a new
+-- keyword, service or destination), is checked against the site's approved
+-- list (BEFORE) and recorded with the list and version that vouched for it
+-- (AFTER, once per post, list version and keyword). Missing or revoked
+-- approval refuses: there is no fail-open path.
+create function core_keyword_link_once(p_client_id uuid, p_keyword_id uuid, p_post uuid, p_draft uuid, p_change uuid, p_plan_item uuid)
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
+declare g record;
+begin
+  select * into g from core_keyword_grounding(p_client_id, p_keyword_id);
+  if g.list_id is null then return; end if;
+  if not exists (select 1 from core_keyword_links c
+                  where c.list_id = g.list_id and c.list_version = g.list_version and c.keyword_id = p_keyword_id
+                    and (c.social_post_id = p_post or c.content_draft_id = p_draft or c.change_log_id = p_change)) then
+    insert into core_keyword_links (client_id, list_id, list_version, keyword_id, core_keyword_id, social_post_id, content_draft_id, change_log_id, plan_item_id)
+    values (p_client_id, g.list_id, g.list_version, p_keyword_id, g.core_keyword_id, p_post, p_draft, p_change, p_plan_item);
+  end if;
+end $$;
+revoke all on function core_keyword_link_once(uuid, uuid, uuid, uuid, uuid, uuid) from public, anon, authenticated, service_role;
+
+create function core_keyword_social_governed(tg_op text, n social_posts, o social_posts) returns boolean
+language sql immutable set search_path = public, pg_temp as $$
+  select n.review_status = 'in_review'
+     and (tg_op = 'INSERT' or o.review_status is distinct from 'in_review'
+          or (n.keyword_id, n.service_id, n.social_account_id) is distinct from (o.keyword_id, o.service_id, o.social_account_id))
+$$;
+revoke all on function core_keyword_social_governed(text, social_posts, social_posts) from public, anon, authenticated;
+
 create function core_keyword_social_gate() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_problem text;
 begin
-  if new.review_status = 'in_review' and (tg_op = 'INSERT' or old.review_status is distinct from 'in_review')
-     and core_keyword_required_for(new.client_id, new.service_id) then
-    if new.keyword_id is null or not exists (select 1 from core_keyword_grounding(new.client_id, new.keyword_id)) then
-      raise exception 'core_keyword_required: this site has an approved core keyword list; a post in review names one of its keywords (or a long-tail keyword linked to one)'
-        using errcode = '23514';
+  if core_keyword_social_governed(tg_op, new, case when tg_op = 'UPDATE' then old end) and not core_keyword_exempt(new.client_id) then
+    if new.keyword_id is null then
+      raise exception 'core_keyword_required: a post in review names a keyword of its site''s approved core keyword list' using errcode = '23514';
+    end if;
+    v_problem := coalesce(core_keyword_eligibility(new.client_id, core_site_of_service(new.client_id, new.service_id), new.keyword_id, new.service_id),
+                          core_market_problem(new.client_id, new.social_account_id, new.keyword_id));
+    if v_problem is not null then
+      raise exception '%', v_problem using errcode = '23514';
     end if;
   end if;
   return new;
 end $$;
 revoke all on function core_keyword_social_gate() from public, anon, authenticated;
-create trigger social_posts_aa_core_keyword before insert or update of review_status, keyword_id on social_posts
+create trigger social_posts_aa_core_keyword before insert or update of review_status, keyword_id, service_id, social_account_id on social_posts
   for each row execute function core_keyword_social_gate();
+
+create function core_keyword_social_record() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if core_keyword_social_governed(tg_op, new, case when tg_op = 'UPDATE' then old end) and new.keyword_id is not null then
+    perform core_keyword_link_once(new.client_id, new.keyword_id, new.id, null, null, null);
+  end if;
+  return null;
+end $$;
+revoke all on function core_keyword_social_record() from public, anon, authenticated;
+create trigger social_posts_core_keyword_record after insert or update of review_status, keyword_id, service_id, social_account_id on social_posts
+  for each row execute function core_keyword_social_record();
+
+create function core_keyword_draft_governed(tg_op text, n content_drafts, o content_drafts) returns boolean
+language sql immutable set search_path = public, pg_temp as $$
+  select n.status = 'in_review'
+     and (tg_op = 'INSERT' or o.status is distinct from 'in_review'
+          or (n.keyword_id, n.service_id, n.plan_item_id) is distinct from (o.keyword_id, o.service_id, o.plan_item_id))
+$$;
+revoke all on function core_keyword_draft_governed(text, content_drafts, content_drafts) from public, anon, authenticated;
 
 create function core_keyword_draft_gate() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare g record;
+declare v_problem text; v_site uuid;
 begin
-  if new.status = 'in_review' and old.status is distinct from 'in_review'
-     and (core_keyword_required_for(new.client_id, new.service_id) or new.keyword_id is not null) then
-    select * into g from core_keyword_grounding(new.client_id, new.keyword_id);
-    if g.list_id is null then
-      if core_keyword_required_for(new.client_id, new.service_id) then
-        raise exception 'core_keyword_required: this site has an approved core keyword list; a draft in review names one of its keywords (or a long-tail keyword linked to one)'
-          using errcode = '23514';
-      end if;
-    elsif not exists (select 1 from core_keyword_links x where x.content_draft_id = new.id) then
-      insert into core_keyword_links (client_id, list_id, list_version, keyword_id, core_keyword_id, content_draft_id, plan_item_id)
-      values (new.client_id, g.list_id, g.list_version, new.keyword_id, g.core_keyword_id, new.id, new.plan_item_id);
+  if core_keyword_draft_governed(tg_op, new, case when tg_op = 'UPDATE' then old end) and not core_keyword_exempt(new.client_id) then
+    if new.keyword_id is null then
+      raise exception 'core_keyword_required: a draft in review names a keyword of its site''s approved core keyword list' using errcode = '23514';
+    end if;
+    v_site := coalesce((select i.brand_workspace_id from content_plan_items i where i.id = new.plan_item_id),
+                       core_site_of_service(new.client_id, new.service_id));
+    v_problem := core_keyword_eligibility(new.client_id, v_site, new.keyword_id, new.service_id);
+    if v_problem is not null then
+      raise exception '%', v_problem using errcode = '23514';
     end if;
   end if;
   return new;
 end $$;
 revoke all on function core_keyword_draft_gate() from public, anon, authenticated;
-create trigger content_drafts_aa_core_keyword before update of status on content_drafts
+create trigger content_drafts_aa_core_keyword before insert or update of status, keyword_id, service_id, plan_item_id on content_drafts
   for each row execute function core_keyword_draft_gate();
 
+create function core_keyword_draft_record() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if core_keyword_draft_governed(tg_op, new, case when tg_op = 'UPDATE' then old end) and new.keyword_id is not null then
+    perform core_keyword_link_once(new.client_id, new.keyword_id, null, new.id, null, new.plan_item_id);
+  end if;
+  return null;
+end $$;
+revoke all on function core_keyword_draft_record() from public, anon, authenticated;
+create trigger content_drafts_core_keyword_record after insert or update of status, keyword_id, service_id, plan_item_id on content_drafts
+  for each row execute function core_keyword_draft_record();
+
+-- A content change names the site it is on (object_type 'site', object_id a
+-- sites row of this client) and its keyword (after.keyword_id). The keyword
+-- must be eligible for THAT site, and a changed URL (after.url) must be on it.
 create function core_keyword_change_gate() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_kw uuid; v_svc uuid; g record;
+declare v_kw uuid; v_site sites; v_program uuid; v_multi boolean; v_problem text;
 begin
-  if new.change_type not in ('page_rewrite', 'page_added', 'blog_post') then return new; end if;
-  v_kw := case when coalesce(new.after->>'keyword_id', '') ~ '^[0-9a-f-]{36}$' then (new.after->>'keyword_id')::uuid end;
-  select service_id into v_svc from keywords where id = v_kw and client_id = new.client_id;
-  if v_kw is null then
-    if exists (select 1 from core_keyword_lists l where l.client_id = new.client_id and l.status = 'approved') then
-      raise exception 'core_keyword_required: a % change names its core keyword (after.keyword_id)', new.change_type using errcode = '23514';
-    end if;
+  if new.change_type not in ('page_rewrite', 'page_added', 'blog_post') or core_keyword_exempt(new.client_id) then return new; end if;
+  -- A revision is rechecked when it changes what the change is about.
+  if tg_op = 'UPDATE' and (new.change_type, new.object_type, new.object_id, new.after->>'keyword_id', new.after->>'url')
+     is not distinct from (old.change_type, old.object_type, old.object_id, old.after->>'keyword_id', old.after->>'url') then
     return new;
   end if;
-  select * into g from core_keyword_grounding(new.client_id, v_kw);
-  if g.list_id is null and (core_keyword_required_for(new.client_id, v_svc)
-     or exists (select 1 from core_keyword_lists l where l.client_id = new.client_id and l.status = 'approved')) then
-    raise exception 'core_keyword_required: the % change''s keyword is not in its site''s approved core keyword list', new.change_type using errcode = '23514';
+  v_kw := case when coalesce(new.after->>'keyword_id', '') ~ '^[0-9a-f-]{36}$' then (new.after->>'keyword_id')::uuid end;
+  if v_kw is null then
+    raise exception 'core_keyword_required: a % change names its core keyword (after.keyword_id)', new.change_type using errcode = '23514';
+  end if;
+  select * into v_site from sites where id = new.object_id and client_id = new.client_id;
+  v_multi := exists (select 1 from client_brand_workspaces w where w.client_id = new.client_id);
+  if new.object_type is distinct from 'site' or v_site.id is null then
+    raise exception 'core_keyword_required: a % change names the site it is on (object_type site, object_id)', new.change_type using errcode = '23514';
+  end if;
+  if v_multi then
+    select w.id into v_program from client_brand_workspaces w where w.client_id = new.client_id and w.blog_site_id = v_site.id;
+    if v_program is null then
+      raise exception 'core_keyword_required: the site of this % change belongs to no brand site program', new.change_type using errcode = '23514';
+    end if;
+  end if;
+  v_problem := core_keyword_eligibility(new.client_id, v_program, v_kw, null);
+  if v_problem is not null then
+    raise exception '%', v_problem using errcode = '23514';
+  end if;
+  if coalesce(new.after->>'url', '') ~ '^https?://'
+     and lower(regexp_replace(substring(new.after->>'url' from '^https?://([^/:?#]+)'), '^www\.', ''))
+         is distinct from lower(regexp_replace(substring(v_site.url from '^https?://([^/:?#]+)'), '^www\.', '')) then
+    raise exception 'core_keyword_required: the changed page % is not on the site this change names', new.after->>'url' using errcode = '23514';
   end if;
   return new;
 end $$;
 revoke all on function core_keyword_change_gate() from public, anon, authenticated;
-create trigger change_log_aa_core_keyword before insert on change_log
+create trigger change_log_aa_core_keyword before insert or update on change_log
   for each row execute function core_keyword_change_gate();
 
 create function core_keyword_change_record() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare g record;
 begin
-  if new.change_type in ('page_rewrite', 'page_added', 'blog_post') and coalesce(new.after->>'keyword_id', '') ~ '^[0-9a-f-]{36}$' then
-    select * into g from core_keyword_grounding(new.client_id, (new.after->>'keyword_id')::uuid);
-    if g.list_id is not null then
-      insert into core_keyword_links (client_id, list_id, list_version, keyword_id, core_keyword_id, change_log_id)
-      values (new.client_id, g.list_id, g.list_version, (new.after->>'keyword_id')::uuid, g.core_keyword_id, new.id);
-    end if;
+  if new.change_type in ('page_rewrite', 'page_added', 'blog_post') and coalesce(new.after->>'keyword_id', '') ~ '^[0-9a-f-]{36}$'
+     and (tg_op = 'INSERT' or (new.after->>'keyword_id') is distinct from (old.after->>'keyword_id')) then
+    perform core_keyword_link_once(new.client_id, (new.after->>'keyword_id')::uuid, null, null, new.id, null);
   end if;
-  return new;
+  return null;
 end $$;
 revoke all on function core_keyword_change_record() from public, anon, authenticated;
-create trigger change_log_core_keyword_record after insert on change_log
+create trigger change_log_core_keyword_record after insert or update of after on change_log
   for each row execute function core_keyword_change_record();
+
+-- ── 12b. Tracking and reporting per site ───────────────────────────────────
+-- normalize_tracked_keywords keeps its 0033 rule for clients without an
+-- approved core list; a client with approved lists tracks exactly the union
+-- of its approved site lists (BHG: 3 × 50, not a client-wide 50).
+create or replace function normalize_tracked_keywords(p_client_id uuid, p_target int default 50)
+returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_n int;
+begin
+  if exists (select 1 from core_keyword_lists l where l.client_id = p_client_id and l.status = 'approved') then
+    update keywords k
+       set is_tracked = exists (select 1 from core_keyword_lists l where l.client_id = p_client_id and l.status = 'approved' and k.id = any(l.keyword_ids))
+     where k.client_id = p_client_id and k.is_active
+       and k.is_tracked is distinct from exists (select 1 from core_keyword_lists l where l.client_id = p_client_id and l.status = 'approved' and k.id = any(l.keyword_ids));
+    get diagnostics v_n = row_count;
+    return v_n;
+  end if;
+  with ranked as (
+    select k.id,
+           row_number() over (
+             order by k.is_money desc,
+                      case k.priority when 'p1' then 1 when 'p2' then 2 else 3 end,
+                      k.volume desc nulls last,
+                      k.created_at
+           ) as rn
+    from keywords k
+    where k.client_id = p_client_id and k.is_active
+  )
+  update keywords k
+  set is_tracked = (r.rn <= p_target)
+  from ranked r
+  where k.id = r.id and k.is_tracked is distinct from (r.rn <= p_target);
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+
+-- Per site: each approved core keyword with its tracking state, the governed
+-- content that traces to it and its latest organic position.
+create view core_keyword_site_coverage with (security_invoker = true) as
+select l.client_id, l.brand_workspace_id, w.name as site_name, l.id as list_id, l.version as list_version,
+       k.id as keyword_id, k.keyword, k.intent, k.is_tracked, k.service_id,
+       (select count(*) from core_keyword_links c where c.list_id = l.id and c.core_keyword_id = k.id) as linked_items,
+       (select r.position from rank_snapshots r where r.keyword_id = k.id and r.result_type = 'organic'
+          order by r.recorded_at desc limit 1) as latest_organic_position,
+       (select max(r.recorded_at) from rank_snapshots r where r.keyword_id = k.id) as last_ranked_at
+from core_keyword_lists l
+join keywords k on k.id = any(l.keyword_ids)
+left join client_brand_workspaces w on w.id = l.brand_workspace_id
+where l.status = 'approved';
+revoke all on core_keyword_site_coverage from public, anon, authenticated;
+grant select on core_keyword_site_coverage to authenticated, service_role;
 
 -- ── 13. Postconditions ──────────────────────────────────────────────────────
 do $$

@@ -80,6 +80,9 @@ for f in "${MIGRATIONS[@]}" ${LATE[@]+"${LATE[@]}"}; do
 done
 
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /dev/null
+# Legacy suites run with the recorded core-keyword exception for their fictional
+# clients; the two core suites disable it and test the strict rule.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/core_keyword_legacy_exempt.sql" -o /dev/null
 # Billing rows for the portal clients while the generic portal checks run
 # (0062's views are portal views too), removed straight after.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_fixtures.sql" -o /dev/null

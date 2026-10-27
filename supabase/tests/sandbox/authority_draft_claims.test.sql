@@ -248,8 +248,12 @@ select adc.ok('S1 authority_draft_claim is the worker''s and the drafter''s only
 select adc.ok('S2 drafter_write keeps the caller''s rights, the GBP destination and Facebook changes, and gains the gate',
   not (select prosecdef from pg_proc where oid = 'public.drafter_write(jsonb)'::regprocedure)
   and (select prosrc from pg_proc where oid = 'public.drafter_write(jsonb)'::regprocedure) like '%authority_draft_claims_v1%'
-  and (select prosrc from pg_proc where oid = 'public.drafter_write(jsonb)'::regprocedure) like '%drafter_gbp_destination_v1%'
-  and (select prosrc from pg_proc where oid = 'public.drafter_write(jsonb)'::regprocedure) like '%Only a Facebook draft names a social account%');
+  -- 20261027150000 (per-post Business Profile locations) supersedes the v1
+  -- destination block: a GBP draft may name one of the client's verified
+  -- locations, any other named account is refused, and Facebook keeps its Page rule.
+  and (select prosrc from pg_proc where oid = 'public.drafter_write(jsonb)'::regprocedure) like '%drafter_gbp_destination_v2%'
+  and (select prosrc from pg_proc where oid = 'public.drafter_write(jsonb)'::regprocedure) like '%A Business Profile draft names one of this client''''s verified locations%'
+  and (select prosrc from pg_proc where oid = 'public.drafter_write(jsonb)'::regprocedure) like '%A Facebook draft names one of this client''''s Facebook Pages%');
 \o
 
 \c - postgres

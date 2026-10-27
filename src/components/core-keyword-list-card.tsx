@@ -4,20 +4,36 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type Keyword = { id: string; keyword: string; intent: string | null; is_money: boolean; priority: string | null };
+type Keyword = {
+  id: string; keyword: string; intent: string | null; is_money: boolean; priority: string | null;
+  is_active: boolean; service_id: string | null;
+};
+
+// The database approves a list only with exactly this many valid keywords
+// (20261027160000, core_list_incomplete); the card mirrors the rule so an
+// incomplete proposal is never offered for approval.
+const CORE_LIST_SIZE = 50;
 
 type CoreListRow = {
   id: string; version: number; status: string; keyword_ids: string[]; source_ref: string; proposed_at: string; approved_at: string | null;
 };
 
-function CoreList({ clientId, byId, list, label }: { clientId: string; byId: Map<string, Keyword>; list: CoreListRow; label: string }) {
+function CoreList({ clientId, byId, list, label, siteServices }: {
+  clientId: string; byId: Map<string, Keyword>; list: CoreListRow; label: string; siteServices: string[] | null;
+}) {
   const ks = list.keyword_ids.map((id) => byId.get(id)).filter((k): k is Keyword => !!k);
   const noIntent = ks.filter((k) => !k.intent).length;
+  const valid = ks.filter(
+    (k) => k.is_active && !!k.intent && (siteServices === null || (!!k.service_id && siteServices.includes(k.service_id))),
+  ).length;
+  const complete = valid === CORE_LIST_SIZE && list.keyword_ids.length === CORE_LIST_SIZE;
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge variant={list.status === "approved" ? "default" : "secondary"}>{label} v{list.version}</Badge>
-        <span>{list.keyword_ids.length} keywords</span>
+        <span className={complete ? undefined : "text-amber-700"}>
+          {valid} of {CORE_LIST_SIZE} valid{list.keyword_ids.length !== valid ? ` (${list.keyword_ids.length} listed)` : ""}
+        </span>
         {noIntent > 0 && <span className="text-amber-700">{noIntent} without an intent (not usable until set)</span>}
         <span className="text-xs text-muted-foreground">
           {list.status === "approved" && list.approved_at ? `approved ${list.approved_at.slice(0, 10)}` : `proposed ${list.proposed_at.slice(0, 10)}`}
@@ -34,10 +50,16 @@ function CoreList({ clientId, byId, list, label }: { clientId: string; byId: Map
         ))}
       </div>
       <div className="flex gap-2">
-        {list.status === "proposed" && (
+        {list.status === "proposed" && complete && (
           <form action={reviewCoreKeywordList.bind(null, clientId, list.id, list.version, "approve")}>
             <Button type="submit" size="sm">Approve v{list.version}</Button>
           </form>
+        )}
+        {list.status === "proposed" && !complete && (
+          <span className="self-center text-xs text-muted-foreground">
+            A list is approved with exactly {CORE_LIST_SIZE} valid keywords (active, intent set
+            {siteServices === null ? "" : ", a service of this site"}). This one stays a proposal.
+          </span>
         )}
         <form action={reviewCoreKeywordList.bind(null, clientId, list.id, list.version, "withdraw")}>
           <Button type="submit" size="sm" variant="outline">
@@ -63,12 +85,12 @@ export async function CoreKeywordListCard({ clientId, keywords }: { clientId: st
       .eq("client_id", clientId)
       .in("status", ["approved", "proposed"])
       .order("version", { ascending: false }),
-    supabase.from("client_brand_workspaces").select("id, name").eq("client_id", clientId).order("name"),
+    supabase.from("client_brand_workspaces").select("id, name, service_ids").eq("client_id", clientId).order("name"),
   ]);
   const byId = new Map(keywords.map((k) => [k.id, k]));
-  const programs: { id: string | null; name: string | null }[] = (sites ?? []).length
-    ? (sites ?? []).map((w) => ({ id: w.id, name: w.name }))
-    : [{ id: null, name: null }];
+  const programs: { id: string | null; name: string | null; services: string[] | null }[] = (sites ?? []).length
+    ? (sites ?? []).map((w) => ({ id: w.id, name: w.name, services: w.service_ids ?? [] }))
+    : [{ id: null, name: null, services: null }];
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -77,7 +99,8 @@ export async function CoreKeywordListCard({ clientId, keywords }: { clientId: st
       <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground">
           Every weekly blog, Facebook and Business Profile draft must use a keyword from its site&apos;s approved list, or a
-          long-tail keyword linked to one. Without an approved list, nothing is drafted for that site.
+          long-tail keyword linked to one. Without an approved list of {CORE_LIST_SIZE}, nothing is drafted for that site,
+          by the weekly queue or by hand.
         </p>
         {programs.map((program) => {
           const mine = (lists ?? []).filter((l) => (l.brand_workspace_id ?? null) === program.id);
@@ -86,8 +109,8 @@ export async function CoreKeywordListCard({ clientId, keywords }: { clientId: st
           return (
             <div key={program.id ?? "client"} className="space-y-3">
               {program.name && <h3 className="text-sm font-semibold">{program.name}</h3>}
-              {approved ? <CoreList clientId={clientId} byId={byId} list={approved} label="Approved" /> : <p className="text-sm">No approved list.</p>}
-              {proposal && <CoreList clientId={clientId} byId={byId} list={proposal} label="Proposed" />}
+              {approved ? <CoreList clientId={clientId} byId={byId} list={approved} label="Approved" siteServices={program.services} /> : <p className="text-sm">No approved list.</p>}
+              {proposal && <CoreList clientId={clientId} byId={byId} list={proposal} label="Proposed" siteServices={program.services} />}
             </div>
           );
         })}

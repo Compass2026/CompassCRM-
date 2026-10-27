@@ -16,7 +16,10 @@
 --    backhoe, bulldozer, dump truck, tractor; Forklift 4: Class 7 rough
 --    terrain, train-the-trainer) are inserted but stay out of the lists until
 --    Tom decides those services (adding a service to a brand site re-opens
---    its brand approval). So: Safety 50, Forklift 46, Heavy Equipment 28.
+--    its brand approval). Every list also keeps only keywords of that site's
+--    services ("safety training" has none). So: Safety 49, Forklift 46,
+--    Heavy Equipment 28 — all three stay proposals until they hold 50 valid
+--    keywords (8 existing BHG keywords in them also lack an intent).
 --
 -- Nothing is approved. Re-running is a no-op (existing keywords and lists skipped).
 
@@ -127,10 +130,11 @@ from (values
 ) v(keyword, service_id, intent, volume, cpc, city, note)
 where not exists (select 1 from keywords k where k.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and lower(k.keyword) = lower(v.keyword));
 
--- BHG Safety Partners: 50 keywords (30 existing, 20 new)
+-- BHG Safety Partners: 50 researched, 49 in the list ("safety training" has
+-- no CRM service; mapping it to Workplace Safety Training is Tom's call)
 insert into core_keyword_lists (client_id, brand_workspace_id, keyword_ids, source_ref)
 select '3eaa3389-2a33-4004-837c-8aef90404410', '127b7514-a914-4c73-b4c1-2309c2550cd6', array_agg(distinct k.id),
-  'BHG per-site core 50 research (Oct 27 2026; DataForSEO Labs + live owner pages); 50 of 50 mapped to services of this site. Proposed for approval: executive_os:task/3ab519f3-27bd-416c-a3f1-219b285462c3'
+  'BHG per-site core 50 research (Oct 27 2026; DataForSEO Labs + live owner pages); 49 of 50 mapped to services of this site. Proposed for approval: executive_os:task/3ab519f3-27bd-416c-a3f1-219b285462c3'
 from (values
   ('9b86008d-4511-42ff-8e15-70046ba3cc15', 'osha 10'),
   ('335f84e9-69b5-4516-911e-da789cf97ea9', 'osha 10 certification'),
@@ -185,6 +189,7 @@ from (values
 ) v(existing_id, keyword)
 join keywords k on k.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and k.is_active
   and (k.id = v.existing_id::uuid or (v.existing_id is null and lower(k.keyword) = lower(v.keyword)))
+  and k.service_id = any((select w.service_ids from client_brand_workspaces w where w.id = '127b7514-a914-4c73-b4c1-2309c2550cd6'))
 where not exists (select 1 from core_keyword_lists l where l.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and l.brand_workspace_id = '127b7514-a914-4c73-b4c1-2309c2550cd6')
 having count(*) > 0;
 
@@ -242,6 +247,7 @@ from (values
 ) v(existing_id, keyword)
 join keywords k on k.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and k.is_active
   and (k.id = v.existing_id::uuid or (v.existing_id is null and lower(k.keyword) = lower(v.keyword)))
+  and k.service_id = any((select w.service_ids from client_brand_workspaces w where w.id = 'd8598959-62d5-47f5-900c-ba73c1b840e5'))
 where not exists (select 1 from core_keyword_lists l where l.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and l.brand_workspace_id = 'd8598959-62d5-47f5-900c-ba73c1b840e5')
 having count(*) > 0;
 
@@ -281,5 +287,6 @@ from (values
 ) v(existing_id, keyword)
 join keywords k on k.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and k.is_active
   and (k.id = v.existing_id::uuid or (v.existing_id is null and lower(k.keyword) = lower(v.keyword)))
+  and k.service_id = any((select w.service_ids from client_brand_workspaces w where w.id = '9058fbd1-9177-4436-a879-1ffcb28fc26b'))
 where not exists (select 1 from core_keyword_lists l where l.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and l.brand_workspace_id = '9058fbd1-9177-4436-a879-1ffcb28fc26b')
 having count(*) > 0;

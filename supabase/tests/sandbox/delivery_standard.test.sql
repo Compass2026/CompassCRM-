@@ -2,6 +2,14 @@
 -- everything is rolled back. Fixtures are written with triggers off (they are
 -- not under test); the standard's own guard is exercised with triggers on.
 begin;
+-- The strict core-keyword rule (20261027160000): no sandbox exemption for this
+-- suite's clients, and the admin-only guard on exemptions is on.
+do $$ begin
+  if exists (select 1 from pg_trigger where tgname = 'sandbox_core_exempt_new_client') then
+    execute 'alter table clients disable trigger sandbox_core_exempt_new_client';
+  end if;
+  execute 'alter table core_keyword_exemptions enable trigger core_keyword_exemptions_guard';
+end $$;
 create schema ds_test;
 create function ds_test.ok(label text, cond boolean) returns void language plpgsql as $$
 begin if not coalesce(cond, false) then raise exception 'FAILED %', label; end if; raise notice 'ok %', label; end $$;
