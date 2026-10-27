@@ -925,6 +925,42 @@ and the per-site survey in `docs/website-updates.md`.
   Since Sept 20 the side-branch name for a build parked next to someone
   else's site is `compass/foundation-build`.
 
+## Weekly Facebook and Business Profile drafts (Oct 27 2026)
+
+Migration `20261027160000_weekly_social_slots.sql` (sandbox suite
+`weekly_social_slots.test.sql`). The monthly delivery standard plans
+8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
+
+- **Wednesday beat** (`create_weekly_blog_tasks`, unchanged cron): besides
+  the blog slots, `queue_standard_social_tasks()` opens one CLAUDE task
+  keyed `social_slot:<plan item>` per standard Facebook / GBP slot dated
+  this week that `social_slot_readiness()` calls ready, and fires the worker
+  once per client. A unique index makes a second task per slot impossible.
+  Forward only: slots before this week are never queued.
+- **Ready** = client active or launching, slot not held / linked / queued,
+  brand approved (the slot's brand site for multi-brand clients, else the
+  board), destination bound through the publisher (Facebook: the site's own
+  Page, never a sister brand's; GBP: zernio transport and exactly one
+  verified location, shared by every brand of the client), and an active
+  keyword with a recorded intent, an approved service and an owner page.
+  Anything else is skipped with the first reason, logged in
+  `delivery_queue_log` (team read-only).
+- **Worker:** `social_slot_claim` (the binding one-hour claim, same door
+  as `authority_draft_claim`) → `post-drafter` brief / check / submit →
+  `social_slot_link`, which accepts only the governed in-review draft
+  written for that task at the slot's destination and brand, fills the
+  slot's keyword / service / intent / owner page and closes the task. The
+  skill's "Weekly social slot" playbook.
+- **Launching clients:** readiness, not lifecycle. A launching client
+  whose brand is approved now gets its standard blog tasks (from this week
+  on, `queue_standard_blog_tasks_from`, so no backlog) and its social
+  tasks. Lifecycle and publishing are untouched: drafts wait for review,
+  and the publisher still needs Tom's approval, the account switch and the
+  pilot list.
+- **BHG:** three brand sites share one GBP location; each site's GBP slots
+  are queued, and a task whose location has other open slots that day
+  tells the worker to choose a different service and topic.
+
 ## Reporting worker (Sept 13 2026)
 
 **Nine-area scorecard update (PR #50, app not deployed; 0041 applied Sept 23 as `20260923015843`):** see

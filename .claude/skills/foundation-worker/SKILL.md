@@ -305,9 +305,28 @@ select c.name, c.id as client_id, t.id as task_id, t.due_date, s.content_paths, 
 from tasks t
 join clients c on c.id = t.client_id
 left join sites s on s.client_id = c.id
-where t.key = 'blog_post' and t.status <> 'done' and c.status = 'active'
+where t.key = 'blog_post' and t.status <> 'done' and c.status in ('active', 'launching')
   -- a draft already written (in review, rejected, …) waits for a person
   and not exists (select 1 from content_drafts d where d.source_task_id = t.id and d.status <> 'requested')
+order by t.due_date, c.name;
+```
+
+  A launching client's task exists only when its brand is approved
+  (`create_weekly_blog_tasks`, 20261027160000); work it like an active
+  client's. Lifecycle is not yours to change.
+
+- **Weekly social slot** — an open task keyed `social_slot:<plan item id>`
+  (20261027160000): the Wednesday beat queued a ready Facebook or Business
+  Profile slot of the monthly delivery standard (brand approved, destination
+  bound and verified, a usable keyword). The fire's reason starts `Weekly
+  drafts`.
+
+```sql
+select c.name, c.id as client_id, t.id as task_id, t.status, t.due_date, t.notes,
+       substring(t.key from 13)::uuid as plan_item_id
+from tasks t join clients c on c.id = t.client_id
+where t.key like 'social\_slot:%' and t.status in ('open', 'in_progress')
+  and c.status in ('active', 'launching')
 order by t.due_date, c.name;
 ```
 
@@ -340,9 +359,11 @@ order by t.created_at;
 ```
 
 Order within a client: Foundation → Website → SEO → Reporting → Website
-updates → Blog post → Authority draft request → Content draft request. A
-payload naming "Website updates", "Weekly blog post", "Authority draft
-request" or "Content draft request" points at those units.
+updates → Blog post → Weekly social slot → Authority draft request → Content
+draft request. A payload naming "Website updates", "Weekly blog post",
+"Weekly drafts", "Authority draft request" or "Content draft request" points
+at those units. A `Weekly drafts` fire may carry several social slot tasks
+for the client: work them all in that run, one after another.
 
 Runs are started by the CRM (`worker_fires` records why — a client created, a
 stage completed, Website activated, a stage reopened) and by a daily sweep.
@@ -1831,13 +1852,73 @@ the brand voice (`get_brand_profile`), sourced facts only.
 
 One post, then stop. The next task arrives next Wednesday.
 
+### Weekly social slot (PB7, weekly — the `social_slot:<plan item>` task)
+
+The monthly delivery standard plans 8 Facebook and 8 Business Profile posts
+per site. Every Wednesday `create_weekly_blog_tasks()` queues one task per
+slot dated this week that `social_slot_readiness()` calls ready: the brand
+(board, or the slot's brand site) is approved, the destination is bound and
+verified through the publisher, and a usable keyword exists. Slots that are
+not ready are skipped with the reason in `delivery_queue_log`; you never
+see them. Each task is one post. Work every open task of the client in the
+run, one after another.
+
+1. **Claim:** `select social_slot_claim('<task id>', 'worker-routine');`.
+   `claimed: false` (`claimed_by_other`: another session is drafting this
+   slot; `task_not_open`) → skip this task and report it. The claim lasts an
+   hour; claim again with the same label to refresh it.
+2. **Read the slot and its destination.** The task's notes carry
+   `plan_item:<id> channel:<facebook|google_business> account:<social account id>`.
+   `select * from content_plan_items where id = '<plan item>'`; recheck
+   `select * from social_slot_readiness('<client>', '<planned_date>', '<planned_date>') where plan_item_id = '<plan item>'`
+   — anything but `ready` or `Already queued.` → set the task `blocked` with
+   that reason as its note and go to the next task.
+3. **Pick the keyword and service** for the slot's brand (`brand_workspace_id`
+   → its `service_ids`; the client's otherwise): an active keyword with a
+   recorded `intent`, an `approved` service and an owner page, preferring P1/P2
+   money keywords, then Search Console impressions, then volume. Write at the
+   keyword's **recorded** intent; never relabel it. Avoid a service and intent
+   that already has an open or approved post on this channel this month
+   (`social_posts` with `review_status in ('in_review','approved')`). When the
+   notes say the Business Profile location has other open slots on the same
+   day (BHG: three brand sites, one location), choose a different service and
+   topic from those slots' drafts.
+4. **Draft through `post-drafter`** exactly as the *AI Drafter* playbook
+   below (brief → write → check → submit, at most three submits per brief),
+   with `"claimant": "worker-routine"` and `"runtime": "claude-worker-skill"`.
+   The target:
+   - Facebook: `{"channel": "facebook", "postType": "standard", "intent":
+     "<keyword intent>", "serviceId", "keywordId", "socialAccountId":
+     "<account from the notes>", "assetIds": []}`. No button, no URL, no
+     hashtags.
+   - Business Profile: `{"channel": "google_business", "postType":
+     "standard", "intent", "serviceId", "keywordId", "ctaType":
+     "LEARN_MORE", "ctaUrl": "<the keyword's or service's owner page>",
+     "assetIds": []}`. The location comes from the client's binding; never
+     name one.
+   Usable claims only, brand voice from the brief. A Facebook post and a
+   Business Profile post for the same week are different copy.
+5. **Link:** `select social_slot_link('<task id>', '<post_id>', 'worker-routine');`
+   It checks the post is yours for this slot (client, channel, destination,
+   brand, in review, written after the task) and fills the slot's keyword,
+   service, intent and owner page, then closes the task. A refusal →
+   leave the post in review, set the task `blocked` with the refusal, and
+   report both ids.
+6. **Report:** client, slot, channel, destination, keyword, `post_id`,
+   `run_id`, `review_task_id`. Images are a separate step (Brand › Creative
+   use, or `content_stage_media` / `content_revise` in Executive OS); the
+   post waits in review for a person either way.
+
+**Never:** approve, schedule or publish; switch a publisher or pilot on;
+clear a hold; draft a slot whose task you did not claim; draft a slot dated
+before this week; use another brand's Page or another client's location.
+
 ### AI Drafter — one Business Profile post (drafter v1)
 
-Only when a person asks for one by name (client, service, intent, keyword,
-button). Never on your own initiative and never as a batch: automatic
-drafting is not built, and when it is it will follow the agreement (the
-`gbp` feature and room in `gbp_posts`, from `client_entitlements_for` /
-`client_quota_usage`), never billing. You are the model
+When a person asks for one by name (client, service, intent, keyword,
+button), or for a queued *Weekly social slot* task above (which also drafts
+Facebook posts, through the same brief / check / submit). Never on your own
+initiative and never as a batch outside those tasks. You are the model
 adapter; the `post-drafter` Edge Function owns the brief, the linter and the
 write. The CRM is still your only channel, and SQL is never the write path.
 
@@ -1889,7 +1970,7 @@ after `stale_brief`) starts a new count.
 **Never:** insert or edit `social_posts`, `post_claims`, `post_assets` or
 `drafter_runs` by SQL; edit the post after submit; approve, reject,
 schedule or publish it (no function mode does that, and you never call the
-publisher); draft for any channel but `google_business`; cite a claim that
+publisher); draft for any channel but `google_business` (or `facebook` for a Weekly social slot task); cite a claim that
 is not in the brief; retry past three.
 
 **Report:** client, target, `brief_hash`, attempts used, and the answer —

@@ -288,6 +288,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edits.test.
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_standard.test.sql"
+# Weekly Facebook / GBP slots: readiness reasons, forward-only queue, one task
+# per slot, binding claim, governed link, launching readiness (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_social_slots.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
 
 # Map-tracking-only clients skip every onboarding trigger; full clients keep them.
