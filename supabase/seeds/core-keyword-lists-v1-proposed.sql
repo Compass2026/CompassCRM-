@@ -1,4 +1,4 @@
--- PROVISIONAL — NOT APPLIED. Run only after migration 20261027160000 is
+-- PROVISIONAL — NOT APPLIED. Run only after migration 20261027191343 is
 -- reviewed, accepted and applied (PR #192).
 --
 -- Proposes core keyword list v1 for every active or launching client. The

@@ -1,4 +1,4 @@
--- PROVISIONAL — NOT APPLIED. Run only after migration 20261027160000 is
+-- PROVISIONAL — NOT APPLIED. Run only after migration 20261027191343 is
 -- reviewed, accepted and applied (PR #192), and after core-keyword-lists-v1-proposed.sql.
 --
 -- BHG Safety Partners: one core keyword list PROPOSAL per site (Tom, Oct 27

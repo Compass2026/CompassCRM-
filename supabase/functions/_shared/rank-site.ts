@@ -4,7 +4,7 @@
 // rows must name the same host. A multi-brand client (BHG: three brand
 // sites) measures each keyword against the brand site that owns its service
 // — the same ownership core keyword lists use (client_brand_workspaces.
-// service_ids, migration 20261027160000). Nothing is guessed: a keyword
+// service_ids, migration 20261027191343). Nothing is guessed: a keyword
 // whose service belongs to no brand site, or to several, or a client whose
 // records name different hosts, is a problem to show, never "the first
 // site". Mirrored in SQL by public.keyword_site_hosts().

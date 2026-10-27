@@ -132,7 +132,7 @@ begin
     r ->> 'kind' = 'verified' and (r ->> 'social_account_id')::uuid = zg.id('ga')
     and (select count(*) from social_accounts where client_id = '00000000-0000-4000-b000-00000000000a' and platform = 'google_business') = 1, r::text);
 
-  -- Several locations per client are allowed (20261027150000, covered in
+  -- Several locations per client are allowed (20261027190935, covered in
   -- gbp_location_per_post.test.sql); a location never belongs to two clients.
   e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b', 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/1234567890', 'B', 'B', '{}')$q$);
   perform zg.ok('B6 client A''s location can never be bound for another client', e like '23505:%another client%', e);

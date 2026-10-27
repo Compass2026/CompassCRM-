@@ -1,5 +1,5 @@
 -- Sandbox harness only (never a migration). Suites written before the core
--- keyword gates (20261027160000) test their own behaviour with fictional
+-- keyword gates (20261027191343) test their own behaviour with fictional
 -- clients that have no core keyword list. They run with the recorded
 -- exception (core_keyword_exemptions), granted here for every existing client
 -- and, through a sandbox trigger, every client a suite creates. The admin-only

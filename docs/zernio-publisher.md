@@ -438,7 +438,7 @@ The client's `social_accounts` row for `google_business`:
 
 Rules:
 - **Several locations per client, each post naming its own** (since
-  `20261027150000`; it was one location per client before). A location is
+  `20261027190935`; it was one location per client before). A location is
   bound to one Compass row, so it belongs to one client. One Zernio
   `googlebusiness` account may serve several locations, because every Zernio
   request pins its location. There is no fan-out: a post goes only to the
@@ -544,7 +544,7 @@ connect, edit, delete or webhook call.
 Migration `20261011050000_zernio_gbp_publisher.sql` (additive):
 - the binding check also allows `google_business` with `locations/<id>`;
 - `social_accounts_one_gbp_binding`, a unique index (one bound location per
-  client). Replaced in `20261027150000` by `social_accounts_gbp_location_binding`
+  client). Replaced in `20261027190935` by `social_accounts_gbp_location_binding`
   (one Compass row per location);
 - `publisher_bind_account` accepts `google_business` rows (Facebook unchanged);
 - `publisher_bind_gbp_location` (service role only);
@@ -640,7 +640,7 @@ Steps:
 ## Several locations per client (Oct 15 2026)
 
 Logic Solar has a verified Wichita profile and an Overland Park profile that
-is not connected yet. Migration `20261027150000_gbp_location_per_post.sql`
+is not connected yet. Migration `20261027190935_gbp_location_per_post.sql`
 makes the Business Profile destination explicit per post.
 
 **Binding.**

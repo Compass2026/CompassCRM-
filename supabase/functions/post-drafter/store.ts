@@ -77,7 +77,7 @@ export function createStore(supabase: Client) {
     },
 
     // The client's Facebook Pages and Business Profile locations (a brief
-    // names its destination; 20261027150000). Read-only.
+    // names its destination; 20261027190935). Read-only.
     async socialAccounts(clientId: string): Promise<SocialAccountRow[]> {
       const { data, error } = await supabase.from("social_accounts")
         .select("id, platform, external_account_id, display_name, publish_provider, publish_page_id, publish_verified_at")

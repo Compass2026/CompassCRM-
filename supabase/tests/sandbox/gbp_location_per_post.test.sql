@@ -1,4 +1,4 @@
--- 20261027150000: several Business Profile locations per client, each post and
+-- 20261027190935: several Business Profile locations per client, each post and
 -- slot naming its own. Fictional clients only (removed at the end); run after
 -- drafter_gbp_destination.test.sql (uses its fd helpers).
 \set team '00000000-0000-4000-a000-000000000001'

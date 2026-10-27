@@ -111,7 +111,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
   // Business Profile: any bound Zernio location of the client decides the
   // route with the approval's named location — Zernio or the direct path,
   // never both (gbp.ts gbpRoute). A client may have several locations
-  // (20261027150000); each post names its own.
+  // (20261027190935); each post names its own.
   const [{ data: clientGbpLocations }, { data: clientTransport }] = isGbp
     ? await Promise.all([
         supabase.from("social_accounts").select("id, display_name, external_account_id").eq("client_id", clientId).eq("platform", "google_business")

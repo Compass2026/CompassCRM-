@@ -1,5 +1,5 @@
 // Mirror of public.url_host / public.organic_rank_state (migration
-// 20261021163048) and public.keyword_organic_state (20261027160000) for
+// 20261021163048) and public.keyword_organic_state (20261027191343) for
 // pages that read rank_snapshots directly. Keep the two
 // in step: tests/organic-rank.test.mjs pins the same truth table.
 export type OrganicRankState = "website" | "third_party" | "unverified" | "not_found";

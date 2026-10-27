@@ -94,7 +94,7 @@ export default async function SettingsPage({
   const gbpRows: ZernioGbpRow[] = (clients ?? [])
     .filter((c) => publisher.clients.includes(c.id) || (gbpLocations ?? []).some((l) => l.client_id === c.id)
       || (gbpTransports ?? []).some((t) => t.client_id === c.id && t.gbp_transport === "zernio"))
-    // One row per bound location (a client may have several; 20261027150000),
+    // One row per bound location (a client may have several; 20261027190935),
     // plus a row to bind another location.
     .flatMap((c) => {
       const transport: "google" | "zernio" = (gbpTransports ?? []).find((t) => t.client_id === c.id)?.gbp_transport === "zernio" ? "zernio" : "google";

@@ -1,4 +1,4 @@
--- 20261027160000: weekly Facebook / Business Profile drafting from standard
+-- 20261027191343: weekly Facebook / Business Profile drafting from standard
 -- slots, grounded in each client's approved core keyword list. Fictional
 -- clients only; everything is rolled back.
 --   A  active, approved board, Facebook + GBP bound, core list [kA, kA3]; kA2
@@ -14,7 +14,7 @@
 -- Worker runs follow the skill's contract: claimant 'worker-routine:<run id>',
 -- one id per run, reused on that run's retries.
 begin;
--- The strict core-keyword rule (20261027160000): no sandbox exemption for this
+-- The strict core-keyword rule (20261027191343): no sandbox exemption for this
 -- suite's clients, and the admin-only guard on exemptions is on.
 do $$ begin
   if exists (select 1 from pg_trigger where tgname = 'sandbox_core_exempt_new_client') then

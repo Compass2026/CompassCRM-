@@ -933,7 +933,7 @@ and the per-site survey in `docs/website-updates.md`.
 
 ## Weekly Facebook and Business Profile drafts (Oct 27 2026)
 
-Migration `20261027160000_weekly_social_slots.sql` (sandbox suite
+Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
 `weekly_social_slots.test.sql`). The monthly delivery standard plans
 8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
 

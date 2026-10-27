@@ -10,7 +10,7 @@ type Keyword = {
 };
 
 // The database approves a list only with exactly this many valid keywords
-// (20261027160000, core_list_incomplete); the card mirrors the rule so an
+// (20261027191343, core_list_incomplete); the card mirrors the rule so an
 // incomplete proposal is never offered for approval.
 const CORE_LIST_SIZE = 50;
 
@@ -71,7 +71,7 @@ function CoreList({ clientId, byId, list, label, siteServices }: {
   );
 }
 
-// The client's core keyword lists (20261027160000): one per site program —
+// The client's core keyword lists (20261027191343): one per site program —
 // the client for a single-site client, each brand site for a multi-brand one
 // (BHG: Safety, Forklift, Heavy Equipment). Each site's approved version is
 // what its weekly blog, Facebook and Business Profile drafts must trace to;

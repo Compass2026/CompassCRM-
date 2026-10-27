@@ -312,11 +312,11 @@ order by t.due_date, c.name;
 ```
 
   A launching client's task exists only when its brand is approved
-  (`create_weekly_blog_tasks`, 20261027160000); work it like an active
+  (`create_weekly_blog_tasks`, 20261027191343); work it like an active
   client's. Lifecycle is not yours to change.
 
 - **Weekly social slot** — an open task keyed `social_slot:<plan item id>`
-  (20261027160000): the Wednesday beat queued a ready Facebook or Business
+  (20261027191343): the Wednesday beat queued a ready Facebook or Business
   Profile slot of the monthly delivery standard (brand approved, destination
   bound and verified, a usable keyword). The fire's reason starts `Weekly
   drafts`.

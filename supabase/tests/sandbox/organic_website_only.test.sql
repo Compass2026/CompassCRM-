@@ -6,7 +6,7 @@ begin;
 -- on client B's website (another client is never "us"); A's own website
 -- written with www and in upper case; and a DataForSEO row with a position
 -- but no URL. A stays a single-site client here; the multi-brand rule
--- (20261027160000: each keyword judged against its own brand site) is
+-- (20261027191343: each keyword judged against its own brand site) is
 -- checked at the end.
 insert into keywords(id,client_id,keyword,is_tracked,priority) values
  ('00000000-0000-4000-d000-0000000000f1','00000000-0000-4000-b000-00000000000a','a third party',true,'p1'),
@@ -106,7 +106,7 @@ begin
   raise exception 'C3 stored history was changed'; end if;
 end $$;
 
--- Multi-brand (20261027160000): once A has brand sites, each keyword is
+-- Multi-brand (20261027191343): once A has brand sites, each keyword is
 -- judged against the brand site owning its service. A sister brand's page is
 -- third party; a keyword no brand site owns, and an older row not judged
 -- against the keyword's own site, prove nothing (unverified).

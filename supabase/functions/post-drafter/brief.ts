@@ -179,7 +179,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   } else {
     // A Business Profile draft goes to one of the client's verified locations:
     // the one it names, or the only one. With several, it must name one
-    // (drafter_write enforces the same; 20261027150000).
+    // (drafter_write enforces the same; 20261027190935).
     const locations = (extra.socialAccounts ?? []).filter((a) => a.platform === "google_business"
       && a.publish_provider === "zernio" && !!a.publish_page_id && !!a.publish_verified_at);
     if (target.socialAccountId) {

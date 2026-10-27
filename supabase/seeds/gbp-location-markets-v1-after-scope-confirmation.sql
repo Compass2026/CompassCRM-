@@ -3,7 +3,7 @@
 -- core_market_problem(). Do NOT run it with the keyword proposal seeds.
 -- Run it only after Tom confirms each location's market scope below, in the
 -- same session as:  select set_config('compass.market_scope_confirmed', '<who, when>', false);
--- Requires migration 20261027160000 (PR #192).
+-- Requires migration 20261027191343 (PR #192).
 --
 -- Business Profile location markets: which city keywords may be posted to
 -- which verified location. As of Oct 27 2026 every active / launching client

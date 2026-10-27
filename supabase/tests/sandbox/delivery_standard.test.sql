@@ -2,7 +2,7 @@
 -- everything is rolled back. Fixtures are written with triggers off (they are
 -- not under test); the standard's own guard is exercised with triggers on.
 begin;
--- The strict core-keyword rule (20261027160000): no sandbox exemption for this
+-- The strict core-keyword rule (20261027191343): no sandbox exemption for this
 -- suite's clients, and the admin-only guard on exemptions is on.
 do $$ begin
   if exists (select 1 from pg_trigger where tgname = 'sandbox_core_exempt_new_client') then
@@ -238,7 +238,7 @@ insert into client_brand_workspaces (id, client_id, slug, name, website_url, pho
    array['00000000-0000-4000-d501-00000000000e']::uuid[], '00000000-0000-4000-d507-000000000001'),
   ('00000000-0000-4000-d504-00000000000e', '00000000-0000-4000-d500-00000000000d', 'p2', 'P2', 'https://p2.example.test', '5555555555',
    array['00000000-0000-4000-d501-00000000000f']::uuid[], null);
--- 20261027160000: weekly drafts trace to an approved core keyword list.
+-- 20261027191343: weekly drafts trace to an approved core keyword list.
 -- P is multi-brand: one approved list per brand site (P1 owns service e, P2 owns f).
 insert into core_keyword_lists (client_id, brand_workspace_id, version, status, keyword_ids, source_ref, approved_by, approved_at) values
   ('00000000-0000-4000-d500-00000000000d', '00000000-0000-4000-d504-00000000000d', 1, 'approved',
@@ -309,7 +309,7 @@ begin
     (select brand_workspace_id from content_plan_items where id = moved) = '00000000-0000-4000-d504-00000000000e');
 end $$;
 
--- 20261027150000: a second verified Business Profile location is a
+-- 20261027190935: a second verified Business Profile location is a
 -- destination chosen per slot, never "none"; targets and slots are unchanged
 -- (binding a location never adds GBP work).
 do $$
