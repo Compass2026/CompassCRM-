@@ -1,8 +1,8 @@
 -- 20261027160000: weekly Facebook / Business Profile drafting from standard
 -- slots, grounded in each client's approved core keyword list. Fictional
 -- clients only; everything is rolled back.
---   A  active, approved board, Facebook + GBP bound, core list [kA]; kA2 is a
---      valid keyword outside the core list
+--   A  active, approved board, Facebook + GBP bound, core list [kA, kA3]; kA2
+--      is a valid keyword outside the core list
 --   L  launching, approved board, Facebook bound            (readiness, not lifecycle)
 --   D  launching, draft board, Facebook bound               (skipped: brand)
 --   K  active, approved board, Facebook bound, core keyword without intent
@@ -43,6 +43,7 @@ insert into brand_boards (client_id, status, approved_on) values
 insert into services (id, client_id, name, status, page_url) values
   (ws_test.id('sA'), ws_test.id('A'), 'Service A', 'approved', 'https://a.example.test/service'),
   (ws_test.id('sA2'), ws_test.id('A'), 'Service A2', 'approved', 'https://a.example.test/service-2'),
+  (ws_test.id('sA3'), ws_test.id('A'), 'Service A3', 'approved', 'https://a.example.test/service-3'),
   (ws_test.id('sL2'), ws_test.id('L'), 'Service L off-site', 'approved', 'https://booking.example.test/l'),
   (ws_test.id('sL'), ws_test.id('L'), 'Service L', 'approved', 'https://l.example.test/service'),
   (ws_test.id('sD'), ws_test.id('D'), 'Service D', 'approved', 'https://d.example.test/service'),
@@ -55,6 +56,7 @@ insert into services (id, client_id, name, status, page_url) values
 insert into keywords (id, client_id, keyword, service_id, is_active, intent, target_url) values
   (ws_test.id('kA'), ws_test.id('A'), 'kw a', ws_test.id('sA'), true, 'commercial', 'https://a.example.test/service'),
   (ws_test.id('kA2'), ws_test.id('A'), 'kw a2 outside core', ws_test.id('sA2'), true, 'commercial', null),
+  (ws_test.id('kA3'), ws_test.id('A'), 'kw a3 second core', ws_test.id('sA3'), true, 'informational', null),
   (ws_test.id('kL'), ws_test.id('L'), 'kw l', ws_test.id('sL'), true, 'informational', null),
   (ws_test.id('kL2'), ws_test.id('L'), 'kw l2', ws_test.id('sL2'), true, 'commercial', null),
   (ws_test.id('kD'), ws_test.id('D'), 'kw d', ws_test.id('sD'), true, 'commercial', null),
@@ -67,6 +69,7 @@ insert into keywords (id, client_id, keyword, service_id, is_active, intent, tar
 insert into page_groups (client_id, name, page_type, target_url, status, supporting_keyword_ids) values
   (ws_test.id('A'), 'A page', 'service', 'https://a.example.test/service/', 'approved', '{}'),
   (ws_test.id('A'), 'A2 page', 'service', 'https://a.example.test/service-2', 'approved', '{}'),
+  (ws_test.id('A'), 'A3 page', 'service', 'https://a.example.test/service-3', 'approved', '{}'),
   (ws_test.id('L'), 'L page', 'service', 'https://l.example.test/service', 'approved', '{}'),
   (ws_test.id('L'), 'L off-site page', 'service', 'https://booking.example.test/l', 'approved', '{}'),
   (ws_test.id('D'), 'D page', 'service', 'https://d.example.test/service', 'approved', '{}'),
@@ -97,7 +100,7 @@ insert into client_brand_workspaces (id, client_id, slug, name, website_url, pho
 -- Approved core lists as a teammate would leave them (the guard is tested below).
 insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
 select ws_test.id('list.' || c), ws_test.id(c), 1, 'approved', ids, 'test fixture', (select id from team_members limit 1), now()
-from (values ('A', array[ws_test.id('kA')]), ('L', array[ws_test.id('kL')]), ('D', array[ws_test.id('kD')]),
+from (values ('A', array[ws_test.id('kA'), ws_test.id('kA3')]), ('L', array[ws_test.id('kL')]), ('D', array[ws_test.id('kD')]),
              ('K', array[ws_test.id('kK')]), ('M', array[ws_test.id('kM1'), ws_test.id('kM2')]), ('O', array[ws_test.id('kO1')])) v(c, ids);
 insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref)
 values (ws_test.id('list.P'), ws_test.id('P'), 1, 'proposed', array[ws_test.id('kP')], 'test fixture: keywords.is_tracked');
@@ -337,6 +340,65 @@ begin
     ws_test.reason('A', 'A.fb') = 'Already linked to a post.' and queue_standard_social_tasks(ws_test.id('A'), ws_test.w() + 6) = 0);
 end $$;
 
+-- ── The post's own keyword is judged at link, never vouched for by another ──
+select ws_test.slot('A.fb3', 'A', 'facebook_posts', ws_test.w() + 5);
+select queue_standard_social_tasks(ws_test.id('A'), ws_test.w() + 6);
+select queue_standard_social_tasks(ws_test.id('O'), ws_test.w() + 6);
+select set_config('ws_test.t3', (select id::text from tasks where key = 'social_slot:' || ws_test.id('A.fb3')), true);
+select set_config('ws_test.to', (select id::text from tasks where key = 'social_slot:' || ws_test.id('O.fb')), true);
+set local session_replication_role = replica;
+insert into social_posts (id, client_id, platform, search_intent, service_id, keyword_id, review_status, publish_status, created_at,
+                          drafter_run_id, social_account_id, author_kind, copy) values
+  (ws_test.id('p.e1'), ws_test.id('A'), 'facebook', 'commercial', ws_test.id('sA'), ws_test.id('kA'), 'in_review', 'not_scheduled',
+   now() + interval '1 second', gen_random_uuid(), ws_test.id('fbA'), 'worker', 'copy e1'),
+  (ws_test.id('p.e5'), ws_test.id('A'), 'facebook', 'commercial', ws_test.id('sA3'), ws_test.id('kA'), 'in_review', 'not_scheduled',
+   now() + interval '1 second', gen_random_uuid(), ws_test.id('fbA'), 'worker', 'copy e5 wrong service'),
+  (ws_test.id('p.o2'), ws_test.id('O'), 'facebook', 'informational', ws_test.id('sO2'), ws_test.id('kO2'), 'in_review', 'not_scheduled',
+   now() + interval '1 second', gen_random_uuid(), ws_test.id('fbO'), 'worker', 'copy long tail');
+set local session_replication_role = origin;
+do $$
+declare t uuid := current_setting('ws_test.t3')::uuid; o uuid := current_setting('ws_test.to')::uuid; ra text := current_setting('ws_test.ra'); r jsonb;
+begin
+  perform ws_test.ok('E0 claimed: two core keywords (kA, kA3) are usable for the slot',
+    (social_slot_claim(t, ra)->>'claimed')::boolean and (social_slot_claim(o, ra)->>'claimed')::boolean);
+  perform ws_test.ok('E1 a post whose service is not its keyword''s service is refused',
+    ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, t, ws_test.id('p.e5'), ra)) like '22023: keyword_not_eligible: the post''s service is not the keyword''s service%');
+  perform set_config('session_replication_role', 'replica', true);
+  update keywords set is_active = false where id = ws_test.id('kA');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('E2 the post''s keyword is deactivated while kA3 stays usable: the slot is ready, the stale post is refused, nothing recorded',
+    ws_test.reason('A', 'A.fb3') = 'READY'
+    and ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, t, ws_test.id('p.e1'), ra)) like '22023: keyword_not_eligible: the keyword is inactive%'
+    and not exists (select 1 from core_keyword_links where social_post_id = ws_test.id('p.e1')));
+  perform set_config('session_replication_role', 'replica', true);
+  update keywords set is_active = true where id = ws_test.id('kA');
+  update services set status = 'proposed' where id = ws_test.id('sA');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('E3 the post''s service loses its approval while kA3 stays usable: the post is refused',
+    ws_test.reason('A', 'A.fb3') = 'READY'
+    and ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, t, ws_test.id('p.e1'), ra)) like '22023: keyword_not_eligible: the keyword''s service is not approved%');
+  perform set_config('session_replication_role', 'replica', true);
+  update services set status = 'approved' where id = ws_test.id('sA');
+  update keywords set is_active = false where id = ws_test.id('kO1');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('E4 a supporting term whose core parent is deactivated no longer traces to the list: refused, nothing recorded',
+    not exists (select 1 from core_keyword_grounding(ws_test.id('O'), ws_test.id('kO2')))
+    and ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, o, ws_test.id('p.o2'), ra)) like '22023: %'
+    and not exists (select 1 from core_keyword_links where social_post_id = ws_test.id('p.o2')));
+  perform set_config('session_replication_role', 'replica', true);
+  update keywords set is_active = true where id = ws_test.id('kO1');
+  perform set_config('session_replication_role', 'origin', true);
+  r := social_slot_link(o, ws_test.id('p.o2'), ra);
+  perform ws_test.ok('E5 parent restored: the supporting term links, evidence naming its core parent',
+    (r->>'linked')::boolean
+    and exists (select 1 from core_keyword_links where social_post_id = ws_test.id('p.o2') and keyword_id = ws_test.id('kO2')
+                and core_keyword_id = ws_test.id('kO1')));
+  r := social_slot_link(t, ws_test.id('p.e1'), ra);
+  perform ws_test.ok('E6 unchanged selected keyword: the post links and the evidence names kA',
+    (r->>'linked')::boolean
+    and exists (select 1 from core_keyword_links where social_post_id = ws_test.id('p.e1') and core_keyword_id = ws_test.id('kA')));
+end $$;
+
 -- ── Queued, then revoked: eligibility is re-checked at claim and link ────────
 select ws_test.slot('A.fb2', 'A', 'facebook_posts', ws_test.w() + 4);
 select queue_standard_social_tasks(ws_test.id('A'), ws_test.w() + 6);
@@ -374,8 +436,10 @@ begin
   update core_keyword_lists set status = 'approved' where id = ws_test.id('list.A');
   update keywords set intent = null where id = ws_test.id('kA');
   perform set_config('session_replication_role', 'origin', true);
-  perform ws_test.ok('V4 the only core keyword loses its intent after queueing: the link is refused',
-    ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, t, ws_test.id('p.ok2'), ra)) like '22023: not_ready: No core keyword (v1)%');
+  perform ws_test.ok('V4 the post''s own core keyword loses its intent while another core keyword stays usable: the slot is still ready, the post is refused',
+    ws_test.reason('A', 'A.fb2') = 'READY'
+    and ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, t, ws_test.id('p.ok2'), ra)) like '22023: keyword_not_eligible: the keyword has no recorded intent%'
+    and not exists (select 1 from core_keyword_links where social_post_id = ws_test.id('p.ok2')));
   perform set_config('session_replication_role', 'replica', true);
   update keywords set intent = 'commercial' where id = ws_test.id('kA');
   update tasks set claimed_at = now() - interval '2 hours' where id = t;
@@ -428,7 +492,7 @@ begin
   update keywords set core_parent_keyword_id = null where id = ws_test.id('kO2');
   perform ws_test.ok('D1 an unattended worker run is refused for a keyword outside the core list, before anything is written',
     ws_test.msg(format('select drafter_write(%L::jsonb)', req)) like '23514: core_keyword_required%'
-    and not exists (select 1 from social_posts where client_id = ws_test.id('O')));
+    and not exists (select 1 from social_posts where client_id = ws_test.id('O') and copy = 'x'));
   perform ws_test.ok('D2 teammate and operator drafting are unchanged (no worker-routine token → no core gate)',
     ws_test.msg(format('select drafter_write(%L::jsonb)', req || jsonb_build_object('claimant', 'claude-operator:op123456'))) not like '%core_keyword_required%');
 end $$;

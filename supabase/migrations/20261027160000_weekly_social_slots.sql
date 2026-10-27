@@ -133,18 +133,69 @@ alter table keywords add constraint keywords_core_parent_fk
   foreign key (core_parent_keyword_id, client_id) references keywords(id, client_id);
 alter table keywords add constraint keywords_core_parent_not_self check (core_parent_keyword_id is distinct from id);
 
--- The approved list a keyword traces to: itself a member, or its named parent.
+-- The approved list an ACTIVE keyword traces to: itself a member, or its
+-- named parent when that parent is active and a member. Evidence already
+-- recorded in core_keyword_links is history and is never re-read through this.
 create function core_keyword_grounding(p_client_id uuid, p_keyword_id uuid)
 returns table (list_id uuid, list_version integer, core_keyword_id uuid)
 language sql stable security invoker set search_path = public, pg_temp as $$
-  select l.id, l.version, case when k.id = any(l.keyword_ids) then k.id else k.core_parent_keyword_id end
+  select l.id, l.version, case when k.id = any(l.keyword_ids) then k.id else pk.id end
   from core_keyword_lists l
-  join keywords k on k.client_id = l.client_id and k.id = p_keyword_id
+  join keywords k on k.client_id = l.client_id and k.id = p_keyword_id and k.is_active
+  left join keywords pk on pk.id = k.core_parent_keyword_id and pk.client_id = k.client_id and pk.is_active
   where l.client_id = p_client_id and l.status = 'approved'
-    and (k.id = any(l.keyword_ids) or k.core_parent_keyword_id = any(l.keyword_ids))
+    and (k.id = any(l.keyword_ids) or pk.id = any(l.keyword_ids))
 $$;
 revoke all on function core_keyword_grounding(uuid, uuid) from public, anon;
 grant execute on function core_keyword_grounding(uuid, uuid) to authenticated, service_role;
+
+-- Is THIS keyword (with this service, when a post names one) usable for a
+-- weekly draft of this site right now? null = yes, else the first reason:
+--   keyword_not_eligible: inactive / another client's, no recorded intent,
+--     the post's service is not the keyword's, the service is not approved,
+--     its owner page fails post-drafter's page gate (https, on the site's
+--     host — the brand site's for multi-brand clients — with an approved
+--     page group), or the service belongs to another brand site;
+--   core_keyword_required: it does not trace to the approved core list.
+-- Readiness asks it for every keyword; the link asks it for the post's own
+-- keyword and service, so another usable keyword never vouches for a post.
+create function core_keyword_eligibility(p_client_id uuid, p_brand_workspace_id uuid, p_keyword_id uuid, p_service_id uuid default null)
+returns text
+language plpgsql stable security invoker set search_path = public, pg_temp as $$
+declare k keywords; v services; site text; ws client_brand_workspaces; norm_page text;
+begin
+  select * into k from keywords where id = p_keyword_id and client_id = p_client_id;
+  if k.id is null or not k.is_active then return 'keyword_not_eligible: the keyword is inactive or not this client''s.'; end if;
+  if not exists (select 1 from core_keyword_grounding(p_client_id, p_keyword_id)) then
+    return 'core_keyword_required: the keyword is not in the approved core keyword list and names no active core parent.';
+  end if;
+  if k.intent is null then return 'keyword_not_eligible: the keyword has no recorded intent.'; end if;
+  if p_service_id is not null and p_service_id is distinct from k.service_id then
+    return 'keyword_not_eligible: the post''s service is not the keyword''s service.';
+  end if;
+  select * into v from services where id = k.service_id and client_id = p_client_id;
+  if v.id is null or v.status::text <> 'approved' then return 'keyword_not_eligible: the keyword''s service is not approved.'; end if;
+  if p_brand_workspace_id is not null then
+    select * into ws from client_brand_workspaces where id = p_brand_workspace_id and client_id = p_client_id;
+    if ws.id is null or not (v.id = any(ws.service_ids)) then
+      return 'keyword_not_eligible: the keyword''s service belongs to another brand site.';
+    end if;
+    site := ws.website_url;
+  else
+    select website_url into site from clients where id = p_client_id;
+  end if;
+  norm_page := lower(regexp_replace(regexp_replace(v.page_url, '^(https?://)www\.', '\1'), '/+$', ''));
+  if v.page_url is null or v.page_url !~ '^https://\S+$'
+     or lower(regexp_replace(substring(v.page_url from '^https?://([^/:?#]+)'), '^www\.', ''))
+        is distinct from lower(regexp_replace(substring(site from '^https?://([^/:?#]+)'), '^www\.', ''))
+     or not exists (select 1 from page_groups g where g.client_id = p_client_id and g.status = 'approved'
+                      and lower(regexp_replace(regexp_replace(g.target_url, '^(https?://)www\.', '\1'), '/+$', '')) = norm_page) then
+    return 'keyword_not_eligible: the service''s owner page is not on the site with an approved page group.';
+  end if;
+  return null;
+end $$;
+revoke all on function core_keyword_eligibility(uuid, uuid, uuid, uuid) from public, anon;
+grant execute on function core_keyword_eligibility(uuid, uuid, uuid, uuid) to authenticated, service_role;
 
 create table core_keyword_links (
   id bigint generated always as identity primary key,
@@ -300,16 +351,9 @@ language sql stable security invoker set search_path = public, pg_temp as $$
     when s.list_id is null then 'No approved core keyword list'
       || case when s.proposed_version is not null then ' (v' || s.proposed_version || ' proposed, awaiting approval).' else '.' end
     when not exists (
-      select 1 from keywords k join services v on v.id = k.service_id and v.client_id = k.client_id
-       where k.client_id = s.client_id and k.is_active and k.intent is not null and v.status = 'approved'
-         and (k.id = any(s.core_ids) or k.core_parent_keyword_id = any(s.core_ids))
-         and v.page_url ~ '^https://\S+$'
-         and lower(regexp_replace(substring(v.page_url from '^https?://([^/:?#]+)'), '^www\.', ''))
-             = lower(regexp_replace(substring(coalesce(s.ws_website, s.client_website) from '^https?://([^/:?#]+)'), '^www\.', ''))
-         and exists (select 1 from page_groups g where g.client_id = v.client_id and g.status = 'approved'
-                       and lower(regexp_replace(regexp_replace(g.target_url, '^(https?://)www\.', '\1'), '/+$', ''))
-                         = lower(regexp_replace(regexp_replace(v.page_url, '^(https?://)www\.', '\1'), '/+$', '')))
-         and (not s.multi or v.id = any(s.ws_services)))
+      select 1 from keywords k
+       where k.client_id = s.client_id and k.is_active
+         and core_keyword_eligibility(s.client_id, case when s.multi then s.brand_workspace_id end, k.id) is null)
       then 'No core keyword (v' || s.list_version || ') with an intent and an approved service whose owner page is on the site with an approved page group.'
   end as reason) r
   order by s.planned_date, s.id
@@ -445,7 +489,7 @@ language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   t tasks; i content_plan_items; p social_posts; r record; g jsonb;
   v_who text := btrim(coalesce(p_claimant, ''));
-  v_url text;
+  v_url text; v_problem text;
 begin
   select * into t from tasks where id = p_task_id for update;
   if t.id is null or t.key not like 'social\_slot:%' then
@@ -481,6 +525,12 @@ begin
   if i.brand_workspace_id is not null and not exists (
        select 1 from client_brand_workspaces w where w.id = i.brand_workspace_id and p.service_id = any(w.service_ids)) then
     raise exception 'The post''s service belongs to another brand site' using errcode = '22023';
+  end if;
+  -- The post's own keyword and service, judged now: another usable core
+  -- keyword never vouches for it.
+  v_problem := core_keyword_eligibility(t.client_id, i.brand_workspace_id, p.keyword_id, p.service_id);
+  if v_problem is not null then
+    raise exception '%', v_problem using errcode = '22023';
   end if;
   g := core_keyword_record(t.client_id, p.keyword_id, 'social_post', p.id, i.id);
   select coalesce(case when p.cta_url ~ '^https?://\S+$' then p.cta_url end,
@@ -676,7 +726,8 @@ begin
      or has_function_privilege('authenticated', 'public.queue_standard_social_tasks(uuid, date)', 'execute')
      or has_function_privilege('authenticated', 'public.core_keyword_record(uuid, uuid, text, uuid, uuid)', 'execute')
      or has_function_privilege('anon', 'public.social_slot_readiness(uuid, date, date)', 'execute')
-     or has_function_privilege('anon', 'public.core_keyword_grounding(uuid, uuid)', 'execute') then
+     or has_function_privilege('anon', 'public.core_keyword_grounding(uuid, uuid)', 'execute')
+     or has_function_privilege('anon', 'public.core_keyword_eligibility(uuid, uuid, uuid, uuid)', 'execute') then
     raise exception 'The social slot and core keyword doors are the worker''s; readiness and grounding are the team''s to read';
   end if;
   if has_table_privilege('authenticated', 'public.delivery_queue_log', 'insert')
