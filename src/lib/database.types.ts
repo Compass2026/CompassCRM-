@@ -5912,15 +5912,15 @@ export type Database = {
       }
       core_keyword_lists: {
         Row: {
-          approved_at: string | null; approved_by: string | null; client_id: string; id: string; keyword_ids: string[]
+          approved_at: string | null; approved_by: string | null; brand_workspace_id: string | null; client_id: string; id: string; keyword_ids: string[]
           proposed_at: string; source_ref: string; status: string; version: number
         }
         Insert: {
-          approved_at?: string | null; approved_by?: string | null; client_id: string; id?: string; keyword_ids: string[]
+          approved_at?: string | null; approved_by?: string | null; brand_workspace_id?: string | null; client_id: string; id?: string; keyword_ids: string[]
           proposed_at?: string; source_ref: string; status?: string; version?: number
         }
         Update: {
-          approved_at?: string | null; approved_by?: string | null; client_id?: string; id?: string; keyword_ids?: string[]
+          approved_at?: string | null; approved_by?: string | null; brand_workspace_id?: string | null; client_id?: string; id?: string; keyword_ids?: string[]
           proposed_at?: string; source_ref?: string; status?: string; version?: number
         }
         Relationships: []

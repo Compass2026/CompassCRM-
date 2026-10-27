@@ -101,7 +101,12 @@ insert into client_brand_workspaces (id, client_id, slug, name, website_url, pho
 insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
 select ws_test.id('list.' || c), ws_test.id(c), 1, 'approved', ids, 'test fixture', (select id from team_members limit 1), now()
 from (values ('A', array[ws_test.id('kA'), ws_test.id('kA3')]), ('L', array[ws_test.id('kL')]), ('D', array[ws_test.id('kD')]),
-             ('K', array[ws_test.id('kK')]), ('M', array[ws_test.id('kM1'), ws_test.id('kM2')]), ('O', array[ws_test.id('kO1')])) v(c, ids);
+             ('K', array[ws_test.id('kK')]), ('O', array[ws_test.id('kO1')])) v(c, ids);
+-- M is multi-brand: one list per site. M1's is approved; M2's starts approved
+-- too (R8/R9 test brand approval) and is revoked later for per-site isolation.
+insert into core_keyword_lists (id, client_id, brand_workspace_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
+values (ws_test.id('list.M1'), ws_test.id('M'), ws_test.id('M1'), 1, 'approved', array[ws_test.id('kM1')], 'test fixture', (select id from team_members limit 1), now()),
+       (ws_test.id('list.M2'), ws_test.id('M'), ws_test.id('M2'), 1, 'approved', array[ws_test.id('kM2')], 'test fixture', (select id from team_members limit 1), now());
 insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref)
 values (ws_test.id('list.P'), ws_test.id('P'), 1, 'proposed', array[ws_test.id('kP')], 'test fixture: keywords.is_tracked');
 set local session_replication_role = origin;
@@ -493,8 +498,12 @@ begin
   perform ws_test.ok('D1 an unattended worker run is refused for a keyword outside the core list, before anything is written',
     ws_test.msg(format('select drafter_write(%L::jsonb)', req)) like '23514: core_keyword_required%'
     and not exists (select 1 from social_posts where client_id = ws_test.id('O') and copy = 'x'));
-  perform ws_test.ok('D2 teammate and operator drafting are unchanged (no worker-routine token → no core gate)',
-    ws_test.msg(format('select drafter_write(%L::jsonb)', req || jsonb_build_object('claimant', 'claude-operator:op123456'))) not like '%core_keyword_required%');
+  perform ws_test.ok('D2 an operator draft on a site with an approved core list is held to it too',
+    ws_test.msg(format('select drafter_write(%L::jsonb)', req || jsonb_build_object('claimant', 'claude-operator:op123456'))) like '23514: core_keyword_required%');
+  perform ws_test.ok('D3 before a site''s list is approved, a person''s own drafting is unchanged (P: list only proposed)',
+    ws_test.msg(format('select drafter_write(%L::jsonb)', jsonb_build_object('client_id', ws_test.id('P'), 'copy', 'x', 'lint', jsonb_build_object('ok', true),
+      'claimant', 'claude-operator:op123456', 'brief', jsonb_build_object('client', jsonb_build_object('id', ws_test.id('P')),
+      'target', jsonb_build_object('channel', 'google_business', 'keyword', jsonb_build_object('id', ws_test.id('kP'))))))) not like '%core_keyword_required%');
 end $$;
 reset role;
 reset session authorization;
@@ -562,6 +571,122 @@ begin
 end $$;
 reset role;
 reset session authorization;
+
+-- ── Site programs: one list per brand site, approved independently ─────────
+do $$
+declare ra text := current_setting('ws_test.ra'); r jsonb; t uuid;
+begin
+  perform ws_test.ok('S1 a multi-brand client''s list names its site, and only that site''s keywords; a single-site list names none',
+    ws_test.err(format($q$insert into core_keyword_lists (client_id, keyword_ids, source_ref) values (%L, %L, 'x')$q$,
+      ws_test.id('M'), array[ws_test.id('kM1')])) = '23514'
+    and ws_test.err(format($q$insert into core_keyword_lists (client_id, brand_workspace_id, keyword_ids, source_ref) values (%L, %L, %L, 'x')$q$,
+      ws_test.id('M'), ws_test.id('M1'), array[ws_test.id('kM2')])) = '23514'
+    and ws_test.err(format($q$insert into core_keyword_lists (client_id, brand_workspace_id, keyword_ids, source_ref) values (%L, %L, %L, 'x')$q$,
+      ws_test.id('A'), ws_test.id('M1'), array[ws_test.id('kA')])) = '23514');
+  insert into core_keyword_lists (client_id, brand_workspace_id, keyword_ids, source_ref) values (ws_test.id('M'), ws_test.id('M1'), array[ws_test.id('kM1')], 'x');
+  perform ws_test.ok('S2 versions are per site: a new M1 proposal is M1 v2, M2 keeps its own v1',
+    (select max(version) from core_keyword_lists where brand_workspace_id = ws_test.id('M1')) = 2
+    and (select max(version) from core_keyword_lists where brand_workspace_id = ws_test.id('M2')) = 1);
+  perform ws_test.ok('S3 grounding is per site: a keyword grounds only in its own site''s list',
+    (select list_id from core_keyword_grounding(ws_test.id('M'), ws_test.id('kM1'))) = ws_test.id('list.M1')
+    and (select list_id from core_keyword_grounding(ws_test.id('M'), ws_test.id('kM2'))) = ws_test.id('list.M2'));
+  perform set_config('session_replication_role', 'replica', true);
+  update core_keyword_lists set status = 'superseded' where id = ws_test.id('list.M2');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('S4 per-site isolation: revoking M2''s list stops M2 and leaves M1 eligible; M1''s list never vouches for M2',
+    ws_test.reason('M', 'M2.gb') like 'No approved core keyword list%'
+    and ws_test.reason('M', 'M1.gb') in ('READY', 'Already linked to a post.')
+    and not exists (select 1 from core_keyword_grounding(ws_test.id('M'), ws_test.id('kM2'))));
+  perform set_config('session_replication_role', 'replica', true);
+  update core_keyword_lists set status = 'approved' where id = ws_test.id('list.M2');
+  perform set_config('session_replication_role', 'origin', true);
+  t := (select id from tasks where key = 'social_slot:' || ws_test.id('M1.gb'));
+  perform ws_test.ok('S5 claimed for M1', (social_slot_claim(t, ra)->>'claimed')::boolean);
+  perform set_config('session_replication_role', 'replica', true);
+  insert into social_posts (id, client_id, platform, search_intent, service_id, keyword_id, review_status, publish_status, created_at,
+                            drafter_run_id, social_account_id, author_kind, copy, cta_type, cta_url) values
+    (ws_test.id('p.cross'), ws_test.id('M'), 'google_business', 'commercial', ws_test.id('sM2'), ws_test.id('kM2'), 'in_review', 'not_scheduled',
+     now() + interval '1 second', gen_random_uuid(), ws_test.id('gbM'), 'worker', 'copy for M2 on the shared location', 'LEARN_MORE', 'https://m2.example.test/service');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('S6 a valid, approved keyword of the sister site cannot fill an M1 slot, even on the shared location',
+    ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, t, ws_test.id('p.cross'), ra)) like '22023: %belongs to another brand site%');
+end $$;
+
+-- ── Locations: several verified Business Profile locations per client ──────
+set local session_replication_role = replica;
+insert into clients (id, name, status, website_url) values (ws_test.id('G'), 'WS Two locations', 'active', 'https://g.example.test');
+insert into brand_boards (client_id, status, approved_on) values (ws_test.id('G'), 'approved', now());
+insert into services (id, client_id, name, status, page_url) values (ws_test.id('sG'), ws_test.id('G'), 'Service G', 'approved', 'https://g.example.test/service');
+insert into keywords (id, client_id, keyword, service_id, is_active, intent) values (ws_test.id('kG'), ws_test.id('G'), 'kw g', ws_test.id('sG'), true, 'commercial');
+insert into page_groups (client_id, name, page_type, target_url, status, supporting_keyword_ids) values (ws_test.id('G'), 'G page', 'service', 'https://g.example.test/service', 'approved', '{}');
+insert into social_accounts (id, client_id, platform, display_name, external_account_id, publish_provider, publish_account_id, publish_page_id, publish_verified_at, publish_enabled) values
+  (ws_test.id('gbG1'), ws_test.id('G'), 'google_business', 'G North', 'locations/71', 'zernio', 'aaaaaaaaaaaaaaaaaaaaaa71', 'locations/71', now(), false),
+  (ws_test.id('gbG2'), ws_test.id('G'), 'google_business', 'G South', 'locations/72', 'zernio', 'aaaaaaaaaaaaaaaaaaaaaa72', 'locations/72', now(), false);
+insert into publisher_client_transports (client_id, gbp_transport, changed_by_kind) values (ws_test.id('G'), 'zernio', 'publisher');
+insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
+values (ws_test.id('list.G'), ws_test.id('G'), 1, 'approved', array[ws_test.id('kG')], 'test fixture', (select id from team_members limit 1), now());
+set local session_replication_role = origin;
+select ws_test.slot('G.gb', 'G', 'gbp_posts', ws_test.w() + 2), ws_test.slot('G.gb1', 'G', 'gbp_posts', ws_test.w() + 3),
+       ws_test.slot('G.gb2', 'G', 'gbp_posts', ws_test.w() + 3, null, 'blocked');
+update content_plan_items set gbp_location_id = ws_test.id('gbG1') where id = ws_test.id('G.gb1');
+update content_plan_items set gbp_location_id = ws_test.id('gbG2') where id = ws_test.id('G.gb2');
+do $$
+declare ra text := current_setting('ws_test.ra'); t uuid;
+begin
+  perform ws_test.ok('G1 a multi-location client''s slot with no location is never sent to a default: it asks for one',
+    ws_test.reason('G', 'G.gb') = 'Choose this slot''s Business Profile location (the client has 2 verified locations).');
+  perform ws_test.ok('G2 a slot naming its location is ready for exactly that location',
+    ws_test.reason('G', 'G.gb1') = 'READY'
+    and (select social_account_id from social_slot_readiness(ws_test.id('G'), ws_test.w(), ws_test.w() + 6) where plan_item_id = ws_test.id('G.gb1')) = ws_test.id('gbG1'));
+  perform ws_test.ok('G3 a held location (verification hold) blocks only its own slot',
+    ws_test.reason('G', 'G.gb2') = 'Blocked: held by a teammate' and ws_test.reason('G', 'G.gb1') = 'READY');
+  perform queue_standard_social_tasks(ws_test.id('G'), ws_test.w() + 6);
+  t := (select id from tasks where key = 'social_slot:' || ws_test.id('G.gb1'));
+  perform ws_test.ok('G4 only the located slot is queued, naming its location',
+    t is not null and not exists (select 1 from tasks where key = 'social_slot:' || ws_test.id('G.gb'))
+    and (select notes like '%account:' || ws_test.id('gbG1') || '%' from tasks where id = t)
+    and (social_slot_claim(t, ra)->>'social_account_id')::uuid = ws_test.id('gbG1'));
+  perform set_config('session_replication_role', 'replica', true);
+  insert into social_posts (id, client_id, platform, search_intent, service_id, keyword_id, review_status, publish_status, created_at,
+                            drafter_run_id, social_account_id, author_kind, copy, cta_type, cta_url) values
+    (ws_test.id('p.g2'), ws_test.id('G'), 'google_business', 'commercial', ws_test.id('sG'), ws_test.id('kG'), 'in_review', 'not_scheduled',
+     now() + interval '1 second', gen_random_uuid(), ws_test.id('gbG2'), 'worker', 'copy for the other location', 'LEARN_MORE', 'https://g.example.test/service'),
+    (ws_test.id('p.g1'), ws_test.id('G'), 'google_business', 'commercial', ws_test.id('sG'), ws_test.id('kG'), 'in_review', 'not_scheduled',
+     now() + interval '1 second', gen_random_uuid(), ws_test.id('gbG1'), 'worker', 'copy for this location', 'LEARN_MORE', 'https://g.example.test/service');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('G5 a post for the other location cannot fill the slot',
+    ws_test.msg(format($q$select social_slot_link(%L, %L, %L)$q$, t, ws_test.id('p.g2'), ra)) like '22023: The post is not addressed to the slot''s verified destination%');
+  perform ws_test.ok('G6 the post for the slot''s own location links',
+    (social_slot_link(t, ws_test.id('p.g1'), ra)->>'linked')::boolean);
+end $$;
+
+-- ── Every path into review, once the site's list is approved ───────────────
+do $$ begin
+  perform set_config('session_replication_role', 'replica', true);
+  insert into social_posts (id, client_id, platform, search_intent, service_id, keyword_id, review_status, publish_status, author_kind, copy, created_by) values
+    -- A's approved list is v2 [kA2] by now (V6); kA is outside it.
+    (ws_test.id('h.off'), ws_test.id('A'), 'facebook', 'commercial', ws_test.id('sA'), ws_test.id('kA'), 'draft', 'not_scheduled', 'human', 'hand typed off core', (select id from team_members limit 1)),
+    (ws_test.id('h.none'), ws_test.id('A'), 'facebook', 'commercial', ws_test.id('sA'), null, 'draft', 'not_scheduled', 'human', 'hand typed no keyword', (select id from team_members limit 1)),
+    (ws_test.id('h.p'), ws_test.id('P'), 'facebook', 'commercial', ws_test.id('sP'), ws_test.id('kP'), 'draft', 'not_scheduled', 'human', 'hand typed before approval', (select id from team_members limit 1));
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('P1 a hand-typed post submitted on a site with an approved list must name a core keyword',
+    ws_test.msg(format($q$update social_posts set review_status = 'in_review', submitted_at = now() where id = %L$q$, ws_test.id('h.off'))) like '23514: core_keyword_required%'
+    and ws_test.msg(format($q$update social_posts set review_status = 'in_review', submitted_at = now() where id = %L$q$, ws_test.id('h.none'))) like '23514: core_keyword_required%');
+  perform ws_test.ok('P2 before the list is approved (P), submitting a hand-typed post is unchanged',
+    ws_test.msg(format($q$update social_posts set review_status = 'in_review', submitted_at = now() where id = %L$q$, ws_test.id('h.p'))) not like '%core_keyword_required%');
+  perform ws_test.ok('P3 a refresh, new page or blog filing names its core keyword, and is recorded',
+    ws_test.msg(format($q$insert into change_log (client_id, change_type, object_type, after, status) values (%L, 'page_rewrite', 'site', '{}'::jsonb, 'proposed')$q$,
+      ws_test.id('A'))) like '23514: core_keyword_required%'
+    and ws_test.msg(format($q$insert into change_log (client_id, change_type, object_type, after, status) values (%L, 'page_added', 'site', %L::jsonb, 'proposed')$q$,
+      ws_test.id('A'), jsonb_build_object('keyword_id', ws_test.id('kA3')))) like '23514: core_keyword_required%'
+    and ws_test.msg(format($q$insert into change_log (id, client_id, change_type, object_type, after, status) values (%L, %L, 'page_rewrite', 'site', %L::jsonb, 'proposed')$q$,
+      ws_test.id('cl.ok'), ws_test.id('A'), jsonb_build_object('keyword_id', ws_test.id('kA2')))) = 'accepted');
+  perform ws_test.ok('P3b the refresh''s grounding is recorded with list and version',
+    exists (select 1 from core_keyword_links where change_log_id = ws_test.id('cl.ok') and core_keyword_id = ws_test.id('kA2') and list_version = 2));
+  perform ws_test.ok('P4 other website changes (redirect, schema) are not content and are not gated',
+    ws_test.msg(format($q$insert into change_log (client_id, change_type, object_type, after, status) values (%L, 'redirect', 'site', '{}'::jsonb, 'proposed')$q$,
+      ws_test.id('A'))) = 'accepted');
+end $$;
 
 -- ── Access ──────────────────────────────────────────────────────────────────
 set local role anon;

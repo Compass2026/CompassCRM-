@@ -1698,11 +1698,11 @@ select enabled from client_entitlements_for('<client_id>') where service_key = '
 client's approved core keyword list: pick only a keyword in it, or a
 long-tail keyword whose `core_parent_keyword_id` is in it. No approved list
 → change nothing, leave `site_updates` open with the note "No approved core
-keyword list; left for Tom", stop. After each `change_log` row (proposed or
-pushed), record its grounding:
-`select core_keyword_record('<client_id>', '<keyword_id>', 'change_log', '<change_log id>');`
-A `core_keyword_required` refusal means the keyword was not core: revert or
-withdraw that change and pick a core keyword.
+keyword list; left for Tom", stop. Every `change_log` row for a
+`page_rewrite`, `page_added` or `blog_post` carries its keyword as
+`after.keyword_id`; the database refuses one without a keyword of the site's
+approved list (`core_keyword_required`) and records the grounding itself. A
+refusal means the keyword was not core: pick a core keyword.
 
 `remaining` is this run's cap for each kind (pages already added or
 proposed this month count). `website` not enabled, or both allocations 0 →
@@ -1893,9 +1893,11 @@ a slot.
      core list or keyword revoked): set the task `blocked` with `detail` as
      its note and go to the next task. `task_not_open` → skip.
 2. **Pick a core keyword** for the slot's brand (`brand_workspace_id` → its
-   `service_ids`; the client's otherwise). It must be in the approved list
-   (`select keyword_ids from core_keyword_lists where client_id = '<client>'
-   and status = 'approved'`) or a long-tail keyword whose
+   `service_ids`; the client's otherwise). It must be in that SITE's approved
+   list (`select keyword_ids from core_keyword_lists where client_id =
+   '<client>' and brand_workspace_id is not distinct from '<slot brand site
+   or null>' and status = 'approved'` — BHG's three sites each have their own;
+   a sister site's keyword never qualifies) or a long-tail keyword whose
    `core_parent_keyword_id` is in it, have a recorded `intent`, and an
    `approved` service with an owner page. Never use another keyword, however
    relevant: drafter_write refuses an unattended run's non-core keyword
@@ -1918,8 +1920,11 @@ a slot.
      URL, no hashtags.
    - Business Profile: `{"channel": "google_business", "postType":
      "standard", "intent", "serviceId", "keywordId", "ctaType":
-     "LEARN_MORE", "ctaUrl": "<the service's owner page>", "assetIds": []}`.
-     The location comes from the client's binding; never name one.
+     "LEARN_MORE", "ctaUrl": "<the service's owner page>",
+     "socialAccountId": "<social_account_id from the claim>", "assetIds": []}`.
+     That is the slot's own location (a multi-location client's slot names
+     it; a single-location client has one). Never another location, and
+     write for that market: its city, its phone and page from the brief.
    Usable claims only, brand voice from the brief. A Facebook post and a
    Business Profile post for the same week are different copy.
 4. **Link:** `select social_slot_link('<task id>', '<post_id>', '<run token>');`

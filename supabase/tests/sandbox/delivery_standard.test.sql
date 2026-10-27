@@ -231,9 +231,12 @@ insert into client_brand_workspaces (id, client_id, slug, name, website_url, pho
   ('00000000-0000-4000-d504-00000000000e', '00000000-0000-4000-d500-00000000000d', 'p2', 'P2', 'https://p2.example.test', '5555555555',
    array['00000000-0000-4000-d501-00000000000f']::uuid[], null);
 -- 20261027160000: weekly drafts trace to an approved core keyword list.
-insert into core_keyword_lists (client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
-values ('00000000-0000-4000-d500-00000000000d', 1, 'approved',
-        array['00000000-0000-4000-d502-00000000000e', '00000000-0000-4000-d502-00000000000f']::uuid[], 'test', (select id from team_members limit 1), now());
+-- P is multi-brand: one approved list per brand site (P1 owns service e, P2 owns f).
+insert into core_keyword_lists (client_id, brand_workspace_id, version, status, keyword_ids, source_ref, approved_by, approved_at) values
+  ('00000000-0000-4000-d500-00000000000d', '00000000-0000-4000-d504-00000000000d', 1, 'approved',
+   array['00000000-0000-4000-d502-00000000000e']::uuid[], 'test', (select id from team_members limit 1), now()),
+  ('00000000-0000-4000-d500-00000000000d', '00000000-0000-4000-d504-00000000000e', 1, 'approved',
+   array['00000000-0000-4000-d502-00000000000f']::uuid[], 'test', (select id from team_members limit 1), now());
 set local session_replication_role = origin;
 insert into client_delivery_standards (client_id, standard_id, effective_month, source_ref)
 select '00000000-0000-4000-d500-00000000000d', id, (date_trunc('month', now() at time zone 'America/Chicago') - interval '1 month')::date, 'test'

@@ -49,32 +49,48 @@ function CoreList({ clientId, byId, list, label }: { clientId: string; byId: Map
   );
 }
 
-// The client's core keyword list (20261027160000): the approved version every
-// weekly blog, Facebook and Business Profile draft must trace to, and the
-// newest proposal waiting for a teammate.
+// The client's core keyword lists (20261027160000): one per site program —
+// the client for a single-site client, each brand site for a multi-brand one
+// (BHG: Safety, Forklift, Heavy Equipment). Each site's approved version is
+// what its weekly blog, Facebook and Business Profile drafts must trace to;
+// a proposal waits for a teammate. Locations are not lists.
 export async function CoreKeywordListCard({ clientId, keywords }: { clientId: string; keywords: Keyword[] }) {
   const supabase = await createClient();
-  const { data: lists } = await supabase
-    .from("core_keyword_lists")
-    .select("id, version, status, keyword_ids, source_ref, proposed_at, approved_at")
-    .eq("client_id", clientId)
-    .in("status", ["approved", "proposed"])
-    .order("version", { ascending: false });
-  const approved = (lists ?? []).find((l) => l.status === "approved") ?? null;
-  const proposal = (lists ?? []).find((l) => l.status === "proposed" && (!approved || l.version > approved.version)) ?? null;
+  const [{ data: lists }, { data: sites }] = await Promise.all([
+    supabase
+      .from("core_keyword_lists")
+      .select("id, version, status, keyword_ids, source_ref, proposed_at, approved_at, brand_workspace_id")
+      .eq("client_id", clientId)
+      .in("status", ["approved", "proposed"])
+      .order("version", { ascending: false }),
+    supabase.from("client_brand_workspaces").select("id, name").eq("client_id", clientId).order("name"),
+  ]);
   const byId = new Map(keywords.map((k) => [k.id, k]));
+  const programs: { id: string | null; name: string | null }[] = (sites ?? []).length
+    ? (sites ?? []).map((w) => ({ id: w.id, name: w.name }))
+    : [{ id: null, name: null }];
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Core keyword list</CardTitle>
+        <CardTitle className="text-base">Core keyword list{programs.length > 1 ? "s" : ""}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground">
-          Every weekly blog, Facebook and Business Profile draft must use a keyword from the approved list, or a
-          long-tail keyword linked to one. Without an approved list, nothing is drafted for this client.
+          Every weekly blog, Facebook and Business Profile draft must use a keyword from its site&apos;s approved list, or a
+          long-tail keyword linked to one. Without an approved list, nothing is drafted for that site.
         </p>
-        {approved ? <CoreList clientId={clientId} byId={byId} list={approved} label="Approved" /> : <p className="text-sm">No approved list.</p>}
-        {proposal && <CoreList clientId={clientId} byId={byId} list={proposal} label="Proposed" />}
+        {programs.map((program) => {
+          const mine = (lists ?? []).filter((l) => (l.brand_workspace_id ?? null) === program.id);
+          const approved = mine.find((l) => l.status === "approved") ?? null;
+          const proposal = mine.find((l) => l.status === "proposed" && (!approved || l.version > approved.version)) ?? null;
+          return (
+            <div key={program.id ?? "client"} className="space-y-3">
+              {program.name && <h3 className="text-sm font-semibold">{program.name}</h3>}
+              {approved ? <CoreList clientId={clientId} byId={byId} list={approved} label="Approved" /> : <p className="text-sm">No approved list.</p>}
+              {proposal && <CoreList clientId={clientId} byId={byId} list={proposal} label="Proposed" />}
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );
