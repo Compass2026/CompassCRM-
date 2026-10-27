@@ -189,7 +189,7 @@ from (values
 ) v(existing_id, keyword)
 join keywords k on k.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and k.is_active
   and (k.id = v.existing_id::uuid or (v.existing_id is null and lower(k.keyword) = lower(v.keyword)))
-  and k.service_id = any((select w.service_ids from client_brand_workspaces w where w.id = '127b7514-a914-4c73-b4c1-2309c2550cd6'))
+  and exists (select 1 from client_brand_workspaces w where w.id = '127b7514-a914-4c73-b4c1-2309c2550cd6' and k.service_id = any(w.service_ids))
 where not exists (select 1 from core_keyword_lists l where l.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and l.brand_workspace_id = '127b7514-a914-4c73-b4c1-2309c2550cd6')
 having count(*) > 0;
 
@@ -247,7 +247,7 @@ from (values
 ) v(existing_id, keyword)
 join keywords k on k.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and k.is_active
   and (k.id = v.existing_id::uuid or (v.existing_id is null and lower(k.keyword) = lower(v.keyword)))
-  and k.service_id = any((select w.service_ids from client_brand_workspaces w where w.id = 'd8598959-62d5-47f5-900c-ba73c1b840e5'))
+  and exists (select 1 from client_brand_workspaces w where w.id = 'd8598959-62d5-47f5-900c-ba73c1b840e5' and k.service_id = any(w.service_ids))
 where not exists (select 1 from core_keyword_lists l where l.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and l.brand_workspace_id = 'd8598959-62d5-47f5-900c-ba73c1b840e5')
 having count(*) > 0;
 
@@ -287,6 +287,6 @@ from (values
 ) v(existing_id, keyword)
 join keywords k on k.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and k.is_active
   and (k.id = v.existing_id::uuid or (v.existing_id is null and lower(k.keyword) = lower(v.keyword)))
-  and k.service_id = any((select w.service_ids from client_brand_workspaces w where w.id = '9058fbd1-9177-4436-a879-1ffcb28fc26b'))
+  and exists (select 1 from client_brand_workspaces w where w.id = '9058fbd1-9177-4436-a879-1ffcb28fc26b' and k.service_id = any(w.service_ids))
 where not exists (select 1 from core_keyword_lists l where l.client_id = '3eaa3389-2a33-4004-837c-8aef90404410' and l.brand_workspace_id = '9058fbd1-9177-4436-a879-1ffcb28fc26b')
 having count(*) > 0;
