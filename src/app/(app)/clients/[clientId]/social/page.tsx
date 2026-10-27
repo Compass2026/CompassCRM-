@@ -36,7 +36,7 @@ export default async function SocialPage({
 
   const now = new Date();
   const monthStr = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [{ data: posts }, usageQ, { data: services }, { data: offers }, { data: keywords }] = await Promise.all([
+  const [{ data: posts }, usageQ, { data: services }, { data: offers }, { data: keywords }, { data: gbpLocations }] = await Promise.all([
     supabase
       .from("social_posts")
       .select("id, platform, post_type, search_intent, copy, review_status, publish_status, scheduled_at, published_at, submitted_at, author_kind, created_at, drafter_run_id")
@@ -51,6 +51,9 @@ export default async function SocialPage({
     supabase.from("services").select("id, name").eq("client_id", clientId).eq("status", "approved").order("sort_order"),
     supabase.from("offers").select("id, title, status").eq("client_id", clientId).neq("status", "retired").order("title"),
     supabase.from("keywords").select("id, keyword").eq("client_id", clientId).eq("is_tracked", true).order("keyword"),
+    // Bound Business Profile locations: with several, a draft names one.
+    supabase.from("social_accounts").select("id, display_name, external_account_id").eq("client_id", clientId)
+      .eq("platform", "google_business").not("publish_provider", "is", null).order("display_name"),
   ]);
 
   const all = (posts ?? []).filter((p) => isReviewStatus(p.review_status) && isPublishStatus(p.publish_status));
@@ -155,6 +158,7 @@ export default async function SocialPage({
               services={(services ?? []).map((s) => ({ id: s.id, label: s.name }))}
               offers={(offers ?? []).map((o) => ({ id: o.id, label: `${o.title}${o.status === "confirmed" ? "" : ` (${o.status})`}` }))}
               keywords={(keywords ?? []).map((k) => ({ id: k.id, label: k.keyword }))}
+              locations={(gbpLocations ?? []).map((l) => ({ id: l.id, label: l.display_name ?? l.external_account_id ?? l.id }))}
             />
           </CardContent>
         </Card>

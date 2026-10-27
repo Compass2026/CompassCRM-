@@ -35,11 +35,14 @@ type Item = {
   target_url: string | null;
   planned_date: string | null;
   notes: string | null;
+  gbp_location_id?: string | null;
 };
 
-// The fields a teammate fills for a slot (shared by add and edit).
-function PlanFields({ deliverable, services, keywords, week, item, idPrefix, facebookOnly = false }: {
-  deliverable: Deliverable; services: Option[]; keywords: Option[]; week: string; item?: Item; idPrefix: string; facebookOnly?: boolean;
+// The fields a teammate fills for a slot (shared by add and edit). locations:
+// the client's bound Business Profile locations; with two or more, a GBP slot
+// names the one it is for (its post must go there; never redirected).
+function PlanFields({ deliverable, services, keywords, week, item, idPrefix, facebookOnly = false, locations = [] }: {
+  deliverable: Deliverable; services: Option[]; keywords: Option[]; week: string; item?: Item; idPrefix: string; facebookOnly?: boolean; locations?: Option[];
 }) {
   const id = (k: string) => `${idPrefix}-${k}`;
   const sunday = new Date(`${week}T00:00:00Z`);
@@ -63,6 +66,15 @@ function PlanFields({ deliverable, services, keywords, week, item, idPrefix, fac
           <Label htmlFor={id("channel")}>Channel</Label>
           <select id={id("channel")} name="channel" className={field} defaultValue="facebook" required>
             {SOCIAL_CHANNELS.filter((c) => !facebookOnly || c === "facebook").map((c) => <option key={c} value={c}>{platformLabels[c].label}</option>)}
+          </select>
+        </div>
+      )}
+      {deliverable === "gbp" && locations.length > 1 && (
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor={id("location")}>Business Profile location</Label>
+          <select id={id("location")} name="gbp_location_id" className={field} defaultValue={item?.gbp_location_id ?? ""}>
+            <option value="">Not chosen yet (drafting waits)</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
           </select>
         </div>
       )}
@@ -106,8 +118,8 @@ function PlanFields({ deliverable, services, keywords, week, item, idPrefix, fac
 // standard: the client is on the monthly delivery standard this week, so
 // social is Facebook only, a web page slot is a refresh, and `remaining` is
 // the month's room rather than the weekly cadence.
-export function AddPlanItemForm({ clientId, week, deliverable, services, keywords, remaining, standard = false }: {
-  clientId: string; week: string; deliverable: Deliverable; services: Option[]; keywords: Option[]; remaining: number; standard?: boolean;
+export function AddPlanItemForm({ clientId, week, deliverable, services, keywords, remaining, standard = false, locations = [] }: {
+  clientId: string; week: string; deliverable: Deliverable; services: Option[]; keywords: Option[]; remaining: number; standard?: boolean; locations?: Option[];
 }) {
   const [state, action, pending] = useActionState(createPlanItemAction.bind(null, clientId, week), {});
   return (
@@ -118,7 +130,7 @@ export function AddPlanItemForm({ clientId, week, deliverable, services, keyword
       <form action={action} className="mt-3 space-y-3" key={state.n ?? 0}>
         <input type="hidden" name="deliverable" value={deliverable} />
         {standard && deliverable === "web_page" && <input type="hidden" name="standard_key" value="page_refreshes" />}
-        <PlanFields deliverable={deliverable} services={services} keywords={keywords} week={week} idPrefix={`add-${deliverable}`} facebookOnly={standard} />
+        <PlanFields deliverable={deliverable} services={services} keywords={keywords} week={week} idPrefix={`add-${deliverable}`} facebookOnly={standard} locations={locations} />
         <Button type="submit" size="sm" disabled={pending}>Add to the plan</Button>
         <Message state={state} />
       </form>
@@ -126,15 +138,15 @@ export function AddPlanItemForm({ clientId, week, deliverable, services, keyword
   );
 }
 
-export function EditPlanItemForm({ clientId, week, item, services, keywords }: {
-  clientId: string; week: string; item: Item; services: Option[]; keywords: Option[];
+export function EditPlanItemForm({ clientId, week, item, services, keywords, locations = [] }: {
+  clientId: string; week: string; item: Item; services: Option[]; keywords: Option[]; locations?: Option[];
 }) {
   const [state, action, pending] = useActionState(updatePlanItemAction.bind(null, clientId, item.id, week), {});
   return (
     <details className="text-xs" data-edit-plan-item>
       <summary className="cursor-pointer text-muted-foreground">Edit details</summary>
       <form action={action} className="mt-2 space-y-2">
-        <PlanFields deliverable={item.deliverable as Deliverable} services={services} keywords={keywords} week={week} item={item} idPrefix={`edit-${item.id}`} />
+        <PlanFields deliverable={item.deliverable as Deliverable} services={services} keywords={keywords} week={week} item={item} idPrefix={`edit-${item.id}`} locations={locations} />
         <Button type="submit" size="sm" variant="outline" disabled={pending}>Save</Button>
         <Message state={state} />
       </form>

@@ -329,7 +329,9 @@ export function createStore(supabase: Client) {
     },
 
     // ── Business Profile through Zernio ──
-    // The client's bound Business Profile location (at most one; 20261011050000).
+    // A bound Business Profile location of the client (any one: a client may
+    // have several since 20261015200000). Only decides whether the client is
+    // on Zernio; a post is always sent to its own approved location.
     async gbpLocationForClient(clientId: string): Promise<import("./facebook.ts").Binding | null> {
       const rows = (await one<import("./facebook.ts").Binding[]>(
         supabase.from("social_accounts").select(BINDING_COLS)
@@ -362,7 +364,7 @@ export function createStore(supabase: Client) {
 
     // The piloted clients and every client with a Business Profile location
     // row, for the read-only accounts report.
-    async clientsForGbp(piloted: string[]): Promise<{ id: string; name: string; website_url: string | null; location: import("./facebook.ts").Binding | null }[]> {
+    async clientsForGbp(piloted: string[]): Promise<{ id: string; name: string; website_url: string | null; location: import("./facebook.ts").Binding | null; locations: import("./facebook.ts").Binding[] }[]> {
       const rows = (await one<import("./facebook.ts").Binding[]>(
         supabase.from("social_accounts").select(BINDING_COLS).eq("platform", "google_business")
       )) ?? [];
@@ -371,7 +373,10 @@ export function createStore(supabase: Client) {
       const clients = (await one<{ id: string; name: string; website_url: string | null }[]>(
         supabase.from("clients").select("id, name, website_url").in("id", ids).order("name")
       )) ?? [];
-      return clients.map((c) => ({ ...c, location: rows.find((r) => r.client_id === c.id && r.publish_provider) ?? null }));
+      return clients.map((c) => {
+        const locations = rows.filter((r) => r.client_id === c.id && r.publish_provider);
+        return { ...c, location: locations[0] ?? null, locations };
+      });
     },
 
     async bindGbpLocation(v: { client_id: string; account_id: string; location_id: string; location_name: string | null; account_name: string | null; health: unknown }): Promise<Record<string, unknown>> {

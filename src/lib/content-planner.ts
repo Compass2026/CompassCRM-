@@ -138,6 +138,9 @@ export type PlanFields = {
   target_url: string | null;
   planned_date: string | null;
   notes: string | null;
+  // A Business Profile slot's location (20261015200000); present only when the
+  // form offers the choice, so a single-location client's slots are untouched.
+  gbp_location_id?: string | null;
 };
 
 const opt = (v: FormDataEntryValue | null) => {
@@ -175,11 +178,15 @@ export function parsePlanFields(get: (k: string) => FormDataEntryValue | null, w
     return { ok: false, error: "The planned date must fall inside this week." };
   }
   const notes = opt(get("notes"));
+  const rawLocation = get("gbp_location_id");
+  const location = opt(rawLocation);
+  if (location && (!isUuid(location) || deliverable !== "gbp")) return { ok: false, error: "Choose one of this client's Business Profile locations." };
   return {
     ok: true,
     fields: {
       deliverable, channel, purpose, topic, search_intent: (intent as PostIntent | null) ?? null,
       service_id: service, keyword_id: keyword, target_url: target, planned_date: planned, notes: notes?.slice(0, 2000) ?? null,
+      ...(rawLocation !== null && deliverable === "gbp" ? { gbp_location_id: location } : {}),
     },
   };
 }
