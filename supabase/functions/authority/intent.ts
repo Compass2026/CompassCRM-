@@ -13,6 +13,8 @@ const BUYER = /\bnear me\b|\b(quotes?|estimates?|hire|hiring|book|schedule|cost 
 // A service noun or a service verb: "roof repair", "gutter installation".
 const SERVICE = /\b(repair|replacement|replace|installation|install|inspection|restoration|roofing|roofer|siding|gutters?|soffit|fascia|lighting|lights)\b/i;
 const STRONG_BUYER = /\bnear me\b|\b(quotes?|estimates?|hire|book)\b/i;
+// Evaluating a named business: "<brand> reviews", "<brand> vs <rival>".
+const EVALUATE = /\b(reviews?|ratings?|complaints?|vs\.?|versus|compare|comparison|alternatives?|legit|bbb|worth it|cost|costs|prices?|pricing)\b/i;
 const STATE_SUFFIX = /\b(mo|missouri)\b/i;
 
 export function assessIntent(query: string, stored: string | null, ctx: { clientName: string; places: PlaceIndex }): IntentCheck {
@@ -26,18 +28,38 @@ export function assessIntent(query: string, stored: string | null, ctx: { client
     "safety", "heavy", "operator", "operators", "industrial", "consulting",
     "consultants", "consultant", "compliance", "audits", "audit", "contractors",
     "contractor", "interiors", "design", "build", "electrical", "marketing",
-    "solar",
+    "solar", "plumbing", "contracting", "rental", "rentals", "boxing", "masonry",
+    "brothers",
   ]);
+  // A place in the name ("Pensacola Equipment Rentals") is not a brand word
+  // either: "equipment rental pensacola" is someone choosing a provider.
+  const placeWords = new Set(ctx.places.names.flatMap((p) => p.norm.trim().split(" ")));
   const brandWords = (ctx.clientName.toLowerCase().match(/[a-z']{4,}/g) ?? [])
-    .filter((w) => !generic.has(w));
+    .filter((w) => !generic.has(w) && !placeWords.has(w.replace(/'/g, "")));
   const initialism = ctx.clientName.match(/^\s*([A-Z]{2,5})\b/)?.[1]?.toLowerCase();
-  const brand = q.includes(ctx.clientName.toLowerCase())
+  const fullName = q.includes(ctx.clientName.toLowerCase());
+  const brand = fullName
     || brandWords.some((w) => new RegExp(`\\b${w}\\b`).test(q))
     || !!(initialism && new RegExp(`\\b${initialism}\\b`).test(q));
+  // A name made only of service and place words is also what people search
+  // for the service; matching it is not by itself a search for the business.
+  const descriptiveName = fullName && brandWords.length === 0 && !initialism;
   const local = placesIn(q, ctx.places).length > 0 || STATE_SUFFIX.test(q);
   let assessed: AssessedIntent;
   let reason: string;
-  if (brand && (SERVICE.test(q) || BUYER.test(q))) {
+  // Naming the business is an attribute, not a primary intent. Only the bare
+  // name (with a place, or contact words) is plainly navigational; reviews,
+  // comparisons, questions and services are judged on the evidence.
+  if (brand && descriptiveName) {
+    assessed = "ambiguous";
+    reason = "The business name is also a description of the service; left to human judgment.";
+  } else if (brand && EVALUATE.test(q)) {
+    assessed = "ambiguous";
+    reason = `Names the business while evaluating it (${q.match(EVALUATE)![0]}): commercial or navigational; left to human judgment.`;
+  } else if (brand && QUESTION.test(q)) {
+    assessed = "ambiguous";
+    reason = "Names the business in a question: informational or navigational; left to human judgment.";
+  } else if (brand && (SERVICE.test(q) || BUYER.test(q))) {
     assessed = "ambiguous";
     reason = "Names the business and a service: navigational or commercial; left to human judgment.";
   } else if (brand) {
