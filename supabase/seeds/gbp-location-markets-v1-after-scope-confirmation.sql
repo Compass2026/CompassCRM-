@@ -1,0 +1,42 @@
+-- EFFECTIVE MAPPINGS, NOT A PROPOSAL. gbp_location_markets has no proposed
+-- status: every row this file inserts takes effect at once in
+-- core_market_problem(). Do NOT run it with the keyword proposal seeds.
+-- Run it only after Tom confirms each location's market scope below, in the
+-- same session as:  select set_config('compass.market_scope_confirmed', '<who, when>', false);
+-- Requires migration 20261027160000 (PR #192).
+--
+-- Business Profile location markets: which city keywords may be posted to
+-- which verified location. As of Oct 27 2026 every active / launching client
+-- has exactly one verified location in the CRM, so core_market_problem()
+-- refuses nothing today; these rows matter once a second location is bound
+-- (Logic Overland Park, after its verification hold).
+--
+--   Logic Solar · Wichita (locations/6226831491529440170): its office market
+--     only, so Kansas City / Overland Park keywords never go to the Wichita
+--     profile while the Overland Park profile stays on hold. Austin is
+--     excluded and gets no row. Scope to confirm: Wichita only, or Wichita
+--     plus its surrounding service area?
+--   BHG Safety Partners · shared Hannibal HQ (locations/8807181124955207538):
+--     one profile shared by the three brand sites, whose city pages are
+--     service markets (training travels to the client) — 'all'. Scope to
+--     confirm: may every BHG city keyword post to the shared HQ profile?
+--
+-- Not here, on purpose: Show Me Design's two studios and Ginger Huff's
+-- profiles (not bound; Ginger's location structure is unresolved), and every
+-- single-location client (no row needed). Nothing is bound, enabled or
+-- un-held. Re-running is a no-op.
+do $$ begin
+  if coalesce(current_setting('compass.market_scope_confirmed', true), '') = '' then
+    raise exception 'Market scope not confirmed: set compass.market_scope_confirmed after Tom confirms the scope (see header). Nothing written.';
+  end if;
+end $$;
+insert into gbp_location_markets (client_id, social_account_id, market, kind, source_ref)
+select sa.client_id, sa.id, v.market, v.kind, v.source_ref
+from (values
+  ('ee84d86f-3ec4-49b7-95e2-5e98239737ca'::uuid, 'Wichita', 'office',
+   'Wichita office (logic-solar.com/locations/kansas/wichita, 307 S Prescott Cir). Scope confirmed: ' || current_setting('compass.market_scope_confirmed')),
+  ('99ec3c6d-aeb6-477e-8a22-d30eb81a83bf'::uuid, 'All BHG service markets', 'all',
+   'Shared Hannibal HQ profile for the Safety, Forklift and Heavy Equipment sites; city pages are service markets. Scope confirmed: ' || current_setting('compass.market_scope_confirmed'))
+) v(account_id, market, kind, source_ref)
+join social_accounts sa on sa.id = v.account_id and sa.platform::text = 'google_business'
+where not exists (select 1 from gbp_location_markets m where m.social_account_id = sa.id and lower(btrim(m.market)) = lower(btrim(v.market)));

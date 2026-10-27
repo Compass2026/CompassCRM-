@@ -9216,6 +9216,7 @@ export type Database = {
           recorded_at: string
           result_type: Database["public"]["Enums"]["rank_result_type"]
           run_id: string | null
+          site_host: string | null
           source: Database["public"]["Enums"]["rank_source"]
           url_ranked: string | null
         }
@@ -9227,6 +9228,7 @@ export type Database = {
           recorded_at?: string
           result_type: Database["public"]["Enums"]["rank_result_type"]
           run_id?: string | null
+          site_host?: string | null
           source?: Database["public"]["Enums"]["rank_source"]
           url_ranked?: string | null
         }
@@ -9238,6 +9240,7 @@ export type Database = {
           recorded_at?: string
           result_type?: Database["public"]["Enums"]["rank_result_type"]
           run_id?: string | null
+          site_host?: string | null
           source?: Database["public"]["Enums"]["rank_source"]
           url_ranked?: string | null
         }

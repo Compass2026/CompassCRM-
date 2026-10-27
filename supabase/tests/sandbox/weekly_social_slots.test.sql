@@ -787,9 +787,126 @@ do $$ begin
     ws_test.msg(format($q$update content_drafts set status = 'in_review' where id = %L$q$, ws_test.id('d.blogoff'))) like '23514: core_keyword_required%'
     and ws_test.msg(format($q$update content_drafts set status = 'in_review' where id = %L$q$, ws_test.id('d.pagenone'))) like '23514: core_keyword_required%'
     and ws_test.msg(format($q$update content_drafts set status = 'in_review' where id = %L$q$, ws_test.id('d.pagep'))) like '23514: core_keyword_required%');
+  -- A newer approved version (v3, same members) and a same-keyword URL revision.
+  perform set_config('session_replication_role', 'replica', true);
+  update core_keyword_lists set status = 'superseded' where id = ws_test.id('list.A2');
+  insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
+  select ws_test.id('list.A3'), client_id, (select max(version) + 1 from core_keyword_lists where client_id = ws_test.id('A')), 'approved', keyword_ids, 'test: a newer version, same members', approved_by, now()
+    from core_keyword_lists where id = ws_test.id('list.A2');
+  perform set_config('session_replication_role', 'origin', true);
+  perform set_config('ws_test.p3d', ws_test.msg(format($q$update change_log set after = after || '{"url": "https://a.example.test/service-2-revised"}'::jsonb where id = %L$q$,
+    ws_test.id('cl.ok'))), true);
+  perform set_config('ws_test.p3e', ws_test.msg(format($q$update change_log set after = after || '{"url": "https://m2.example.test/elsewhere"}'::jsonb where id = %L$q$,
+    ws_test.id('cl.ok'))), true);
+  perform set_config('session_replication_role', 'replica', true);
+  update core_keyword_lists set status = 'superseded' where id = ws_test.id('list.A3');
+  update core_keyword_lists set status = 'approved' where id = ws_test.id('list.A2');
+  perform set_config('session_replication_role', 'origin', true);
   perform ws_test.ok('P4 other website changes (redirect, schema) are not content and are not gated',
     ws_test.msg(format($q$insert into change_log (client_id, change_type, object_type, after, status) values (%L, 'redirect', 'site', '{}'::jsonb, 'proposed')$q$,
       ws_test.id('A'))) = 'accepted');
+end $$;
+
+-- ── F. The strict path end to end: no exemption, every trigger on ──────────
+-- A real drafter_write for A's Facebook slot on a core keyword (v2), as the
+-- worker run that claimed the slot; the post enters review through the
+-- ordinary checklist, the core gate records its evidence, and the slot links.
+insert into claims (id, client_id, claim, status, source, confirmed_on)
+values (ws_test.id('claim.A'), ws_test.id('A'), 'Service A2 is offered across the A metro.', 'confirmed', 'test fixture', now());
+select ws_test.slot('A.fbF', 'A', 'facebook_posts', ws_test.w() + 4);
+select queue_standard_social_tasks(ws_test.id('A'), ws_test.w() + 6);
+set local session authorization authenticator;
+set local role service_role;
+do $$
+declare ra text := current_setting('ws_test.ra'); t uuid; c jsonb; r jsonb; st text;
+begin
+  perform ws_test.ok('F0 strict: client A has no exemption and the exemption guard is on',
+    not exists (select 1 from core_keyword_exemptions where client_id = ws_test.id('A'))
+    and exists (select 1 from pg_trigger where tgname = 'core_keyword_exemptions_guard' and tgenabled = 'O')
+    and exists (select 1 from pg_trigger where tgname = 'social_posts_aa_update' and tgenabled = 'O'));
+  t := (select id from tasks where key = 'social_slot:' || ws_test.id('A.fbF'));
+  c := social_slot_claim(t, ra);
+  st := ws_test.msg(format('select set_config(%L, drafter_write(%L::jsonb)::text, true)', 'ws_test.f_write', jsonb_build_object(
+    'client_id', ws_test.id('A'), 'requested_via', 'worker', 'runtime', 'sandbox-model', 'attempt', 1, 'claimant', ra,
+    'brief_version', 'drafter-brief/1', 'brief_hash', 'sha256:' || repeat('ab', 32),
+    'brief', jsonb_build_object('client', jsonb_build_object('id', ws_test.id('A')),
+      'target', jsonb_build_object('channel', 'facebook', 'post_type', 'standard', 'search_intent', 'commercial',
+        'service', jsonb_build_object('id', ws_test.id('sA2'), 'name', 'Service A2'),
+        'keyword', jsonb_build_object('id', ws_test.id('kA2')), 'cta', jsonb_build_object('type', null, 'url', null), 'offer', null,
+        'social_account', jsonb_build_object('id', ws_test.id('fbA'), 'page_id', '11111', 'name', 'A Page')),
+      'allowed_facts', jsonb_build_object('claims', jsonb_build_array(jsonb_build_object('id', ws_test.id('claim.A'))))),
+    'lint', jsonb_build_object('ok', true, 'problems', '[]'::jsonb, 'warnings', '[]'::jsonb),
+    'copy', 'Service A2 is offered across the A metro. Ask us about it.', 'claim_ids', jsonb_build_array(ws_test.id('claim.A')), 'asset_ids', '[]'::jsonb)));
+  r := nullif(current_setting('ws_test.f_write', true), '')::jsonb;
+  perform set_config('ws_test.f_task', t::text, true);
+  perform set_config('ws_test.f_post', coalesce(r->>'post_id', ''), true);
+  perform ws_test.ok('F1 a worker run claims the slot and writes the post on a core keyword; it enters review through the ordinary checklist',
+    st = 'accepted' and (select review_status = 'in_review' and keyword_id = ws_test.id('kA2') and social_account_id = ws_test.id('fbA')
+                         from social_posts where id = (r->>'post_id')::uuid));
+end $$;
+do $$
+declare p uuid := nullif(current_setting('ws_test.f_post'), '')::uuid;
+begin
+  perform ws_test.ok('F2 entering review recorded the keyword, the approved list and its version',
+    exists (select 1 from core_keyword_links where social_post_id = p and keyword_id = ws_test.id('kA2')
+            and list_id = ws_test.id('list.A2') and list_version = 2));
+  perform set_config('ws_test.f_link', ws_test.msg(format('select social_slot_link(%L, %L, %L)', current_setting('ws_test.f_task'), p, current_setting('ws_test.ra'))), true);
+end $$;
+do $$ begin
+  perform ws_test.ok('F3 the slot links that post and the task closes, without a second evidence row',
+    current_setting('ws_test.f_link') = 'accepted'
+    and (select content_post_id is null and social_post_id = nullif(current_setting('ws_test.f_post'), '')::uuid from content_plan_items where id = ws_test.id('A.fbF'))
+    and (select status = 'done' from tasks where id = current_setting('ws_test.f_task')::uuid)
+    and (select count(*) from core_keyword_links where social_post_id = nullif(current_setting('ws_test.f_post'), '')::uuid) = 1);
+end $$;
+reset role;
+reset session authorization;
+
+do $$ begin
+  perform ws_test.ok('P3d a same-keyword URL revision under a newer approved version records its own evidence row (v2 kept, the newer one added)',
+    current_setting('ws_test.p3d') = 'accepted'
+    and exists (select 1 from core_keyword_links where change_log_id = ws_test.id('cl.ok') and list_version = 2)
+    and exists (select 1 from core_keyword_links c join core_keyword_lists l on l.id = c.list_id where c.change_log_id = ws_test.id('cl.ok') and l.id = ws_test.id('list.A3') and c.list_version = l.version)
+    and (select count(*) from core_keyword_links where change_log_id = ws_test.id('cl.ok')) = 2);
+  perform ws_test.ok('P3e a URL revision onto another host is refused like an insert',
+    current_setting('ws_test.p3e') like '23514: core_keyword_required%not on the site%');
+end $$;
+-- ── R. Rank observations are judged against the keyword's own site ─────────
+insert into locations (id, client_id, name, city, is_physical_location) values (ws_test.id('loc.M'), ws_test.id('M'), 'M home', 'M City', true);
+insert into keywords (id, client_id, keyword, service_id, is_active, intent) values (ws_test.id('kMx'), ws_test.id('M'), 'kw m none', null, true, 'commercial');
+update keywords set is_tracked = true where id in (ws_test.id('kM1'), ws_test.id('kM2'));
+insert into rank_snapshots (keyword_id, location_id, result_type, position, url_ranked, recorded_at, source, site_host) values
+  -- kM2: an old row (no site_host) whose page is the sister site M1's
+  (ws_test.id('kM2'), ws_test.id('loc.M'), 'organic', 2, 'https://m1.example.test/service', now() - interval '1 day', 'dataforseo', null),
+  -- kM1: an older new-style website rank, then the latest new-style row: a sister page
+  (ws_test.id('kM1'), ws_test.id('loc.M'), 'organic', 5, 'https://www.m1.example.test/service', now() - interval '8 days', 'dataforseo', 'm1.example.test'),
+  (ws_test.id('kM1'), ws_test.id('loc.M'), 'organic', 1, 'https://m2.example.test/x', now() - interval '1 day', 'dataforseo', 'm1.example.test');
+do $$ begin
+  perform ws_test.ok('R1 each keyword resolves to its own brand site; a single-site client to its one site; unowned resolves to nothing',
+    keyword_site_hosts(ws_test.id('kM1')) = array['m1.example.test'] and keyword_site_hosts(ws_test.id('kM2')) = array['m2.example.test']
+    and keyword_site_hosts(ws_test.id('kA2')) = array['a.example.test'] and keyword_site_hosts(ws_test.id('kMx')) = '{}');
+  perform ws_test.ok('R2 its own host counts, a sister brand''s host never does',
+    keyword_organic_state(ws_test.id('kM1'), 'dataforseo', 3, 'https://blog.m1.example.test/a', 'm1.example.test') = 'website'
+    and keyword_organic_state(ws_test.id('kM1'), 'dataforseo', 3, 'https://m2.example.test/a', 'm1.example.test') = 'third_party'
+    and keyword_organic_state(ws_test.id('kMx'), 'dataforseo', 3, 'https://m1.example.test/a', 'm1.example.test') = 'unverified');
+  perform ws_test.ok('R3 older multi-brand rows prove nothing for a site unless they show a page on it',
+    keyword_organic_state(ws_test.id('kM2'), 'dataforseo', null, null, null) = 'unverified'
+    and keyword_organic_state(ws_test.id('kM2'), 'dataforseo', 2, 'https://m1.example.test/service', null) = 'unverified'
+    and keyword_organic_state(ws_test.id('kM2'), 'dataforseo', 4, 'https://m2.example.test/service', null) = 'website'
+    and keyword_organic_state(ws_test.id('kM2'), 'dataforseo', null, null, 'm1.example.test') = 'unverified');
+  perform ws_test.ok('R4 single-site clients are unchanged (not found, website, third party)',
+    keyword_organic_state(ws_test.id('kA2'), 'dataforseo', null, null, null) = 'not_found'
+    and keyword_organic_state(ws_test.id('kA2'), 'dataforseo', 4, 'https://www.a.example.test/p', null) = 'website'
+    and keyword_organic_state(ws_test.id('kA2'), 'dataforseo', 4, 'https://www.facebook.com/a', null) = 'third_party');
+  perform ws_test.ok('R5 the ranking view shows no position for a sister page or an unattributed old row, and keeps the earlier own-site rank as history',
+    (select position is null and state = 'third_party' and previous_position = 5 and previous_state = 'website'
+       from client_growth_rankings where keyword_id = ws_test.id('kM1') and result_type = 'organic')
+    and (select position is null and state = 'unverified' from client_growth_rankings where keyword_id = ws_test.id('kM2') and result_type = 'organic'));
+  perform ws_test.ok('R6 the per-site coverage view reports no position from a sister page',
+    not exists (select 1 from core_keyword_site_coverage where keyword_id = ws_test.id('kM1') and latest_organic_position is not null));
+  perform ws_test.ok('R7 anon cannot resolve sites or judge rows',
+    not has_function_privilege('anon', 'public.keyword_site_hosts(uuid)', 'execute')
+    and not has_function_privilege('anon', 'public.keyword_organic_state(uuid, text, integer, text, text)', 'execute'));
 end $$;
 
 -- ── Access ──────────────────────────────────────────────────────────────────

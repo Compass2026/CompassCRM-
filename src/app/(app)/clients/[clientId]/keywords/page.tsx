@@ -21,7 +21,8 @@ import { LocationsPanel } from "@/components/locations-panel";
 import { GridConfigCard } from "@/components/grid-config-card";
 import { CoreKeywordListCard } from "@/components/core-keyword-list-card";
 import { cn } from "@/lib/utils";
-import { organicRankState, siteHosts } from "@/lib/organic-rank";
+import { keywordOrganicState } from "@/lib/organic-rank";
+import { keywordSite } from "../../../../../../supabase/functions/_shared/rank-site";
 
 const selectClass =
   "field-sm";
@@ -58,18 +59,26 @@ export default async function KeywordsPage({
       supabase
         .from("rank_snapshots")
         .select(
-          "keyword_id, location_id, result_type, position, url_ranked, source, recorded_at, keywords!inner(client_id)"
+          "keyword_id, location_id, result_type, position, url_ranked, source, site_host, recorded_at, keywords!inner(client_id)"
         )
         .eq("keywords.client_id", clientId)
         .order("recorded_at", { ascending: false })
         .limit(4000),
-      supabase.from("clients").select("website_url").eq("id", clientId).maybeSingle(),
-      supabase.from("sites").select("url").eq("client_id", clientId),
-      supabase.from("client_brand_workspaces").select("website_url").eq("client_id", clientId),
+      supabase.from("clients").select("name, dba, website_url").eq("id", clientId).maybeSingle(),
+      supabase.from("sites").select("id, url").eq("client_id", clientId),
+      supabase.from("client_brand_workspaces").select("id, name, website_url, blog_site_id, service_ids").eq("client_id", clientId),
     ]);
-  // The client's own websites. An organic row on any other host (a directory,
-  // social or review page carrying the business name) is not a ranking.
-  const hosts = siteHosts([client?.website_url, ...(sites ?? []).map((s) => s.url), ...(brands ?? []).map((b) => b.website_url)]);
+  // Each keyword's own website (its brand site for a multi-brand client). An
+  // organic row on any other host — a directory, a social page, a sister
+  // brand's site — is not that keyword's ranking.
+  const rankClient = { name: client?.name ?? "", dba: client?.dba ?? null, website_url: client?.website_url ?? null, sites: sites ?? [], client_brand_workspaces: brands ?? [] };
+  const multiBrand = (brands ?? []).length > 0;
+  const keywordHosts = new Map(
+    (keywords ?? []).map((k) => {
+      const site = keywordSite(rankClient, k);
+      return [k.id, site.ok ? [site.host] : []] as const;
+    })
+  );
 
   const physicalLocations = (locations ?? []).filter(
     (l) => l.is_physical_location
@@ -169,7 +178,9 @@ export default async function KeywordsPage({
   for (const s of snapshots ?? []) {
     const key = `${s.keyword_id}:${s.location_id}:${s.result_type}`;
     if (latest.has(key) || excluded.has(key)) continue;
-    const state = s.result_type === "organic" ? organicRankState(s.source, s.position, s.url_ranked, hosts) : null;
+    const state = s.result_type === "organic"
+      ? keywordOrganicState(s.source, s.position, s.url_ranked, s.site_host, keywordHosts.get(s.keyword_id) ?? [], multiBrand)
+      : null;
     if (state === "third_party" || state === "unverified") excluded.add(key);
     else latest.set(key, s.position);
   }

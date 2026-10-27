@@ -1083,14 +1083,19 @@ create trigger change_log_aa_core_keyword before insert or update on change_log
 create function core_keyword_change_record() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
+  -- Same predicate as the gate: an insert, or a revision of what the change
+  -- is about (type, site, keyword or URL). A same-keyword URL revision under
+  -- a newer approved version gets its own row for that version.
   if new.change_type in ('page_rewrite', 'page_added', 'blog_post') and coalesce(new.after->>'keyword_id', '') ~ '^[0-9a-f-]{36}$'
-     and (tg_op = 'INSERT' or (new.after->>'keyword_id') is distinct from (old.after->>'keyword_id')) then
+     and (tg_op = 'INSERT'
+          or (new.change_type, new.object_type, new.object_id, new.after->>'keyword_id', new.after->>'url')
+             is distinct from (old.change_type, old.object_type, old.object_id, old.after->>'keyword_id', old.after->>'url')) then
     perform core_keyword_link_once(new.client_id, (new.after->>'keyword_id')::uuid, null, null, new.id, null);
   end if;
   return null;
 end $$;
 revoke all on function core_keyword_change_record() from public, anon, authenticated;
-create trigger change_log_core_keyword_record after insert or update of after on change_log
+create trigger change_log_core_keyword_record after insert or update on change_log
   for each row execute function core_keyword_change_record();
 
 -- ── 12b. Tracking and reporting per site ───────────────────────────────────
@@ -1130,13 +1135,292 @@ begin
   return v_n;
 end $$;
 
+-- ── 12c. Rank observations per site ───────────────────────────────────────
+-- A keyword's organic rank is measured against its own website: the
+-- client's one site, or for a multi-brand client the brand site owning the
+-- keyword's service (the core list ownership). rank-sync resolves it per
+-- keyword (supabase/functions/_shared/rank-site.ts) and stores the host it
+-- judged against on site_host; rows from before carry null and are never
+-- rewritten. keyword_site_hosts() is the SQL mirror. keyword_organic_state()
+-- judges one row: for a multi-brand client a DataForSEO row not judged
+-- against this keyword's own host (older rows judged against "the first
+-- site") proves nothing for this site unless it shows a page on it, so it is
+-- 'unverified', never a position. The ranking views, the City Index and the
+-- coverage view read it, so no reader presents a sister site's result, or
+-- an unattributed old row, as a per-site measurement.
+alter table rank_snapshots add column site_host text;
+comment on column rank_snapshots.site_host is
+  'Host the collector judged this observation against (the keyword''s own website). Null on rows before 20261027160000.';
+
+-- The keyword's own website hosts: [its host], or {} when unresolved (two
+-- different hosts, no owning brand site, several, no website). Security
+-- invoker: a reader sees only what RLS lets it read. The portal views inline
+-- the same lookup because they run as their owner and a function would run
+-- as the portal user (20261021163048).
+create function public.keyword_site_hosts(p_keyword_id uuid) returns text[]
+language sql stable security invoker set search_path = public, pg_temp as $$
+  with k as (select id, client_id, service_id from keywords where id = p_keyword_id),
+  h as (
+    select array_agg(distinct x.h) filter (where x.h is not null) as hosts, count(distinct x.w) as owners
+    from k cross join lateral (
+      select public.url_host(w.website_url) as h, w.id as w from client_brand_workspaces w
+       where w.client_id = k.client_id and k.service_id = any(w.service_ids)
+      union all
+      select public.url_host(si.url), w.id from client_brand_workspaces w join sites si on si.id = w.blog_site_id
+       where w.client_id = k.client_id and k.service_id = any(w.service_ids)
+      union all
+      select public.url_host(c.website_url), null from clients c
+       where c.id = k.client_id and not exists (select 1 from client_brand_workspaces w where w.client_id = k.client_id)
+      union all
+      select public.url_host(si.url), null from sites si
+       where si.client_id = k.client_id and not exists (select 1 from client_brand_workspaces w where w.client_id = k.client_id)
+    ) x
+  )
+  select case when coalesce(cardinality(h.hosts), 0) = 1 and coalesce(h.owners, 0) <= 1 then h.hosts else '{}'::text[] end
+  from k cross join h
+$$;
+revoke all on function public.keyword_site_hosts(uuid) from public, anon;
+grant execute on function public.keyword_site_hosts(uuid) to authenticated, service_role;
+
+-- One organic row, given the keyword's hosts and whether its client is
+-- multi-brand. Pure.
+create function public.keyword_rank_state(p_source text, p_position integer, p_url text, p_site_host text, p_hosts text[], p_multi boolean)
+returns text language sql immutable parallel safe set search_path = '' as $$
+  select case
+    when p_multi and p_source = 'dataforseo' and (p_site_host is null or not (p_site_host = any(coalesce(p_hosts, '{}'))))
+      then case when p_position is not null and public.organic_rank_state(p_source, p_position, p_url, p_hosts) = 'website'
+                then 'website' else 'unverified' end
+    else public.organic_rank_state(p_source, p_position, p_url, p_hosts)
+  end
+$$;
+revoke all on function public.keyword_rank_state(text, integer, text, text, text[], boolean) from public, anon;
+grant execute on function public.keyword_rank_state(text, integer, text, text, text[], boolean) to authenticated, service_role;
+
+create function public.keyword_organic_state(p_keyword_id uuid, p_source text, p_position integer, p_url text, p_site_host text)
+returns text language sql stable security invoker set search_path = public, pg_temp as $$
+  select public.keyword_rank_state(p_source, p_position, p_url, p_site_host, public.keyword_site_hosts(p_keyword_id),
+           exists (select 1 from keywords k join client_brand_workspaces w on w.client_id = k.client_id where k.id = p_keyword_id))
+$$;
+revoke all on function public.keyword_organic_state(uuid, text, integer, text, text) from public, anon;
+grant execute on function public.keyword_organic_state(uuid, text, integer, text, text) to authenticated, service_role;
+
+-- The three ranking views and the City Index as 20261021163048, judging each
+-- row against its keyword's own website instead of every client host.
+create or replace view public.client_growth_rankings with (security_invoker = true) as
+select k.client_id, k.id as keyword_id, k.keyword, k.city as keyword_city,
+  s.location_id, l.name as location_name, s.result_type,
+  s.first_position, s.first_checked_at, s.position, s.checked_at, s.previous_position, s.previous_checked_at,
+  s.first_state, s.state, s.previous_state
+from public.keywords k
+cross join lateral (
+  -- The keyword's own website, as public.keyword_site_hosts (inline: this
+  -- view may run as its owner for a portal user).
+  select case when coalesce(cardinality(x.hosts), 0) = 1 and coalesce(x.owners, 0) <= 1 then x.hosts else '{}'::text[] end as hosts,
+         exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id) as multi
+  from (
+    select array_agg(distinct y.h) filter (where y.h is not null) as hosts, count(distinct y.w) as owners from (
+      select public.url_host(b.website_url) as h, b.id as w from public.client_brand_workspaces b
+       where b.client_id = k.client_id and k.service_id = any(b.service_ids)
+      union all
+      select public.url_host(si.url), b.id from public.client_brand_workspaces b join public.sites si on si.id = b.blog_site_id
+       where b.client_id = k.client_id and k.service_id = any(b.service_ids)
+      union all
+      select public.url_host(c.website_url), null from public.clients c
+       where c.id = k.client_id and not exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id)
+      union all
+      select public.url_host(si.url), null from public.sites si
+       where si.client_id = k.client_id and not exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id)
+    ) y
+  ) x
+) w
+left join lateral (
+  with ordered as (
+    select r.location_id, r.result_type::text as result_type, r.position, r.recorded_at,
+      case when r.result_type::text = 'organic' then public.keyword_rank_state(r.source::text, r.position, r.url_ranked, r.site_host, w.hosts, w.multi)
+           when r.position is null then 'not_found' else 'listed' end as state,
+      row_number() over (partition by r.location_id, r.result_type order by r.recorded_at desc, r.id desc) as latest,
+      row_number() over (partition by r.location_id, r.result_type order by r.recorded_at, r.id) as earliest
+    from public.rank_snapshots r
+    where r.keyword_id = k.id and r.source::text = 'dataforseo' and r.recorded_at <= now()
+  )
+  select o.location_id, o.result_type,
+    max(o.position) filter (where o.earliest = 1 and o.state in ('website', 'listed')) as first_position,
+    max(o.recorded_at) filter (where o.earliest = 1) as first_checked_at,
+    max(o.position) filter (where o.latest = 1 and o.state in ('website', 'listed')) as position,
+    max(o.recorded_at) filter (where o.latest = 1) as checked_at,
+    max(o.position) filter (where o.latest = 2 and o.state in ('website', 'listed')) as previous_position,
+    max(o.recorded_at) filter (where o.latest = 2) as previous_checked_at,
+    max(o.state) filter (where o.earliest = 1) as first_state,
+    max(o.state) filter (where o.latest = 1) as state,
+    max(o.state) filter (where o.latest = 2) as previous_state
+  from ordered o
+  where o.latest <= 2 or o.earliest = 1
+  group by o.location_id, o.result_type
+) s on true
+left join public.locations l on l.id = s.location_id and l.client_id = k.client_id
+where k.is_active and k.is_tracked;
+
+create or replace view public.portal_growth_rankings with (security_barrier = true, security_invoker = false) as
+select k.client_id, k.id as keyword_id, k.keyword, k.city as keyword_city,
+  s.location_id, l.name as location_name, s.result_type,
+  s.first_position, s.first_checked_at, s.position, s.checked_at, s.previous_position, s.previous_checked_at,
+  s.first_state, s.state, s.previous_state
+from public.keywords k
+cross join lateral (
+  -- The keyword's own website, as public.keyword_site_hosts (inline: this
+  -- view may run as its owner for a portal user).
+  select case when coalesce(cardinality(x.hosts), 0) = 1 and coalesce(x.owners, 0) <= 1 then x.hosts else '{}'::text[] end as hosts,
+         exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id) as multi
+  from (
+    select array_agg(distinct y.h) filter (where y.h is not null) as hosts, count(distinct y.w) as owners from (
+      select public.url_host(b.website_url) as h, b.id as w from public.client_brand_workspaces b
+       where b.client_id = k.client_id and k.service_id = any(b.service_ids)
+      union all
+      select public.url_host(si.url), b.id from public.client_brand_workspaces b join public.sites si on si.id = b.blog_site_id
+       where b.client_id = k.client_id and k.service_id = any(b.service_ids)
+      union all
+      select public.url_host(c.website_url), null from public.clients c
+       where c.id = k.client_id and not exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id)
+      union all
+      select public.url_host(si.url), null from public.sites si
+       where si.client_id = k.client_id and not exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id)
+    ) y
+  ) x
+) w
+left join lateral (
+  with ordered as (
+    select r.location_id, r.result_type::text as result_type, r.position, r.recorded_at,
+      case when r.result_type::text = 'organic' then public.keyword_rank_state(r.source::text, r.position, r.url_ranked, r.site_host, w.hosts, w.multi)
+           when r.position is null then 'not_found' else 'listed' end as state,
+      row_number() over (partition by r.location_id, r.result_type order by r.recorded_at desc, r.id desc) as latest,
+      row_number() over (partition by r.location_id, r.result_type order by r.recorded_at, r.id) as earliest
+    from public.rank_snapshots r
+    where r.keyword_id = k.id and r.source::text = 'dataforseo' and r.recorded_at <= now()
+  )
+  select o.location_id, o.result_type,
+    max(o.position) filter (where o.earliest = 1 and o.state in ('website', 'listed')) as first_position,
+    max(o.recorded_at) filter (where o.earliest = 1) as first_checked_at,
+    max(o.position) filter (where o.latest = 1 and o.state in ('website', 'listed')) as position,
+    max(o.recorded_at) filter (where o.latest = 1) as checked_at,
+    max(o.position) filter (where o.latest = 2 and o.state in ('website', 'listed')) as previous_position,
+    max(o.recorded_at) filter (where o.latest = 2) as previous_checked_at,
+    max(o.state) filter (where o.earliest = 1) as first_state,
+    max(o.state) filter (where o.latest = 1) as state,
+    max(o.state) filter (where o.latest = 2) as previous_state
+  from ordered o
+  where o.latest <= 2 or o.earliest = 1
+  group by o.location_id, o.result_type
+) s on true
+left join public.locations l on l.id = s.location_id and l.client_id = k.client_id
+where k.is_active and k.is_tracked and k.client_id = (select public.portal_client_id());
+
+create or replace view public.portal_rankings with (security_invoker = false) as
+with ranked as (
+  select k.client_id, k.id as keyword_id, k.keyword, k.city, k.is_money,
+    r.result_type::text as result_type, r.position, r.recorded_at,
+    case when r.result_type::text = 'organic' then public.keyword_rank_state(r.source::text, r.position, r.url_ranked, r.site_host, w.hosts, w.multi)
+         when r.position is null then 'not_found' else 'listed' end as state,
+    row_number() over (partition by k.id, r.result_type order by r.recorded_at desc) as rn
+  from public.rank_snapshots r
+  join public.keywords k on k.id = r.keyword_id
+  cross join lateral (
+    -- The keyword's own website, as public.keyword_site_hosts (inline: this
+    -- view may run as its owner for a portal user).
+    select case when coalesce(cardinality(x.hosts), 0) = 1 and coalesce(x.owners, 0) <= 1 then x.hosts else '{}'::text[] end as hosts,
+           exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id) as multi
+    from (
+      select array_agg(distinct y.h) filter (where y.h is not null) as hosts, count(distinct y.w) as owners from (
+        select public.url_host(b.website_url) as h, b.id as w from public.client_brand_workspaces b
+         where b.client_id = k.client_id and k.service_id = any(b.service_ids)
+        union all
+        select public.url_host(si.url), b.id from public.client_brand_workspaces b join public.sites si on si.id = b.blog_site_id
+         where b.client_id = k.client_id and k.service_id = any(b.service_ids)
+        union all
+        select public.url_host(c.website_url), null from public.clients c
+         where c.id = k.client_id and not exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id)
+        union all
+        select public.url_host(si.url), null from public.sites si
+         where si.client_id = k.client_id and not exists (select 1 from public.client_brand_workspaces b where b.client_id = k.client_id)
+      ) y
+    ) x
+  ) w
+  where k.client_id = (select public.portal_client_id())
+    and k.is_active and k.is_tracked
+    and r.source::text = 'dataforseo'
+)
+select client_id, keyword, city, is_money, result_type,
+  max(position) filter (where rn = 1 and state in ('website', 'listed')) as position,
+  max(position) filter (where rn = 2 and state in ('website', 'listed')) as previous_position,
+  max(recorded_at) filter (where rn = 1) as checked_at,
+  max(state) filter (where rn = 1) as state,
+  max(state) filter (where rn = 2) as previous_state
+from ranked
+where rn <= 2
+group by client_id, keyword, city, is_money, result_type;
+
+create or replace function public.compute_location_index(p_location_id uuid, p_period date)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_client uuid;
+  v_start date := date_trunc('month', p_period)::date;
+  v_end date := (date_trunc('month', p_period) + interval '1 month')::date;
+  v_organic numeric(5,2);
+  v_map numeric(5,2);
+  v_counted int;
+begin
+  select client_id into v_client from locations where id = p_location_id;
+  if v_client is null then
+    return;
+  end if;
+
+
+  select count(*) into v_counted
+  from keywords k
+  where k.client_id = v_client and k.is_active and k.priority = 'p1';
+
+  -- Latest in-period organic row per P1 keyword, chosen BEFORE judging it:
+  -- when that latest check found nothing, or found a page that is not the
+  -- client's website, the keyword is left out. An older website rank is never
+  -- substituted for the latest check. Map pack keeps its existing rule (latest
+  -- found position in the period).
+  with latest as (
+    select distinct on (rs.keyword_id, rs.result_type)
+      rs.result_type, rs.position as pos,
+      rs.result_type::text <> 'organic'
+        or public.keyword_organic_state(rs.keyword_id, rs.source::text, rs.position, rs.url_ranked, rs.site_host) = 'website' as counts
+    from rank_snapshots rs
+    join keywords k on k.id = rs.keyword_id
+    where rs.location_id = p_location_id
+      and k.client_id = v_client and k.is_active and k.priority = 'p1'
+      and (rs.result_type::text = 'organic' or rs.position is not null)
+      and rs.recorded_at >= v_start and rs.recorded_at < v_end
+    order by rs.keyword_id, rs.result_type, rs.recorded_at desc
+  )
+  select round(avg(pos) filter (where result_type = 'organic' and counts), 2),
+         round(avg(pos) filter (where result_type = 'map_pack'), 2)
+  into v_organic, v_map
+  from latest;
+
+  insert into location_index (location_id, period, organic_index, map_index, keywords_counted, computed_at)
+  values (p_location_id, v_start, v_organic, v_map, v_counted, now())
+  on conflict (location_id, period) do update
+    set organic_index = excluded.organic_index,
+        map_index = excluded.map_index,
+        keywords_counted = excluded.keywords_counted,
+        computed_at = excluded.computed_at;
+end $$;
+revoke execute on function public.compute_location_index(uuid, date) from public, anon, authenticated;
+
 -- Per site: each approved core keyword with its tracking state, the governed
 -- content that traces to it and its latest organic position.
 create view core_keyword_site_coverage with (security_invoker = true) as
 select l.client_id, l.brand_workspace_id, w.name as site_name, l.id as list_id, l.version as list_version,
        k.id as keyword_id, k.keyword, k.intent, k.is_tracked, k.service_id,
        (select count(*) from core_keyword_links c where c.list_id = l.id and c.core_keyword_id = k.id) as linked_items,
-       (select r.position from rank_snapshots r where r.keyword_id = k.id and r.result_type = 'organic'
+       (select case when public.keyword_organic_state(k.id, r.source::text, r.position, r.url_ranked, r.site_host) = 'website'
+                    then r.position end
+          from rank_snapshots r where r.keyword_id = k.id and r.result_type = 'organic'
           order by r.recorded_at desc limit 1) as latest_organic_position,
        (select max(r.recorded_at) from rank_snapshots r where r.keyword_id = k.id) as last_ranked_at
 from core_keyword_lists l

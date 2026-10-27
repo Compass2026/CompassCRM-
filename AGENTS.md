@@ -173,7 +173,13 @@ Both are idempotent: natural-key unique indexes on `rank_snapshots`,
   every 20 minutes, a no-op when nothing is ready) reads `tasks_ready`,
   fetches each result, writes organic + map-pack positions to
   `rank_snapshots` with `source = 'dataforseo'` and `recorded_at` = the
-  run's start (the client's site host or business name identifies "us"),
+  run's start (the keyword's own website identifies "us": the client's one
+  site, or for a multi-brand client the brand site owning the keyword's
+  service — `supabase/functions/_shared/rank-site.ts`, Oct 27 2026; the
+  host judged against is stored on `rank_snapshots.site_host`, and a
+  keyword whose site cannot be resolved is neither posted nor recorded but
+  named in the run's error; the business or brand name still counts in the
+  map pack),
   stamps `keywords.last_checked`, completes the run once every posted task
   has answered and recomputes the City Index; a run still open after three
   hours is marked failed with the shortfall. **Locations:** every
@@ -958,6 +964,12 @@ Migration `20261027160000_weekly_social_slots.sql` (sandbox suite
   `is_tracked` to the union of the client's approved site lists
   (`normalize_tracked_keywords` keeps the 0033 top-50 rule only for
   clients with none); `core_keyword_site_coverage` reports per site.
+  Readers judge each organic row against its keyword's own website
+  (`keyword_site_hosts` / `keyword_rank_state`, inlined in the ranking
+  views and used by the City Index): a sister brand's page is
+  `third_party`, and an older multi-brand row (no `site_host`, judged
+  against "the first site") is `unverified` unless it shows a page on the
+  keyword's own site. No stored row is rewritten.
   Proposals are data steps (`supabase/seeds/core-keyword-lists-v1-proposed.sql`,
   `bhg-core-keyword-lists-v1-proposed.sql`), not approvals.
 - **No fail-open.** Every content path is gated, whoever writes it: the
@@ -978,8 +990,11 @@ Migration `20261027160000_weekly_social_slots.sql` (sandbox suite
   shared profile). A city keyword posted to a location must be one of its
   markets (`market_not_applicable`); a client with a single verified
   location and no rows is unaffected, which is every client today.
-  `supabase/seeds/gbp-location-markets-v1-proposed.sql` proposes Logic
-  Wichita (office) and BHG's shared HQ (all).
+  The rows take effect on insert (there is no proposed state), so
+  `supabase/seeds/gbp-location-markets-v1-after-scope-confirmation.sql`
+  (Logic Wichita office, BHG shared HQ all) refuses to run until
+  `compass.market_scope_confirmed` names Tom's confirmation; it is not one
+  of the keyword proposal seeds.
 - **Worker:** one token per run (`worker-routine:<run id>`, reused on
   retries) → `social_slot_claim` (the binding one-hour claim, same door as
   `authority_draft_claim`; refuses a slot no longer eligible) →

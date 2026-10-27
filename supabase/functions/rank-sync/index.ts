@@ -25,12 +25,17 @@
 // and costs ten times as much; the queue takes 100 per request, answers in a
 // few minutes, and 400 checks a week come to about $3.50 a month.
 //
-// The client's site host (sites.url, else clients.website_url) gives the
-// organic position; the host or the business name gives the map-pack
-// position. Secrets (Vault): DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD; without
+// Each keyword is measured against its own website (_shared/rank-site.ts):
+// the client's one site, or for a multi-brand client the brand site that
+// owns the keyword's service. That host gives the organic position and is
+// stored on the snapshot (site_host); the host or the business / brand name
+// gives the map-pack position. A keyword whose site cannot be resolved is
+// not posted (no paid check that could not be attributed) and is named in
+// the run's error. Secrets (Vault): DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD; without
 // them post answers { skipped } and nothing breaks.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { keywordSite, onKeywordSite, type RankSiteClient } from "../_shared/rank-site.ts";
 
 const DFS = "https://api.dataforseo.com/v3/serp/google/organic";
 const BATCH = 100;
@@ -66,15 +71,6 @@ function stateName(s: string | null | undefined): string | null {
   if (!s) return null;
   const t = s.trim();
   return STATES[t.toUpperCase()] ?? (Object.values(STATES).find((n) => n.toLowerCase() === t.toLowerCase()) ?? null);
-}
-
-function host(u: string | null | undefined): string | null {
-  if (!u) return null;
-  try {
-    return new URL(u.startsWith("http") ? u : `https://${u}`).hostname.replace(/^www\./, "").toLowerCase();
-  } catch {
-    return null;
-  }
 }
 
 function norm(s: string | null | undefined): string {
@@ -121,15 +117,11 @@ Deno.serve(async (req) => {
   };
 
   // ── Shared: who counts as "us", and the location row for a keyword ──────
-  type ClientRow = { id: string; name: string; dba: string | null; city: string | null; state: string | null; website_url: string | null; sites: { url: string | null }[] | null };
-  const identity = (client: ClientRow) => {
-    const site = client.sites?.find((s) => s.url)?.url ?? client.website_url;
-    const ourHost = host(site);
-    const ourNames = [client.name, client.dba].filter(Boolean).map((n) => norm(n));
-    const onSite = (it: Item) => {
-      const d = (it.domain ?? host(it.url) ?? "").replace(/^www\./, "").toLowerCase();
-      return !!ourHost && !!d && (d === ourHost || d.endsWith(`.${ourHost}`));
-    };
+  type ClientRow = RankSiteClient & { id: string; city: string | null; state: string | null };
+  const CLIENT_COLUMNS = "id, name, dba, city, state, website_url, sites(id, url), client_brand_workspaces(id, name, website_url, blog_site_id, service_ids)";
+  const identity = (ourHost: string, names: string[]) => {
+    const ourNames = names.map((n) => norm(n));
+    const onSite = (it: Item) => onKeywordSite(it.domain ?? it.url, ourHost);
     // Organic is the website only. A directory, social or review page titled
     // with the business name (or another firm with the same name) is not the
     // site's rank (Lucas, Oct 2026: Facebook, MapQuest, Angi in Washington).
@@ -187,7 +179,7 @@ Deno.serve(async (req) => {
   if (mode === "post") {
     let clientQuery = supabase
       .from("clients")
-      .select("id, name, dba, city, state, website_url, sites(url)")
+      .select(CLIENT_COLUMNS)
       .in("status", ["active", "launching"]);
     if (body.client_id) clientQuery = clientQuery.eq("id", body.client_id);
     const { data: clients, error: clientError } = await clientQuery;
@@ -195,13 +187,20 @@ Deno.serve(async (req) => {
 
     const posted: { client: string; keywords: number; tasks: number; cost: number; errors: string[] }[] = [];
     for (const client of (clients ?? []) as ClientRow[]) {
-      const { data: kws } = await supabase
+      const { data: tracked } = await supabase
         .from("keywords")
-        .select("id, keyword, city")
+        .select("id, keyword, city, service_id")
         .eq("client_id", client.id)
         .eq("is_active", true)
         .eq("is_tracked", true);
-      if (!kws?.length) continue;
+      if (!tracked?.length) continue;
+      // Only keywords whose own website is known are checked.
+      const unsited: string[] = [];
+      const kws = tracked.filter((k) => {
+        const site = keywordSite(client, k);
+        if (!site.ok) unsited.push(`${k.keyword}: not checked, ${site.problem}`);
+        return site.ok;
+      });
 
       // One open run per client: a second post while one is running would
       // only double the bill.
@@ -224,7 +223,7 @@ Deno.serve(async (req) => {
         if (coord) return { ...base, location_coordinate: coord };
         return { ...base, location_name: `${k.city ?? client.city ?? ""},${stateFull},United States`.replace(/^,/, "") };
       };
-      const stat = { client: client.name, keywords: kws.length, tasks: 0, cost: 0, retried: 0, errors: [] as string[] };
+      const stat = { client: client.name, keywords: tracked.length, tasks: 0, cost: 0, retried: 0, errors: [...unsited] as string[] };
       const postBatch = async (batch: Record<string, unknown>[]): Promise<string[]> => {
         const refused: string[] = [];
         for (let i = 0; i < batch.length; i += BATCH) {
@@ -239,7 +238,7 @@ Deno.serve(async (req) => {
         }
         return refused;
       };
-      const refused = await postBatch(kws.map((k) => taskFor(k)));
+      const refused = kws.length ? await postBatch(kws.map((k) => taskFor(k))) : [];
       if (refused.length && homeCoord) {
         // The city name was not in DataForSEO's list; check those at the home coordinates.
         stat.retried = refused.length;
@@ -278,9 +277,9 @@ Deno.serve(async (req) => {
   const job = (async () => {
     const tagged = ready.filter((r) => r.tag && /^[0-9a-f-]{36}$/i.test(r.tag));
     // Bound PostgREST URLs as the client roster grows. Never ignore read errors.
-    const kws: {id:string;keyword:string;city:string|null;client_id:string}[]=[];
+    const kws: {id:string;keyword:string;city:string|null;client_id:string;service_id:string|null}[]=[];
     for(let offset=0;offset<tagged.length;offset+=80) {
-      let query=supabase.from("keywords").select("id, keyword, city, client_id")
+      let query=supabase.from("keywords").select("id, keyword, city, client_id, service_id")
         .in("id",tagged.slice(offset,offset+80).map(r=>r.tag!));
       if(body.client_id)query=query.eq("client_id",body.client_id);
       const {data,error}=await query;
@@ -291,7 +290,7 @@ Deno.serve(async (req) => {
     const clientIds = [...new Set((kws ?? []).map((k) => k.client_id))];
     const { data: clients, error: clientsError } = await supabase
       .from("clients")
-      .select("id, name, dba, city, state, website_url, sites(url)")
+      .select(CLIENT_COLUMNS)
       .in("id", clientIds);
     if(clientsError)throw new Error(`client_lookup_failed: ${clientsError.code}`);
     const { data: runs, error: runsError } = await supabase
@@ -303,10 +302,10 @@ Deno.serve(async (req) => {
     if(runsError)throw new Error(`run_lookup_failed: ${runsError.code}`);
     const runFor = new Map<string, { id: string; started_at: string; checks_count: number | null }>();
     for (const r of runs ?? []) if (!runFor.has(r.client_id)) runFor.set(r.client_id, r);
-    const isUsFor = new Map<string, ReturnType<typeof identity>>();
+    const clientFor = new Map<string, ClientRow>();
     const locFor = new Map<string, Awaited<ReturnType<typeof locationResolver>>>();
     for (const c of (clients ?? []) as ClientRow[]) {
-      isUsFor.set(c.id, identity(c));
+      clientFor.set(c.id, c);
       locFor.set(c.id, await locationResolver(c));
     }
 
@@ -321,7 +320,11 @@ Deno.serve(async (req) => {
       if (!got.ok || !t || t.status_code !== 20000) { errors.push(`${kw.keyword}: ${t?.status_message ?? got.status}`); return; }
       cost += Number(t.cost ?? 0);
       const items: Item[] = t.result?.[0]?.items ?? [];
-      const isUs = isUsFor.get(kw.client_id)!;
+      // Judged against this keyword's own site, resolved now: a sister
+      // brand's result is never this keyword's rank.
+      const site = keywordSite(clientFor.get(kw.client_id)!, kw);
+      if (!site.ok) { errors.push(`${kw.keyword}: not recorded, ${site.problem}`); return; }
+      const isUs = identity(site.host, site.names);
       const organic = items.filter((x) => x.type === "organic");
       const pack = items.filter((x) => x.type === "local_pack" || x.type === "map");
       const org = organic.find(isUs.organic);
@@ -334,12 +337,12 @@ Deno.serve(async (req) => {
       rows.push({
         keyword_id: kw.id, location_id: locationId, result_type: "organic",
         position: org?.rank_group ?? null, url_ranked: org?.url ?? null,
-        recorded_at: recordedAt, source: "dataforseo", run_id: run?.id ?? null,
+        recorded_at: recordedAt, source: "dataforseo", run_id: run?.id ?? null, site_host: site.host,
       });
       rows.push({
         keyword_id: kw.id, location_id: locationId, result_type: "map_pack",
         position: packHit ? pack.indexOf(packHit) + 1 : null, url_ranked: packHit?.url ?? null,
-        recorded_at: recordedAt, source: "dataforseo", run_id: run?.id ?? null,
+        recorded_at: recordedAt, source: "dataforseo", run_id: run?.id ?? null, site_host: site.host,
       });
     });
 
