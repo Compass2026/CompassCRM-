@@ -20,16 +20,17 @@ grant usage on schema ws_test to anon, authenticated, service_role;
 grant execute on all functions in schema ws_test to anon, authenticated, service_role;
 
 set local session_replication_role = replica;
-insert into clients (id, name, status) values
-  (ws_test.id('A'), 'WS Active', 'active'), (ws_test.id('L'), 'WS Launching', 'launching'),
-  (ws_test.id('D'), 'WS Draft board', 'launching'), (ws_test.id('K'), 'WS No intent', 'active'),
-  (ws_test.id('M'), 'WS Multi', 'active');
+insert into clients (id, name, status, website_url) values
+  (ws_test.id('A'), 'WS Active', 'active', 'https://www.a.example.test'), (ws_test.id('L'), 'WS Launching', 'launching', 'https://l.example.test'),
+  (ws_test.id('D'), 'WS Draft board', 'launching', 'https://d.example.test'), (ws_test.id('K'), 'WS No intent', 'active', 'https://k.example.test'),
+  (ws_test.id('M'), 'WS Multi', 'active', 'https://parent.example.test');
 insert into brand_boards (client_id, status, approved_on) values
   (ws_test.id('A'), 'approved', now()), (ws_test.id('L'), 'approved', now()), (ws_test.id('D'), 'draft', null),
   (ws_test.id('K'), 'approved', now()), (ws_test.id('M'), 'draft', null);
 insert into services (id, client_id, name, status, page_url) values
   (ws_test.id('sA'), ws_test.id('A'), 'Service A', 'approved', 'https://a.example.test/service'),
   (ws_test.id('sA2'), ws_test.id('A'), 'Service A2', 'approved', 'https://a.example.test/service-2'),
+  (ws_test.id('sL2'), ws_test.id('L'), 'Service L off-site', 'approved', 'https://booking.example.test/l'),
   (ws_test.id('sL'), ws_test.id('L'), 'Service L', 'approved', 'https://l.example.test/service'),
   (ws_test.id('sD'), ws_test.id('D'), 'Service D', 'approved', 'https://d.example.test/service'),
   (ws_test.id('sK'), ws_test.id('K'), 'Service K', 'approved', 'https://k.example.test/service'),
@@ -38,10 +39,19 @@ insert into services (id, client_id, name, status, page_url) values
 insert into keywords (id, client_id, keyword, service_id, is_active, intent, target_url) values
   (ws_test.id('kA'), ws_test.id('A'), 'kw a', ws_test.id('sA'), true, 'commercial', 'https://a.example.test/service'),
   (ws_test.id('kL'), ws_test.id('L'), 'kw l', ws_test.id('sL'), true, 'informational', null),
+  (ws_test.id('kL2'), ws_test.id('L'), 'kw l2', ws_test.id('sL2'), true, 'commercial', null),
   (ws_test.id('kD'), ws_test.id('D'), 'kw d', ws_test.id('sD'), true, 'commercial', null),
   (ws_test.id('kK'), ws_test.id('K'), 'kw k', ws_test.id('sK'), true, null, null),
   (ws_test.id('kM1'), ws_test.id('M'), 'kw m1', ws_test.id('sM1'), true, 'commercial', null),
   (ws_test.id('kM2'), ws_test.id('M'), 'kw m2', ws_test.id('sM2'), true, 'commercial', null);
+insert into page_groups (client_id, name, page_type, target_url, status, supporting_keyword_ids) values
+  (ws_test.id('A'), 'A page', 'service', 'https://a.example.test/service/', 'approved', '{}'),
+  (ws_test.id('L'), 'L page', 'service', 'https://l.example.test/service', 'approved', '{}'),
+  (ws_test.id('L'), 'L off-site page', 'service', 'https://booking.example.test/l', 'approved', '{}'),
+  (ws_test.id('D'), 'D page', 'service', 'https://d.example.test/service', 'approved', '{}'),
+  (ws_test.id('K'), 'K page', 'service', 'https://k.example.test/service', 'approved', '{}'),
+  (ws_test.id('M'), 'M1 page', 'service', 'https://m1.example.test/service', 'approved', '{}'),
+  (ws_test.id('M'), 'M2 page', 'service', 'https://m2.example.test/service', 'approved', '{}');
 insert into social_accounts (id, client_id, platform, display_name, external_account_id, publish_provider, publish_account_id,
                              publish_page_id, publish_verified_at, publish_enabled) values
   (ws_test.id('fbA'), ws_test.id('A'), 'facebook', 'A Page', '11111', 'zernio', 'aaaaaaaaaaaaaaaaaaaaaa01', '11111', now(), false),
@@ -102,7 +112,18 @@ do $$ begin
   perform ws_test.ok('R5 a draft brand board blocks drafting',
     ws_test.reason('D', 'D.fb') = 'The brand board is not approved.');
   perform ws_test.ok('R6 no keyword with an intent, approved service and owner page → named reason',
-    ws_test.reason('K', 'K.fb') = 'No active keyword with an intent, an approved service and an owner page.');
+    ws_test.reason('K', 'K.fb') = 'No active keyword with an intent and an approved service whose owner page is on the site with an approved page group.');
+  perform set_config('session_replication_role', 'replica', true);
+  update page_groups set status = 'proposed' where client_id = ws_test.id('A');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('R6b the drafter''s own page gate: no approved page group for the owner page → not ready (www and trailing slash ignored when approved)',
+    ws_test.reason('A', 'A.fb') like 'No active keyword%');
+  perform set_config('session_replication_role', 'replica', true);
+  update page_groups set status = 'approved' where client_id = ws_test.id('A');
+  perform set_config('session_replication_role', 'origin', true);
+  perform ws_test.ok('R6c an owner page off the client''s site (a booking platform) does not count; an on-site one does',
+    ws_test.reason('A', 'A.fb') = 'READY' and ws_test.reason('L', 'L.fb') = 'READY'
+    and (select count(*) from keywords k join services v on v.id = k.service_id where k.client_id = ws_test.id('L')) = 2);
   perform ws_test.ok('R7 multi-brand: an approved site with its own Page is ready; the shared location serves it',
     ws_test.reason('M', 'M1.fb') = 'READY' and ws_test.reason('M', 'M1.gb') = 'READY'
     and (select social_account_id from social_slot_readiness(ws_test.id('M'), ws_test.w(), ws_test.w() + 6) where plan_item_id = ws_test.id('M1.fb')) = ws_test.id('fbM1'));

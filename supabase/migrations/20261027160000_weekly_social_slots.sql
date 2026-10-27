@@ -66,8 +66,9 @@ create unique index tasks_social_slot_key on tasks(key) where key like 'social\_
 --             location is bound (drafter_write's own rule). A location shared
 --             by several brand sites serves them all; shared_same_day counts
 --             the other open slots on that location and day.
--- Keyword: at least one active keyword with a recorded intent, an approved
--- service of the slot's brand (or client) and an http(s) owner page.
+-- Keyword: at least one active keyword with a recorded intent and an approved
+-- service of the slot's brand (or client) that passes post-drafter's page
+-- gate, so a queued task is one the drafter can write.
 create function social_slot_readiness(p_client_id uuid, p_from date, p_through date)
 returns table (
   plan_item_id uuid,
@@ -83,8 +84,8 @@ returns table (
 )
 language sql stable security invoker set search_path = public, pg_temp as $$
   with slots as (
-    select i.*, c.status::text as client_status,
-           w.status as ws_status, w.facebook_account_id as ws_facebook, w.service_ids as ws_services,
+    select i.*, c.status::text as client_status, c.website_url as client_website,
+           w.status as ws_status, w.facebook_account_id as ws_facebook, w.service_ids as ws_services, w.website_url as ws_website,
            exists (select 1 from client_brand_workspaces x where x.client_id = i.client_id) as multi
     from content_plan_items i
     join clients c on c.id = i.client_id
@@ -129,12 +130,20 @@ language sql stable security invoker set search_path = public, pg_temp as $$
       then 'The brand board is not approved.'
     when d.account_id is null and s.standard_key = 'facebook_posts' then 'No verified Facebook Page is bound for this site.'
     when d.account_id is null then 'No verified Business Profile location is bound for this client.'
+    -- post-drafter's own page gate (brief.ts): the service's https page, on
+    -- the site's host (the brand site's for multi-brand clients), targeted
+    -- by an approved page group. URLs compared without www or trailing slash.
     when not exists (
       select 1 from keywords k join services v on v.id = k.service_id and v.client_id = k.client_id
        where k.client_id = s.client_id and k.is_active and k.intent is not null and v.status = 'approved'
-         and coalesce(k.target_url, v.page_url) ~ '^https?://\S+$'
+         and v.page_url ~ '^https://\S+$'
+         and lower(regexp_replace(substring(v.page_url from '^https?://([^/:?#]+)'), '^www\.', ''))
+             = lower(regexp_replace(substring(coalesce(s.ws_website, s.client_website) from '^https?://([^/:?#]+)'), '^www\.', ''))
+         and exists (select 1 from page_groups g where g.client_id = v.client_id and g.status = 'approved'
+                       and lower(regexp_replace(regexp_replace(g.target_url, '^(https?://)www\.', '\1'), '/+$', ''))
+                         = lower(regexp_replace(regexp_replace(v.page_url, '^(https?://)www\.', '\1'), '/+$', '')))
          and (not s.multi or v.id = any(s.ws_services)))
-      then 'No active keyword with an intent, an approved service and an owner page.'
+      then 'No active keyword with an intent and an approved service whose owner page is on the site with an approved page group.'
   end as reason) r
   order by s.planned_date, s.id
 $$;
