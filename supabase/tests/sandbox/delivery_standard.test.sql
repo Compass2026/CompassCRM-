@@ -298,7 +298,7 @@ begin
     (select brand_workspace_id from content_plan_items where id = moved) = '00000000-0000-4000-d504-00000000000e');
 end $$;
 
--- 20261015200000: a second verified Business Profile location is a
+-- 20261027150000: a second verified Business Profile location is a
 -- destination chosen per slot, never "none"; targets and slots are unchanged
 -- (binding a location never adds GBP work).
 do $$

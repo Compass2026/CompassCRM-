@@ -571,7 +571,8 @@ $anchor$;
 $gate$;
 begin
   if strpos(definition, 'core_keyword_gate_v1') > 0 then return; end if;
-  if strpos(definition, 'drafter_gbp_destination_v1') = 0 or strpos(definition, 'authority_draft_claims_v1') = 0
+  if (strpos(definition, 'drafter_gbp_destination_v1') = 0 and strpos(definition, 'drafter_gbp_destination_v2') = 0)
+     or strpos(definition, 'authority_draft_claims_v1') = 0
      or (length(definition) - length(replace(definition, anchor, ''))) <> length(anchor) then
     raise exception 'Unexpected drafter_write definition; review before applying the core keyword gate';
   end if;

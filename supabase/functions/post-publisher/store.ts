@@ -330,7 +330,7 @@ export function createStore(supabase: Client) {
 
     // ── Business Profile through Zernio ──
     // A bound Business Profile location of the client (any one: a client may
-    // have several since 20261015200000). Only decides whether the client is
+    // have several since 20261027150000). Only decides whether the client is
     // on Zernio; a post is always sent to its own approved location.
     async gbpLocationForClient(clientId: string): Promise<import("./facebook.ts").Binding | null> {
       const rows = (await one<import("./facebook.ts").Binding[]>(

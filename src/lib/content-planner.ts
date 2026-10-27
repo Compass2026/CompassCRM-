@@ -138,7 +138,7 @@ export type PlanFields = {
   target_url: string | null;
   planned_date: string | null;
   notes: string | null;
-  // A Business Profile slot's location (20261015200000); present only when the
+  // A Business Profile slot's location (20261027150000); present only when the
   // form offers the choice, so a single-location client's slots are untouched.
   gbp_location_id?: string | null;
 };

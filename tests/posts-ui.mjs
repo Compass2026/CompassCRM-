@@ -526,7 +526,7 @@ try {
   ok("Approved Business Profile post: Zernio route, exact location and the no-write preflight (real function) from the post page");
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
-  // One row per bound location, plus a row to bind another (20261015200000).
+  // One row per bound location, plus a row to bind another (20261027150000).
   const gbpRow = page.locator(`[data-gbp-row="${CLIENT_A}"][data-gbp-location="locations/7770001"]`);
   assert.equal(await page.locator(`[data-gbp-row="${CLIENT_A}"][data-gbp-location="another"]`).count(), 1, "a row binds another location");
   assert.match(await gbpRow.textContent(), /locations\/7770001/);

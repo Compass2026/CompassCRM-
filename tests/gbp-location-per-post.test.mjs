@@ -1,4 +1,4 @@
-// Several Business Profile locations per client (20261015200000): a GBP brief
+// Several Business Profile locations per client (20261027150000): a GBP brief
 // names its location, never guessed between several; a planner slot names its
 // location only when the form offers the choice. The database boundary is
 // supabase/tests/sandbox/gbp_location_per_post.test.sql.

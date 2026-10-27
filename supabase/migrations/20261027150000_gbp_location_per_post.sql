@@ -186,7 +186,7 @@ declare
 
 $q$;
   v2 text := $q$
-  -- drafter_gbp_destination_v2 (20261015200000): the location the draft names
+  -- drafter_gbp_destination_v2 (20261027150000): the location the draft names
   -- (one of this client's verified Zernio locations), else the client's only
   -- one. Never chosen between several, never another client's.
   if v_channel = 'google_business' then
