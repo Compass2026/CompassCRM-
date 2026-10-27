@@ -173,7 +173,13 @@ Both are idempotent: natural-key unique indexes on `rank_snapshots`,
   every 20 minutes, a no-op when nothing is ready) reads `tasks_ready`,
   fetches each result, writes organic + map-pack positions to
   `rank_snapshots` with `source = 'dataforseo'` and `recorded_at` = the
-  run's start (the client's site host or business name identifies "us"),
+  run's start (the keyword's own website identifies "us": the client's one
+  site, or for a multi-brand client the brand site owning the keyword's
+  service — `supabase/functions/_shared/rank-site.ts`, Oct 27 2026; the
+  host judged against is stored on `rank_snapshots.site_host`, and a
+  keyword whose site cannot be resolved is neither posted nor recorded but
+  named in the run's error; the business or brand name still counts in the
+  map pack),
   stamps `keywords.last_checked`, completes the run once every posted task
   has answered and recomputes the City Index; a run still open after three
   hours is marked failed with the shortfall. **Locations:** every
@@ -924,6 +930,88 @@ and the per-site survey in `docs/website-updates.md`.
   `compass-astro` branch deleted; `sites` rows point at Tom's Next.js repos).
   Since Sept 20 the side-branch name for a build parked next to someone
   else's site is `compass/foundation-build`.
+
+## Weekly Facebook and Business Profile drafts (Oct 27 2026)
+
+Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
+`weekly_social_slots.test.sql`). The monthly delivery standard plans
+8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
+
+- **Wednesday beat** (`create_weekly_blog_tasks`, unchanged cron): besides
+  the blog slots, `queue_standard_social_tasks()` opens one CLAUDE task
+  keyed `social_slot:<plan item>` per standard Facebook / GBP slot dated
+  this week that `social_slot_readiness()` calls ready, and fires the worker
+  once per client. A unique index makes a second task per slot impossible.
+  Forward only: slots before this week are never queued.
+- **Ready** = client active or launching, slot not held / linked / queued,
+  brand approved (the slot's brand site for multi-brand clients, else the
+  board), destination bound through the publisher (Facebook: the site's own
+  Page, never a sister brand's; GBP: zernio transport and exactly one
+  verified location, shared by every brand of the client), and an active
+  keyword with a recorded intent, an approved service and an owner page.
+  Anything else is skipped with the first reason, logged in
+  `delivery_queue_log` (team read-only).
+- **Core keyword list** (Tom, Oct 27: every program derives from its
+  approved core 50, **per site**). `core_keyword_lists` holds versioned
+  lists per site program (`brand_workspace_id`: each brand site of a
+  multi-brand client — BHG has three — else the client): proposed →
+  approved only by a signed-in teammate (Keywords tab › Core keyword list)
+  and only with **exactly 50 valid keywords** (active, intent recorded, a
+  service of that site; judged at approval, `core_list_incomplete`
+  otherwise — an incomplete list stays a proposal). Never edited or
+  deleted; a new approval supersedes the old. A long-tail keyword counts
+  only through `keywords.core_parent_keyword_id`. Approving a list sets
+  `is_tracked` to the union of the client's approved site lists
+  (`normalize_tracked_keywords` keeps the 0033 top-50 rule only for
+  clients with none); `core_keyword_site_coverage` reports per site.
+  Readers judge each organic row against its keyword's own website
+  (`keyword_site_hosts` / `keyword_rank_state`, inlined in the ranking
+  views and used by the City Index): a sister brand's page is
+  `third_party`, and an older multi-brand row (no `site_host`, judged
+  against "the first site") is `unverified` unless it shows a page on the
+  keyword's own site. No stored row is rewritten.
+  Proposals are data steps (`supabase/seeds/core-keyword-lists-v1-proposed.sql`,
+  `bhg-core-keyword-lists-v1-proposed.sql`), not approvals.
+- **No fail-open.** Every content path is gated, whoever writes it: the
+  weekly queue (per site: one site's missing list never stops its sister),
+  claim and link, `drafter_write`, `content_draft_open_weekly`, any social
+  post or content draft (blog or page) entering review **or revised while
+  in review** (keyword, service, destination, plan item), and every
+  `page_rewrite` / `page_added` / `blog_post` change_log row, which must
+  name its `sites` row (`object_type 'site'`), the site's program
+  (`client_brand_workspaces.blog_site_id`) and `after.keyword_id`, with
+  `after.url` on that site. No approved list, or a revoked one → refused.
+  `core_keyword_links` records keyword, list and version for each entry
+  and each revision. The only bypass is a recorded exception
+  (`core_keyword_exemptions`, granted by a signed-in team admin with a
+  reason; production has none).
+- **Location markets.** `gbp_location_markets` says which city keywords a
+  Business Profile location takes (`office` / `service_area` / `all` for a
+  shared profile). A city keyword posted to a location must be one of its
+  markets (`market_not_applicable`); a client with a single verified
+  location and no rows is unaffected, which is every client today.
+  The rows take effect on insert (there is no proposed state), so
+  `supabase/seeds/gbp-location-markets-v1-after-scope-confirmation.sql`
+  (Logic Wichita office, BHG shared HQ all) refuses to run until
+  `compass.market_scope_confirmed` names Tom's confirmation; it is not one
+  of the keyword proposal seeds.
+- **Worker:** one token per run (`worker-routine:<run id>`, reused on
+  retries) → `social_slot_claim` (the binding one-hour claim, same door as
+  `authority_draft_claim`; refuses a slot no longer eligible) →
+  `post-drafter` brief / check / submit → `social_slot_link`, which
+  re-checks eligibility, accepts only the governed in-review draft written
+  for that task at the slot's destination and brand on a current core
+  keyword, fills the slot's keyword / service / intent / owner page and
+  closes the task. The skill's "Weekly social slot" playbook.
+- **Launching clients:** readiness, not lifecycle. A launching client
+  whose brand is approved now gets its standard blog tasks (from this week
+  on, `queue_standard_blog_tasks_site`, so no backlog) and its social
+  tasks. Lifecycle and publishing are untouched: drafts wait for review,
+  and the publisher still needs Tom's approval, the account switch and the
+  pilot list.
+- **BHG:** three brand sites share one GBP location; each site's GBP slots
+  are queued, and a task whose location has other open slots that day
+  tells the worker to choose a different service and topic.
 
 ## Reporting worker (Sept 13 2026)
 

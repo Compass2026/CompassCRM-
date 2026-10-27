@@ -176,8 +176,19 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     if (!target.socialAccountId) refuse("social_account_missing", "A Facebook draft names the client's Facebook Page (socialAccountId).");
     else if (!account) refuse("social_account_unknown", "The Facebook Page is not one of this client's Facebook accounts.");
     else socialAccount = { id: account.id, page_id: account.external_account_id, name: account.display_name };
-  } else if (target.socialAccountId) {
-    refuse("social_account_not_applicable", "Only a Facebook draft names a social account.");
+  } else {
+    // A Business Profile draft goes to one of the client's verified locations:
+    // the one it names, or the only one. With several, it must name one
+    // (drafter_write enforces the same; 20261027190935).
+    const locations = (extra.socialAccounts ?? []).filter((a) => a.platform === "google_business"
+      && a.publish_provider === "zernio" && !!a.publish_page_id && !!a.publish_verified_at);
+    if (target.socialAccountId) {
+      const location = locations.find((a) => a.id === target.socialAccountId);
+      if (!location) refuse("social_account_unknown", "The Business Profile location is not one of this client's verified locations.");
+      else socialAccount = { id: location.id, page_id: location.publish_page_id ?? null, name: location.display_name };
+    } else if (locations.length > 1) {
+      refuse("social_account_missing", `This client has ${locations.length} Business Profile locations; the draft names one (socialAccountId).`);
+    }
   }
 
   // ── Per-draft gate ──

@@ -4986,6 +4986,7 @@ export type Database = {
         Row: {
           authority_opportunity_id: string | null
           brand_workspace_id: string | null
+          gbp_location_id: string | null
           channel: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id: string | null
@@ -5015,6 +5016,7 @@ export type Database = {
         Insert: {
           authority_opportunity_id?: string | null
           brand_workspace_id?: string | null
+          gbp_location_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id?: string | null
@@ -5044,6 +5046,7 @@ export type Database = {
         Update: {
           authority_opportunity_id?: string | null
           brand_workspace_id?: string | null
+          gbp_location_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id?: string
           content_post_id?: string | null
@@ -5905,6 +5908,21 @@ export type Database = {
         Row: { client_id: string; effective_month: string; id: string; recorded_at: string; recorded_by: string | null; source_ref: string; standard_id: string }
         Insert: { client_id: string; effective_month: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref: string; standard_id: string }
         Update: { client_id?: string; effective_month?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string }
+        Relationships: []
+      }
+      core_keyword_lists: {
+        Row: {
+          approved_at: string | null; approved_by: string | null; brand_workspace_id: string | null; client_id: string; id: string; keyword_ids: string[]
+          proposed_at: string; source_ref: string; status: string; version: number
+        }
+        Insert: {
+          approved_at?: string | null; approved_by?: string | null; brand_workspace_id?: string | null; client_id: string; id?: string; keyword_ids: string[]
+          proposed_at?: string; source_ref: string; status?: string; version?: number
+        }
+        Update: {
+          approved_at?: string | null; approved_by?: string | null; brand_workspace_id?: string | null; client_id?: string; id?: string; keyword_ids?: string[]
+          proposed_at?: string; source_ref?: string; status?: string; version?: number
+        }
         Relationships: []
       }
       delivery_standards: {
@@ -7152,6 +7170,7 @@ export type Database = {
           competition: number | null
           cpc: number | null
           created_at: string
+          core_parent_keyword_id: string | null
           department: Database["public"]["Enums"]["department"]
           id: string
           intent: string | null
@@ -7173,6 +7192,7 @@ export type Database = {
           competition?: number | null
           cpc?: number | null
           created_at?: string
+          core_parent_keyword_id?: string | null
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
@@ -7194,6 +7214,7 @@ export type Database = {
           competition?: number | null
           cpc?: number | null
           created_at?: string
+          core_parent_keyword_id?: string | null
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
@@ -9195,6 +9216,7 @@ export type Database = {
           recorded_at: string
           result_type: Database["public"]["Enums"]["rank_result_type"]
           run_id: string | null
+          site_host: string | null
           source: Database["public"]["Enums"]["rank_source"]
           url_ranked: string | null
         }
@@ -9206,6 +9228,7 @@ export type Database = {
           recorded_at?: string
           result_type: Database["public"]["Enums"]["rank_result_type"]
           run_id?: string | null
+          site_host?: string | null
           source?: Database["public"]["Enums"]["rank_source"]
           url_ranked?: string | null
         }
@@ -9217,6 +9240,7 @@ export type Database = {
           recorded_at?: string
           result_type?: Database["public"]["Enums"]["rank_result_type"]
           run_id?: string | null
+          site_host?: string | null
           source?: Database["public"]["Enums"]["rank_source"]
           url_ranked?: string | null
         }

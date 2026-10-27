@@ -80,7 +80,8 @@ test("Business Profile: no social_account key, its own rules, one photo or graph
   const logo = buildBrief(withAssets(lucas()), { ...TARGET, assetIds: ["logo-1"] });
   assert.ok(logo.refusals.some((f) => f.code === "asset_unusable"));
   const named = buildBrief(withAssets(lucas()), { ...TARGET, socialAccountId: PAGE_ACCOUNT });
-  assert.ok(named.refusals.some((f) => f.code === "social_account_not_applicable"));
+  // A Facebook Page is never a Business Profile destination.
+  assert.ok(named.refusals.some((f) => f.code === "social_account_unknown"));
 });
 
 test("the linter judges a Facebook draft by the same fact rules, plus Facebook's channel rules", () => {

@@ -2,6 +2,14 @@
 -- everything is rolled back. Fixtures are written with triggers off (they are
 -- not under test); the standard's own guard is exercised with triggers on.
 begin;
+-- The strict core-keyword rule (20261027191343): no sandbox exemption for this
+-- suite's clients, and the admin-only guard on exemptions is on.
+do $$ begin
+  if exists (select 1 from pg_trigger where tgname = 'sandbox_core_exempt_new_client') then
+    execute 'alter table clients disable trigger sandbox_core_exempt_new_client';
+  end if;
+  execute 'alter table core_keyword_exemptions enable trigger core_keyword_exemptions_guard';
+end $$;
 create schema ds_test;
 create function ds_test.ok(label text, cond boolean) returns void language plpgsql as $$
 begin if not coalesce(cond, false) then raise exception 'FAILED %', label; end if; raise notice 'ok %', label; end $$;
@@ -230,6 +238,13 @@ insert into client_brand_workspaces (id, client_id, slug, name, website_url, pho
    array['00000000-0000-4000-d501-00000000000e']::uuid[], '00000000-0000-4000-d507-000000000001'),
   ('00000000-0000-4000-d504-00000000000e', '00000000-0000-4000-d500-00000000000d', 'p2', 'P2', 'https://p2.example.test', '5555555555',
    array['00000000-0000-4000-d501-00000000000f']::uuid[], null);
+-- 20261027191343: weekly drafts trace to an approved core keyword list.
+-- P is multi-brand: one approved list per brand site (P1 owns service e, P2 owns f).
+insert into core_keyword_lists (client_id, brand_workspace_id, version, status, keyword_ids, source_ref, approved_by, approved_at) values
+  ('00000000-0000-4000-d500-00000000000d', '00000000-0000-4000-d504-00000000000d', 1, 'approved',
+   array['00000000-0000-4000-d502-00000000000e']::uuid[], 'test', (select id from team_members limit 1), now()),
+  ('00000000-0000-4000-d500-00000000000d', '00000000-0000-4000-d504-00000000000e', 1, 'approved',
+   array['00000000-0000-4000-d502-00000000000f']::uuid[], 'test', (select id from team_members limit 1), now());
 set local session_replication_role = origin;
 insert into client_delivery_standards (client_id, standard_id, effective_month, source_ref)
 select '00000000-0000-4000-d500-00000000000d', id, (date_trunc('month', now() at time zone 'America/Chicago') - interval '1 month')::date, 'test'
@@ -294,6 +309,28 @@ begin
     (select brand_workspace_id from content_plan_items where id = moved) = '00000000-0000-4000-d504-00000000000e');
 end $$;
 
+-- 20261027190935: a second verified Business Profile location is a
+-- destination chosen per slot, never "none"; targets and slots are unchanged
+-- (binding a location never adds GBP work).
+do $$
+declare p constant uuid := '00000000-0000-4000-d500-00000000000d'; nm date := ds_test.nm(); before bigint; slots bigint;
+begin
+  select sum(target) into before from delivery_targets(p, nm) where deliverable = 'gbp_posts';
+  select count(*) into slots from content_plan_items where client_id = p and standard_month = nm and standard_key = 'gbp_posts';
+  perform set_config('session_replication_role', 'replica', true);
+  insert into social_accounts (id, client_id, platform, display_name, publish_account_name, publish_verified_at) values
+    ('00000000-0000-4000-d507-000000000003', p, 'google_business', 'DS Plan GBP 2', 'DS Plan GBP 2', now());
+  perform set_config('session_replication_role', 'origin', true);
+  perform ds_test.ok('ML1 two verified locations: destination chosen per slot, the same GBP target, no new slots',
+    (select bool_and(destination = '2 verified locations (chosen per slot)') from delivery_targets(p, nm) where deliverable = 'gbp_posts' and unit_kind = 'brand')
+    and (select sum(target) from delivery_targets(p, nm) where deliverable = 'gbp_posts') = before
+    and plan_delivery_month(p, nm) >= 0
+    and (select count(*) from content_plan_items where client_id = p and standard_month = nm and standard_key = 'gbp_posts') = slots);
+  perform set_config('session_replication_role', 'replica', true);
+  delete from social_accounts where id = '00000000-0000-4000-d507-000000000003';
+  perform set_config('session_replication_role', 'origin', true);
+end $$;
+
 -- The weekly beat: on the standard, one task per blog slot dated this week,
 -- naming the slot; rerun-safe. Off the standard, unchanged.
 insert into content_plan_items (client_id, week_start, deliverable, purpose, topic, service_id, planned_date, standard_key)
@@ -347,6 +384,9 @@ insert into keywords (id, client_id, keyword, service_id, is_active) values
   ('00000000-0000-4000-d502-000000000010', '00000000-0000-4000-d500-00000000000e', 'kw q', '00000000-0000-4000-d501-000000000010', true);
 insert into content_posts (id, client_id, title, status, origin, keyword_id) values
   ('00000000-0000-4000-d508-000000000001', '00000000-0000-4000-d500-00000000000e', 'linked', 'draft', 'compass', '00000000-0000-4000-d502-000000000010');
+insert into core_keyword_lists (client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
+values ('00000000-0000-4000-d500-00000000000e', 1, 'approved', array['00000000-0000-4000-d502-000000000010']::uuid[], 'test',
+        (select id from team_members limit 1), now());
 set local session_replication_role = origin;
 create function ds_test.slot(id uuid, d date, hold text default null) returns void language sql as $$
   insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, service_id, planned_date, standard_key, hold, hold_reason)

@@ -132,10 +132,12 @@ begin
     r ->> 'kind' = 'verified' and (r ->> 'social_account_id')::uuid = zg.id('ga')
     and (select count(*) from social_accounts where client_id = '00000000-0000-4000-b000-00000000000a' and platform = 'google_business') = 1, r::text);
 
-  e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000a', 'eeeeeeeeeeeeeeeeeeeeeee2', 'locations/999', 'A2', 'A2', '{}')$q$);
-  perform zg.ok('B6 one bound location per client: a second location is refused', e like '23505:%already bound%', e);
-  e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b', 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/555555', 'B', 'B', '{}')$q$);
-  perform zg.ok('B7 the same Zernio account can never serve another client', e like '23505:%', e);
+  -- Several locations per client are allowed (20261027190935, covered in
+  -- gbp_location_per_post.test.sql); a location never belongs to two clients.
+  e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b', 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/1234567890', 'B', 'B', '{}')$q$);
+  perform zg.ok('B6 client A''s location can never be bound for another client', e like '23505:%another client%', e);
+  e := zg.try($q$select publisher_bind_gbp_location('00000000-0000-4000-b000-00000000000b', 'eeeeeeeeeeeeeeeeeeeeeee2', 'locations/1234567890', 'B', 'B', '{}')$q$);
+  perform zg.ok('B7 ... not even through another Zernio account', e like '23505:%another client%', e);
   perform zg.ok('B8 ... and the refused bind left no location row behind for client B',
     not exists (select 1 from social_accounts where client_id = '00000000-0000-4000-b000-00000000000b' and platform = 'google_business'));
   e := zg.try(format($q$select publisher_bind_account(%L, 'eeeeeeeeeeeeeeeeeeeeeee1', 'locations/42', 'x', '{}')$q$, zg.id('ga')));

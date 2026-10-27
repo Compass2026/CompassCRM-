@@ -33,14 +33,24 @@ async function start(): Promise<Supabase> {
 
 // A draft names its destination so the approval binds it (the approved
 // snapshot includes social_account_id): a Facebook draft the client's Facebook
-// Page when the client has exactly one; a Business Profile draft the client's
-// Business Profile location bound for publishing through Zernio (at most one
-// per client). Never guessed between several.
-async function destinationFor(supabase: Supabase, clientId: string, platform: string | null | undefined): Promise<{ social_account_id?: string | null }> {
+// Page when the client has exactly one; a Business Profile draft the location
+// chosen in the form, which must be one of the client's bound locations, or
+// the client's only bound location. Never guessed between several.
+async function destinationFor(
+  supabase: Supabase,
+  clientId: string,
+  platform: string | null | undefined,
+  requested?: FormDataEntryValue | null,
+): Promise<{ social_account_id?: string | null; error?: string }> {
   if (platform !== "facebook" && platform !== "google_business") return {};
   let q = supabase.from("social_accounts").select("id").eq("client_id", clientId).eq("platform", platform);
   if (platform === "google_business") q = q.not("publish_provider", "is", null);
-  const { data } = await q.limit(2);
+  const { data } = await q.limit(50);
+  if (platform === "google_business" && typeof requested === "string" && requested) {
+    return (data ?? []).some((a) => a.id === requested)
+      ? { social_account_id: requested }
+      : { error: "Choose one of this client's connected Business Profile locations." };
+  }
   return data?.length === 1 ? { social_account_id: data[0].id } : {};
 }
 
@@ -49,7 +59,8 @@ export async function createPostAction(clientId: string, _prev: PostFormState, f
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
-  const page = await destinationFor(supabase, clientId, parsed.value.platform);
+  const { error: destination, ...page } = await destinationFor(supabase, clientId, parsed.value.platform, form.get("social_account_id"));
+  if (destination) return { error: destination };
   const { data, error } = await supabase
     .from("social_posts")
     .insert({ client_id: clientId, ...parsed.value, ...page })
@@ -70,7 +81,8 @@ export async function updatePostAction(
   const supabase = await start();
   const parsed = parsePostFields((k) => form.get(k));
   if (!parsed.ok) return { error: parsed.error };
-  const page = await destinationFor(supabase, clientId, parsed.value.platform);
+  const { error: destination, ...page } = await destinationFor(supabase, clientId, parsed.value.platform, form.get("social_account_id"));
+  if (destination) return { error: destination };
   const { data, error } = await supabase
     .from("social_posts")
     .update({ ...parsed.value, ...page })

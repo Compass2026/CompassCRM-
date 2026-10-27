@@ -80,6 +80,9 @@ for f in "${MIGRATIONS[@]}" ${LATE[@]+"${LATE[@]}"}; do
 done
 
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /dev/null
+# Legacy suites run with the recorded core-keyword exception for their fictional
+# clients; the two core suites disable it and test the strict rule.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/core_keyword_legacy_exempt.sql" -o /dev/null
 # Billing rows for the portal clients while the generic portal checks run
 # (0062's views are portal views too), removed straight after.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_fixtures.sql" -o /dev/null
@@ -266,6 +269,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_draft_cla
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.test.sql"
 # New GBP drafts pin the existing client binding before human review.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_gbp_destination.test.sql"
+# Several Business Profile locations per client; slots and posts never redirected.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/gbp_location_per_post.test.sql"
 
 # Agency review ledger: human actor, versions, stage gates and portal isolation.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollout.test.sql"
@@ -288,6 +293,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edits.test.
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_standard.test.sql"
+# Weekly Facebook / GBP slots: readiness reasons, forward-only queue, one task
+# per slot, binding claim, governed link, launching readiness (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_social_slots.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
 
 # Map-tracking-only clients skip every onboarding trigger; full clients keep them.
