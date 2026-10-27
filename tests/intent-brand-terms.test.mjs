@@ -23,7 +23,8 @@ test("distinctive names and exact business initials still signal branded searche
   assert.equal(check("BHG forklift training","commercial","BHG Forklift Training").conflict,true);
   assert.equal(check("Lucas Construction","navigational","Lucas Construction").assessed,"navigational");
   assert.equal(check("Ginger Huff Interiors","navigational","Ginger Huff Interiors").assessed,"navigational");
-  assert.equal(check("Ginger design","commercial","Ginger Huff Interiors").conflict,true);
+  // Brand plus a service word is judged on the evidence, whatever the sector.
+  assert.equal(check("Ginger design","commercial","Ginger Huff Interiors").conflict,false);
 });
 test("solar is an industry noun, not Logic Solar's brand",()=>{
   for(const [query,intent] of [
@@ -43,7 +44,8 @@ test("solar is an industry noun, not Logic Solar's brand",()=>{
   // Naming the business while evaluating it is not automatically navigational.
   assert.equal(check("logic solar reviews","commercial","Logic Solar").conflict,false);
   assert.equal(check("logic solar reviews","navigational","Logic Solar").conflict,false);
-  assert.equal(check("logic solar battery backup","commercial","Logic Solar").assessed,"navigational");
+  assert.equal(check("logic solar battery backup","commercial","Logic Solar").assessed,"ambiguous");
+  assert.equal(check("logic solar battery backup","commercial","Logic Solar").conflict,false);
 });
 
 const at=(place)=>buildPlaceIndex([place],[place],[]);
@@ -98,4 +100,38 @@ test("a branded query is judged by what the searcher is doing",()=>{
   // The bare name, with a place or contact words, is still a navigational search.
   assert.equal(checkAt("ridgeline boxing o'fallon","commercial",name,"O'Fallon").conflict,true);
   assert.equal(check("ridgeline boxing phone number","commercial",name).conflict,true);
+});
+
+test("only the bare name, a place or contact words make a branded query navigational",()=>{
+  // Brand + something else, across sectors: never forced, whatever the label.
+  for(const [query,intent,name] of [
+    ["ridgeline boxing membership","transactional","Ridgeline Boxing"],
+    ["ridgeline boxing kids classes","commercial","Ridgeline Boxing"],
+    ["ironwood plumbing water heater","commercial","Ironwood Plumbing & Contracting LLC"],
+    ["ironwood plumbing careers","informational","Ironwood Plumbing & Contracting LLC"],
+    ["fieldstone brothers masonry retaining wall","commercial","Fieldstone Brothers Masonry"],
+    ["harbor dental implants","transactional","Harbor Dental"],
+    ["harbor dental insurance accepted","informational","Harbor Dental"],
+    ["BHG forklift certification","commercial","BHG Safety Partners LLC"],
+    ["BHG osha 30","transactional","BHG Safety Partners LLC"],
+  ]) {
+    const actual=check(query,intent,name);
+    assert.equal(actual.assessed,"ambiguous",query);
+    assert.equal(actual.conflict,false,query);
+  }
+  // Controls: the bare name, with a place, a state or contact words.
+  for(const [query,name,place] of [
+    ["ridgeline boxing","Ridgeline Boxing","O'Fallon"],
+    ["ridgeline boxing o'fallon","Ridgeline Boxing","O'Fallon"],
+    ["ridgeline boxing ofallon mo","Ridgeline Boxing","O'Fallon"],
+    ["ridgeline boxing phone number","Ridgeline Boxing","O'Fallon"],
+    ["ridgeline boxing hours","Ridgeline Boxing","O'Fallon"],
+    ["ridgeline boxing near me","Ridgeline Boxing","O'Fallon"],
+    ["ironwood plumbing and contracting","Ironwood Plumbing & Contracting LLC","Wentzville"],
+    ["ironwood plumbing address","Ironwood Plumbing & Contracting LLC","Wentzville"],
+    ["BHG safety partners","BHG Safety Partners LLC","Hannibal"],
+  ]) {
+    assert.equal(checkAt(query,"navigational",name,place).assessed,"navigational",query);
+    assert.equal(checkAt(query,"commercial",name,place).conflict,true,query);
+  }
 });

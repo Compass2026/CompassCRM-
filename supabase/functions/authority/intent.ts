@@ -3,7 +3,7 @@
 // flags a clear contradiction. It never corrects the stored value: a
 // conflict is a finding for a person, and an ambiguous query is left to
 // judgment rather than guessed. Pure.
-import { placesIn, type PlaceIndex } from "./urls.ts";
+import { normPlace, placesIn, type PlaceIndex } from "./urls.ts";
 
 export type AssessedIntent = "navigational" | "informational" | "commercial_or_transactional" | "ambiguous";
 export type IntentCheck = { stored: string | null; assessed: AssessedIntent; conflict: boolean; reason: string };
@@ -13,8 +13,26 @@ const BUYER = /\bnear me\b|\b(quotes?|estimates?|hire|hiring|book|schedule|cost 
 // A service noun or a service verb: "roof repair", "gutter installation".
 const SERVICE = /\b(repair|replacement|replace|installation|install|inspection|restoration|roofing|roofer|siding|gutters?|soffit|fascia|lighting|lights)\b/i;
 const STRONG_BUYER = /\bnear me\b|\b(quotes?|estimates?|hire|book)\b/i;
-// Evaluating a named business: "<brand> reviews", "<brand> vs <rival>".
-const EVALUATE = /\b(reviews?|ratings?|complaints?|vs\.?|versus|compare|comparison|alternatives?|legit|bbb|worth it|cost|costs|prices?|pricing)\b/i;
+// What may accompany a business's name in a plainly navigational search:
+// finding it, reaching it or getting in. Anything else beside the name
+// ("reviews", "membership", "battery backup") is judged on the evidence.
+const CONTACT = new Set([
+  "phone", "number", "telephone", "call", "address", "hours", "location", "locations",
+  "directions", "contact", "website", "site", "official", "email", "login", "log",
+  "near", "me", "office", "map",
+]);
+const FILLER = new Set(["and", "the", "of", "at", "in", "co"]);
+const STATES = new Set([
+  "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id", "il", "in", "ia",
+  "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms", "mo", "mt", "ne", "nv", "nh", "nj",
+  "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt",
+  "va", "wa", "wv", "wi", "wy", "alabama", "alaska", "arizona", "arkansas", "california",
+  "colorado", "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois",
+  "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts",
+  "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada",
+  "ohio", "oklahoma", "oregon", "pennsylvania", "tennessee", "texas", "utah", "vermont",
+  "virginia", "washington", "wisconsin", "wyoming",
+]);
 const STATE_SUFFIX = /\b(mo|missouri)\b/i;
 
 export function assessIntent(query: string, stored: string | null, ctx: { clientName: string; places: PlaceIndex }): IntentCheck {
@@ -48,23 +66,20 @@ export function assessIntent(query: string, stored: string | null, ctx: { client
   let assessed: AssessedIntent;
   let reason: string;
   // Naming the business is an attribute, not a primary intent. Only the bare
-  // name (with a place, or contact words) is plainly navigational; reviews,
-  // comparisons, questions and services are judged on the evidence.
+  // name, alone or with a place or contact words, is plainly navigational;
+  // every other branded query is judged on the evidence.
   if (brand && descriptiveName) {
     assessed = "ambiguous";
     reason = "The business name is also a description of the service; left to human judgment.";
-  } else if (brand && EVALUATE.test(q)) {
-    assessed = "ambiguous";
-    reason = `Names the business while evaluating it (${q.match(EVALUATE)![0]}): commercial or navigational; left to human judgment.`;
-  } else if (brand && QUESTION.test(q)) {
-    assessed = "ambiguous";
-    reason = "Names the business in a question: informational or navigational; left to human judgment.";
-  } else if (brand && (SERVICE.test(q) || BUYER.test(q))) {
-    assessed = "ambiguous";
-    reason = "Names the business and a service: navigational or commercial; left to human judgment.";
   } else if (brand) {
-    assessed = "navigational";
-    reason = "Names the business: a brand query.";
+    const rest = beyondName(q, ctx.clientName, ctx.places);
+    if (rest.length === 0) {
+      assessed = "navigational";
+      reason = "The business's name alone, or with a place or contact words: a search for the business.";
+    } else {
+      assessed = "ambiguous";
+      reason = `Names the business with "${rest.join(" ")}": the evidence decides; left to human judgment.`;
+    }
   } else if (QUESTION.test(q)) {
     assessed = "informational";
     reason = "Phrased as a question or a how-to / comparison.";
@@ -92,4 +107,14 @@ export function assessIntent(query: string, stored: string | null, ctx: { client
   if (!s) reason += " No stored intent.";
   else if (conflict) reason += ` Stored as ${s}.`;
   return { stored, assessed, conflict, reason };
+}
+
+// The words of a branded query that are not the business's name, a place,
+// a state or a contact word.
+function beyondName(q: string, clientName: string, places: PlaceIndex): string[] {
+  let hay = normPlace(q);
+  for (const p of places.names) hay = hay.split(p.norm).join(" ");
+  const nameWords = new Set(normPlace(clientName).trim().split(" "));
+  return hay.trim().split(/\s+/).filter((w) =>
+    w && !nameWords.has(w) && !CONTACT.has(w) && !FILLER.has(w) && !STATES.has(w));
 }
