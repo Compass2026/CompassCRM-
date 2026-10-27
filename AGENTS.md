@@ -945,12 +945,27 @@ Migration `20261027160000_weekly_social_slots.sql` (sandbox suite
   keyword with a recorded intent, an approved service and an owner page.
   Anything else is skipped with the first reason, logged in
   `delivery_queue_log` (team read-only).
-- **Worker:** `social_slot_claim` (the binding one-hour claim, same door
-  as `authority_draft_claim`) → `post-drafter` brief / check / submit →
-  `social_slot_link`, which accepts only the governed in-review draft
-  written for that task at the slot's destination and brand, fills the
-  slot's keyword / service / intent / owner page and closes the task. The
-  skill's "Weekly social slot" playbook.
+- **Core keyword list** (Tom, Oct 27: every program derives from its
+  approved core 50). `core_keyword_lists` holds versioned lists of at most
+  50 keyword ids per client: proposed → approved only by a signed-in
+  teammate (Keywords tab › Core keyword list), never edited or deleted, a
+  new approval supersedes the old. A long-tail keyword counts only through
+  `keywords.core_parent_keyword_id`. No approved list → no weekly blog or
+  social drafting for that client, with the reason logged. Proposals from
+  the current `is_tracked` 50 are a data step
+  (`supabase/seeds/core-keyword-lists-v1-proposed.sql`), not an approval.
+  Enforced at queue, claim and link, in `drafter_write` for unattended runs
+  (claimant `worker-routine:<run id>`) and in `content_draft_open_weekly`
+  for standard blog slots; `core_keyword_links` records list, version and
+  core keyword per draft (and per refresh, via `core_keyword_record`).
+- **Worker:** one token per run (`worker-routine:<run id>`, reused on
+  retries) → `social_slot_claim` (the binding one-hour claim, same door as
+  `authority_draft_claim`; refuses a slot no longer eligible) →
+  `post-drafter` brief / check / submit → `social_slot_link`, which
+  re-checks eligibility, accepts only the governed in-review draft written
+  for that task at the slot's destination and brand on a current core
+  keyword, fills the slot's keyword / service / intent / owner page and
+  closes the task. The skill's "Weekly social slot" playbook.
 - **Launching clients:** readiness, not lifecycle. A launching client
   whose brand is approved now gets its standard blog tasks (from this week
   on, `queue_standard_blog_tasks_from`, so no backlog) and its social

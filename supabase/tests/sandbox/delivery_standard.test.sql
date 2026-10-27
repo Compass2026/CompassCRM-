@@ -230,6 +230,10 @@ insert into client_brand_workspaces (id, client_id, slug, name, website_url, pho
    array['00000000-0000-4000-d501-00000000000e']::uuid[], '00000000-0000-4000-d507-000000000001'),
   ('00000000-0000-4000-d504-00000000000e', '00000000-0000-4000-d500-00000000000d', 'p2', 'P2', 'https://p2.example.test', '5555555555',
    array['00000000-0000-4000-d501-00000000000f']::uuid[], null);
+-- 20261027160000: weekly drafts trace to an approved core keyword list.
+insert into core_keyword_lists (client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
+values ('00000000-0000-4000-d500-00000000000d', 1, 'approved',
+        array['00000000-0000-4000-d502-00000000000e', '00000000-0000-4000-d502-00000000000f']::uuid[], 'test', (select id from team_members limit 1), now());
 set local session_replication_role = origin;
 insert into client_delivery_standards (client_id, standard_id, effective_month, source_ref)
 select '00000000-0000-4000-d500-00000000000d', id, (date_trunc('month', now() at time zone 'America/Chicago') - interval '1 month')::date, 'test'
@@ -347,6 +351,9 @@ insert into keywords (id, client_id, keyword, service_id, is_active) values
   ('00000000-0000-4000-d502-000000000010', '00000000-0000-4000-d500-00000000000e', 'kw q', '00000000-0000-4000-d501-000000000010', true);
 insert into content_posts (id, client_id, title, status, origin, keyword_id) values
   ('00000000-0000-4000-d508-000000000001', '00000000-0000-4000-d500-00000000000e', 'linked', 'draft', 'compass', '00000000-0000-4000-d502-000000000010');
+insert into core_keyword_lists (client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
+values ('00000000-0000-4000-d500-00000000000e', 1, 'approved', array['00000000-0000-4000-d502-000000000010']::uuid[], 'test',
+        (select id from team_members limit 1), now());
 set local session_replication_role = origin;
 create function ds_test.slot(id uuid, d date, hold text default null) returns void language sql as $$
   insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, service_id, planned_date, standard_key, hold, hold_reason)

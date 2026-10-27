@@ -1694,6 +1694,16 @@ where service_key in ('website_pages', 'website_refreshes');
 select enabled from client_entitlements_for('<client_id>') where service_key = 'website';
 ```
 
+**Core keywords (Tom, Oct 27).** Every new page and refresh traces to the
+client's approved core keyword list: pick only a keyword in it, or a
+long-tail keyword whose `core_parent_keyword_id` is in it. No approved list
+→ change nothing, leave `site_updates` open with the note "No approved core
+keyword list; left for Tom", stop. After each `change_log` row (proposed or
+pushed), record its grounding:
+`select core_keyword_record('<client_id>', '<keyword_id>', 'change_log', '<change_log id>');`
+A `core_keyword_required` refusal means the keyword was not core: revert or
+withdraw that change and pick a core keyword.
+
 `remaining` is this run's cap for each kind (pages already added or
 proposed this month count). `website` not enabled, or both allocations 0 →
 not in the agreement: change nothing, leave `site_updates` open with the
@@ -1818,8 +1828,12 @@ errors, block the task with "Entitlements could not be read: <error>" and
 stop. **Each post serves one long-tail keyword and one service page**, in
 the brand voice (`get_brand_profile`), sourced facts only.
 
-1. **Pick the keyword:** a tracked P2 / P3 keyword with `informational` or
-   `commercial` intent (`keywords.intent`), no post yet
+1. **Pick the keyword:** from the client's approved core keyword list
+   (`core_keyword_lists`, `status = 'approved'`), or a long-tail keyword whose
+   `core_parent_keyword_id` is in it; for a task naming a `plan_item:` the
+   open is refused otherwise (`core_keyword_required`) and the grounding is
+   recorded in `core_keyword_links`. Among those: a P2 / P3 keyword with
+   `informational` or `commercial` intent (`keywords.intent`), no post yet
    (`content_posts.keyword_id`), preferring Search Console queries with
    impressions and a `gsc_snapshots` position past 10, then volume. Note
    the service page it supports (`service_id` → the service's page group
@@ -1858,60 +1872,74 @@ The monthly delivery standard plans 8 Facebook and 8 Business Profile posts
 per site. Every Wednesday `create_weekly_blog_tasks()` queues one task per
 slot dated this week that `social_slot_readiness()` calls ready: the brand
 (board, or the slot's brand site) is approved, the destination is bound and
-verified through the publisher, and a usable keyword exists. Slots that are
-not ready are skipped with the reason in `delivery_queue_log`; you never
-see them. Each task is one post. Work every open task of the client in the
-run, one after another.
+verified through the publisher, the client's **core keyword list** is
+approved, and a core keyword with an intent and a valid owner page exists.
+Slots that are not ready are skipped with the reason in `delivery_queue_log`;
+you never see them. Each task is one post. Work every open task of the
+client in the run, one after another.
 
-1. **Claim:** `select social_slot_claim('<task id>', 'worker-routine');`.
-   `claimed: false` (`claimed_by_other`: another session is drafting this
-   slot; `task_not_open`) → skip this task and report it. The claim lasts an
-   hour; claim again with the same label to refresh it.
-2. **Read the slot and its destination.** The task's notes carry
-   `plan_item:<id> channel:<facebook|google_business> account:<social account id>`.
-   `select * from content_plan_items where id = '<plan item>'`; recheck
-   `select * from social_slot_readiness('<client>', '<planned_date>', '<planned_date>') where plan_item_id = '<plan item>'`
-   — anything but `ready` or `Already queued.` → set the task `blocked` with
-   that reason as its note and go to the next task.
-3. **Pick the keyword and service** for the slot's brand (`brand_workspace_id`
-   → its `service_ids`; the client's otherwise): an active keyword with a
-   recorded `intent`, an `approved` service and an owner page, preferring P1/P2
-   money keywords, then Search Console impressions, then volume. Write at the
-   keyword's **recorded** intent; never relabel it. Avoid a service and intent
-   that already has an open or approved post on this channel this month
-   (`social_posts` with `review_status in ('in_review','approved')`). When the
-   notes say the Business Profile location has other open slots on the same
-   day (BHG: three brand sites, one location), choose a different service and
-   topic from those slots' drafts.
-4. **Draft through `post-drafter`** exactly as the *AI Drafter* playbook
+**Your run token.** At the start of the run make one token and use it for
+every claim, drafter call and link in this run, retries included; never
+reuse another run's token and never use the bare label:
+`select 'worker-routine:' || replace(gen_random_uuid()::text, '-', '') as run_token;`
+Two sessions started together hold different tokens, so only one can claim
+a slot.
+
+1. **Claim:** `select social_slot_claim('<task id>', '<run token>');`
+   - `claimed: true` → it returns the slot, its `social_account_id` and the
+     `core_list_id` / `core_list_version` to draft against.
+   - `claimed_by_other` → another run holds it; skip the task, write nothing.
+   - `not_ready` → eligibility changed since the queue (brand, destination,
+     core list or keyword revoked): set the task `blocked` with `detail` as
+     its note and go to the next task. `task_not_open` → skip.
+2. **Pick a core keyword** for the slot's brand (`brand_workspace_id` → its
+   `service_ids`; the client's otherwise). It must be in the approved list
+   (`select keyword_ids from core_keyword_lists where client_id = '<client>'
+   and status = 'approved'`) or a long-tail keyword whose
+   `core_parent_keyword_id` is in it, have a recorded `intent`, and an
+   `approved` service with an owner page. Never use another keyword, however
+   relevant: drafter_write refuses an unattended run's non-core keyword
+   (`core_keyword_required`) and the link would too. Prefer P1/P2 money
+   keywords, then Search Console impressions, then volume. Write at the
+   keyword's **recorded** intent; never relabel it, and never edit a core
+   list or a keyword's core parent. Avoid a service and intent that already
+   has an open or approved post on this channel this month (`social_posts`
+   with `review_status in ('in_review','approved')`). When the notes say the
+   Business Profile location has other open slots on the same day (BHG:
+   three brand sites, one location), choose a different service and topic
+   from those slots' drafts.
+3. **Draft through `post-drafter`** exactly as the *AI Drafter* playbook
    below (brief → write → check → submit, at most three submits per brief),
-   with `"claimant": "worker-routine"` and `"runtime": "claude-worker-skill"`.
+   with `"claimant": "<run token>"` and `"runtime": "claude-worker-skill"`.
    The target:
    - Facebook: `{"channel": "facebook", "postType": "standard", "intent":
      "<keyword intent>", "serviceId", "keywordId", "socialAccountId":
-     "<account from the notes>", "assetIds": []}`. No button, no URL, no
-     hashtags.
+     "<social_account_id from the claim>", "assetIds": []}`. No button, no
+     URL, no hashtags.
    - Business Profile: `{"channel": "google_business", "postType":
      "standard", "intent", "serviceId", "keywordId", "ctaType":
-     "LEARN_MORE", "ctaUrl": "<the keyword's or service's owner page>",
-     "assetIds": []}`. The location comes from the client's binding; never
-     name one.
+     "LEARN_MORE", "ctaUrl": "<the service's owner page>", "assetIds": []}`.
+     The location comes from the client's binding; never name one.
    Usable claims only, brand voice from the brief. A Facebook post and a
    Business Profile post for the same week are different copy.
-5. **Link:** `select social_slot_link('<task id>', '<post_id>', 'worker-routine');`
-   It checks the post is yours for this slot (client, channel, destination,
-   brand, in review, written after the task) and fills the slot's keyword,
-   service, intent and owner page, then closes the task. A refusal →
-   leave the post in review, set the task `blocked` with the refusal, and
+4. **Link:** `select social_slot_link('<task id>', '<post_id>', '<run token>');`
+   It re-checks eligibility now, checks the post is yours for this slot
+   (client, channel, destination, brand, in review, written after the task)
+   and that its keyword traces to the **current** approved core list, records
+   list, version and core keyword in `core_keyword_links`, fills the slot's
+   keyword / service / intent / owner page and closes the task. A refusal
+   (`not_ready: …`, `core_keyword_required`, `CD409` when your claim lapsed)
+   → leave the post in review, set the task `blocked` with the refusal, and
    report both ids.
-6. **Report:** client, slot, channel, destination, keyword, `post_id`,
-   `run_id`, `review_task_id`. Images are a separate step (Brand › Creative
-   use, or `content_stage_media` / `content_revise` in Executive OS); the
-   post waits in review for a person either way.
+5. **Report:** client, slot, channel, destination, keyword, core list
+   version, `post_id`, `run_id`, `review_task_id`. Images are a separate step
+   (Brand › Creative use, or `content_stage_media` / `content_revise` in
+   Executive OS); the post waits in review for a person either way.
 
 **Never:** approve, schedule or publish; switch a publisher or pilot on;
-clear a hold; draft a slot whose task you did not claim; draft a slot dated
-before this week; use another brand's Page or another client's location.
+clear a hold; draft a slot whose task you did not claim with this run's
+token; draft a slot dated before this week; use a keyword outside the
+approved core list; use another brand's Page or another client's location.
 
 ### AI Drafter — one Business Profile post (drafter v1)
 

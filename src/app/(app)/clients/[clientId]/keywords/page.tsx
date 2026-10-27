@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/card";
 import { LocationsPanel } from "@/components/locations-panel";
 import { GridConfigCard } from "@/components/grid-config-card";
+import { CoreKeywordListCard } from "@/components/core-keyword-list-card";
 import { cn } from "@/lib/utils";
 import { organicRankState, siteHosts } from "@/lib/organic-rank";
 
@@ -221,6 +222,7 @@ export default async function KeywordsPage({
           {latestPeriod && ` · GSC through ${latestPeriod}`}
         </span>
       </div>
+      <CoreKeywordListCard clientId={clientId} keywords={keywords ?? []} />
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Keywords</CardTitle>

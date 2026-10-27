@@ -5907,6 +5907,21 @@ export type Database = {
         Update: { client_id?: string; effective_month?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string }
         Relationships: []
       }
+      core_keyword_lists: {
+        Row: {
+          approved_at: string | null; approved_by: string | null; client_id: string; id: string; keyword_ids: string[]
+          proposed_at: string; source_ref: string; status: string; version: number
+        }
+        Insert: {
+          approved_at?: string | null; approved_by?: string | null; client_id: string; id?: string; keyword_ids: string[]
+          proposed_at?: string; source_ref: string; status?: string; version?: number
+        }
+        Update: {
+          approved_at?: string | null; approved_by?: string | null; client_id?: string; id?: string; keyword_ids?: string[]
+          proposed_at?: string; source_ref?: string; status?: string; version?: number
+        }
+        Relationships: []
+      }
       delivery_standards: {
         Row: {
           blog_posts: number; decided_at: string; decided_by: string; exclusion_reason: string; exclusions: string[]
@@ -7152,6 +7167,7 @@ export type Database = {
           competition: number | null
           cpc: number | null
           created_at: string
+          core_parent_keyword_id: string | null
           department: Database["public"]["Enums"]["department"]
           id: string
           intent: string | null
@@ -7173,6 +7189,7 @@ export type Database = {
           competition?: number | null
           cpc?: number | null
           created_at?: string
+          core_parent_keyword_id?: string | null
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
@@ -7194,6 +7211,7 @@ export type Database = {
           competition?: number | null
           cpc?: number | null
           created_at?: string
+          core_parent_keyword_id?: string | null
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
