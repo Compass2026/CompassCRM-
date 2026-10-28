@@ -70,8 +70,9 @@ export function createStore(supabase: Client) {
     },
 
     // The one read of Client Intelligence (0047).
-    async input(clientId: string, serviceId: string | null = null): Promise<DrafterInput | null> {
-      const { data, error } = await supabase.rpc("client_intelligence_for_content", { p_client_id: clientId, p_service_id: serviceId });
+    // keywordId finds a multi-brand draft's site when it names no service (20261028170000).
+    async input(clientId: string, serviceId: string | null = null, keywordId: string | null = null): Promise<DrafterInput | null> {
+      const { data, error } = await supabase.rpc("client_intelligence_for_content", { p_client_id: clientId, p_service_id: serviceId, p_keyword_id: keywordId });
       if (error) throw Object.assign(new Error(error.message), { code: error.code });
       return (data as DrafterInput | null) ?? null;
     },

@@ -40,6 +40,7 @@ import {
 } from "./types.ts";
 import { claimCategories, hostOf, normalizeUrl, stableJson, words } from "./rules.ts";
 import { assessIntent } from "../authority/intent.ts";
+import { approvedMarketPlaces, normWords, ownerNormUrl, resolveKeywordOwner, type OwnerContext, type OwnerPurpose } from "../authority/keyword-owner.ts";
 import { buildPlaceIndex } from "../authority/urls.ts";
 
 export const MAX_CLAIMS = 2;
@@ -136,7 +137,36 @@ export function eligibleClaims(
   return { eligible, excluded: excludedClaims };
 }
 
-export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { socialAccounts?: SocialAccountRow[] } = {}): BriefResult {
+// The owner context the loader returns (20261028170000). A fixture or a legacy
+// caller without one gets the same resolver over the input's own rows, with
+// nothing checked live and every group taken as a service page: enforce is
+// off, so only explicit conflicts, wrong pages and holds refuse.
+export function ownerContextOf(input: DrafterInput): OwnerContext {
+  const given = (input as DrafterInput & { owner_context?: OwnerContext }).owner_context;
+  if (given) return given;
+  return {
+    enforce: false,
+    program_id: null,
+    site_url: input.client.website_url ?? null,
+    workspaces: [],
+    keywords: input.keywords.map((k) => ({ id: k.id, keyword: k.keyword, is_active: !!k.is_active, intent: k.intent ?? null,
+      service_id: k.service_id ?? null, target_url: k.target_url ?? null, city: null, market_id: null, core_parent_keyword_id: null })),
+    services: input.services.map((s) => ({ id: s.id, status: s.status, page_url: s.page_url ?? null, primary_keyword_id: s.primary_keyword_id ?? null })),
+    page_groups: input.pageGroups.map((g) => ({ id: g.id, status: g.status, page_type: (g as { page_type?: string }).page_type ?? "service",
+      target_url: g.target_url, primary_keyword_id: g.primary_keyword_id })),
+    published_posts: [],
+    markets: [],
+    page_checks: [],
+    holds: [],
+    as_of: `${input.asOf}T12:00:00Z`,
+  };
+}
+
+export function buildBrief(
+  input: DrafterInput,
+  target: DraftTarget,
+  extra: { socialAccounts?: SocialAccountRow[]; purpose?: OwnerPurpose } = {},
+): BriefResult {
   // Missing target fields inherit from the selected keyword. Explicit
   // disagreements still refuse below; never rewrite the stored keyword.
   const selected = input.keywords.find((k) => k.id === target.keywordId);
@@ -219,35 +249,36 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     gate.offer = "not_applicable";
   }
 
-  // ── Service and target page ──
-  const needsService = campaignMode === "keyword" && target.postType === "standard" && intent !== "navigational";
+  // ── Owner page and related service (20261028170000) ──
+  // The keyword's owner page is the one page that explicitly claims it; the
+  // service is the related topic. One resolver (authority/keyword-owner.ts,
+  // SQL's keyword_owner() twin) decides, for this purpose.
+  const ownerCtx = ownerContextOf(input);
+  // The site program comes from the loader's owner context (the brand site it
+  // scoped the input to); a derived legacy context has none.
+  const program = ownerCtx.program_id;
+  const purpose: OwnerPurpose = extra.purpose ?? "post";
   let service: DrafterInput["services"][number] | null = null;
   let pageUrl: string | null = null;
   let pageGroupId: string | null = null;
+  let ownerPage: Brief["target"]["owner_page"] = null;
   if (target.serviceId) {
     service = input.services.find((s) => s.id === target.serviceId) ?? null;
     if (!service) refuse("service_unknown", "The service is not one of this client's services.");
     else if (service.status !== "approved") refuse("service_not_approved", `${service.name} is ${service.status}, not approved.`);
-  } else if (needsService) {
-    refuse("service_missing", `A standard ${intent} post needs an approved service as its topic.`);
   }
-  if (service) {
-    const page = normalizeUrl(service.page_url);
-    const siteHost = hostOf(input.client.website_url);
-    if (!page) refuse("target_page_missing", `${service.name} has no page to link to.`);
-    else if (!page.startsWith("https://")) refuse("target_page_invalid", `${service.page_url} is not an https page.`);
-    else if (!siteHost || hostOf(page) !== siteHost) refuse("target_page_invalid", `${service.page_url} is not on the client's website (${input.client.website_url}).`);
+  if (target.keywordId) {
+    const owned = resolveKeywordOwner(ownerCtx, target.keywordId, { program, purpose });
+    if (!owned.ok) refuse(owned.code, `${owned.message}`);
     else {
-      const group = input.pageGroups.find((g) => normalizeUrl(g.target_url) === page);
-      if (!group) refuse("target_page_unapproved", `No page group targets ${service.page_url}.`);
-      else if (group.status !== "approved") refuse("target_page_unapproved", `The page group for ${service.page_url} is ${group.status}, not approved.`);
-      else {
-        pageUrl = service.page_url;
-        pageGroupId = group.id;
-      }
+      pageUrl = owned.owner.display_url;
+      pageGroupId = owned.owner.page_group_id;
+      ownerPage = { url: owned.owner.url, display_url: owned.owner.display_url, page_group_id: owned.owner.page_group_id,
+        role: owned.owner.role, market: owned.owner.market, program_id: owned.owner.program_id };
+      gate.owner_page = `${owned.owner.role}${owned.notes.length ? " (not enforced: " + owned.notes.join("; ") + ")" : ""}`;
     }
-    gate.service = service.status === "approved" && pageUrl ? "approved_with_page" : "not_ready";
   }
+  if (service) gate.service = service.status === "approved" && pageUrl ? "approved_with_owner_page" : "not_ready";
 
   // ── CTA ──
   const ctaType = target.ctaType?.trim() || null;
@@ -257,14 +288,14 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     else if (ctaType === "CALL") {
       if (target.ctaUrl) refuse("cta_invalid", "A Call button takes no link.");
     } else {
-      const want = pageUrl ?? (intent === "navigational" ? input.client.website_url : null);
-      if (!want) refuse("cta_invalid", "The button needs the approved target page.");
-      else if (target.ctaUrl && normalizeUrl(target.ctaUrl) !== normalizeUrl(want)) refuse("cta_invalid", `The button must link to the target page ${want}, not ${target.ctaUrl}.`);
+      const want = pageUrl;
+      if (!want) refuse("cta_invalid", "The button needs the keyword's owner page.");
+      else if (target.ctaUrl && ownerNormUrl(target.ctaUrl) !== ownerNormUrl(want)) refuse("cta_invalid", `The button must link to the owner page ${want}, not ${target.ctaUrl}.`);
       else ctaUrl = want;
     }
   }
 
-  // ── Keyword foundation and unique owner ──
+  // ── Keyword foundation ──
   let keyword: Brief["target"]["keyword"] = null;
   if (target.keywordId) {
     const k = input.keywords.find((x) => x.id === target.keywordId);
@@ -278,21 +309,6 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
         clientName: input.client.name, places: buildPlaceIndex(places, places, []),
       });
       if (assessed.conflict) refuse("keyword_intent_conflict", `"${k.keyword}": ${assessed.reason} Review the keyword intent before drafting.`);
-      if (k.target_url && pageUrl && normalizeUrl(k.target_url) !== normalizeUrl(pageUrl)) refuse("keyword_wrong_page", `"${k.keyword}" targets ${k.target_url}, not ${pageUrl}.`);
-      // Check equivalent keyword rows too: separate IDs must not hide two
-      // primary owners for the same demand. Supporting assets keep one owner.
-      const sameText = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
-      const primary = input.keywords.find((x) => x.id === service?.primary_keyword_id);
-      const ownerKeywords = new Set([sameText(k.keyword), ...(primary ? [sameText(primary.keyword)] : [])]);
-      const cluster = input.keywords.filter((x) => x.is_active && ownerKeywords.has(sameText(x.keyword)));
-      const ids = new Set(cluster.map((x) => x.id));
-      const owners = new Set([
-        pageUrl,
-        ...cluster.map((x) => x.target_url),
-        ...input.services.filter((s) => s.status === "approved" && s.primary_keyword_id && ids.has(s.primary_keyword_id)).map((s) => s.page_url),
-        ...input.pageGroups.filter((g) => g.status === "approved" && g.primary_keyword_id && ids.has(g.primary_keyword_id)).map((g) => g.target_url),
-      ].map(normalizeUrl).filter(Boolean));
-      if (owners.size > 1) refuse("keyword_owner_conflict", `"${k.keyword}" has competing owner pages: ${[...owners].join(", ")}. Resolve ownership before drafting.`);
       keyword = { id: k.id, text: k.keyword, tracked: !!k.is_tracked, money: !!k.is_money, max_exact_uses: KEYWORD_MAX_EXACT_USES };
     }
   }
@@ -323,7 +339,13 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   if (assets.length > 1) refuse("too_many_assets", facebook ? "Facebook posts take one image in v1." : "Business Profile posts take one image in v1.");
 
   // ── Facts a draft may state; what it may not ──
-  const places = [...new Set(input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name).filter(Boolean) as string[])];
+  const places = [...new Set([
+    ...input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name),
+    ...approvedMarketPlaces(ownerCtx, program),
+  ].filter(Boolean) as string[])];
+  // Offerings held from promotion: the linter refuses copy that names them.
+  const heldOfferings = ownerCtx.holds.filter((h) => h.brand_workspace_id === null || h.brand_workspace_id === program)
+    .map((h) => ({ offering: h.offering, phrases: h.phrases.map(normWords) }));
   const excludedFacts: Brief["excluded"]["facts"] = [];
   if (filled(input.client.service_area)) {
     excludedFacts.push({ fact: `Service area text: "${input.client.service_area}"`, reason: "Only active locations are approved places; the free-text service area is not." });
@@ -347,7 +369,10 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
       post_type: target.postType,
       campaign_mode: campaignMode,
       search_intent: intent,
-      service: service && pageUrl && pageGroupId ? { id: service.id, name: service.name, page_url: pageUrl, page_group_id: pageGroupId } : null,
+      // The related service (the topic); its page is not the owner unless the resolver said so.
+      service: service ? { id: service.id, name: service.name, page_url: service.page_url ?? null,
+        page_group_id: ownerPage && service.page_url && ownerNormUrl(service.page_url) === ownerPage.url ? pageGroupId : null } : null,
+      owner_page: ownerPage,
       keyword,
       cta: { type: ctaType, url: ctaUrl, in_copy_phrase: input.board?.standing_cta ?? null },
       offer,
@@ -367,7 +392,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
       min_claims: minClaims,
       max_claims: MAX_CLAIMS,
     },
-    excluded: { claims: excludedClaims, facts: excludedFacts },
+    excluded: { claims: excludedClaims, facts: excludedFacts, offerings: heldOfferings },
     brand: {
       positioning: input.brand?.positioning ?? null,
       voice_tone: input.brand?.voice_tone ?? null,

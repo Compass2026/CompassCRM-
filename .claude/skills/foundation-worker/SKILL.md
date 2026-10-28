@@ -1719,14 +1719,23 @@ read: <error>; nothing planned". Billing state never matters here — never
 read Stripe, invoices or `client_billing_status`. Work already done beyond
 a lowered allocation stays; never revert it to fit.
 
-**1. Map first (every month, cheap).** For every tracked keyword with no
-`target_url`, pick the page: the `page_groups` row whose primary or
-supporting keywords include it (its `target_url`), else the city route for
-its `city`, else the service page for its `service_id`, else the home page.
-Write `keywords.target_url`. Fill `page_groups.target_url` from the site
-where the page exists (read the tree: `site-push {read: true}` lists paths;
-`src/app/<route>/page.tsx` or a `data/locations.json` slug is a page). A
-page group with no page is a candidate below.
+**1. Map first (every month, cheap).** A keyword's page is its **owner
+page** (20261028170000): `select keyword_owner('<client>', null, '<keyword>',
+'refresh')` returns it, or the first reason there is none. Its service is the
+related topic, never a second owner. For a tracked keyword with no owner
+(`target_page_missing`), the owner is, in this order, the `target_url` of the
+approved page group whose PRIMARY keyword it is, else its existing
+`keywords.target_url`, else its related service's page — never a city route
+or the home page by guess, and never a `target_url` that differs from its
+primary group's target (that is a `keyword_owner_conflict`, which stays
+visible for Tom; do not pick a winner). Fill `page_groups.target_url` from the
+site where the page exists (read the tree: `site-push {read: true}` lists
+paths; `src/app/<route>/page.tsx` or a `data/locations.json` slug is a page)
+— city and Home groups included. A page group with no page is a candidate
+below. After mapping, run `owner-page-check` `{client_id}`: an owner page that
+has never been checked live is `page_not_verified`, and a page that answers
+any path with the same HTML (a single-page app) is `soft_404` until someone
+reads the rendered page and records a `method = 'rendered'` check.
 
 **2. Pick the month's work** from the evidence, in this order, until the
 caps from step 0 are met (`remaining` new pages, `remaining` refreshes):
@@ -1879,7 +1888,9 @@ per site. Every Wednesday `create_weekly_blog_tasks()` queues one task per
 slot dated this week that `social_slot_readiness()` calls ready: the brand
 (board, or the slot's brand site) is approved, the destination is bound and
 verified through the publisher, the client's **core keyword list** is
-approved, and a core keyword with an intent and a valid owner page exists.
+approved, and a core keyword with an intent and one verified owner page
+(an approved page group checked live; an approved related service where the
+page is a service page; an approved market for a city term) exists.
 Slots that are not ready are skipped with the reason in `delivery_queue_log`;
 you never see them. Each task is one post. Work every open task of the
 client in the run, one after another.
@@ -1904,8 +1915,12 @@ a slot.
    '<client>' and brand_workspace_id is not distinct from '<slot brand site
    or null>' and status = 'approved'` — BHG's three sites each have their own;
    a sister site's keyword never qualifies) or a long-tail keyword whose
-   `core_parent_keyword_id` is in it, have a recorded `intent`, and an
-   `approved` service with an owner page. Never use another keyword, however
+   `core_parent_keyword_id` is in it, have a recorded `intent`, and pass
+   `select core_keyword_eligibility('<client>', '<slot brand site or null>',
+   '<keyword>', null, 'post')` (null = usable; else the reason). A Home,
+   city or brand term needs no service; a service page needs its related
+   service. Never draft a held offering (`promotion_held`), even as an
+   aside in copy on another keyword. Never use another keyword, however
    relevant: drafter_write refuses an unattended run's non-core keyword
    (`core_keyword_required`) and the link would too. Prefer P1/P2 money
    keywords, then Search Console impressions, then volume. Write at the
@@ -1926,7 +1941,7 @@ a slot.
      URL, no hashtags.
    - Business Profile: `{"channel": "google_business", "postType":
      "standard", "intent", "serviceId", "keywordId", "ctaType":
-     "LEARN_MORE", "ctaUrl": "<the service's owner page>",
+     "LEARN_MORE", "ctaUrl": "<the keyword's owner page, from the brief's target.owner_page>",
      "socialAccountId": "<social_account_id from the claim>", "assetIds": []}`.
      That is the slot's own location (a multi-location client's slot names
      it; a single-location client has one). Never another location, and
