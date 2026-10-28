@@ -172,15 +172,33 @@ export async function planFromAuthorityAction(clientId: string, weekParam: strin
   if (!deliverable) return { error: `A ${o.content_type.replace(/_/g, " ")} opportunity does not fill a weekly slot.` };
   const planned = String(form.get("planned_date") ?? "").trim() || null;
   if (planned && (planned < week || planned > addDays(week, 6))) return { error: "The planned date must fall inside this week." };
+  // The plan's target is the keyword's owner page (keyword_owner, 20261028170000),
+  // on its own brand site; without a resolvable owner, the opportunity's path
+  // on the site that owns its service (a BHG brand site, else the client's).
   let target: string | null = null;
-  if (o.target_path && client?.website_url) {
-    try { target = new URL(o.target_path, client.website_url).toString(); } catch { target = null; }
+  let site: string | null = null;
+  if (o.keyword_id) {
+    const { data: owner } = await supabase.rpc("keyword_owner", {
+      p_client_id: clientId, p_brand_workspace_id: null, p_keyword_id: o.keyword_id, p_purpose: deliverable === "blog" ? "blog" : "post",
+    });
+    const own = owner as { url?: string; display_url?: string; program_id?: string | null } | null;
+    target = own?.display_url ?? own?.url ?? null;
+    site = own?.program_id ?? null;
+  }
+  if (!target && o.target_path) {
+    const { data: ws } = o.service_id
+      ? await supabase.from("client_brand_workspaces").select("id, website_url").eq("client_id", clientId).contains("service_ids", [o.service_id]).maybeSingle()
+      : { data: null };
+    const base = ws?.website_url ?? client?.website_url ?? null;
+    site = site ?? ws?.id ?? null;
+    if (base) { try { target = new URL(o.target_path, base).toString(); } catch { target = null; } }
   }
   const intent = ["navigational", "informational", "commercial", "transactional"].includes(o.intent ?? "") ? o.intent : null;
   const { error } = await supabase.from("content_plan_items").insert({
     client_id: clientId, week_start: week, deliverable, channel: deliverable === "gbp" ? "google_business" : null,
     purpose: "authority", authority_opportunity_id: o.id, topic: o.topic.slice(0, 200), search_intent: intent,
     service_id: o.service_id, keyword_id: o.keyword_id, target_url: target, planned_date: planned,
+    ...(site ? { brand_workspace_id: site } : {}),
   });
   if (error) return { error: planError(error.message) };
   revalidatePlanner(clientId);

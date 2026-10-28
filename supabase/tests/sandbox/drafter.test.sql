@@ -245,7 +245,7 @@ begin
   perform dr.ok('D9 a draft that did not pass the linter is refused', st like '23514:%linter%', st);
   st := dr.try(format('select drafter_write(%L::jsonb)',
     dr.req('informational', array['00000000-0000-4000-f000-00000000003b']::uuid[], 'Licensed electricians', null, 'https://b.example.test/')));
-  perform dr.ok('D10 a button that does not go to the service page is refused', st like '23514:%service page%', st);
+  perform dr.ok('D10 a button that does not go to the keyword''s owner page (here the service page) is refused', st like '23514:%owner page%', st);
   st := dr.try(format('select drafter_write(%L::jsonb)',
     dr.req('informational', array['00000000-0000-4000-f000-00000000000a']::uuid[], 'Family owned since 1998')));
   perform dr.ok('D11 another client''s claim cannot be linked', st is not null, st);

@@ -139,6 +139,13 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
   }
 
   // ── Places ──
+  // ── Held offerings (20261028170000): never advertised while held ──
+  const heldWords = ` ${copy.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  for (const h of brief.excluded.offerings ?? []) {
+    const hit = h.phrases.find((p) => heldWords.includes(` ${p} `));
+    if (hit) add("held_offering", `"${hit}" promotes ${h.offering}, which is held from promotion.`, hit);
+  }
+
   const allowedPlaces = new Set(brief.allowed_facts.crm.places.map((p) => p.toLowerCase()));
   const placeText = mask(copy, [...spans, ...brief.allowed_facts.crm.places.flatMap((p) => spansOf(copy, p))]);
   for (const m of placeText.matchAll(/\b(?:[A-Z][a-z'.]+\s){1,3}Count(?:y|ies)\b/g)) {

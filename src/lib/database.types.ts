@@ -13628,6 +13628,10 @@ export type Database = {
       get_secret: { Args: { secret_name: string }; Returns: string }
       is_team: { Args: never; Returns: boolean }
       is_team_admin: { Args: never; Returns: boolean }
+      keyword_owner: {
+        Args: { p_brand_workspace_id: string | null; p_client_id: string; p_keyword_id: string; p_purpose?: string | null }
+        Returns: Json
+      }
       normalize_tracked_keywords: {
         Args: { p_client_id: string; p_target?: number }
         Returns: number

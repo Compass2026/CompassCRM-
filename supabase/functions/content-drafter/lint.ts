@@ -79,6 +79,12 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   }
   if ((draft.h1 ?? "").length > R.h1_max) add("h1_too_long", `Keep the H1 to ${R.h1_max} characters.`);
   if (/^#\s/m.test(body)) add("h1_in_body", "The H1 is its own field; the body starts at H2 (##).");
+  // Held offerings (20261028170000): never advertised while held, anywhere in the article.
+  const allText = ` ${[draft.title, draft.meta_title, draft.meta_description, draft.h1, body].join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  for (const h of brief.excluded.offerings ?? []) {
+    const hit = h.phrases.find((p) => allText.includes(` ${p} `));
+    if (hit) add("held_offering", `"${hit}" promotes ${h.offering}, which is held from promotion.`, hit);
+  }
   const n = wordCount(body);
   if (body.trim() && n < R.min_words) add("too_short", `Write at least ${R.min_words} words (this is ${n}).`);
   if (n > R.max_words) add("too_long", `Keep it to ${R.max_words} words (this is ${n}).`);

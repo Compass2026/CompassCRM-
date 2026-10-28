@@ -83,7 +83,8 @@ export type BlogBrief = {
     draft_id: string;
     campaign_id: string;
     keyword_id: string;
-    owner_page: { id: string; url: string } | null;
+    // The keyword's owner page (20261028170000): the article's required link.
+    owner_page: { id: string | null; url: string; role: string; market: string | null } | null;
     topic: string;
     primary_keyword: string | null;
     search_intent: string;
@@ -98,7 +99,8 @@ export type BlogBrief = {
     min_claims: number;
     max_claims: number;
   };
-  excluded: { claims: { id: string; text: string; reason: string }[]; facts: { fact: string; reason: string }[] };
+  excluded: { claims: { id: string; text: string; reason: string }[]; facts: { fact: string; reason: string }[];
+    offerings?: { offering: string; phrases: string[] }[] };
   brand: {
     positioning: string | null;
     voice_tone: string | null;
@@ -131,11 +133,14 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
   if (draft.deliverable !== "blog") refuse("deliverable_unsupported", "The content drafter writes blogs in v1; web pages come next.");
   // Reuse the current search foundation: a live keyword, matching intent and
   // service, and one approved owner page, including equivalent keyword rows.
+  // Purpose blog (20261028170000): the keyword's owner page must be one a new
+  // article may support (no Home or brand-only article, no second article on
+  // a keyword a published one already owns).
   const foundation = buildBrief(input, {
     channel: "google_business", postType: "standard", ctaType: null,
     keywordId: draft.keyword_id, serviceId: draft.service_id,
     intent: draft.search_intent ?? "",
-  });
+  }, { purpose: "blog" });
   if (!foundation.ok) return foundation;
   const keyword = input.keywords.find((k) => k.id === draft.keyword_id)!;
   draft = { ...draft, primary_keyword: keyword.keyword,
@@ -160,22 +165,15 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
     if (a?.status !== "ready") refuse(`${key}_not_ready`, `${label} are not ready: ${(a?.gaps ?? []).join(" ") || "missing."}`);
   }
 
-  // ── Service and its page ──
+  // ── Owner page (the required link) and the related service ──
   const site = filled(input.client.website_url) ? input.client.website_url! : null;
   const siteHost = hostOf(site);
-  let service: DrafterInput["services"][number] | null = null;
-  let pageUrl: string | null = null;
-  if (draft.service_id) {
-    service = input.services.find((s) => s.id === draft.service_id) ?? null;
-    if (!service) refuse("service_unknown", "The service is not one of this client's services.");
-    else if (service.status !== "approved") refuse("service_not_approved", `${service.name} is ${service.status}, not approved.`);
-    else if (service.page_url) {
-      const page = normalizeUrl(service.page_url);
-      if (!page || !siteHost || hostOf(page) !== siteHost) refuse("target_page_invalid", `${service.page_url} is not on the client's website.`);
-      else pageUrl = service.page_url;
-    }
-  }
-  gate.service = service ? (pageUrl ? "approved_with_page" : "approved_no_page") : "none";
+  const ownerPage = foundation.brief.target.owner_page;
+  const pageUrl: string | null = ownerPage?.display_url ?? null;
+  const service: DrafterInput["services"][number] | null = draft.service_id
+    ? input.services.find((s) => s.id === draft.service_id) ?? null : null;
+  gate.service = service ? "approved_related" : "none";
+  gate.owner_page = ownerPage?.role ?? "none";
 
   // ── Claims: the post drafter's rule ──
   const { eligible, excluded } = eligibleClaims(input, service, pageUrl);
@@ -198,7 +196,8 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
   const required = pageUrl ? allowed.filter((l) => normalizeUrl(l.url) === normalizeUrl(pageUrl)) : [];
 
   const differentiators = (input.brand?.differentiators ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
-  const places = [...new Set(input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name).filter(Boolean) as string[])];
+  // The same approved places as the post brief (active locations ∪ approved markets).
+  const places = foundation.brief.allowed_facts.crm.places;
   const excludedFacts: BlogBrief["excluded"]["facts"] = [];
   if (filled(input.client.service_area)) {
     excludedFacts.push({ fact: `Service area text: "${input.client.service_area}"`, reason: "Only active locations are approved places; the free-text service area is not." });
@@ -224,14 +223,11 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
         draft_id: draft.id,
         campaign_id: draft.plan_item_id ?? draft.id,
         keyword_id: keyword.id,
-        owner_page: foundation.brief.target.service ? {
-          id: foundation.brief.target.service.page_group_id,
-          url: foundation.brief.target.service.page_url,
-        } : null,
+        owner_page: ownerPage ? { id: ownerPage.page_group_id, url: ownerPage.display_url, role: ownerPage.role, market: ownerPage.market } : null,
         topic: draft.topic,
         primary_keyword: draft.primary_keyword,
         search_intent: intent,
-        service: service ? { id: service.id, name: service.name, page_url: pageUrl } : null,
+        service: service ? { id: service.id, name: service.name, page_url: service.page_url ?? null } : null,
         authority_opportunity_id: draft.authority_opportunity_id,
         request_note: draft.request_note,
       },
@@ -248,7 +244,7 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
         min_claims: intent === "navigational" ? 0 : BLOG_RULES.min_claims,
         max_claims: BLOG_RULES.max_claims,
       },
-      excluded: { claims: excluded, facts: excludedFacts },
+      excluded: { claims: excluded, facts: excludedFacts, offerings: foundation.brief.excluded.offerings ?? [] },
       brand: {
         positioning: input.brand?.positioning ?? null,
         voice_tone: input.brand?.voice_tone ?? null,

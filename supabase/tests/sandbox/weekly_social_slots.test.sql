@@ -93,6 +93,11 @@ insert into page_groups (client_id, name, page_type, target_url, status, support
   (ws_test.id('M'), 'M2 page', 'service', 'https://m2.example.test/service', 'approved', '{}'),
   (ws_test.id('P'), 'P page', 'service', 'https://p.example.test/service', 'approved', '{}'),
   (ws_test.id('O'), 'O page', 'service', 'https://o.example.test/service', 'approved', '{}');
+-- Every fixture page was checked live (20261028170000: an unchecked owner
+-- page is not verified).
+insert into owner_page_checks (client_id, requested_url, url_norm, final_url, http_status, verdict, method, source_ref)
+select g.client_id, g.target_url, core_norm_url(g.target_url), g.target_url, 200, 'live', 'http', 'test fixture'
+from page_groups g where g.client_id in (select id from clients where name like 'WS %');
 insert into social_accounts (id, client_id, platform, display_name, external_account_id, publish_provider, publish_account_id,
                              publish_page_id, publish_verified_at, publish_enabled) values
   (ws_test.id('fbA'), ws_test.id('A'), 'facebook', 'A Page', '11111', 'zernio', 'aaaaaaaaaaaaaaaaaaaaaa01', '11111', now(), false),
@@ -189,7 +194,7 @@ do $$ begin
   perform ws_test.ok('R5 a draft brand board blocks drafting',
     ws_test.reason('D', 'D.fb') = 'The brand board is not approved.');
   perform ws_test.ok('R6 a core keyword without an intent is not usable → named reason with the list version',
-    ws_test.reason('K', 'K.fb') = 'No core keyword (v1) with an intent and an approved service whose owner page is on the site with an approved page group.');
+    ws_test.reason('K', 'K.fb') = 'No core keyword (v1) with an intent and one verified owner page on the site (an approved page group, checked live), an approved related service where the page needs one, and an approved market.');
   perform set_config('session_replication_role', 'replica', true);
   update page_groups set status = 'proposed' where client_id = ws_test.id('A');
   perform set_config('session_replication_role', 'origin', true);
@@ -338,7 +343,7 @@ begin
   perform ws_test.ok('L6 the governed core draft fills the slot: post, keyword, service, intent and owner page; the task is done',
     (r->>'linked')::boolean and (r->>'list_version')::int = 1
     and (select social_post_id = ws_test.id('p.ok') and keyword_id = ws_test.id('kA') and service_id = ws_test.id('sA')
-               and search_intent = 'commercial' and target_url = 'https://a.example.test/service' and hold is null
+               and search_intent = 'commercial' and core_norm_url(target_url) = 'https://a.example.test/service' and hold is null
          from content_plan_items where id = ws_test.id('A.fb'))
     and (select status = 'done' from tasks where id = t));
   perform ws_test.ok('L6b the evidence names list, version, keyword and core keyword for the post',
@@ -355,7 +360,7 @@ begin
     ws_test.err(format($q$select social_slot_link(%L, %L, %L)$q$, g, ws_test.id('p.ok'), ra)) in ('22023', '23505'));
   r := social_slot_link(g, ws_test.id('p.gb'), ra);
   perform ws_test.ok('L10 the GBP slot takes its post and the button''s owner page',
-    (select social_post_id = ws_test.id('p.gb') and target_url = 'https://a.example.test/service' from content_plan_items where id = ws_test.id('A.gb')));
+    (select social_post_id = ws_test.id('p.gb') and core_norm_url(target_url) = 'https://a.example.test/service' from content_plan_items where id = ws_test.id('A.gb')));
   perform ws_test.ok('L11 a linked slot is no longer ready and is not queued again',
     ws_test.reason('A', 'A.fb') = 'Already linked to a post.' and queue_standard_social_tasks(ws_test.id('A'), ws_test.w() + 6) = 0);
 end $$;
@@ -673,6 +678,13 @@ insert into publisher_client_transports (client_id, gbp_transport, changed_by_ki
 insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
 values (ws_test.id('list.G'), ws_test.id('G'), 1, 'approved', array[ws_test.id('kG'), ws_test.id('kGn'), ws_test.id('kGs')], 'test fixture', (select id from team_members limit 1), now());
 insert into gbp_location_markets (client_id, social_account_id, market, kind, source_ref) values (ws_test.id('G'), ws_test.id('gbG1'), 'North City', 'office', 'test: the north office');
+-- 20261028170000: organic scope is its own record (both cities are served);
+-- the Business Profile market above still decides which profile may carry it.
+insert into client_service_markets (client_id, city, state, status, basis, source_ref, decided_on) values
+  (ws_test.id('G'), 'North City', 'MO', 'approved', 'recorded_decision', 'test: served market', current_date),
+  (ws_test.id('G'), 'South Town', 'MO', 'approved', 'recorded_decision', 'test: served market', current_date);
+insert into owner_page_checks (client_id, requested_url, url_norm, final_url, http_status, verdict, method, source_ref)
+values (ws_test.id('G'), 'https://g.example.test/service', core_norm_url('https://g.example.test/service'), 'https://g.example.test/service', 200, 'live', 'http', 'test fixture');
 set local session_replication_role = origin;
 select ws_test.slot('G.gb', 'G', 'gbp_posts', ws_test.w() + 2), ws_test.slot('G.gb1', 'G', 'gbp_posts', ws_test.w() + 3),
        ws_test.slot('G.gb2', 'G', 'gbp_posts', ws_test.w() + 3, null, 'blocked');
@@ -794,7 +806,11 @@ do $$ begin
   select ws_test.id('list.A3'), client_id, (select max(version) + 1 from core_keyword_lists where client_id = ws_test.id('A')), 'approved', keyword_ids, 'test: a newer version, same members', approved_by, now()
     from core_keyword_lists where id = ws_test.id('list.A2');
   perform set_config('session_replication_role', 'origin', true);
-  perform set_config('ws_test.p3d', ws_test.msg(format($q$update change_log set after = after || '{"url": "https://a.example.test/service-2-revised"}'::jsonb where id = %L$q$,
+  -- 20261028170000: a page_rewrite is a refresh of the keyword's owner page, so
+  -- the revision re-spells that page; any other page is refused.
+  perform set_config('ws_test.p3f', ws_test.msg(format($q$update change_log set after = after || '{"url": "https://a.example.test/service-2-revised"}'::jsonb where id = %L$q$,
+    ws_test.id('cl.ok'))), true);
+  perform set_config('ws_test.p3d', ws_test.msg(format($q$update change_log set after = after || '{"url": "https://a.example.test/service-2/"}'::jsonb where id = %L$q$,
     ws_test.id('cl.ok'))), true);
   perform set_config('ws_test.p3e', ws_test.msg(format($q$update change_log set after = after || '{"url": "https://m2.example.test/elsewhere"}'::jsonb where id = %L$q$,
     ws_test.id('cl.ok'))), true);
@@ -826,6 +842,20 @@ begin
     and exists (select 1 from pg_trigger where tgname = 'social_posts_aa_update' and tgenabled = 'O'));
   t := (select id from tasks where key = 'social_slot:' || ws_test.id('A.fbF'));
   c := social_slot_claim(t, ra);
+  -- A brief from a drafter older than 20261028170000 names no owner page: refused, nothing written.
+  st := ws_test.msg(format('select drafter_write(%L::jsonb)', jsonb_build_object(
+    'client_id', ws_test.id('A'), 'requested_via', 'worker', 'runtime', 'sandbox-model', 'attempt', 1, 'claimant', ra,
+    'brief_version', 'drafter-brief/1', 'brief_hash', 'sha256:' || repeat('cd', 32),
+    'brief', jsonb_build_object('client', jsonb_build_object('id', ws_test.id('A')),
+      'target', jsonb_build_object('channel', 'facebook', 'post_type', 'standard', 'search_intent', 'commercial',
+        'service', jsonb_build_object('id', ws_test.id('sA2'), 'name', 'Service A2'),
+        'keyword', jsonb_build_object('id', ws_test.id('kA2')), 'cta', jsonb_build_object('type', null, 'url', null), 'offer', null,
+        'social_account', jsonb_build_object('id', ws_test.id('fbA'), 'page_id', '11111', 'name', 'A Page')),
+      'allowed_facts', jsonb_build_object('claims', jsonb_build_array(jsonb_build_object('id', ws_test.id('claim.A'))))),
+    'lint', jsonb_build_object('ok', true, 'problems', '[]'::jsonb, 'warnings', '[]'::jsonb),
+    'copy', 'Service A2 is offered across the A metro. Ask us about it.', 'claim_ids', jsonb_build_array(ws_test.id('claim.A')), 'asset_ids', '[]'::jsonb)));
+  perform ws_test.ok('F0b mixed versions: a brief that names no owner page (an older drafter) is refused and writes nothing',
+    st like '23514: owner_page_mismatch:%' and not exists (select 1 from social_posts where client_id = ws_test.id('A') and copy like 'Service A2 is offered%'));
   st := ws_test.msg(format('select set_config(%L, drafter_write(%L::jsonb)::text, true)', 'ws_test.f_write', jsonb_build_object(
     'client_id', ws_test.id('A'), 'requested_via', 'worker', 'runtime', 'sandbox-model', 'attempt', 1, 'claimant', ra,
     'brief_version', 'drafter-brief/1', 'brief_hash', 'sha256:' || repeat('ab', 32),
@@ -833,6 +863,7 @@ begin
       'target', jsonb_build_object('channel', 'facebook', 'post_type', 'standard', 'search_intent', 'commercial',
         'service', jsonb_build_object('id', ws_test.id('sA2'), 'name', 'Service A2'),
         'keyword', jsonb_build_object('id', ws_test.id('kA2')), 'cta', jsonb_build_object('type', null, 'url', null), 'offer', null,
+        'owner_page', jsonb_build_object('url', 'https://a.example.test/service-2', 'role', 'service'),
         'social_account', jsonb_build_object('id', ws_test.id('fbA'), 'page_id', '11111', 'name', 'A Page')),
       'allowed_facts', jsonb_build_object('claims', jsonb_build_array(jsonb_build_object('id', ws_test.id('claim.A'))))),
     'lint', jsonb_build_object('ok', true, 'problems', '[]'::jsonb, 'warnings', '[]'::jsonb),
@@ -868,6 +899,8 @@ do $$ begin
     and exists (select 1 from core_keyword_links where change_log_id = ws_test.id('cl.ok') and list_version = 2)
     and exists (select 1 from core_keyword_links c join core_keyword_lists l on l.id = c.list_id where c.change_log_id = ws_test.id('cl.ok') and l.id = ws_test.id('list.A3') and c.list_version = l.version)
     and (select count(*) from core_keyword_links where change_log_id = ws_test.id('cl.ok')) = 2);
+  perform ws_test.ok('P3f a refresh revised onto a page that is not the keyword''s owner is refused',
+    current_setting('ws_test.p3f') like '23514: refresh_not_owner:%');
   perform ws_test.ok('P3e a URL revision onto another host is refused like an insert',
     current_setting('ws_test.p3e') like '23514: core_keyword_required%not on the site%');
 end $$;

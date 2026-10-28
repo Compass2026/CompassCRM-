@@ -1013,6 +1013,72 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   are queued, and a task whose location has other open slots that day
   tells the worker to choose a different service and topic.
 
+## Keyword owner page vs related service (Oct 28 2026; `20261028170000` written, **not applied**)
+
+Every gate used to take a keyword's service and treat `services.page_url`
+as the keyword's page, so a city term owned by its city page, a Home or
+brand term with no service, and a BHG brand-site term with no service were
+refused, and a service's primary keyword co-owned every keyword of that
+service. The migration separates the two:
+
+- **Owner page:** exactly one explicit claim on the keyword: an approved
+  page group naming it (or an equivalent row of the **same site program**)
+  primary, its `target_url`, or the page of an approved service naming it
+  primary. Two different claims are `keyword_owner_conflict`, never a
+  priority order. With no claim, the related service's page; never Home by
+  default. The page group's `page_type` gives the role: service, city, home,
+  brand (`other`), or blog (a published article).
+- **Related service:** `keywords.service_id`, optional; when set, approved
+  and on the same site. A service page owner needs it unless the intent is
+  navigational.
+- **One resolver, two twins:** SQL `keyword_owner(client, program,
+  keyword, purpose)` and TypeScript `authority/keyword-owner.ts`. Both are
+  held to `tests/fixtures/keyword-owner-cases.json` (46 cases: relative
+  paths, aliases, same text on another brand site, same-named cities, wrong
+  site, unapproved service, held market, 404, duplicate owners, no-service
+  Home). Purposes are post, blog, refresh and add (`core_owner_allows`):
+  - Home anchors posts but no new blog.
+  - A reviews page takes commercial and navigational posts.
+  - A refresh rewrites the owner page, never an article.
+- **Evidence it needs:**
+  - `client_service_markets` is organic scope. Offices are backfilled from
+    active physical locations. Anything else is a recorded decision (source
+    and date) or a signed-in teammate's. It is separate from
+    `gbp_location_markets` (publication); a Business Profile post needs
+    both.
+  - `keywords.market_id` is explicit. A bare `keywords.city` resolves only
+    when exactly one market of the site has that name.
+  - `owner_page_checks`: unchecked means `page_not_verified`, and a check
+    older than 45 days counts as unchecked. The `owner-page-check` function
+    (team JWT or cron secret) records `http` verdicts; a host that answers
+    any path with the same HTML is `soft_404`. SPA routes (Show Me Design)
+    are verified by a `rendered` check.
+  - `client_promotion_holds` holds offerings, with the person's words and
+    date. No keyword, core parent, related service, owner page, CTA or
+    drafted copy may promote a held offering. Only a signed-in teammate
+    releases a hold.
+- **Patched:**
+  - eligibility (a 5-argument form with purpose), grounding, the list guard;
+  - the post / draft / change review gates (`cta_not_owner`,
+    `owner_page_mismatch`, `refresh_not_owner`);
+  - drafter_write: the brief must name the database's owner, so a brief
+    from an older drafter is refused;
+  - `social_slot_link` (the slot target is the owner page), readiness;
+  - `client_intelligence_for_content(client, service, keyword)`, which adds
+    `owner_context`;
+  - `content_plan_board`, the planner's Authority path, and the worker
+    skill's Map-first rule.
+- **Deploy order:**
+  1. Apply the migration. Drafting fails closed until step 2: briefs
+     without an owner page are refused.
+  2. Deploy `post-drafter` and `content-drafter` (both pass `p_keyword_id`,
+     which the old loader lacks).
+  3. Deploy `owner-page-check`, and run it per client.
+  4. Record markets and holds as data steps.
+
+  Rollback: redeploy the previous functions, then restore the patched
+  functions from `20261027191343`. Nothing here rewrites existing rows.
+
 ## Reporting worker (Sept 13 2026)
 
 **Nine-area scorecard update (PR #50, app not deployed; 0041 applied Sept 23 as `20260923015843`):** see

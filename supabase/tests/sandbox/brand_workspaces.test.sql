@@ -27,7 +27,9 @@ select cd.as_user('authenticated','00000000-0000-4000-a000-000000000001');
 insert into client_brand_workspaces(id,client_id,slug,name,website_url,phone,positioning,voice_tone,standing_cta,hard_rules,service_ids,claim_ids,asset_ids,blog_site_id,facebook_account_id) values
  (cd.id('safety-brand'),cd.id('multi'),'safety','Safety Training','https://safety.example.test','202-555-0120','Safety training','Clear','Call us',array['Use sourced claims'],array[cd.id('safety')],array[cd.id('safety-claim')],array[cd.id('safety-logo')],cd.id('safety-site'),cd.id('safety-fb')),
  (cd.id('forklift-brand'),cd.id('multi'),'forklift','Forklift Training','https://forklift.example.test','202-555-0120','Forklift training','Clear','Call us',array['Use sourced claims'],array[cd.id('forklift')],array[cd.id('forklift-claim')],array[cd.id('forklift-logo')],cd.id('forklift-site'),cd.id('forklift-fb'));
-select cd.ok('BR1 legacy intelligence is byte-equivalent',client_intelligence_for_content(cd.id('a'),cd.id('svc'))=client_intelligence_input(cd.id('a')));
+-- 20261028170000 adds owner_context (the keyword owner resolver's rows); everything else is unchanged.
+select cd.ok('BR1 legacy intelligence is byte-equivalent',client_intelligence_for_content(cd.id('a'),cd.id('svc')) - 'owner_context' = client_intelligence_input(cd.id('a'))
+  and client_intelligence_for_content(cd.id('a'),cd.id('svc')) ? 'owner_context');
 do $$ declare i jsonb; b jsonb; begin
  i:=client_intelligence_for_content(cd.id('multi'),cd.id('safety'));
  perform cd.ok('BR2 services, keywords, claims and images stay within selected brand',

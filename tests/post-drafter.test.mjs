@@ -72,18 +72,35 @@ test("refused: brand board not approved", () => {
   assert.ok(r.refusals.some((f) => f.code === "brand_board_not_approved"));
 });
 
-test("refused: missing, off-site or unapproved target page", () => {
+test("refused: missing, off-site or unapproved owner page", () => {
+  // The owner page is every explicit claim on the keyword (20261028170000):
+  // the service's primary page, the keyword's target_url, the page group's
+  // target. Moving all three together keeps one owner.
+  const claimAt = (url) => (x) => ({ ...x,
+    services: x.services.map((s) => (s.id === ROOF ? { ...s, page_url: url } : s)),
+    keywords: x.keywords.map((k) => (k.id === KW ? { ...k, target_url: url } : k)),
+    pageGroups: x.pageGroups.map((g) => ({ ...g, target_url: url })) });
   for (const [mut, code] of [
-    [(x) => ({ ...x, services: x.services.map((s) => (s.id === ROOF ? { ...s, page_url: null } : s)) }), "target_page_missing"],
-    [(x) => ({ ...x, services: x.services.map((s) => (s.id === ROOF ? { ...s, page_url: "https://evil.example/roof" } : s)) }), "target_page_invalid"],
-    [(x) => ({ ...x, services: x.services.map((s) => (s.id === ROOF ? { ...s, page_url: "http://lucasconstructionmo.com/services/roof-replacement" } : s)) }), "target_page_invalid"],
+    [claimAt(null), "target_page_missing"],
+    [claimAt("https://evil.example/roof"), "keyword_wrong_page"],
+    [claimAt("http://lucasconstructionmo.com/services/roof-replacement"), "target_page_invalid"],
     [(x) => ({ ...x, pageGroups: [] }), "target_page_unapproved"],
     [(x) => ({ ...x, pageGroups: x.pageGroups.map((g) => ({ ...g, status: "draft" })) }), "target_page_unapproved"],
+    // Two different explicit claims are a conflict, never a priority order.
+    [(x) => ({ ...x, services: x.services.map((s) => (s.id === ROOF ? { ...s, page_url: "https://evil.example/roof" } : s)) }), "keyword_owner_conflict"],
   ]) {
     const r = brief(mut);
     assert.equal(r.ok, false, code);
     assert.ok(r.refusals.some((f) => f.code === code), `${code}: ${JSON.stringify(r.refusals)}`);
   }
+});
+
+test("a related service needs no page of its own when the keyword's own page owns it", () => {
+  const r = brief((x) => ({ ...x, services: x.services.map((s) => (s.id === ROOF ? { ...s, page_url: null, primary_keyword_id: null } : s)) }));
+  assert.equal(r.ok, true, JSON.stringify(r.refusals));
+  assert.equal(r.brief.target.owner_page.url, PAGE);
+  assert.equal(r.brief.target.service.id, ROOF);
+  assert.equal(r.brief.target.cta.url, PAGE);
 });
 
 test("refused: an unapproved service, a mismatched keyword, an offer on a standard post, a button to another page", () => {
@@ -95,13 +112,28 @@ test("refused: an unapproved service, a mismatched keyword, an offer on a standa
     [{ ...TARGET, channel: "instagram" }, "channel_unsupported"],
     // Facebook is drafted (Oct 11 2026), but never with a Business Profile button.
     [{ ...TARGET, channel: "facebook" }, "cta_not_applicable"],
-    [{ ...TARGET, serviceId: null, keywordId: null }, "service_missing"],
+    [{ ...TARGET, serviceId: null, keywordId: null }, "keyword_missing"],
   ];
   for (const [t, code] of cases) {
     const r = brief(undefined, t);
     assert.equal(r.ok, false, code);
     assert.ok(r.refusals.some((f) => f.code === code), `${code}: ${JSON.stringify(r.refusals)}`);
   }
+});
+
+test("refused: a service page owns the keyword but the keyword names no related service", () => {
+  const r = brief((x) => ({ ...x, keywords: x.keywords.map((k) => (k.id === KW ? { ...k, service_id: null } : k)),
+    services: x.services.map((s) => (s.id === ROOF ? { ...s, primary_keyword_id: null } : s)) }), { ...TARGET, serviceId: null });
+  assert.equal(r.ok, false);
+  assert.ok(r.refusals.some((f) => f.code === "service_missing"), JSON.stringify(r.refusals));
+});
+
+test("refused: copy that names a held offering", () => {
+  const r = brief((x) => ({ ...x, owner_context: undefined }));
+  assert.equal(r.ok, true);
+  const held = { ...r.brief, excluded: { ...r.brief.excluded, offerings: [{ offering: "Repairs on other installers' work", phrases: ["third party repair"] }] } };
+  const l = lintDraft(held, { copy: GOOD.replace(/\.$/, ". We also handle third-party repair."), claim_ids: [OC, WARRANTY] }, { gazetteer: GAZETTEER });
+  assert.ok(l.problems.some((p) => p.code === "held_offering"), JSON.stringify(l.problems));
 });
 
 test("refused: a commercial draft with no relevant usable claim", () => {

@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - authority-run
+          - owner-page-check
           - gsc-sync
           - post-drafter
           - content-drafter

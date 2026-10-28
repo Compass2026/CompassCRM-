@@ -185,7 +185,8 @@ test("Authority and the Drafter disagreeing on the target refuses; the Drafter n
   assert.equal(kw.body.authority_opportunity_id, OPP);
   const svc = await call(drafter(fakeStore(state({ opportunity: { service_id: "2d53aa66-3353-4ea7-b5b9-fd1961a69788", key: "gbp_post:2d53aa66-3353-4ea7-b5b9-fd1961a69788:commercial", keyword_id: null } })).store), A("brief"));
   assert.equal(svc.status, 422);
-  assert.ok(svc.body.refusals.some((r) => r.code === "target_page_missing"));
+  // No keyword, no owner page: refused before any page is chosen (20261028170000).
+  assert.ok(svc.body.refusals.some((r) => r.code === "keyword_missing"), JSON.stringify(svc.body));
 });
 
 test("Authority evidence must be claims the Drafter itself allows", async () => {

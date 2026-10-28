@@ -138,7 +138,7 @@ export function createPostDrafter(deps: Deps) {
   async function rebuild(clientId: string, target: DraftTarget):
     Promise<{ ok: true; brief: Brief; hash: string; state: string | null } | { ok: false; status: number; body: Json }> {
     let input;
-    try { input = await store.input(clientId, target.serviceId); } catch (e) {
+    try { input = await store.input(clientId, target.serviceId, target.keywordId ?? null); } catch (e) {
       if ((e as {code?:string}).code === "23514") return {ok:false,status:422,body:{eligible:false,refusals:[{code:"brand_service_required",message:(e as Error).message}]}};
       throw e;
     }

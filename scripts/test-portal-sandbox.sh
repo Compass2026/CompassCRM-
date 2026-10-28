@@ -296,6 +296,10 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_stan
 # Weekly Facebook / GBP slots: readiness reasons, forward-only queue, one task
 # per slot, binding claim, governed link, launching readiness (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_social_slots.test.sql"
+# 20261028170000: keyword owner page vs related service, on the fixture the
+# TypeScript resolver is tested against too (tests/keyword-owner.test.mjs).
+psql_as supabase_admin -d sandbox -v owner_cases="$(cat "$ROOT/tests/fixtures/keyword-owner-cases.json")" \
+  -f "$ROOT/supabase/tests/sandbox/keyword_owner_resolver.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
 
 # Map-tracking-only clients skip every onboarding trigger; full clients keep them.

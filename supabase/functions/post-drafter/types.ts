@@ -124,7 +124,12 @@ export type Brief = {
     post_type: "standard" | "offer";
     campaign_mode: "keyword" | "non_search";
     search_intent: SearchIntent;
-    service: { id: string; name: string; page_url: string; page_group_id: string } | null;
+    // The related service (the topic, optional for Home / city / brand owners).
+    service: { id: string; name: string; page_url: string | null; page_group_id: string | null } | null;
+    // The keyword's one owner page (20261028170000): the CTA, plan target and
+    // required link. drafter_write refuses a brief whose owner_page is not
+    // the database's keyword_owner().
+    owner_page: { url: string; display_url: string; page_group_id: string | null; role: string; market: string | null; program_id: string | null } | null;
     keyword: { id: string; text: string; tracked: boolean; money: boolean; max_exact_uses: number } | null;
     cta: { type: string | null; url: string | null; in_copy_phrase: string | null };
     offer: { id: string; title: string; terms: string; starts_on: string | null; ends_on: string | null } | null;
@@ -144,6 +149,9 @@ export type Brief = {
   excluded: {
     claims: { id: string; text: string; reason: string }[];
     facts: { fact: string; reason: string }[];
+    // Offerings the business has but does not advertise yet (client_promotion_holds):
+    // the copy may not name them. Optional for briefs written before 20261028170000.
+    offerings?: { offering: string; phrases: string[] }[];
   };
   brand: {
     positioning: string | null;
