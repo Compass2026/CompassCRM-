@@ -48,7 +48,7 @@ select ko_test.id(x->>'key'), ko_test.id(x->>'client'), x->>'key', (x->>'page_ty
 from ko_test.fx, jsonb_array_elements(j->'page_groups') x;
 insert into owner_page_checks (client_id, requested_url, url_norm, final_url, http_status, verdict, method, source_ref)
 select ko_test.id(x->>'client'), x->>'url', core_norm_url(x->>'url'), x->>'url', case x->>'verdict' when 'missing' then 404 else 200 end,
-       x->>'verdict', 'http', 'test fixture'
+       x->>'verdict', coalesce(x->>'method', 'http'), 'test fixture'
 from ko_test.fx, jsonb_array_elements(j->'page_checks') x;
 insert into content_posts (id, client_id, title, status, url)
 select ko_test.id(x->>'key'), ko_test.id(x->>'client'), 'Fixture article', 'published', x->>'url'
@@ -237,7 +237,7 @@ select ko_test.ok('V1 the evidence row records the owner page, its role and the 
            and l.owner_url = 'https://ridgeline.example.test/service-areas/oakfield' and l.owner_role = 'city' and l.market_id = ko_test.id('mOak')));
 select ko_test.ok('V2 the loader carries the owner context, and a multi-brand draft with no service finds its site by keyword',
   client_intelligence_for_content(ko_test.id('R'), null) ? 'owner_context'
-  and jsonb_array_length(client_intelligence_for_content(ko_test.id('R'), null)->'owner_context'->'page_checks') = 9
+  and jsonb_array_length(client_intelligence_for_content(ko_test.id('R'), null)->'owner_context'->'page_checks') = 11
   and (client_intelligence_for_content(ko_test.id('H'), null, ko_test.id('kSafeCo'))->'workspace'->>'id')::uuid = ko_test.id('H.safe')
   and not exists (select 1 from jsonb_array_elements(client_intelligence_for_content(ko_test.id('H'), null, ko_test.id('kSafeCo'))->'keywords') x
                    where x->>'id' = ko_test.id('kSafeCoLift')::text)

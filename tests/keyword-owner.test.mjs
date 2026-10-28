@@ -43,7 +43,7 @@ export function contextFor(clientKey, overrides = {}) {
       id: id(m.key), brand_workspace_id: m.workspace ? id(m.workspace) : null, city: m.city, state: m.state, status: m.status,
       basis: m.basis, source_ref: "test fixture",
     })),
-    page_checks: fx.page_checks.filter(mine).map((c) => ({ url_norm: ownerNormUrl(c.url), verdict: c.verdict, checked_at: asOf })),
+    page_checks: fx.page_checks.filter(mine).map((c, i) => ({ url_norm: ownerNormUrl(c.url), verdict: c.verdict, checked_at: asOf, method: c.method ?? "http", id: i + 1 })),
     holds: fx.holds.filter(mine).map((h) => ({
       id: id(h.key), brand_workspace_id: null, offering: h.offering, phrases: h.phrases.map((p) => p.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()),
       service_ids: h.services.map(id), decided_on: "2026-10-28", source_ref: "test fixture",

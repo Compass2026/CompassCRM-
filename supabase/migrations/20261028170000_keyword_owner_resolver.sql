@@ -469,7 +469,9 @@ begin
   end if;
 
   -- Role: the approved page group(s) targeting the owner; else a published post.
-  select array_agg(distinct g.page_type::text), (array_agg(g.id order by g.created_at, g.id))[1],
+  -- Roles, not raw page types: service and hub are both a service page.
+  select array_agg(distinct case g.page_type::text when 'home' then 'home' when 'city' then 'city' when 'other' then 'brand' else 'service' end),
+         (array_agg(g.id order by g.created_at, g.id))[1],
          (array_agg(g.target_url order by g.created_at, g.id))[1]
     into v_roles, v_gid, v_display
     from page_groups g
@@ -478,7 +480,7 @@ begin
     return v_out || jsonb_build_object('problem_code', 'page_role_ambiguous', 'problem',
       'Approved page groups give ' || v_owner || ' different roles: ' || array_to_string(v_roles, ', ') || '.');
   elsif cardinality(v_roles) = 1 then
-    v_role := case v_roles[1] when 'home' then 'home' when 'city' then 'city' when 'other' then 'brand' else 'service' end;
+    v_role := v_roles[1];
   elsif exists (select 1 from content_posts cp where cp.client_id = p_client_id and cp.status::text = 'published'
                   and core_norm_url(cp.url, v_site) = v_owner) then
     v_role := 'blog';
@@ -499,10 +501,18 @@ begin
     return v_out || jsonb_build_object('problem_code', 'promotion_held', 'problem', 'The owner page promotes a held offering: ' || v_held || '.');
   end if;
 
-  -- Live page: the latest check of the owner. Unchecked is not verified.
+  -- Live page: the latest check of the owner. Unchecked is not verified. An
+  -- http soft_404 means the host answers every path alike (a single-page app),
+  -- so it cannot judge the route: the latest rendered check decides then. A
+  -- real 404 or redirect from http still wins over an older rendered check.
   if p_purpose is distinct from 'add' then
     select * into chk from owner_page_checks c where c.client_id = p_client_id and c.url_norm = v_owner
      order by c.checked_at desc, c.id desc limit 1;
+    if chk.method = 'http' and chk.verdict = 'soft_404' then
+      select * into chk from owner_page_checks c where c.client_id = p_client_id and c.url_norm = v_owner
+         and (c.method = 'rendered' or c.id = chk.id)
+       order by (c.method = 'rendered') desc, c.checked_at desc, c.id desc limit 1;
+    end if;
     if chk.id is null then
       return v_out || jsonb_build_object('problem_code', 'page_not_verified', 'problem', v_owner || ' has not been checked live.');
     elsif chk.verdict <> 'live' then
@@ -584,10 +594,12 @@ language sql stable security invoker set search_path = public, pg_temp as $$
     'markets', coalesce((select jsonb_agg(jsonb_build_object('id', m.id, 'brand_workspace_id', m.brand_workspace_id, 'city', m.city, 'state', m.state,
                           'country', m.country, 'status', m.status, 'basis', m.basis, 'source_ref', m.source_ref) order by m.id)
                           from client_service_markets m where m.client_id = p_client_id), '[]'),
+    -- The latest check per page and method (keyword_owner reads the latest
+    -- rendered check when the latest http check is a soft 404).
     'page_checks', coalesce((select jsonb_agg(jsonb_build_object('url_norm', c.url_norm, 'verdict', c.verdict, 'checked_at', c.checked_at,
-                              'detail', c.detail, 'method', c.method) order by c.url_norm)
-                              from (select distinct on (url_norm) * from owner_page_checks where client_id = p_client_id
-                                     order by url_norm, checked_at desc, id desc) c), '[]'),
+                              'detail', c.detail, 'method', c.method, 'id', c.id) order by c.url_norm, c.method)
+                              from (select distinct on (url_norm, method) * from owner_page_checks where client_id = p_client_id
+                                     order by url_norm, method, checked_at desc, id desc) c), '[]'),
     'holds', coalesce((select jsonb_agg(jsonb_build_object('id', h.id, 'brand_workspace_id', h.brand_workspace_id, 'offering', h.offering,
                         'phrases', h.phrases, 'service_ids', h.service_ids, 'decided_on', h.decided_on, 'source_ref', h.source_ref) order by h.created_at, h.id)
                         from client_promotion_holds h where h.client_id = p_client_id and h.status = 'held'), '[]'),

@@ -35,7 +35,7 @@ export type OwnerContext = {
   page_groups: { id: string; status: string; page_type: string; target_url: string | null; primary_keyword_id: string | null; created_at?: string }[];
   published_posts: { id: string; url: string }[];
   markets: { id: string; brand_workspace_id: string | null; city: string; state: string; country?: string; status: string; basis?: string; source_ref: string }[];
-  page_checks: { url_norm: string; verdict: string; checked_at: string; detail?: string | null; method?: string }[];
+  page_checks: { url_norm: string; verdict: string; checked_at: string; detail?: string | null; method?: string; id?: number }[];
   holds: { id: string; brand_workspace_id: string | null; offering: string; phrases: string[]; service_ids: string[]; decided_on: string; source_ref: string }[];
   as_of: string;
 };
@@ -225,14 +225,16 @@ export function resolveKeywordOwner(
 
   const groups = ctx.page_groups.filter((g) => g.status === "approved" && ownerNormUrl(g.target_url, site) === owner)
     .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id.localeCompare(b.id));
-  const types = [...new Set(groups.map((g) => g.page_type))].sort();
+  // Roles, not raw page types: service and hub are both a service page.
+  const roleOf = (t: string): OwnerRole => (t === "home" ? "home" : t === "city" ? "city" : t === "other" ? "brand" : "service");
+  const types = [...new Set(groups.map((g) => roleOf(g.page_type)))].sort();
   let role: OwnerRole;
   let display: string | null = null;
   let groupId: string | null = null;
   if (types.length > 1) {
     return fail("page_role_ambiguous", `Approved page groups give ${owner} different roles: ${types.join(", ")}.`);
   } else if (types.length === 1) {
-    role = types[0] === "home" ? "home" : types[0] === "city" ? "city" : types[0] === "other" ? "brand" : "service";
+    role = types[0] as OwnerRole;
     groupId = groups[0].id;
     display = groups[0].target_url;
   } else {
@@ -251,7 +253,12 @@ export function resolveKeywordOwner(
   if (held) return fail("promotion_held", `The owner page promotes a held offering: ${held}.`);
 
   if (purpose !== "add") {
-    const chk = ctx.page_checks.find((c) => c.url_norm === owner);
+    // The latest check; an http soft_404 (a host that answers every path
+    // alike) defers to the latest rendered check (keyword_owner's rule).
+    const mine = ctx.page_checks.filter((c) => c.url_norm === owner)
+      .sort((a, b) => b.checked_at.localeCompare(a.checked_at) || (b.id ?? 0) - (a.id ?? 0));
+    let chk = mine[0];
+    if (chk && chk.method !== "rendered" && chk.verdict === "soft_404") chk = mine.find((c) => c.method === "rendered") ?? chk;
     const maxAge = PAGE_CHECK_MAX_AGE_DAYS * 86400000;
     if (!chk) {
       const r = soft("page_not_verified", `${owner} has not been checked live.`);

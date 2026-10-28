@@ -47,6 +47,8 @@
     { "key": "kBlogOwned", "client": "R", "keyword": "how long do roofs last", "intent": "informational", "service": "sRoof", "target_url": "https://ridgeline.example.test/blog/how-long-roofs-last" },
     { "key": "kInfoService", "client": "R", "keyword": "signs you need a new roof", "intent": "informational", "service": "sRoof" },
     { "key": "kInvalid", "client": "R", "keyword": "roof vents", "intent": "commercial", "service": "sRoof", "target_url": "ridgeline roofing vents page" },
+    { "key": "kSpa", "client": "R", "keyword": "skylight repair", "intent": "commercial", "service": "sRoof" },
+    { "key": "kAmbig", "client": "R", "keyword": "about ridgeline roofing", "intent": "navigational", "target_url": "https://ridgeline.example.test/about" },
     { "key": "kInactive", "client": "R", "keyword": "old roof term", "intent": "commercial", "service": "sRoof", "is_active": false },
     { "key": "kSafeCo", "client": "H", "keyword": "safety training company", "intent": "commercial", "target_url": "https://safe.example.test/" },
     { "key": "kSafeCoLift", "client": "H", "keyword": "Safety Training Company", "intent": "commercial", "target_url": "https://lift.example.test/" },
@@ -67,6 +69,10 @@
     { "key": "gReviews", "client": "R", "page_type": "other", "target_url": "https://ridgeline.example.test/reviews", "primary": "kBrand" },
     { "key": "gGut", "client": "R", "page_type": "service", "target_url": "https://ridgeline.example.test/services/gutters", "primary": "kGut", "status": "proposed" },
     { "key": "gOther", "client": "R", "page_type": "service", "target_url": "https://ridgeline.example.test/services/other-repair", "primary": null },
+    { "key": "gSpa", "client": "R", "page_type": "service", "target_url": "https://ridgeline.example.test/services/spa-route", "primary": "kSpa" },
+    { "key": "gHub", "client": "R", "page_type": "hub", "target_url": "https://ridgeline.example.test/services/roof-replacement", "primary": null },
+    { "key": "gAboutCity", "client": "R", "page_type": "city", "target_url": "https://ridgeline.example.test/about/", "primary": null },
+    { "key": "gAboutBrand", "client": "R", "page_type": "other", "target_url": "https://ridgeline.example.test/about", "primary": null },
     { "key": "gFlat", "client": "R", "page_type": "service", "target_url": "https://ridgeline.example.test/flat-roofs", "primary": null },
     { "key": "gSafeHome", "client": "H", "page_type": "home", "target_url": "https://safe.example.test", "primary": null },
     { "key": "gLiftHome", "client": "H", "page_type": "home", "target_url": "https://lift.example.test/", "primary": "kLiftCo" },
@@ -96,7 +102,9 @@
     { "client": "H", "url": "https://lift.example.test/", "verdict": "live" },
     { "client": "H", "url": "https://safe.example.test/locations/houston", "verdict": "live" },
     { "client": "H", "url": "https://safe.example.test/training", "verdict": "live" },
-    { "client": "H", "url": "https://lift.example.test/classes", "verdict": "soft_404" }
+    { "client": "H", "url": "https://lift.example.test/classes", "verdict": "soft_404" },
+    { "client": "R", "url": "https://ridgeline.example.test/services/spa-route", "verdict": "soft_404" },
+    { "client": "R", "url": "https://ridgeline.example.test/services/spa-route", "verdict": "live", "method": "rendered" }
   ],
   "published_posts": [
     { "key": "pBlog", "client": "R", "url": "https://ridgeline.example.test/blog/how-long-roofs-last" }
@@ -138,6 +146,9 @@
     { "name": "commercial city term does not anchor a blog", "keyword": "kCity", "purpose": "blog", "expect": { "code": "owner_role_not_allowed", "role": "city" } },
     { "name": "city page refresh", "keyword": "kCity", "purpose": "refresh", "expect": { "code": null, "role": "city" } },
     { "name": "a claim that is not a URL", "keyword": "kInvalid", "expect": { "code": "target_page_invalid" } },
+    { "name": "single-page-app route: an http soft 404 defers to the rendered check", "keyword": "kSpa", "expect": { "code": null, "role": "service", "url": "https://ridgeline.example.test/services/spa-route" } },
+    { "name": "a hub group and a service group on one page are one role (service)", "keyword": "kRoofCost", "expect": { "code": null, "role": "service", "url": "https://ridgeline.example.test/services/roof-replacement" } },
+    { "name": "a city group and a brand group on one page are ambiguous", "keyword": "kAmbig", "purpose": "post", "expect": { "code": "page_role_ambiguous" } },
     { "name": "inactive keyword", "keyword": "kInactive", "expect": { "code": "keyword_unknown" } },
     { "name": "single-site client asked for a brand site", "keyword": "kRoof", "program": "H.safe", "expect": { "code": "keyword_wrong_site" } },
     { "name": "brand-site Home term with no service: its program from its own page", "keyword": "kSafeCo", "expect": { "code": null, "role": "home", "url": "https://safe.example.test" } },
