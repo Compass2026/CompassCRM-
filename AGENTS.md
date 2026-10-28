@@ -1051,12 +1051,22 @@ service. The migration separates the two:
   - `owner_page_checks`: unchecked means `page_not_verified`, and a check
     older than 45 days counts as unchecked. The `owner-page-check` function
     (team JWT or cron secret) records `http` verdicts; a host that answers
-    any path with the same HTML is `soft_404`. SPA routes (Show Me Design)
-    are verified by a `rendered` check.
+    any path with the same page content (its `<main>`, or body, without
+    header / nav / footer, compared in full) is `soft_404`. SPA routes
+    (Show Me Design) are verified by a `rendered` check.
   - `client_promotion_holds` holds offerings, with the person's words and
     date. No keyword, core parent, related service, owner page, CTA or
-    drafted copy may promote a held offering. Only a signed-in teammate
-    releases a hold.
+    copy may promote a held offering. Only a signed-in teammate releases a
+    hold. Phrases match by word stem in any order within a short span
+    (`core_hold_hit` / `holdHit`: "solar panel repairs", "we will monitor
+    your solar system"); prose they do not name is the reviewer's to
+    catch. The database checks the copy itself on every forward step —
+    review, approval, scheduling, the publisher's claim, an edit in any of
+    those, a blog release and its claim, a page change, a planner slot —
+    so content written before a hold stops at its next step: refused with
+    the reason, a queued article's claim recorded `blocked`, a slot marked
+    `blocked`. Nothing is deleted or rewritten. `promotion_hold_conflicts
+    (client)` lists what already matches.
 - **Patched:**
   - eligibility (a 5-argument form with purpose), grounding, the list guard;
   - the post / draft / change review gates (`cta_not_owner`,

@@ -276,6 +276,59 @@ revoke all on client_promotion_holds from public, anon, authenticated;
 grant select, insert, update on client_promotion_holds to authenticated;
 grant select on client_promotion_holds to service_role;
 
+-- A light suffix stripper (the TypeScript twin is holdStem): "repairs",
+-- "repaired" and "repairing" meet "repair"; "consultations", "consultant"
+-- and "consulting" meet "consultation". Both sides are stemmed, so it only
+-- has to be consistent.
+create function core_hold_stem(p_word text) returns text
+language plpgsql immutable set search_path = pg_catalog as $$
+declare w text := p_word;
+begin
+  if length(w) <= 3 then return w; end if;
+  if w like '%ies' and length(w) > 4 then w := left(w, -3) || 'y';
+  elsif w like '%s' and w not like '%ss' then w := left(w, -1); end if;
+  if w like '%ation' and length(w) > 7 then w := left(w, -5);
+  elsif w like '%ion' and length(w) > 6 then w := left(w, -3);
+  elsif w like '%ment' and length(w) > 7 then w := left(w, -4);
+  elsif w like '%ing' and length(w) > 5 then w := left(w, -3);
+  elsif w like '%ant' and length(w) > 6 then w := left(w, -3);
+  elsif w like '%ed' and length(w) > 4 then w := left(w, -2); end if;
+  if w like '%er' and length(w) > 4 then w := left(w, -2); end if;
+  if w like '%e' and length(w) > 4 then w := left(w, -1); end if;
+  if length(w) > 3 and right(w, 1) = substr(w, length(w) - 1, 1) and right(w, 1) ~ '[b-df-hj-km-np-rtv-y]' then
+    w := left(w, -1);
+  end if;
+  return w;
+end $$;
+
+create function core_hold_tokens(p_text text) returns text[]
+language sql immutable set search_path = public, pg_temp as $$
+  select coalesce(array_agg(core_hold_stem(t) order by n), '{}')
+  from unnest(string_to_array(core_norm_words(p_text), ' ')) with ordinality as x(t, n) where t <> ''
+$$;
+
+-- The first held phrase whose words all occur, in any order, within a span
+-- of the phrase's length + 2 words ("we will monitor your solar system"
+-- meets "solar system monitoring"); null when none does. Phrases are the
+-- offering's words and its listed paraphrases. Prose they do not name is
+-- the human reviewer's to catch: a miss here is not a statement it is safe.
+create function core_hold_hit(p_phrases text[], p_text text) returns text
+language plpgsql immutable set search_path = public, pg_temp as $$
+declare t text[] := core_hold_tokens(p_text); ph text; ps text[]; m int;
+begin
+  if cardinality(t) = 0 then return null; end if;
+  foreach ph in array coalesce(p_phrases, '{}') loop
+    ps := core_hold_tokens(ph); m := cardinality(ps);
+    continue when m = 0;
+    if exists (select 1 from generate_subscripts(t, 1) i where t[i] = any(ps) and ps <@ t[i:i + m + 1]) then
+      return ph;
+    end if;
+  end loop;
+  return null;
+end $$;
+revoke all on function core_hold_stem(text), core_hold_tokens(text), core_hold_hit(text[], text) from public, anon;
+grant execute on function core_hold_stem(text), core_hold_tokens(text), core_hold_hit(text[], text) to authenticated, service_role;
+
 -- The held offering a text, service or page would promote, or null.
 create function core_promotion_hold(p_client_id uuid, p_program uuid, p_text text, p_service_id uuid, p_url text)
 returns text language sql stable security invoker set search_path = public, pg_temp as $$
@@ -284,7 +337,7 @@ returns text language sql stable security invoker set search_path = public, pg_t
   where h.client_id = p_client_id and h.status = 'held'
     and (h.brand_workspace_id is null or h.brand_workspace_id is not distinct from p_program)
     and ((p_service_id is not null and p_service_id = any(h.service_ids))
-      or exists (select 1 from unnest(h.phrases) ph where ' ' || core_norm_words(p_text) || ' ' like '% ' || ph || ' %')
+      or core_hold_hit(h.phrases, p_text) is not null
       or (p_url is not null and exists (select 1 from services v where v.id = any(h.service_ids) and v.page_url is not null
                                           and core_norm_url(v.page_url) = core_norm_url(p_url))))
   order by h.created_at, h.id limit 1
@@ -1029,6 +1082,211 @@ $$;
 revoke all on function owner_page_check_targets(uuid, uuid) from public, anon, authenticated;
 grant execute on function owner_page_check_targets(uuid, uuid) to service_role;
 
+-- ── 15b. Holds on the copy itself ───────────────────────────────────────────
+-- The keyword gates above see the keyword, its parent, service and owner
+-- page. A hold is also checked against what the reader would see — the
+-- post's copy and button, the article's title, meta, H1, body, slug, CTA and
+-- schema — on every forward step: review, approval, scheduling, the
+-- publisher's claim, and an edit while in any of those. So a hand-edited
+-- post on an allowed installation keyword, a draft written before the hold
+-- was recorded, and an older drafter's brief all stop at the next step.
+-- Nothing is deleted or rewritten: posts and drafts are refused with the
+-- reason, a queued article's claim is recorded as blocked, a planner slot is
+-- marked blocked. promotion_hold_conflicts() lists what already matches.
+-- Program null (unknown) checks every hold of the client: fail closed.
+create function core_copy_hold(p_client_id uuid, p_program uuid, p_text text, p_service_id uuid, p_url text)
+returns text language sql stable security invoker set search_path = public, pg_temp as $$
+  select 'held_offering: ' || coalesce('"' || core_hold_hit(h.phrases, concat_ws(' ', p_text, p_url)) || '" promotes ', 'this promotes ')
+         || h.offering || ', which is held from promotion (' || h.decided_on || ': ' || left(h.source_ref, 160)
+         || '). Edit the copy; only a signed-in teammate releases the hold.'
+  from client_promotion_holds h
+  where h.client_id = p_client_id and h.status = 'held'
+    and (h.brand_workspace_id is null or p_program is null or h.brand_workspace_id = p_program)
+    and ((p_service_id is not null and p_service_id = any(h.service_ids))
+      or core_hold_hit(h.phrases, concat_ws(' ', p_text, p_url)) is not null
+      or (p_url is not null and exists (select 1 from services v where v.id = any(h.service_ids) and v.page_url is not null
+                                          and core_norm_url(v.page_url) = core_norm_url(p_url))))
+  order by h.created_at, h.id limit 1
+$$;
+revoke all on function core_copy_hold(uuid, uuid, text, uuid, text) from public, anon;
+grant execute on function core_copy_hold(uuid, uuid, text, uuid, text) to authenticated, service_role;
+
+create function social_posts_promotion_hold() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_problem text; v_program uuid;
+begin
+  if new.review_status not in ('in_review', 'approved') or new.publish_status not in ('not_scheduled', 'scheduled', 'publishing') then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' then
+    -- The outcome of a send already under way is recorded, never refused.
+    if old.publish_status = 'publishing' then return new; end if;
+    if (new.review_status, new.publish_status, new.copy, new.cta_url, new.service_id, new.keyword_id)
+       is not distinct from (old.review_status, old.publish_status, old.copy, old.cta_url, old.service_id, old.keyword_id) then
+      return new;
+    end if;
+  end if;
+  if not exists (select 1 from client_promotion_holds h where h.client_id = new.client_id and h.status = 'held') then return new; end if;
+  v_program := coalesce(core_site_of_service(new.client_id, new.service_id),
+                        case when new.keyword_id is not null then core_site_of_keyword(new.client_id, new.keyword_id) end);
+  v_problem := core_copy_hold(new.client_id, v_program,
+                              concat_ws(' ', new.copy, (select k.keyword from keywords k where k.id = new.keyword_id)),
+                              new.service_id, nullif(btrim(coalesce(new.cta_url, '')), ''));
+  if v_problem is not null then raise exception '%', v_problem using errcode = '23514'; end if;
+  return new;
+end $$;
+revoke all on function social_posts_promotion_hold() from public, anon, authenticated;
+create trigger social_posts_ab_promotion_hold
+  before insert or update of review_status, publish_status, copy, cta_url, service_id, keyword_id on social_posts
+  for each row execute function social_posts_promotion_hold();
+
+create function content_draft_hold_text(d content_drafts) returns text
+language sql stable security invoker set search_path = public, pg_temp as $$
+  select concat_ws(' ', d.topic, d.primary_keyword, d.title, d.meta_title, d.meta_description, d.h1, d.tldr, d.slug,
+                   d.body_markdown, d.cta::text, d.structured_data::text,
+                   (select k.keyword from keywords k where k.id = d.keyword_id))
+$$;
+revoke all on function content_draft_hold_text(content_drafts) from public, anon, authenticated;
+
+create function content_draft_program(d content_drafts) returns uuid
+language sql stable security invoker set search_path = public, pg_temp as $$
+  select coalesce((select i.brand_workspace_id from content_plan_items i where i.id = d.plan_item_id),
+                  core_site_of_service(d.client_id, d.service_id),
+                  case when d.keyword_id is not null then core_site_of_keyword(d.client_id, d.keyword_id) end)
+$$;
+revoke all on function content_draft_program(content_drafts) from public, anon, authenticated;
+
+create function content_drafts_promotion_hold() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_problem text;
+begin
+  if new.status not in ('in_review', 'approved') then return new; end if;
+  if tg_op = 'UPDATE' and (new.status, new.topic, new.primary_keyword, new.title, new.meta_title, new.meta_description, new.h1,
+                           new.tldr, new.slug, new.body_markdown, new.cta, new.structured_data, new.target_url, new.service_id,
+                           new.keyword_id)
+     is not distinct from (old.status, old.topic, old.primary_keyword, old.title, old.meta_title, old.meta_description, old.h1,
+                           old.tldr, old.slug, old.body_markdown, old.cta, old.structured_data, old.target_url, old.service_id,
+                           old.keyword_id) then
+    return new;
+  end if;
+  if not exists (select 1 from client_promotion_holds h where h.client_id = new.client_id and h.status = 'held') then return new; end if;
+  v_problem := core_copy_hold(new.client_id, content_draft_program(new), content_draft_hold_text(new), new.service_id,
+                              nullif(btrim(coalesce(new.target_url, '')), ''));
+  if v_problem is not null then raise exception '%', v_problem using errcode = '23514'; end if;
+  return new;
+end $$;
+revoke all on function content_drafts_promotion_hold() from public, anon, authenticated;
+create trigger content_drafts_ab_promotion_hold
+  before insert or update of status, topic, primary_keyword, title, meta_title, meta_description, h1, tldr, slug, body_markdown,
+    cta, structured_data, target_url, service_id, keyword_id on content_drafts
+  for each row execute function content_drafts_promotion_hold();
+
+-- An article released before the hold: a human's release is refused with
+-- the reason; the publisher's claim (queued → publishing) is recorded as
+-- blocked with the reason, as blog_publication_claim records its own
+-- problems, and nothing is sent.
+create function blog_publications_promotion_hold() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare d content_drafts; v_problem text;
+begin
+  if not ((tg_op = 'INSERT' and new.status = 'queued') or (tg_op = 'UPDATE' and old.status = 'queued' and new.status = 'publishing')) then
+    return new;
+  end if;
+  select * into d from content_drafts where id = new.draft_id;
+  if d.id is null or not exists (select 1 from client_promotion_holds h where h.client_id = d.client_id and h.status = 'held') then
+    return new;
+  end if;
+  v_problem := core_copy_hold(d.client_id, content_draft_program(d), content_draft_hold_text(d), d.service_id,
+                              nullif(btrim(coalesce(d.target_url, '')), ''));
+  if v_problem is null then return new; end if;
+  if tg_op = 'INSERT' then raise exception '%', v_problem using errcode = '23514'; end if;
+  new.status := 'blocked'; new.lease_token := null; new.lease_expires_at := null; new.last_error := left(v_problem, 1000);
+  return new;
+end $$;
+revoke all on function blog_publications_promotion_hold() from public, anon, authenticated;
+create trigger blog_publications_promotion_hold before insert or update of status on blog_publications
+  for each row execute function blog_publications_promotion_hold();
+
+-- A page change (rewrite, new page, article) whose recorded content would
+-- promote a held offering.
+create function change_log_promotion_hold() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_problem text; v_program uuid;
+begin
+  if new.change_type not in ('page_rewrite', 'page_added', 'blog_post') or new.status::text = 'vetoed' then return new; end if;
+  if tg_op = 'UPDATE' and (new.status, new.after) is not distinct from (old.status, old.after) then return new; end if;
+  if not exists (select 1 from client_promotion_holds h where h.client_id = new.client_id and h.status = 'held') then return new; end if;
+  select w.id into v_program from client_brand_workspaces w where w.client_id = new.client_id and w.blog_site_id = new.object_id;
+  v_problem := core_copy_hold(new.client_id, v_program, new.after::text, null, nullif(new.after->>'url', ''));
+  if v_problem is not null then raise exception '%', v_problem using errcode = '23514'; end if;
+  return new;
+end $$;
+revoke all on function change_log_promotion_hold() from public, anon, authenticated;
+create trigger change_log_ab_promotion_hold before insert or update of status, after on change_log
+  for each row execute function change_log_promotion_hold();
+
+-- A planner slot (any planner, automated or not) for a held offering is
+-- kept and marked blocked with the reason; drafting refuses blocked slots.
+create function content_plan_items_promotion_hold() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_problem text;
+begin
+  if new.hold is not null then return new; end if;
+  if not exists (select 1 from client_promotion_holds h where h.client_id = new.client_id and h.status = 'held') then return new; end if;
+  v_problem := core_copy_hold(new.client_id, new.brand_workspace_id,
+                              concat_ws(' ', new.topic, (select k.keyword from keywords k where k.id = new.keyword_id)),
+                              new.service_id, nullif(btrim(coalesce(new.target_url, '')), ''));
+  if v_problem is not null then
+    new.hold := 'blocked'; new.hold_reason := left(v_problem, 500);
+  end if;
+  return new;
+end $$;
+revoke all on function content_plan_items_promotion_hold() from public, anon, authenticated;
+create trigger content_plan_items_ab_promotion_hold
+  before insert or update of topic, target_url, service_id, keyword_id, hold on content_plan_items
+  for each row execute function content_plan_items_promotion_hold();
+
+-- What already matches a client's holds, for the release runbook and the
+-- team: nothing here is changed. step says what the gate does next.
+create function promotion_hold_conflicts(p_client_id uuid)
+returns table (kind text, id uuid, state text, step text, title text, problem text)
+language sql stable security invoker set search_path = public, pg_temp as $$
+  select * from (
+    select 'social_post'::text, p.id, p.review_status || '/' || p.publish_status,
+           case when p.publish_status = 'published' then 'published: review the live post'
+                when p.review_status in ('draft', 'rejected') then 'refused if submitted'
+                else 'refused at its next step (approve, schedule, publish) or edit' end,
+           left(p.copy, 120),
+           core_copy_hold(p.client_id, coalesce(core_site_of_service(p.client_id, p.service_id),
+                          case when p.keyword_id is not null then core_site_of_keyword(p.client_id, p.keyword_id) end),
+                          concat_ws(' ', p.copy, (select k.keyword from keywords k where k.id = p.keyword_id)),
+                          p.service_id, nullif(btrim(coalesce(p.cta_url, '')), ''))
+    from social_posts p where p.client_id = p_client_id and p.review_status <> 'rejected'
+    union all
+    select 'content_draft', d.id, d.status,
+           case when d.status in ('draft', 'requested', 'rejected') then 'refused if submitted'
+                else 'refused at its next step or edit; a queued release is blocked at claim' end,
+           coalesce(d.title, d.topic),
+           core_copy_hold(d.client_id, content_draft_program(d), content_draft_hold_text(d), d.service_id,
+                          nullif(btrim(coalesce(d.target_url, '')), ''))
+    from content_drafts d where d.client_id = p_client_id and d.status <> 'rejected'
+    union all
+    select 'content_post', c.id, c.status::text, 'published or planned article: review it', c.title,
+           core_copy_hold(c.client_id, null, concat_ws(' ', c.title, c.url), null, nullif(btrim(coalesce(c.url, '')), ''))
+    from content_posts c where c.client_id = p_client_id
+    union all
+    select 'content_plan_item', i.id, coalesce(i.hold, 'open'), 'planned slot: marked blocked when next edited', i.topic,
+           core_copy_hold(i.client_id, i.brand_workspace_id,
+                          concat_ws(' ', i.topic, (select k.keyword from keywords k where k.id = i.keyword_id)),
+                          i.service_id, nullif(btrim(coalesce(i.target_url, '')), ''))
+    from content_plan_items i where i.client_id = p_client_id and i.content_post_id is null and i.social_post_id is null
+  ) x(kind, id, state, step, title, problem)
+  where x.problem is not null
+  order by 1, 2
+$$;
+revoke all on function promotion_hold_conflicts(uuid) from public, anon;
+grant execute on function promotion_hold_conflicts(uuid) to authenticated, service_role;
+
 -- ── 16. Verify ──────────────────────────────────────────────────────────────
 do $verify$
 declare missing text;
@@ -1047,6 +1305,12 @@ begin
   if missing is not null then raise exception 'owner resolver not applied to: %', missing; end if;
   if strpos(pg_get_viewdef('public.content_plan_board'::regclass), 'core_keyword_eligibility') = 0 then
     raise exception 'owner resolver not applied to content_plan_board';
+  end if;
+  -- Holds are checked on the copy at every forward step.
+  if (select count(*) from pg_trigger where not tgisinternal and tgenabled <> 'D' and tgname in
+        ('social_posts_ab_promotion_hold', 'content_drafts_ab_promotion_hold', 'blog_publications_promotion_hold',
+         'change_log_ab_promotion_hold', 'content_plan_items_ab_promotion_hold')) <> 5 then
+    raise exception 'promotion holds are not checked on every copy path';
   end if;
   -- Security definer helpers stay private; readers are team-only.
   if has_function_privilege('anon', 'keyword_owner(uuid,uuid,uuid,text)', 'execute')

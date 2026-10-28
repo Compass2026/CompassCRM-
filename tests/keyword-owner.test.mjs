@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
-  approvedMarketPlaces, ownerAllows, ownerHost, ownerNormUrl, promotionHold, resolveKeywordOwner, siteOfKeyword,
+  approvedMarketPlaces, holdHit, holdStem, ownerAllows, ownerHost, ownerNormUrl, promotionHold, resolveKeywordOwner, siteOfKeyword,
 } from "../supabase/functions/authority/keyword-owner.ts";
 
 const fx = JSON.parse(readFileSync(new URL("./fixtures/keyword-owner-cases.json", import.meta.url), "utf8"));
@@ -96,10 +96,13 @@ test("site of a keyword: by service, else the one site its own pages are on", ()
   assert.equal(siteOfKeyword(contextFor("R"), id("kRoof")), null);
 });
 
-test("held phrases match whole words; the held service's page is held", () => {
+test("held phrases match their words in any inflection; the held service's page is held", () => {
   const r = contextFor("R");
   assert.match(promotionHold(r, null, "We do THIRD-party roof repair too", null, null), /^Repairs on systems/);
-  assert.equal(promotionHold(r, null, "third party roof repairs", null, null), null);
+  assert.match(promotionHold(r, null, "third party roof repairs", null, null), /^Repairs on systems/);
+  assert.match(promotionHold(r, null, "Roof repairs for other installers' jobs", null, null), /^Repairs on systems/);
+  assert.equal(promotionHold(r, null, "third party roofing inspection", null, null), null);
+  assert.equal(promotionHold(r, null, "solar monitoringfoo", null, null), null);
   assert.match(promotionHold(r, null, null, null, "https://www.ridgeline.example.test/services/other-repair/"), /^Repairs on systems/);
 });
 
@@ -120,4 +123,13 @@ test("a stale live check is not verified; an exempt client is told, not refused"
 test("approved market places are the program's approved markets only", () => {
   assert.deepEqual(approvedMarketPlaces(contextFor("R"), null).sort(), ["Brookside", "Oakfield", "Springfield", "Springfield"]);
   assert.deepEqual(approvedMarketPlaces(contextFor("H"), id("H.safe")), ["Hannibal"]);
+});
+
+test("the held-phrase matcher: every shared case (the SQL suite runs the same file)", () => {
+  const h = fx.hold_text_cases;
+  assert.ok(h.cases.length >= 15);
+  for (const c of h.cases) assert.equal(holdHit(h.phrases, c.text), c.hit, c.name);
+  assert.equal(holdStem("consultations"), holdStem("consultant"));
+  assert.equal(holdStem("monitoring"), holdStem("monitor"));
+  assert.equal(holdStem("batteries"), "battery");
 });

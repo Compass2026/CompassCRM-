@@ -136,6 +136,21 @@ select ko_test.ok('G7 held phrases match whole words in any text, and the held s
   core_promotion_hold(ko_test.id('R'), null, 'We also do SOLAR monitoring.', null, null) like 'Monitoring%'
   and core_promotion_hold(ko_test.id('R'), null, 'solar monitoringfoo', null, null) is null
   and core_promotion_hold(ko_test.id('R'), null, null, null, 'https://www.ridgeline.example.test/services/other-repair/') like 'Repairs on systems%');
+select ko_test.ok('G7b held phrases match their inflections: "third party roof repairs" is held',
+  core_promotion_hold(ko_test.id('R'), null, 'third party roof repairs', null, null) like 'Repairs on systems%'
+  and core_promotion_hold(ko_test.id('R'), null, 'roof repairs for other installers'' jobs', null, null) like 'Repairs on systems%'
+  and core_promotion_hold(ko_test.id('R'), null, 'roof replacement for your home', null, null) is null);
+do $$
+declare c jsonb; got text; bad text := ''; n int := 0;
+begin
+  for c in select x from ko_test.fx, jsonb_array_elements(j->'hold_text_cases'->'cases') x loop
+    got := core_hold_hit(array(select jsonb_array_elements_text(j->'hold_text_cases'->'phrases') from ko_test.fx), c->>'text');
+    n := n + 1;
+    if got is distinct from (c->>'hit') then bad := bad || format(E'\n  %s: got %s', c->>'name', coalesce(got, 'null')); end if;
+  end loop;
+  if bad <> '' or n < 15 then raise exception 'FAILED shared hold-phrase cases (%):%', n, bad; end if;
+  raise notice 'ok G7c % shared hold-phrase cases match core_hold_hit()', n;
+end $$;
 
 -- ── 4. Eligibility, lists, grounding ────────────────────────────────────────
 set local session_replication_role = replica;
@@ -181,6 +196,7 @@ insert into social_accounts (id, client_id, platform, display_name, external_acc
 alter table social_posts disable trigger user;
 alter table social_posts enable trigger social_posts_aa_core_keyword;
 alter table social_posts enable trigger social_posts_core_keyword_record;
+alter table social_posts enable trigger social_posts_ab_promotion_hold;
 create function ko_test.post(k text, kw text, svc text, cta text default null, status text default 'in_review') returns text language plpgsql as $$
 declare r text;
 begin
@@ -230,6 +246,97 @@ select ko_test.ok('B1 a blog in review: its brief''s owner page must be the keyw
   ko_test.draft('d.ok', 'kInfoService', 'sRoof', 'https://ridgeline.example.test/services/roof-replacement/') = 'accepted'
   and ko_test.draft('d.mismatch', 'kInfoService', 'sRoof', 'https://ridgeline.example.test/') like '23514: owner_page_mismatch:%'
   and ko_test.draft('d.owned', 'kBlogOwned', 'sRoof', 'https://ridgeline.example.test/blog/how-long-roofs-last') like '23514: keyword_already_owned:%');
+
+-- ── 5b. Holds on the copy ───────────────────────────────────────────────────
+create function ko_test.post_copy(k text, kw text, svc text, copy text) returns text language plpgsql as $$
+declare r text;
+begin
+  r := ko_test.msg(format($q$insert into social_posts (id, client_id, platform, search_intent, service_id, keyword_id, review_status, publish_status,
+                                 created_at, social_account_id, copy)
+                               values (%L, %L, 'facebook', 'commercial', %L, %L, 'draft', 'not_scheduled', now(), %L, %L)$q$,
+     ko_test.id(k), ko_test.id('R'), case when svc is not null then ko_test.id(svc) end, ko_test.id(kw), ko_test.id('fbR'), copy));
+  if r <> 'accepted' then return r; end if;
+  return ko_test.msg(format($q$update social_posts set review_status = 'in_review' where id = %L$q$, ko_test.id(k)));
+end $$;
+create function ko_test.draft_body(k text, kw text, svc text, owner text, body text) returns text language sql as $$
+  select ko_test.msg(format($q$insert into content_drafts (id, client_id, deliverable, topic, keyword_id, search_intent, service_id, status, title, body_markdown, brief)
+                               values (%L, %L, 'blog', 'Fixture', %L, 'informational', %L, 'in_review', 'T', %L, %L::jsonb)$q$,
+     ko_test.id(k), ko_test.id('R'), ko_test.id(kw), case when svc is not null then ko_test.id(svc) end, body,
+     jsonb_build_object('target', jsonb_build_object('owner_page', jsonb_build_object('url', owner))))) $$;
+
+select ko_test.ok('H1 an allowed keyword (a city page, the generic roofing service) cannot carry copy that advertises a held offering',
+  ko_test.post_copy('h.city', 'kCity', 'sRoof', 'Oakfield roofs: we also take on third-party roof repairs.') like '23514: held_offering: "third party roof repair"%'
+  and ko_test.post_copy('h.parent', 'kRoof', 'sRoof', 'New roofs, and roof repairs for other installers'' jobs too.') like '23514: held_offering:%'
+  and ko_test.post_copy('h.clean', 'kRoof', 'sRoof', 'A new roof, installed by our crew.') = 'accepted');
+select ko_test.ok('H2 editing a post in review into held copy is refused; the edit back is accepted',
+  ko_test.msg(format($q$update social_posts set copy = 'Now booking third party roof repair.' where id = %L$q$, ko_test.id('h.clean'))) like '23514: held_offering:%'
+  and ko_test.msg(format($q$update social_posts set copy = 'A new roof for spring.' where id = %L$q$, ko_test.id('h.clean'))) = 'accepted');
+select ko_test.ok('H3 a blog draft: held copy in the body is refused on entering review, and on an edit in review',
+  ko_test.draft_body('hd.held', 'kInfoService', 'sRoof', 'https://ridgeline.example.test/services/roof-replacement/',
+                     'How roofs age. We also do third-party roof repairs.') like '23514: held_offering:%'
+  and ko_test.msg(format($q$update content_drafts set meta_description = 'Third party roof repairs explained' where id = %L$q$, ko_test.id('d.ok'))) like '23514: held_offering:%');
+select ko_test.ok('H4 a page change recording held copy is refused',
+  ko_test.msg(format($q$insert into change_log (id, client_id, change_type, object_type, object_id, after, status)
+                         values (%L, %L, 'page_rewrite', 'site', %L, %L::jsonb, 'proposed')$q$,
+     ko_test.id('c.heldcopy'), ko_test.id('R'), ko_test.id('site.R'),
+     jsonb_build_object('keyword_id', ko_test.id('kCity'), 'url', 'https://ridgeline.example.test/service-areas/oakfield',
+                        'summary', 'Adds a section on third party roof repair'))) like '23514: held_offering:%');
+
+-- Content made BEFORE a hold is recorded: kept, and stopped at its next step.
+do $$
+declare r text[];
+begin
+  r := array[
+    ko_test.post_copy('h.pre', 'kCity', 'sRoof', 'Gutter guard installs this week in Oakfield.'),
+    ko_test.msg(format($q$update social_posts set review_status = 'approved', publish_status = 'scheduled', scheduled_at = now(), reviewed_by = (select id from team_members limit 1), reviewed_at = now(), approved_snapshot = '{}', approved_hash = 'sha256:' || repeat('c', 64) where id = %L$q$, ko_test.id('h.pre'))),
+    ko_test.post_copy('h.pre2', 'kCity', 'sRoof', 'Gutter guard season is here.'),
+    ko_test.msg(format($q$update social_posts set review_status = 'approved', publish_status = 'publishing', scheduled_at = now(), reviewed_by = (select id from team_members limit 1), reviewed_at = now(), approved_snapshot = '{}', approved_hash = 'sha256:' || repeat('c', 64) where id = %L$q$, ko_test.id('h.pre2'))),
+    ko_test.draft_body('hd.pre', 'kInfoService', 'sRoof', 'https://ridgeline.example.test/services/roof-replacement/', 'Why a gutter guard helps a new roof.')];
+  if exists (select 1 from unnest(r) x where x <> 'accepted') then raise exception 'FAILED H5 setup: %', r; end if;
+  raise notice 'ok H5 setup: a scheduled post, a post mid-send and a draft, all before the hold';
+end $$;
+set local session_replication_role = replica;
+insert into blog_publications (id, client_id, draft_id, draft_version, release_hash, snapshot, released_by, scheduled_at)
+values (ko_test.id('bp.pre'), ko_test.id('R'), ko_test.id('hd.pre'), 1, 'sha256:' || repeat('a', 64), '{}', (select id from team_members limit 1), now());
+set local session_replication_role = origin;
+insert into client_promotion_holds (client_id, offering, phrases, source_ref, decided_on)
+values (ko_test.id('R'), 'Gutter guards', array['gutter guard'], 'Fixture decision', current_date);
+alter table blog_publications disable trigger blog_publications_guard;
+select ko_test.ok('H6 after the hold: the scheduled post''s claim is refused, the send already under way is recorded',
+  ko_test.msg(format($q$update social_posts set publish_status = 'publishing' where id = %L$q$, ko_test.id('h.pre'))) like '23514: held_offering: "gutter guard"%'
+  and (select publish_status from social_posts where id = ko_test.id('h.pre')) = 'scheduled'
+  and ko_test.msg(format($q$update social_posts set publish_status = 'published', published_at = now(), published_url = 'https://facebook.example.test/1' where id = %L$q$, ko_test.id('h.pre2'))) = 'accepted');
+do $$
+declare a text; b text; row blog_publications;
+begin
+  a := ko_test.msg(format($q$update blog_publications set status = 'publishing', lease_token = gen_random_uuid(), lease_expires_at = now() + interval '10 minutes' where id = %L$q$, ko_test.id('bp.pre')));
+  select * into row from blog_publications where id = ko_test.id('bp.pre');
+  b := ko_test.msg(format($q$insert into blog_publications (client_id, draft_id, draft_version, release_hash, snapshot, released_by, scheduled_at)
+                            values (%L, %L, 2, %L, '{}', %L, now())$q$, ko_test.id('R'), ko_test.id('hd.pre'), 'sha256:' || repeat('b', 64),
+                            (select id from team_members limit 1)));
+  if a <> 'accepted' or row.status <> 'blocked' or row.last_error not like 'held_offering: "gutter guard"%' or row.lease_token is not null
+     or b not like '23514: held_offering:%' then
+    raise exception 'FAILED H7: claim %, row % / %, new release %', a, row.status, row.last_error, b;
+  end if;
+  raise notice 'ok H7 after the hold: the released article''s claim is recorded blocked with the reason; a new release is refused';
+end $$;
+alter table blog_publications enable trigger blog_publications_guard;
+do $$
+declare a text; i content_plan_items;
+begin
+  a := ko_test.msg(format($q$insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic)
+                            values (%L, %L, date_trunc('week', current_date)::date, 'blog', 'educational', 'Gutter guards for new roofs')$q$,
+                          ko_test.id('pi.held'), ko_test.id('R')));
+  select * into i from content_plan_items where id = ko_test.id('pi.held');
+  if a <> 'accepted' or i.hold is distinct from 'blocked' or i.hold_reason not like 'held_offering: "gutter guard"%' then
+    raise exception 'FAILED H8: insert %, hold % / %', a, i.hold, i.hold_reason;
+  end if;
+  raise notice 'ok H8 a planner slot for a held offering is kept and marked blocked with the reason';
+end $$;
+select ko_test.ok('H9 promotion_hold_conflicts lists what already matches, and changes none of it',
+  (select count(*) from promotion_hold_conflicts(ko_test.id('R')) x where x.id in (ko_test.id('h.pre'), ko_test.id('h.pre2'), ko_test.id('hd.pre'))) = 3
+  and (select step from promotion_hold_conflicts(ko_test.id('R')) x where x.id = ko_test.id('h.pre2')) like 'published:%'
+  and (select copy from social_posts where id = ko_test.id('h.pre')) = 'Gutter guard installs this week in Oakfield.');
 
 -- ── 6. Evidence and the loader ──────────────────────────────────────────────
 select ko_test.ok('V1 the evidence row records the owner page, its role and the market',

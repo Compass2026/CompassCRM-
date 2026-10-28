@@ -300,6 +300,8 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_social
 # TypeScript resolver is tested against too (tests/keyword-owner.test.mjs).
 psql_as supabase_admin -d sandbox -v owner_cases="$(cat "$ROOT/tests/fixtures/keyword-owner-cases.json")" \
   -f "$ROOT/supabase/tests/sandbox/keyword_owner_resolver.test.sql"
+# ...and its rollback script (supabase/rollback/), run and undone.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/keyword_owner_resolver_rollback.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
 
 # Map-tracking-only clients skip every onboarding trigger; full clients keep them.

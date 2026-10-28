@@ -22,18 +22,30 @@ export type PageCheck = {
   detail: string | null;
 };
 
+const clean = (s: string | undefined | null) =>
+  (s ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+// Title, H1 and canonical are metadata: kept short for the record.
 const text = (s: string | undefined | null) => {
-  const t = (s ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+  const t = clean(s);
   return t ? t.slice(0, 300) : null;
 };
+// The site chrome every page shares, removed before comparing pages.
+const CHROME = /<(header|nav|footer|aside|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
+export const MAX_CONTENT = 200_000;
+
+// body is the page's own content: <main> when the page has one, else <body>,
+// without scripts, styles and the shared chrome, compared in full (up to
+// MAX_CONTENT characters of HTML) — never cut to a metadata-length prefix,
+// where a long shared navigation would make every page look alike.
 export function readPage(html: string): { title: string | null; h1: string | null; canonical: string | null; body: string } {
   const title = text(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]);
   const h1 = text(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
   const link = html.match(/<link\b[^>]*rel=["']?canonical["']?[^>]*>/i)?.[0] ?? "";
   const canonical = link.match(/href=["']([^"']+)["']/i)?.[1] ?? null;
-  const body = (html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html)
+  const doc = (html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html).slice(0, MAX_CONTENT)
     .replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
-  return { title, h1, canonical, body: text(body.slice(0, 200_000)) ?? "" };
+  const main = doc.match(/<main\b[^>]*>([\s\S]*)<\/main>/i)?.[1];
+  return { title, h1, canonical, body: clean((main ?? doc).replace(CHROME, " ")) };
 }
 
 const NOT_FOUND = /\b(page not found|404|not found|no longer available|doesn'?t exist|does not exist)\b/i;
@@ -63,6 +75,7 @@ export async function judgePage(requestedUrl: string, siteUrl: string, page: Fet
     return out("soft_404", `the page says it is not found (${read.h1 ?? read.title})`);
   }
   if (probe && probe.status < 400) {
+    // The same content, or the same title and H1, as a path that cannot exist.
     const p = readPage(probe.html);
     const same = (await sha256(p.body)) === hash || (p.title === read.title && p.h1 === read.h1);
     if (same) return out("soft_404", "the host answers a path that cannot exist with the same page; verify this route by its rendered content");

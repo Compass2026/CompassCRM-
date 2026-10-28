@@ -12,6 +12,7 @@
 // numbers, other phone numbers, unapproved places, Brand Board
 // differentiators stated as fact. Plus the channel's own rules (reused from
 // the publisher), words the brand avoids and the keyword-use limit.
+import { holdHit } from "../authority/keyword-owner.ts";
 import { channelProblems } from "../post-publisher/channel.ts";
 import { FACEBOOK_MAX_CHARS } from "../post-publisher/facebook.ts";
 import type { Brief, LintProblem, LintResult, ModelDraft } from "./types.ts";
@@ -140,9 +141,9 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
 
   // ── Places ──
   // ── Held offerings (20261028170000): never advertised while held ──
-  const heldWords = ` ${copy.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  // Same matcher as core_hold_hit: inflections and word order within a short span.
   for (const h of brief.excluded.offerings ?? []) {
-    const hit = h.phrases.find((p) => heldWords.includes(` ${p} `));
+    const hit = holdHit(h.phrases, copy);
     if (hit) add("held_offering", `"${hit}" promotes ${h.offering}, which is held from promotion.`, hit);
   }
 

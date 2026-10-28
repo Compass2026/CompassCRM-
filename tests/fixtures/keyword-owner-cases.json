@@ -162,5 +162,30 @@
     { "name": "own claims on two brand sites: no program", "keyword": "kTwoHosts", "expect": { "code": "program_unresolved" } },
     { "name": "service of the safety site asked for on the lift site", "keyword": "kSafeSvc", "program": "H.lift", "expect": { "code": "keyword_wrong_site" } },
     { "name": "safety service term", "keyword": "kSafeSvc", "program": "H.safe", "purpose": "post", "expect": { "code": null, "role": "service", "url": "https://safe.example.test/training" } }
-  ]
+  ],
+  "hold_text_cases": {
+    "about": "core_hold_hit / holdHit: the same phrase list, the same answer in SQL and TypeScript. hit is the first phrase, in list order, that matches; null means no phrase matches (not that the prose is safe).",
+    "phrases": ["solar panel repair", "solar repair", "inverter repair", "installed by another company", "other installers", "third party repair", "solar consultation", "solar monitoring", "solar system monitoring", "monitoring plan", "solar maintenance"],
+    "cases": [
+      {"name": "exact phrase", "text": "We offer solar panel repair.", "hit": "solar panel repair"},
+      {"name": "plural, with the paraphrase after it", "text": "Book solar panel repairs for systems installed by another company.", "hit": "solar panel repair"},
+      {"name": "paraphrase alone", "text": "Repairs for systems installed by another company.", "hit": "installed by another company"},
+      {"name": "past tense and other order", "text": "Panels from other installers repaired fast", "hit": "other installers"},
+      {"name": "hyphenated third-party", "text": "THIRD-party repairs welcome", "hit": "third party repair"},
+      {"name": "singular consultation", "text": "Book a standalone solar consultation.", "hit": "solar consultation"},
+      {"name": "plural consultations", "text": "Book standalone solar consultations.", "hit": "solar consultation"},
+      {"name": "consultant", "text": "Talk to a solar consultant today", "hit": "solar consultation"},
+      {"name": "verb form, words apart", "text": "We will monitor your solar system for you.", "hit": "solar monitoring"},
+      {"name": "monitoring plans", "text": "Monitoring plans for existing systems", "hit": "monitoring plan"},
+      {"name": "repairing inverters", "text": "Repairing inverters is our specialty", "hit": "inverter repair"},
+      {"name": "a URL slug", "text": "https://example.test/services/solar-repair/", "hit": "solar repair"},
+      {"name": "installation education: batteries", "text": "How do solar batteries work?", "hit": null},
+      {"name": "installation education: install", "text": "Solar panel installation for homes in your area", "hit": null},
+      {"name": "installation education: install day", "text": "On installation day our crew mounts the panels and connects the inverter.", "hit": null},
+      {"name": "installation education: little upkeep", "text": "Solar panels need very little maintenance once installed", "hit": null},
+      {"name": "words too far apart", "text": "Solar roofs rarely need any repair", "hit": null},
+      {"name": "a longer word is not the phrase", "text": "solar monitoringfoo", "hit": null},
+      {"name": "quote for installation", "text": "Get a free quote for solar panel installation", "hit": null}
+    ]
+  }
 }

@@ -101,13 +101,54 @@ export function ownerAllows(role: string, purpose: string, intent: string | null
   }
 }
 
+// core_hold_stem: a light suffix stripper, so "repairs", "repaired" and
+// "repairing" all meet "repair", and "consultations" / "consultant" /
+// "consulting" meet "consultation". Applied to both sides, so it only has to
+// be consistent, not linguistically right.
+export function holdStem(word: string): string {
+  let w = word;
+  if (w.length <= 3) return w;
+  if (w.endsWith("ies") && w.length > 4) w = `${w.slice(0, -3)}y`;
+  else if (w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+  if (w.endsWith("ation") && w.length > 7) w = w.slice(0, -5);
+  else if (w.endsWith("ion") && w.length > 6) w = w.slice(0, -3);
+  else if (w.endsWith("ment") && w.length > 7) w = w.slice(0, -4);
+  else if (w.endsWith("ing") && w.length > 5) w = w.slice(0, -3);
+  else if (w.endsWith("ant") && w.length > 6) w = w.slice(0, -3);
+  else if (w.endsWith("ed") && w.length > 4) w = w.slice(0, -2);
+  if (w.endsWith("er") && w.length > 4) w = w.slice(0, -2);
+  if (w.endsWith("e") && w.length > 4) w = w.slice(0, -1);
+  const last = w.slice(-1);
+  if (w.length > 3 && last === w.slice(-2, -1) && /[b-df-hj-km-np-rtv-y]/.test(last)) w = w.slice(0, -1);
+  return w;
+}
+export const holdTokens = (s: string | null | undefined) => normWords(s).split(" ").filter(Boolean).map(holdStem);
+
+// core_hold_hit: the first held phrase whose words all occur, in any order,
+// within a span of the phrase's length + 2 words ("we will monitor your
+// solar system" meets "solar system monitoring"). Phrases are the offering's
+// words and its listed paraphrases; anything they do not name is the human
+// reviewer's to catch — this is not a promise that other prose is safe.
+export function holdHit(phrases: string[], text: string | null | undefined): string | null {
+  const t = holdTokens(text);
+  for (const p of phrases) {
+    const ps = holdTokens(p);
+    if (!ps.length) continue;
+    for (let i = 0; i < t.length; i++) {
+      if (!ps.includes(t[i])) continue;
+      const win = t.slice(i, i + ps.length + 2);
+      if (ps.every((s) => win.includes(s))) return p;
+    }
+  }
+  return null;
+}
+
 // The held offering a text, service or page would promote (core_promotion_hold).
 export function promotionHold(ctx: OwnerContext, program: string | null, text: string | null, serviceId: string | null, url: string | null): string | null {
-  const hay = ` ${normWords(text)} `;
   for (const h of ctx.holds) {
     if (h.brand_workspace_id !== null && h.brand_workspace_id !== program) continue;
     const bySvc = !!serviceId && h.service_ids.includes(serviceId);
-    const byText = text != null && h.phrases.some((p) => hay.includes(` ${p} `));
+    const byText = text != null && holdHit(h.phrases, text) !== null;
     const byUrl = !!url && h.service_ids.some((sid) => {
       const s = ctx.services.find((x) => x.id === sid);
       return !!s?.page_url && ownerNormUrl(s.page_url) === ownerNormUrl(url);

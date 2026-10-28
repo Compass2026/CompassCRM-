@@ -135,7 +135,12 @@ begin
   st := rm.try($q$delete from report_measurements$q$);
   perform rm.ok('O2 even the owner cannot delete history (trigger)', st = '23514', st);
   st := rm.try($q$delete from clients where id = '00000000-0000-4000-b000-00000000000a'$q$);
-  perform rm.ok('O3 a client with measurements cannot be deleted (offboard it instead)', st = '23503', st);
+  -- The ON DELETE RESTRICT key refuses it: foreign_key_violation (23503)
+  -- through PostgreSQL 17, restrict_violation (23001) from 18 on.
+  perform rm.ok('O3 a client with measurements cannot be deleted (offboard it instead)', st in ('23503', '23001'), st);
+  perform rm.ok('O3b ...because the measurements key is ON DELETE RESTRICT', exists (
+    select 1 from pg_constraint c where c.conrelid = 'public.report_measurements'::regclass and c.contype = 'f'
+       and c.confrelid = 'public.clients'::regclass and c.confdeltype = 'r'), null);
   perform rm.ok('O4 ...and it is still there', exists (select 1 from clients where id = '00000000-0000-4000-b000-00000000000a'));
 end $$;
 

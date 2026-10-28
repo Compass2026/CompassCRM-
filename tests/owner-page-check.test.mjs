@@ -31,6 +31,36 @@ test("soft 404: the page says not found, or the host answers any path with the s
   assert.equal((await judgePage(`${SITE}/a`, SITE, got(200, `${SITE}/a`, page("Oops", "Page not found")), got(404, `${SITE}/x`, ""))).verdict, "soft_404");
 });
 
+// A real site: a navigation far longer than any metadata-length prefix,
+// shared by every page, and a 200 "not found" page under the same chrome.
+const NAV = `<header><a href="/">Ridgeline Roofing</a> Call (555) 555-0100</header><nav>${
+  ["Roof Replacement", "Roof Repair", "Storm Damage", "Gutters", "Siding", "Service Areas", "Gallery", "Reviews", "Blog", "Contact"]
+    .map((l) => `<a href="/${l.toLowerCase().replace(/ /g, "-")}">${l}</a>`).join(" ")} ${"Serving Oakfield, Fairview and Lakeview. ".repeat(8)}</nav>`;
+const FOOT = `<footer>${"Ridgeline Roofing, licensed local roofer. Privacy · Terms. ".repeat(5)}</footer>`;
+const shell = (title, h1, main) => `<html><head><title>${title}</title></head><body>${NAV}<main><h1>${h1}</h1>${main}</main>${FOOT}</body></html>`;
+
+test("live: a real page and the host's soft-404 page share a long navigation but not their content", async () => {
+  assert.ok(NAV.replace(/<[^>]+>/g, " ").length > 300);
+  const real = shell("Roof Repair | Ridgeline", "Roof repair in Oakfield", "<p>Leaks, missing shingles and flashing, found and fixed.</p>");
+  const notFound = shell("Page not available | Ridgeline", "Sorry, we could not find that", "<p>Try the links above.</p>");
+  const v = await judgePage(`${SITE}/services/roof-repair`, SITE, got(200, `${SITE}/services/roof-repair`, real), got(200, `${SITE}/nope`, notFound));
+  assert.equal(v.verdict, "live", v.detail);
+  // ...even when the two differ only below the shared chrome's first 300 characters
+  const sameStart = shell("Roof Repair | Ridgeline", "Roof repair", "<p>A</p>");
+  const other = shell("Gutters | Ridgeline", "Gutters", "<p>B</p>");
+  assert.equal((await judgePage(`${SITE}/a`, SITE, got(200, `${SITE}/a`, sameStart), got(200, `${SITE}/nope`, other))).verdict, "live");
+});
+
+test("soft 404: a catch-all that serves the same shell for every path, chrome and all", async () => {
+  const app = shell("Ridgeline", "Ridgeline Roofing", '<div id="root"></div><p>Loading…</p>');
+  const v = await judgePage(`${SITE}/services/roof-repair`, SITE, got(200, `${SITE}/services/roof-repair`, app), got(200, `${SITE}/nope`, app));
+  assert.equal(v.verdict, "soft_404");
+  // a different main under the same title and H1 is still the same page to a crawler's eye
+  const v2 = await judgePage(`${SITE}/a`, SITE, got(200, `${SITE}/a`, shell("Ridgeline", "Ridgeline Roofing", "<p>x</p>")),
+    got(200, `${SITE}/nope`, shell("Ridgeline", "Ridgeline Roofing", "<p>y</p>")));
+  assert.equal(v2.verdict, "soft_404");
+});
+
 test("the handler checks each owner page once, probes each host once and records every verdict", async () => {
   const recorded = [];
   const calls = [];

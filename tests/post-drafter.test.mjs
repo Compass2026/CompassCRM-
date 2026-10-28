@@ -136,6 +136,20 @@ test("refused: copy that names a held offering", () => {
   assert.ok(l.problems.some((p) => p.code === "held_offering"), JSON.stringify(l.problems));
 });
 
+test("refused: inflected and reordered held phrases; installation education passes", () => {
+  const r = brief((x) => ({ ...x, owner_context: undefined }));
+  const held = { ...r.brief, excluded: { ...r.brief.excluded, offerings: [
+    { offering: "Repairs of systems others installed", phrases: ["solar panel repair", "installed by another company"] },
+    { offering: "Standalone consulting", phrases: ["solar consultation"] },
+    { offering: "Standalone monitoring", phrases: ["solar system monitoring"] }] } };
+  const lint = (extra) => lintDraft(held, { copy: GOOD.replace(/\.$/, `. ${extra}`), claim_ids: [OC, WARRANTY] }, { gazetteer: GAZETTEER });
+  for (const extra of ["Book solar panel repairs for systems installed by another company.", "Book standalone solar consultations.",
+                       "We will monitor your solar system for you."]) {
+    assert.ok(lint(extra).problems.some((p) => p.code === "held_offering"), extra);
+  }
+  assert.ok(!lint("Ask how solar batteries work.").problems.some((p) => p.code === "held_offering"));
+});
+
 test("refused: a commercial draft with no relevant usable claim", () => {
   const r = brief((x) => ({ ...x, claims: x.claims.filter((c) => c.status === "unverified") }));
   assert.equal(r.ok, false);

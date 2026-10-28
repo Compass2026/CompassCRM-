@@ -34,6 +34,16 @@ test("brief: the post drafter's gate and claim rule, the client's own pages, the
   assert.equal(b.rules.min_words, BLOG_RULES.min_words);
 });
 
+test("lint: a held offering is refused in any inflection, in the title, meta, slug, body or CTA", () => {
+  const b = brief();
+  const held = { ...b, excluded: { ...b.excluded, offerings: [{ offering: "Repairs of roofs others installed", phrases: ["third party roof repair"] }] } };
+  const hit = (over) => codes(lintBlog(held, { ...clone(GOOD_BLOG), ...over }, { gazetteer: GAZETTEER })).includes("held_offering");
+  assert.ok(hit({ body_markdown: `${GOOD_BLOG.body_markdown}\n\nWe also take on third-party roof repairs.` }));
+  assert.ok(hit({ meta_description: "Roof repairs for third-party installs, explained." }));
+  assert.ok(hit({ cta: { text: "Book a third party roof repair", url: PAGE } }));
+  assert.ok(!hit({}));
+});
+
 test("brief: refusals — a web page, no intent, an unapproved board, no usable claim", () => {
   const no = (input, row, code) => {
     const r = buildBlogBrief(input, row);
