@@ -1,9 +1,18 @@
 -- Rollback for 20261028170000_keyword_owner_resolver.sql.
--- Run as ONE transaction (psql -1 -f, or the Supabase SQL editor), and only
--- AFTER the previous post-drafter and content-drafter are redeployed: the
--- restored loader takes (client, service) again, and today's drafters call
--- it with p_keyword_id. Undeploy owner-page-check first too (its target
--- list is dropped here).
+-- Run as ONE transaction (psql -1 -f, or the Supabase SQL editor), in this
+-- order (PR #194 "Rollback"):
+--   1. ...containment.sql: pauses every client with an active promotion
+--      hold at the database, because this script removes hold enforcement.
+--      This script refuses to run without it.
+--   2. Reconcile the in-flight sends that script lists; stop if any cannot
+--      be resolved.
+--   3. Redeploy the previous post-drafter and content-drafter (the restored
+--      loader takes (client, service) again) and undeploy owner-page-check
+--      (its target list is dropped here).
+--   4. This script.
+--   5. The containment stays until hold enforcement is back and verified;
+--      ...containment-release.sql refuses before that. A rollback is not a
+--      return to ordinary operation for held clients.
 --
 -- What it does:
 --   1. drops the five copy-hold triggers and their functions;
@@ -22,6 +31,13 @@
 -- Proven in the sandbox (keyword_owner_resolver_rollback.test.sql), and
 -- against main's schema: every restored definition, grant and the view
 -- hash the same as main's; the only trigger left is keywords_market_guard.
+
+do $contained$
+begin
+  if (select count(*) from pg_trigger where tgname like '%_a0_rollback_containment' and tgenabled <> 'D') <> 5 then
+    raise exception 'rollback refused: run 20261028170000_keyword_owner_resolver.containment.sql first (held clients must be paused before hold enforcement is removed)';
+  end if;
+end $contained$;
 
 -- 1. Holds on the copy
 drop trigger social_posts_ab_promotion_hold on public.social_posts;
