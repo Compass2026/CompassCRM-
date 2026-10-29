@@ -358,6 +358,56 @@ select ko_test.ok('V3 anon reaches nothing; the team reads markets, checks and h
   and has_table_privilege('authenticated', 'owner_page_checks', 'insert')
   and not has_table_privilege('authenticated', 'owner_page_checks', 'update'));
 
+-- ── 7. What owner-page-check checks (20261028235000) ────────────────────────
+-- keyword_owner() runs once per keyword in the lists (and their named
+-- children), not once per place the query reads its result; the rows are
+-- the ones §15's definition returned. Calls are counted by
+-- pg_stat_xact_user_functions.
+set local track_functions = 'pl';
+create function ko_test.owner_calls() returns bigint language sql as $$
+  select coalesce((select calls from pg_stat_xact_user_functions
+                    where funcid = 'keyword_owner(uuid,uuid,uuid,text)'::regprocedure), 0) $$;
+create function ko_test.list_keywords(c uuid, ws uuid) returns bigint language sql as $$
+  select count(distinct k.id) from core_keyword_lists l cross join lateral unnest(l.keyword_ids) kid
+  join keywords k on k.client_id = l.client_id and (k.id = kid or k.core_parent_keyword_id = kid) and k.is_active
+  where l.client_id = c and l.status in ('proposed', 'approved') and (ws is null or l.brand_workspace_id = ws) $$;
+create table ko_test.opc (run text, client uuid, ws uuid, url text, site_url text, keyword_count integer, calls bigint);
+create function ko_test.opc_run(run text) returns void language plpgsql as $$
+declare a record; before bigint;
+begin
+  for a in select * from (values (ko_test.id('R'), null::uuid), (ko_test.id('H'), null), (ko_test.id('H'), ko_test.id('H.safe')),
+                                 (ko_test.id('H'), ko_test.id('H.lift'))) v(c, ws) loop
+    before := ko_test.owner_calls();
+    insert into ko_test.opc (run, client, ws, url, site_url, keyword_count)
+    select run, a.c, a.ws, t.url, t.site_url, t.keyword_count from owner_page_check_targets(a.c, a.ws) t;
+    insert into ko_test.opc (run, client, ws, calls) values (run, a.c, a.ws, ko_test.owner_calls() - before);
+  end loop;
+end $$;
+select ko_test.opc_run('materialized');
+select ko_test.ok('P1 owner_page_check_targets resolves each listed keyword once (all sites and per site)',
+  (select count(*) from ko_test.opc where run = 'materialized' and calls is not null) = 4
+  and not exists (select 1 from ko_test.opc where run = 'materialized' and calls is not null
+                   and calls <> ko_test.list_keywords(client, ws))
+  and (select sum(calls) from ko_test.opc where run = 'materialized') > 0
+  and (select count(*) from ko_test.opc where run = 'materialized' and url is not null and client = ko_test.id('R')) > 1);
+-- §15's definition, run and undone: the same rows, more calls.
+savepoint before_opc_down;
+\ir ../../rollback/20261028235000_owner_page_check_targets_materialized.down.sql
+select ko_test.opc_run('inline');
+select ko_test.ok('P2 the rows are §15''s, and §15''s plan resolved keywords more than once',
+  not exists ((select client, ws, url, site_url, keyword_count from ko_test.opc where run = 'materialized' and url is not null)
+              except all
+              (select client, ws, url, site_url, keyword_count from ko_test.opc where run = 'inline' and url is not null))
+  and not exists ((select client, ws, url, site_url, keyword_count from ko_test.opc where run = 'inline' and url is not null)
+                  except all
+                  (select client, ws, url, site_url, keyword_count from ko_test.opc where run = 'materialized' and url is not null))
+  and (select sum(calls) from ko_test.opc where run = 'inline') > (select sum(calls) from ko_test.opc where run = 'materialized'));
+rollback to savepoint before_opc_down;
+select ko_test.ok('P3 the migration''s definition is back after the down script is undone, service_role only',
+  strpos(pg_get_functiondef('owner_page_check_targets(uuid,uuid)'::regprocedure), 'o as materialized') > 0
+  and not has_function_privilege('authenticated', 'owner_page_check_targets(uuid,uuid)', 'execute')
+  and has_function_privilege('service_role', 'owner_page_check_targets(uuid,uuid)', 'execute'));
+
 -- ── 8. Held phrases match within one field or link (20261029010000) ─────────
 -- An installation article shaped like the release's false positive, on
 -- fictional data: its topic ends "design consultation" and the keyword field follows;

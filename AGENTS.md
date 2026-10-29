@@ -1050,7 +1050,9 @@ service. The migration separates the two:
     when exactly one market of the site has that name.
   - `owner_page_checks`: unchecked means `page_not_verified`, and a check
     older than 45 days counts as unchecked. The `owner-page-check` function
-    (team JWT or cron secret) records `http` verdicts; a host that answers
+    (team JWT or cron secret) records `http` verdicts for the pages
+    `owner_page_check_targets` lists (each keyword resolved once since
+    `20261028235000`; BHG's 123 keywords take about 4 s); a host that answers
     any path with the same page content (its `<main>`, or body, without
     header / nav / footer, compared in full) is `soft_404`. SPA routes
     (Show Me Design) are verified by a `rendered` check.
