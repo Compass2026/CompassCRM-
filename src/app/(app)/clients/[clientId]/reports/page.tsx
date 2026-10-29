@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PendingButton } from "@/components/ui/pending-button";
 import { createClient } from "@/lib/supabase/server";
 import { toggleTaskAction } from "@/app/actions";
@@ -76,6 +77,10 @@ export default async function ReportsPage({
 
   return (
     <div className="space-y-4">
+      <div className="surface flex flex-wrap items-center justify-between gap-2 p-4">
+        <p className="text-sm">Versioned monthly reports: freeze a month, review it, approve the exact version, record delivery.</p>
+        <Link href={`/clients/${clientId}/reports/monthly`} className="text-sm font-medium underline">Monthly reports</Link>
+      </div>
       {measurements.error ? <p role="alert" className="surface p-4 text-sm">{measurements.error}</p> :
         <ClientScorecard clientId={clientId} rows={measurements.rows} period={period} baselineOnly={baselineOnly} />}
       <details className="surface p-4 sm:p-5 space-y-4">

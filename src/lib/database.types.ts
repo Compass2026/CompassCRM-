@@ -7545,6 +7545,150 @@ export type Database = {
           },
         ]
       }
+      monthly_report_deliveries: {
+        Row: {
+          client_id: string
+          destination: string
+          detail: string
+          id: string
+          outcome: string
+          recipients: string[]
+          recorded_at: string
+          recorded_by: string
+          report_id: string
+          request_key: string
+        }
+        Insert: {
+          client_id: string
+          destination: string
+          detail?: string
+          id?: string
+          outcome: string
+          recipients: string[]
+          recorded_at?: string
+          recorded_by: string
+          report_id: string
+          request_key: string
+        }
+        Update: {
+          client_id?: string
+          destination?: string
+          detail?: string
+          id?: string
+          outcome?: string
+          recipients?: string[]
+          recorded_at?: string
+          recorded_by?: string
+          report_id?: string
+          request_key?: string
+        }
+        Relationships: []
+      }
+      monthly_reports: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          approved_destination: string | null
+          approved_hash: string | null
+          approved_recipients: string[] | null
+          brand_workspace_id: string | null
+          calculation_version: string
+          client_id: string
+          completeness: string
+          content_hash: string
+          correction_reason: string | null
+          cutoff: string
+          edit_version: number
+          editorial: Json
+          generated_at: string
+          generated_by: string | null
+          id: string
+          is_partial: boolean
+          period: string
+          period_end: string
+          period_start: string
+          request_key: string
+          snapshot: Json
+          snapshot_hash: string
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
+          superseded_at: string | null
+          superseded_by: string | null
+          supersedes_id: string | null
+          unit_key: string
+          version: number
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_destination?: string | null
+          approved_hash?: string | null
+          approved_recipients?: string[] | null
+          brand_workspace_id?: string | null
+          calculation_version: string
+          client_id: string
+          completeness: string
+          content_hash: string
+          correction_reason?: string | null
+          cutoff: string
+          edit_version?: number
+          editorial?: Json
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          is_partial: boolean
+          period: string
+          period_end: string
+          period_start: string
+          request_key: string
+          snapshot: Json
+          snapshot_hash: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          supersedes_id?: string | null
+          unit_key?: never
+          version: number
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_destination?: string | null
+          approved_hash?: string | null
+          approved_recipients?: string[] | null
+          brand_workspace_id?: string | null
+          calculation_version?: string
+          client_id?: string
+          completeness?: string
+          content_hash?: string
+          correction_reason?: string | null
+          cutoff?: string
+          edit_version?: number
+          editorial?: Json
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          is_partial?: boolean
+          period?: string
+          period_end?: string
+          period_start?: string
+          request_key?: string
+          snapshot?: Json
+          snapshot_hash?: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          supersedes_id?: string | null
+          unit_key?: never
+          version?: number
+        }
+        Relationships: []
+      }
       notification_consent_events: {
         Row: {
           actor_id: string | null
@@ -12594,6 +12738,21 @@ export type Database = {
           },
         ]
       }
+      portal_monthly_reports: {
+        Row: {
+          approved_at: string | null
+          brand_workspace_id: string | null
+          client_id: string | null
+          content_hash: string | null
+          cutoff: string | null
+          editorial: Json | null
+          id: string | null
+          period: string | null
+          report: Json | null
+          version: number | null
+        }
+        Relationships: []
+      }
       portal_reports: {
         Row: {
           client_id: string | null
@@ -13612,6 +13771,50 @@ export type Database = {
           unverified: number
           used: number
         }[]
+      }
+      monthly_report_approve: {
+        Args: {
+          p_accept_incomplete?: boolean
+          p_content_hash: string
+          p_destination: string
+          p_recipients: string[]
+          p_report_id: string
+        }
+        Returns: Json
+      }
+      monthly_report_bounds: { Args: { p_period: string }; Returns: unknown }
+      monthly_report_edit: {
+        Args: { p_edit_version: number; p_editorial: Json; p_report_id: string }
+        Returns: Json
+      }
+      monthly_report_record_delivery: {
+        Args: {
+          p_destination: string
+          p_detail: string
+          p_outcome: string
+          p_recipients: string[]
+          p_report_id: string
+          p_request_key: string
+        }
+        Returns: Json
+      }
+      monthly_report_save: {
+        Args: {
+          p_brand_workspace_id: string | null
+          p_calculation_version: string
+          p_client_id: string
+          p_correction_reason?: string | null
+          p_cutoff: string
+          p_editorial: Json | null
+          p_period: string
+          p_request_key: string
+          p_snapshot: Json
+        }
+        Returns: Json
+      }
+      monthly_report_submit: {
+        Args: { p_edit_version: number; p_report_id: string }
+        Returns: Json
       }
       plan_delivery_month: {
         Args: { p_client_id: string; p_month?: string }
