@@ -29,6 +29,11 @@
 //                   the stored bytes here (sha256, signature type, size,
 //                   dimensions), then in ONE transaction withdraw the post,
 //                   replace its media and resubmit it for a fresh review.
+//                   change.kind replace_copy (20261029180000) instead lints
+//                   the proposed copy and claims against a brief rebuilt for
+//                   the post's own target (the post-drafter's rules), then in
+//                   ONE transaction withdraws the post, sets its copy, links
+//                   exactly those claims and resubmits it.
 //   revise_status → the receipt and the post now.
 //
 // Auth: the x-compass-delegation-key header must equal the Vault secret
@@ -41,8 +46,9 @@
 // never executes twice.
 
 import { measure, sha256Hex } from "../_shared/image-meta.ts";
+import type { CopyCheckResult } from "./copy-check.ts";
 
-export const HANDLER_VERSION = 3;
+export const HANDLER_VERSION = 4;
 export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status"] as const;
 const ACTIONS = ["approve", "publish", "approve_and_publish"] as const;
 const CHANNELS = ["chatgpt", "claude"] as const;
@@ -55,6 +61,9 @@ const HEX = /^[0-9a-f]{64}$/;
 const POST_CHANNELS = ["facebook", "google_business"] as const;
 const EDIT_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const MAX_EDIT_BYTES = 30 * 1024 * 1024;
+export const EDIT_KINDS = ["replace_media", "replace_copy"] as const;
+export const MAX_COPY_CHARS = 5000;
+const MAX_COPY_CLAIMS = 10;
 
 type Json = Record<string, unknown>;
 export type DbError = { code: string | null; message: string };
@@ -186,11 +195,18 @@ export function parseRevise(b: Json): Json | string {
   if (!isStr(post.service_id) || !UUID.test(post.service_id)) return "post.service_id is the post's service from batch";
   if (!isStr(post.review_hash) || !HASH.test(post.review_hash)) return "post.review_hash is the review_hash from batch";
   if (!str(post.destination, 300)) return "post.destination is the destination from batch";
-  if (change.kind !== "replace_media") return "change.kind is replace_media";
-  if (!isStr(change.stage_id) || !UUID.test(change.stage_id)) return "change.stage_id is the stage from stage_media";
-  if (!isStr(change.sha256) || !HEX.test(change.sha256)) return "change.sha256 is the staged file's sha256";
-  if (!str(change.label, 200)) return "change.label names the asset";
-  if (!str(change.provenance, 1000)) return "change.provenance says how the image was made";
+  if (!EDIT_KINDS.includes(change.kind as typeof EDIT_KINDS[number])) return `change.kind is one of ${EDIT_KINDS.join(", ")}`;
+  if (change.kind === "replace_media") {
+    if (!isStr(change.stage_id) || !UUID.test(change.stage_id)) return "change.stage_id is the stage from stage_media";
+    if (!isStr(change.sha256) || !HEX.test(change.sha256)) return "change.sha256 is the staged file's sha256";
+    if (!str(change.label, 200)) return "change.label names the asset";
+    if (!str(change.provenance, 1000)) return "change.provenance says how the image was made";
+  } else {
+    if (!str(change.copy, MAX_COPY_CHARS)) return `change.copy is the post's new copy (1–${MAX_COPY_CHARS} characters)`;
+    if (!Array.isArray(change.claim_ids) || change.claim_ids.length > MAX_COPY_CLAIMS
+        || !change.claim_ids.every((c) => isStr(c) && UUID.test(c))) return `change.claim_ids lists up to ${MAX_COPY_CLAIMS} claim ids`;
+    if (new Set(change.claim_ids as string[]).size !== change.claim_ids.length) return "change.claim_ids lists a claim twice";
+  }
   if (!CHANNELS.includes(ex.channel as typeof CHANNELS[number])) return "executor.channel is chatgpt or claude";
   if (!str(ex.executed_by, 120)) return "executor.executed_by names the assistant";
   if (!isStr(ex.account_email) || !/^[^@\s]+@[^@\s]+$/.test(ex.account_email)) return "executor.account_email is the authorizing owner";
@@ -205,8 +221,11 @@ export function parseRevise(b: Json): Json | string {
     operation_id: b.operation_id, client_id: b.client_id,
     post: { channel: post.channel, id: post.id, service_id: (post.service_id as string).toLowerCase(), review_hash: post.review_hash,
             destination: (post.destination as string).trim() },
-    change: { kind: "replace_media", stage_id: change.stage_id, sha256: change.sha256, label: (change.label as string).trim(),
-              provenance: (change.provenance as string).trim() },
+    change: change.kind === "replace_media"
+      ? { kind: "replace_media", stage_id: change.stage_id, sha256: change.sha256, label: (change.label as string).trim(),
+          provenance: (change.provenance as string).trim() }
+      // The copy exactly as sent (it is what gets linted and published).
+      : { kind: "replace_copy", copy: change.copy, claim_ids: (change.claim_ids as string[]).map((c) => c.toLowerCase()) },
     executor: { channel: ex.channel, executed_by: (ex.executed_by as string).trim(), account_email: ex.account_email },
     authority: { kind: au.kind, id: au.id, channels: au.channels, service_ids: au.service_ids, operations: au.operations },
     reason: (b.reason as string).trim(),
@@ -214,7 +233,13 @@ export function parseRevise(b: Json): Json | string {
   };
 }
 
-export function createContentApprovals(deps: { store: Store }) {
+export type ContentApprovalsDeps = {
+  store: Store;
+  // The post-drafter's brief and linter for a proposed copy edit (copy-check.ts).
+  copyCheck?: (clientId: string, postId: string, copy: string, claimIds: string[]) => Promise<CopyCheckResult>;
+};
+
+export function createContentApprovals(deps: ContentApprovalsDeps) {
   const { store } = deps;
 
   async function authorized(req: Request): Promise<boolean> {
@@ -232,7 +257,8 @@ export function createContentApprovals(deps: { store: Store }) {
     const mode = body.mode;
 
     if (mode === "version") {
-      return reply(200, { version: HANDLER_VERSION, modes: MODES, actions: ACTIONS, channels: CHANNELS, content_channels: CONTENT_CHANNELS });
+      return reply(200, { version: HANDLER_VERSION, modes: MODES, actions: ACTIONS, channels: CHANNELS, content_channels: CONTENT_CHANNELS,
+        edit_kinds: deps.copyCheck ? EDIT_KINDS : ["replace_media"] });
     }
 
     if (mode === "batch") {
@@ -343,6 +369,11 @@ export function createContentApprovals(deps: { store: Store }) {
     const receipt = rec.data as Json;
     if (receipt.status === "executed" || receipt.status === "refused") return reply(200, { receipt, replayed: true });
     const id = receipt.id as string;
+    const refuse = async (code: string, message: string, extra: Json = {}) => {
+      const refused = await store.editRefuse(id, code, `${code}: ${message}`);
+      return reply(422, { error: code, message: `${code}: ${message}`, ...extra, receipt: refused.data ?? receipt });
+    };
+    if ((p.change as Json).kind === "replace_copy") return reviseCopy(p, id, receipt, refuse);
 
     // The bytes as stored, measured here: the database never trusts a declared hash.
     let read: StoredRead;
@@ -351,10 +382,6 @@ export function createContentApprovals(deps: { store: Store }) {
     } catch {
       return reply(503, { error: "outcome_unknown", message: "The stored file could not be read; retry with the same operation_id.", receipt });
     }
-    const refuse = async (code: string, message: string) => {
-      const refused = await store.editRefuse(id, code, `${code}: ${message}`);
-      return reply(422, { error: code, message: `${code}: ${message}`, receipt: refused.data ?? receipt });
-    };
     if (!read.ok) {
       if (read.reason === "missing") return refuse("bytes_missing", "nothing was uploaded to the slot");
       if (read.reason === "too_large") return refuse("bytes_mismatch", `the stored file is larger than ${MAX_EDIT_BYTES} bytes`);
@@ -364,6 +391,26 @@ export function createContentApprovals(deps: { store: Store }) {
     if (!meta) return refuse("bytes_mismatch", "the stored file is not a PNG, JPEG or WebP image");
     const measured = { content_hash: await sha256Hex(read.bytes), ...meta };
 
+    return execute(id, receipt, measured);
+  }
+
+  // The copy, checked here against the post's own rebuilt brief; the
+  // database refuses anything not checked clean, or not the receipt's copy.
+  async function reviseCopy(p: Json, id: string, receipt: Json,
+                            refuse: (code: string, message: string, extra?: Json) => Promise<Response>): Promise<Response> {
+    if (!deps.copyCheck) return refuse("copy_check_unavailable", "this deployment cannot check copy; nothing was changed");
+    const change = p.change as { copy: string; claim_ids: string[] };
+    let checked: CopyCheckResult;
+    try {
+      checked = await deps.copyCheck(p.client_id as string, (p.post as Json).id as string, change.copy, change.claim_ids);
+    } catch {
+      return reply(503, { error: "outcome_unknown", message: "The copy check did not confirm; retry with the same operation_id.", receipt });
+    }
+    if (!checked.ok) return refuse(checked.code, checked.message, { problems: checked.problems });
+    return execute(id, receipt, { lint_ok: true, brief_hash: checked.brief_hash, checked_copy: change.copy, warnings: checked.warnings });
+  }
+
+  async function execute(id: string, receipt: Json, measured: Json): Promise<Response> {
     const ex = await store.editExecute(id, measured).catch(unconfirmed);
     if (ex.error) {
       if (ex.error.code && REFUSAL.test(ex.error.code)) {

@@ -289,6 +289,9 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation_
 # 20261020200000: delegated post edits (withdraw → replace media → resubmit
 # under a receipt; identity bound to the executing transaction; never approves).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edits.test.sql"
+# 20261029180000: delegated copy edits (withdraw → set copy and claims →
+# resubmit under a receipt; the copy checked clean; never approves).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edit_copy.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).

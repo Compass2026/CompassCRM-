@@ -76,7 +76,7 @@ const reviseBody = (o = {}) => ({
 test("version lists the edit modes; only the delegation key opens them", async () => {
   const r = await call(fakeStore(), post({ mode: "version" }));
   const v = await r.json();
-  assert.equal(v.version, 3);
+  assert.equal(v.version, 4);
   for (const m of ["stage_media", "revise", "revise_status"]) assert.ok(v.modes.includes(m), m);
   assert.equal((await call(fakeStore(), post(stageBody(), "wrong"))).status, 403);
   assert.equal((await call(fakeStore(), post(reviseBody(), null))).status, 403);

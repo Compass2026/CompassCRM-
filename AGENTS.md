@@ -2354,6 +2354,15 @@ measured → resubmit for a fresh review, in one transaction under a
 `content_edit_receipts` row. Never approves, schedules or publishes; refuses
 approved, scheduled and published posts. Full design: `docs/delegated-post-edits.md`.
 
+- **Copy edits** (`20261029180000`, content-approvals v4, Oct 29 2026): a second
+  change kind, `replace_copy {copy, claim_ids}`, on the same door. The function
+  lints the copy against a brief rebuilt for the post's own target (the
+  post-drafter's `buildBrief` / `lintDraft`); execute refuses anything not
+  checked clean or not the receipt's copy, and any claim that is not a usable
+  claim of the client, then withdraws, sets the copy, links exactly those
+  claims and resubmits. The authority must list `replace_copy`. Executive OS's
+  `content_revise` needs the matching change before it can be called.
+
 - Identity is the executing receipt in THIS transaction (`content_edit_receipt()`,
   txid-bound, service role) — never a session flag alone. History records
   `actor_kind = 'assistant'` with the receipt and no person; `updated_by` is the
