@@ -2,7 +2,7 @@ import type { GrowthRanking } from "./growth-rankings";
 import type { RolloutReview, RolloutWrite } from "./agency-rollout";
 import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
 import type { GrowthMeasurement, SearchHistory, GrowthWork } from "./client-growth";
-import type { OnboardingRow, OnboardingStatus } from "./client-onboarding";
+import type { OnboardingGap, OnboardingRow, OnboardingStatus } from "./client-onboarding";
 import type { CitationLocation, CitationLocationIdentity, CitationDirectory, CitationListing, CitationListingOverview, CitationCheck, CitationTask, CitationRequest, CitationCreditEntry, CitationCreditBalance, CitationImport } from "./citations";
 
 export type Json =
@@ -22,9 +22,9 @@ export type Database = {
   public: {
     Tables: {
       client_onboarding_items: {
-        Row: Omit<OnboardingRow, "section" | "scope" | "title" | "guidance" | "depends_on" | "evidence_source" | "citation_directory_key" | "pipeline_task_key" | "sort_order" | "standard_version" | "item_active" | "scope_label" | "location_hide_address" | "pipeline_task_id" | "pipeline_task_status" | "pipeline_task_title" | "signal"> & { created_at: string; updated_by: string | null }
+        Row: Omit<OnboardingRow, "section" | "scope" | "title" | "guidance" | "depends_on" | "evidence_source" | "citation_directory_key" | "pipeline_task_key" | "sort_order" | "standard_version" | "item_active" | "scope_label" | "location_hide_address" | "pipeline_task_id" | "pipeline_task_status" | "pipeline_task_title" | "signal" | "location_status" | "client_service_scope"> & { created_at: string; updated_by: string | null }
         Insert: { client_id: string; item_key: string; site_id?: string | null; location_id?: string | null }
-        Update: { status?: OnboardingStatus; evidence_url?: string | null; evidence_note?: string; blocking_reason?: string; next_action?: string; due_on?: string | null; required?: boolean }
+        Update: { status?: OnboardingStatus; social_account_id?: string | null; evidence_url?: string | null; evidence_note?: string; blocking_reason?: string; next_action?: string; due_on?: string | null; required?: boolean }
         Relationships: []
       }
       map_grid_profiles: {
@@ -11580,6 +11580,7 @@ export type Database = {
       portal_backlinks: { Row: PortalBacklink; Relationships: [] }
       citation_listing_overview: { Row: CitationListingOverview; Relationships: [] }
       client_onboarding_overview: { Row: OnboardingRow; Relationships: [] }
+      client_onboarding_gaps: { Row: OnboardingGap; Relationships: [] }
       citation_credit_balances: { Row: CitationCreditBalance; Relationships: [] }
       authority_latest: {
         Row: {

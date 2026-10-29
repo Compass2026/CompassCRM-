@@ -1,6 +1,6 @@
 import { reportingHost } from "./integration-health.ts";
 import type { Alert, ReadinessCheck } from "./operations-readiness";
-import { readinessState, type OnboardingRow } from "./client-onboarding.ts";
+import { readinessState, type OnboardingGap, type OnboardingRow } from "./client-onboarding.ts";
 
 type Row={client_id:string};
 export type OperationalCard={key:string;clientId:string;label:string;state:"recorded"|"attention"|"setup"|"unknown";evidence:string;lastAttempt:string|null;lastEvidence:string|null;nextAction:string;href:string};
@@ -24,6 +24,7 @@ export type OperationalInput={
  authority:{client_id:string|null;finished_at:string|null;inventory_fetched_at:string|null;inventory_stale:boolean|null;stale_sections:string[]|null}[]|null;
  // New Client Onboarding rows (client_onboarding_overview); undefined = not loaded, no check.
  onboarding?:OnboardingRow[]|null;
+ onboardingGaps?:OnboardingGap[]|null;
  now:string;
 };
 export type OperationalEvidence={cards:OperationalCard[];alerts:Alert[];checks:Record<string,ReadinessCheck[]>};
@@ -109,7 +110,7 @@ export function buildOperationalEvidence(input:OperationalInput):OperationalEvid
   const authority=input.authority?.find(r=>r.client_id===id);
   check('authority','Recent Authority inventory',input.authority===null?'unknown':!authority?'missing':authority.inventory_stale!==false||authority.stale_sections?.length||!fresh(authority.inventory_fetched_at,7)?'blocked':'recorded',base+'/authority','Inventory must be current within seven days. Content still requires keyword, brand, claim and human approval gates.');
   check('baseline','Reporting baseline evidence',input.profileMeasures===null?'unknown':measures.some(m=>valid(m.window_end))?'recorded':'missing',base+'/growth','A dated measurement establishes an observed baseline, not a pre-engagement baseline or proof of growth.');
-  if(input.onboarding!==undefined){const ob=readinessState(input.onboarding===null?null:input.onboarding.filter(r=>r.client_id===id),day);check('onboarding','New client onboarding checklist',ob.state,base+'/onboarding',ob.detail);}
+  if(input.onboarding!==undefined){const ob=readinessState(input.onboarding===null?null:input.onboarding.filter(r=>r.client_id===id),input.onboardingGaps==null?null:input.onboardingGaps.filter(g=>g.client_id===id),day);check('onboarding','New client onboarding checklist',ob.state,base+'/onboarding',ob.detail);}
  }
  return {cards,alerts,checks};
 }

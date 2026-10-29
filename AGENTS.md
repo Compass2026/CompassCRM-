@@ -25,13 +25,20 @@ business location (`client_onboarding_items`, standard in `onboarding_items`),
 shown on the client's Onboarding tab and as one Control Center check. Items
 point at existing records (pipeline task keys, Citation Tracker listings,
 GSC / GA4 imports, Zernio bindings, sites); those are signals, never a
-sign-off. Only a signed-in teammate can mark an item verified; citation items
-are claimed / verified only against a recorded listing / current accurate
-check. Enrollment is idempotent and adds rows only; new full-service clients
-are enrolled on insert, existing clients from the tab. Future templates:
-Metricool → `zernio_connect`, BrightLocal LRT / LSG → `bing_webmaster` /
-`map_grid_profile`; open legacy tasks are relabelled, done ones untouched.
-Apply the migration before deploying the code.
+sign-off. Nothing is complete by omission: `scope_sites` / `scope_locations`
+are decisions and `client_onboarding_gaps` keeps a client incomplete until
+every site and location has its rows (or "none" is decided with a reason).
+Verified needs a signed-in teammate, every prerequisite done in the same
+site / location (a missing row is never satisfied), and exact evidence:
+GSC / GA4 imports for the site's own host, the location's own named GBP
+profile / the site's own Page (one account credits one location / site).
+Enrollment is idempotent and adds rows only; new full-service clients and
+their later sites / locations are enrolled automatically, map-tracking and
+existing clients are not. Future templates: Metricool → `zernio_connect`,
+BrightLocal LRT / LSG → `bing_webmaster` / `map_grid_profile`. The migration
+changes no existing task; open legacy tasks are labelled only by the reviewed
+`supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
+before deploying the code.
 
 ## Client progress and backlinks (October 12, 2026)
 

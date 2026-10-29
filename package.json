@@ -43,6 +43,7 @@
     "test:communications": "UI_SPEC=tests/communications-integration.mjs scripts/test-tasks-ui.sh",
     "test:communications-ui": "UI_SPEC=tests/communications-ui.mjs scripts/test-tasks-ui.sh",
     "test:crm-lite-ui": "UI_SPEC=tests/crm-lite-ui.mjs scripts/test-tasks-ui.sh",
+    "test:onboarding-ui": "UI_SPEC=tests/onboarding-ui.mjs UI_FIXTURES=onboarding_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:citations-ui": "PGRST_MAX_ROWS=1000 UI_SPEC=tests/citations-ui.mjs UI_FIXTURES=citations_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:citations-pilot": "PGRST_MAX_ROWS=1000 UI_SPEC=tests/citations-pilot.mjs UI_FIXTURES=citations_pilot_fixtures.sql scripts/test-tasks-ui.sh",
     "design:preview": "node --no-warnings scripts/design-preview.mjs"

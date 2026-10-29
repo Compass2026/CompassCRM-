@@ -4,12 +4,13 @@
 // URL, and lets the database guards (20261029170000) have the last word:
 // only a signed-in teammate can mark an item verified, and a citation item is
 // claimed / verified only when the Citation Tracker holds the listing.
-// Nothing here contacts Google, Bing, Zernio or a directory.
+// Nothing here contacts Google, Bing, Zernio or a directory, and nothing here
+// enrolls a client the team did not open: enrollment is the tab's button.
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentTeamMember } from "@/lib/team";
 import { isUuid } from "@/lib/tasks";
-import { prepareUpdate } from "@/lib/client-onboarding";
+import { ACCOUNT_SOURCES, prepareUpdate } from "@/lib/client-onboarding";
 
 export type OnboardingActionState = { error?: string; saved?: boolean; added?: number };
 
@@ -48,7 +49,7 @@ export async function updateOnboardingItemAction(clientId: string, itemId: strin
     if (!isUuid(itemId)) throw new Error("Invalid item. Refresh and try again.");
     const db = await team(clientId);
     const { data: item, error: readError } = await db.from("client_onboarding_overview")
-      .select("id, client_id, citation_directory_key").eq("id", itemId).eq("client_id", clientId).maybeSingle();
+      .select("id, client_id, citation_directory_key, evidence_source").eq("id", itemId).eq("client_id", clientId).maybeSingle();
     dbError(readError, "The item could not be read. Refresh and try again.");
     if (!item) throw new Error("That item is not on this client's checklist.");
     const update = prepareUpdate({
@@ -60,6 +61,9 @@ export async function updateOnboardingItemAction(clientId: string, itemId: strin
       due_on: text(form, "due_on", 10),
       required: form.get("required") === "on",
       listing: !!item.citation_directory_key,
+      // Business Profile / Facebook items name the exact bound account; the database checks it is this client's.
+      accountItem: !!(item.evidence_source && ACCOUNT_SOURCES[item.evidence_source]),
+      account: text(form, "social_account_id", 40) || null,
     });
     const { error } = await db.from("client_onboarding_items").update(update).eq("id", itemId).eq("client_id", clientId);
     dbError(error, "The item could not be saved. Try again.");

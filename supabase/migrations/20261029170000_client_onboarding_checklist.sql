@@ -1,7 +1,8 @@
 -- New Client Onboarding v1.0 (Oct 29 2026; docs/client-onboarding.md).
 -- Written, NOT applied. Additive: no client is enrolled by this migration and
--- no existing task, stage, listing or completion is rewritten except the
--- titles of still-OPEN legacy BrightLocal / Metricool tasks (§5).
+-- no existing task, stage, listing or completion is rewritten. (Labelling the
+-- still-open legacy BrightLocal / Metricool tasks is a separate, reviewed
+-- script: supabase/deferred/20261029_legacy_task_labels.sql.)
 --
 -- Tom's handwritten master checklist becomes ONE reusable per-client
 -- checklist that points at the records that already exist instead of copying
@@ -13,16 +14,30 @@
 --   * Search Console / GA4 import receipts, Zernio bindings (social_accounts),
 --     sites, client_access.
 -- Those are shown beside each item as evidence signals. A signal never moves
--- an item: status changes are a teammate's, with evidence. "Verified" can only
--- be set by a signed-in team member (never a connected account, the worker or
--- the service role), and a citation item can only be claimed / verified when
--- the Citation Tracker holds a listing (verified: a current accurate check).
+-- an item: status changes are a teammate's, with evidence.
 --
 -- Statuses keep the three things the checklist must not merge apart:
 --   requested (access asked for) → connected (connection works) → verified
 --   (data or listing evidence seen), plus submitted / claimed for listings and
 --   needs_correction / inaccessible / blocked / not_applicable.
 -- Done = verified, or not_applicable with a reason.
+--
+-- Nothing is complete by omission (review of PR #200):
+--   * Scope is a decision. scope_sites / scope_locations say every website
+--     and every listing-eligible business location is recorded, or record
+--     "none" as not applicable with a reason. client_onboarding_gaps lists
+--     what is missing (no site / no location decided, a site or location with
+--     no checklist rows, a site or location recorded after "none").
+--   * Prerequisites are enforced: an item is verified only when every
+--     dependency row exists in the same site / location (or on the client)
+--     and is done. A missing row is a missing prerequisite, never satisfied.
+--   * Evidence is matched exactly. Search Console / GA4 sign-off needs an
+--     import for this site's own host; Business Profile / Facebook items name
+--     the exact bound account (social_accounts), which credits one location /
+--     site only. A client-wide signal is labelled as such and never verifies
+--     a site or location.
+-- "Verified" is set only by a signed-in team member (never a connected
+-- account, the worker or the service role).
 --
 -- Rollback: supabase/rollback/20261029170000_client_onboarding_checklist.down.sql
 
@@ -37,17 +52,20 @@ create table public.onboarding_items (
   guidance text not null default '' check (length(guidance) <= 2000),
   default_owner owner_type not null default 'TOM',
   required boolean not null default true,
+  -- Each dependency is client-scoped or in the item's own scope (checked below).
   depends_on text[] not null default '{}',
   -- Which existing record backs the evidence signal (client_onboarding_overview).
-  evidence_source text check (evidence_source in ('access','location_identity','site','gsc','ga4','gbp_binding','facebook_binding','citation','website_pipeline')),
+  evidence_source text check (evidence_source in ('access','scope','location_identity','site','gsc','ga4','gbp_binding','facebook_binding','citation','website_pipeline')),
   citation_directory_key text references public.citation_directories(key),
-  -- The existing pipeline task this item tracks (tasks.key on the same client).
+  -- The existing pipeline task this item tracks (tasks.key on the same client; client-wide).
   pipeline_task_key text,
   standard_version text not null default '1.0',
   sort_order integer not null,
   is_active boolean not null default true,
   check ((evidence_source = 'citation') = (citation_directory_key is not null)),
-  check (evidence_source <> 'citation' or scope = 'location')
+  check (evidence_source <> 'citation' or scope = 'location'),
+  check (evidence_source <> 'gbp_binding' or scope = 'location'),
+  check (evidence_source <> 'facebook_binding' or scope = 'site')
 );
 comment on table public.onboarding_items is 'New Client Onboarding standard (v1.0). Reference data; per-client state lives in client_onboarding_items.';
 
@@ -55,6 +73,10 @@ insert into public.onboarding_items (key, section, scope, sort_order, title, def
   -- A. Identity, site, brand, locations
   ('identity_business', 'identity', 'client', 10, 'Legal name, DBA, primary phone and website confirmed', 'TOM', true, '{}', null, null, null,
    'Use the agreement / intake as evidence. This is the name every listing must match.'),
+  ('scope_sites', 'identity', 'client', 12, 'Website inventory: every site the client runs is recorded, or "no website" decided', 'TOM', true, '{identity_business}', 'scope', null, null,
+   'Verified = every website is a site record with its checklist. No website: not applicable with the reason. A site recorded later reopens the decision.'),
+  ('scope_locations', 'identity', 'client', 14, 'Business locations: every listing-eligible location approved on Citations, or "none eligible" decided', 'TOM', true, '{identity_business}', 'scope', null, null,
+   'Verified = each real, listing-eligible location has an approved identity on the Citations tab and its checklist. None eligible: not applicable with the reason. A location approved later reopens the decision.'),
   ('identity_location', 'identity', 'location', 20, 'Location identity approved: NAP, public vs hidden address, branch eligibility', 'TOM', true, '{identity_business}', 'location_identity', null, null,
    'Approve the identity on the Citations tab. A service-area business hides its street; confirm each directory accepts a hidden address before listing it.'),
   ('service_areas', 'identity', 'client', 30, 'Service areas confirmed (cities / radius)', 'TOM', true, '{identity_business}', null, null, null,
@@ -64,16 +86,16 @@ insert into public.onboarding_items (key, section, scope, sort_order, title, def
   ('access_requests', 'identity', 'client', 50, 'Access requested for GSC, GA4, GBP, Facebook, DNS / hosting', 'TOM', true, '{}', 'access', null, null,
    'Track each on Overview › Access. Record who granted what and when — never a password or token.'),
   -- B. Search and analytics
-  ('gsc_verified', 'search', 'site', 110, 'Search Console domain property verified for the Compass account', 'TOM', true, '{website_owner,access_requests}', 'gsc', null, 'gsc_verify',
-   'Domain property (sc-domain:) preferred. Verified = the property is set on the client and an import has landed.'),
-  ('ga4_stream', 'search', 'site', 120, 'GA4 property, web stream and tag on the live site; phone_click / form_submit key events', 'TOM', true, '{website_owner,access_requests}', 'ga4', null, 'ga4',
-   'A property existing is not the tag installed. Check collection on the production host.'),
-  ('ga4_reporting', 'search', 'site', 130, 'GA4 data proven in reporting', 'TOM', true, '{ga4_stream}', 'ga4', null, null,
-   'Verified = a dated GA4 window shows on the Progress tab. New properties have no history.'),
-  ('gsc_ga4_link', 'search', 'site', 140, 'Search Console linked to GA4', 'TOM', true, '{gsc_verified,ga4_stream}', null, null, null,
+  ('gsc_verified', 'search', 'site', 110, 'Search Console property for this site verified for the Compass account', 'TOM', true, '{website_owner,access_requests}', 'gsc', null, 'gsc_verify',
+   'Domain property (sc-domain:) preferred. Verified only once an import has landed for this site''s own host; another site''s property never counts.'),
+  ('ga4_stream', 'search', 'site', 120, 'GA4 property, web stream and tag on this site; phone_click / form_submit key events', 'TOM', true, '{website_owner,access_requests}', 'ga4', null, 'ga4',
+   'A property existing is not the tag installed. Verified needs this site''s measurement id (on the site record or in the evidence).'),
+  ('ga4_reporting', 'search', 'site', 130, 'GA4 data for this site proven in reporting', 'TOM', true, '{ga4_stream}', 'ga4', null, null,
+   'Verified only once a GA4 import filtered to this site''s hostname has landed. New properties have no history.'),
+  ('gsc_ga4_link', 'search', 'site', 140, 'Search Console linked to GA4 for this site', 'TOM', true, '{gsc_verified,ga4_stream}', null, null, null,
    'GA4 Admin › Product links › Search Console. Evidence: the link screen.'),
-  ('gbp_ownership', 'search', 'location', 150, 'Business Profile claimed, verified, Compass as manager, exact location matched', 'TOM', true, '{identity_location}', 'gbp_binding', null, 'google_access',
-   'Exact location = the place id of this business location. Tag the GBP website link with UTM so GA4 attributes it. Existing location holds stay in force.'),
+  ('gbp_ownership', 'search', 'location', 150, 'Business Profile for this location claimed, verified, Compass as manager', 'TOM', true, '{identity_location}', 'gbp_binding', null, 'google_access',
+   'Name this location''s exact Business Profile (its bound account) or record its GBP listing on the Citations tab. Another location''s profile never counts. Tag the GBP website link with UTM so GA4 attributes it. Location holds stay in force.'),
   ('bing_webmaster', 'search', 'site', 160, 'Bing Webmaster Tools: site verified and sitemap submitted', 'TOM', true, '{gsc_verified}', null, null, 'bing_webmaster',
    'Import from Search Console or verify by DNS. This is the site in Bing search — separate from the Bing Places listing.'),
   -- C. Citations (one row per business location, backed by the Citation Tracker)
@@ -90,10 +112,10 @@ insert into public.onboarding_items (key, section, scope, sort_order, title, def
    'Free business account only; no Yelp ads.'),
   ('citation_nextdoor', 'citations', 'location', 270, 'Nextdoor business page', 'TOM', true, '{identity_location}', 'citation', 'nextdoor', null, ''),
   -- D. Social (Zernio is transport; connection is not permission to publish)
-  ('zernio_facebook', 'social', 'client', 310, 'Facebook Page bound through Zernio to the right client / brand, read and publish verified', 'TOM', true, '{access_requests}', 'facebook_binding', null, 'zernio_connect',
-   'Verified = the exact Page is bound and verified for this client (and brand workspace). Publishing stays off until Tom enables it; a binding is not a published receipt.'),
-  ('zernio_gbp', 'social', 'location', 320, 'Business Profile location bound through Zernio', 'TOM', true, '{gbp_ownership}', 'gbp_binding', null, null,
-   'Bind the exact locations/N of this business location. Blocked GBP location holds are not lifted here.'),
+  ('zernio_facebook', 'social', 'site', 310, 'Facebook Page for this site bound through Zernio, read and publish verified', 'TOM', true, '{access_requests}', 'facebook_binding', null, 'zernio_connect',
+   'Name the exact bound Page. A brand site''s Page must be the brand''s own. Publishing stays off until Tom enables it; a binding is not a published receipt.'),
+  ('zernio_gbp', 'social', 'location', 320, 'Business Profile location bound through Zernio for this location', 'TOM', true, '{gbp_ownership}', 'gbp_binding', null, null,
+   'Name the exact bound locations/N of this business location. One profile credits one location: another location''s binding (e.g. Wichita for Overland Park) never counts, and holds are not lifted here.'),
   ('social_profile_links', 'social', 'site', 330, 'Social profile links on the website and GBP; sameAs in structured data', 'TOM', true, '{zernio_facebook}', null, null, null,
    'Only profiles the client owns and keeps.'),
   ('other_social_channels', 'social', 'client', 340, 'Other social channels (Instagram, LinkedIn, …) per agreement', 'TOM', false, '{}', null, null, null,
@@ -111,6 +133,8 @@ create table public.client_onboarding_items (
   item_key text not null references public.onboarding_items(key) on delete restrict,
   site_id uuid references public.sites(id), -- no action: a whole-client delete cascades; a lone site or location delete is refused
   location_id uuid references public.citation_locations(id),
+  -- The exact bound Business Profile location / Facebook Page this item is about.
+  social_account_id uuid references public.social_accounts(id),
   status text not null default 'not_started' check (status in (
     'not_started','requested','in_progress','submitted','claimed','connected',
     'verified','needs_correction','inaccessible','blocked','not_applicable')),
@@ -137,6 +161,9 @@ create table public.client_onboarding_items (
   check ((evidence_note || ' ' || coalesce(evidence_url, '')) !~* '(password|passwd|api[_ -]?key|secret|token)\s*[:=]')
 );
 create index client_onboarding_items_client on public.client_onboarding_items(client_id, item_key);
+-- One bound profile / Page credits one location / site per item.
+create unique index client_onboarding_items_one_account on public.client_onboarding_items(item_key, social_account_id)
+  where social_account_id is not null;
 comment on table public.client_onboarding_items is 'New Client Onboarding checklist state per client / site / business location. Done = verified, or not_applicable with a reason.';
 
 -- Append-only history: every status / evidence change, so completion evidence is never lost.
@@ -149,17 +176,74 @@ create table public.client_onboarding_events (
   evidence_note text not null,
   blocking_reason text not null,
   next_action text not null,
+  social_account_id uuid,
   recorded_at timestamptz not null default now(),
   recorded_by uuid
 );
 create index client_onboarding_events_item on public.client_onboarding_events(item_id, id desc);
 
--- Scope and evidence guard.
+-- ── 3. Matching helpers ────────────────────────────────────────────────────
+-- A property or URL's host, lowercased, without www. ('sc-domain:x' → 'x').
+create function public.onboarding_host(p text) returns text
+language sql immutable set search_path = pg_catalog, pg_temp as $$
+  select nullif(regexp_replace(lower(coalesce(case
+    when p ~* '^sc-domain:' then substring(p from '(?i)^sc-domain:([^/[:space:]]+)')
+    else substring(p from '(?i)^https?://([^/:?#[:space:]]+)') end, '')), '^www\.', ''), '')
+$$;
+
+-- What the checklist still lacks for a client: scope decisions and per-scope rows.
+-- Only enrolled clients appear. Invoker: RLS applies.
+create view public.client_onboarding_gaps with (security_invoker = true) as
+with enrolled as (select distinct client_id from public.client_onboarding_items),
+decided as (
+  select client_id, item_key, status from public.client_onboarding_items where item_key in ('scope_sites','scope_locations')
+),
+active_items as (select key, scope from public.onboarding_items where is_active)
+select e.client_id, 'no_site'::text as kind, null::uuid as target_id, null::text as label,
+  'No website is recorded and "no website" has not been decided.'::text as detail
+from enrolled e
+where not exists (select 1 from public.sites s where s.client_id = e.client_id)
+  and coalesce((select d.status from decided d where d.client_id = e.client_id and d.item_key = 'scope_sites'), '') <> 'not_applicable'
+union all
+select e.client_id, 'site_after_none', s.id, s.url, 'A site was recorded after "no website" was decided; review the decision.'
+from enrolled e join public.sites s on s.client_id = e.client_id
+where exists (select 1 from decided d where d.client_id = e.client_id and d.item_key = 'scope_sites' and d.status = 'not_applicable')
+union all
+select e.client_id, 'no_location', null, null, 'No business location is approved and "none eligible" has not been decided.'
+from enrolled e
+where not exists (select 1 from public.citation_locations l where l.client_id = e.client_id and l.status = 'active')
+  and coalesce((select d.status from decided d where d.client_id = e.client_id and d.item_key = 'scope_locations'), '') <> 'not_applicable'
+union all
+select e.client_id, 'location_after_none', l.id, l.label, 'A location was approved after "none eligible" was decided; review the decision.'
+from enrolled e join public.citation_locations l on l.client_id = e.client_id and l.status = 'active'
+where exists (select 1 from decided d where d.client_id = e.client_id and d.item_key = 'scope_locations' and d.status = 'not_applicable')
+union all
+select e.client_id, 'site_missing_items', s.id, s.url,
+  format('%s checklist items missing for this site; run "Add missing items".', m.n)
+from enrolled e join public.sites s on s.client_id = e.client_id
+cross join lateral (select count(*) as n from active_items i where i.scope = 'site'
+  and not exists (select 1 from public.client_onboarding_items ci where ci.client_id = e.client_id and ci.item_key = i.key and ci.site_id = s.id)) m
+where m.n > 0
+union all
+select e.client_id, 'location_missing_items', l.id, l.label,
+  format('%s checklist items missing for this location; run "Add missing items".', m.n)
+from enrolled e join public.citation_locations l on l.client_id = e.client_id and l.status = 'active'
+cross join lateral (select count(*) as n from active_items i where i.scope = 'location'
+  and not exists (select 1 from public.client_onboarding_items ci where ci.client_id = e.client_id and ci.item_key = i.key and ci.location_id = l.id)) m
+where m.n > 0;
+
+-- ── 4. Guard: scope, prerequisites, exact evidence, sign-off ───────────────
 create function public.guard_client_onboarding_item() returns trigger
 language plpgsql set search_path = public, pg_temp as $$
 declare
   v_item public.onboarding_items;
+  v_dep public.onboarding_items;
+  v_dep_key text;
+  v_dep_status text;
   v_dir uuid;
+  v_host text;
+  v_acct public.social_accounts;
+  v_signing boolean;
 begin
   select * into v_item from public.onboarding_items where key = new.item_key;
   if tg_op = 'UPDATE' and (new.client_id <> old.client_id or new.item_key <> old.item_key
@@ -178,18 +262,114 @@ begin
     raise exception using errcode = '23514', message = 'That business location belongs to another client.';
   end if;
 
-  if new.status = 'verified' and (tg_op = 'INSERT' or old.status <> 'verified'
-      or new.evidence_url is distinct from old.evidence_url or new.evidence_note <> old.evidence_note) then
+  -- The named account: this client's, the right platform, and consistent across a location's GBP items.
+  if new.social_account_id is not null then
+    if v_item.evidence_source not in ('gbp_binding','facebook_binding') then
+      raise exception using errcode = '23514', message = 'Only Business Profile and Facebook items name an account.';
+    end if;
+    select * into v_acct from public.social_accounts a where a.id = new.social_account_id;
+    if v_acct.id is null or v_acct.client_id <> new.client_id then
+      raise exception using errcode = '23514', message = 'That account belongs to another client.';
+    end if;
+    if v_acct.platform::text <> (case v_item.evidence_source when 'gbp_binding' then 'google_business' else 'facebook' end) then
+      raise exception using errcode = '23514', message = 'That account is not the right platform for this item.';
+    end if;
+    if v_item.evidence_source = 'gbp_binding' and exists (
+        select 1 from public.client_onboarding_items o join public.onboarding_items oi on oi.key = o.item_key
+        where o.client_id = new.client_id and o.location_id = new.location_id and o.id <> new.id
+          and oi.evidence_source = 'gbp_binding' and o.social_account_id is not null and o.social_account_id <> new.social_account_id) then
+      raise exception using errcode = '23514', message = 'This location''s Business Profile items name different profiles.';
+    end if;
+    if v_item.evidence_source = 'facebook_binding' and exists (
+        select 1 from public.client_brand_workspaces w where w.client_id = new.client_id and w.blog_site_id = new.site_id
+          and w.facebook_account_id is not null and w.facebook_account_id <> new.social_account_id) then
+      raise exception using errcode = '23514', message = 'This brand site''s Facebook Page is the brand''s own Page.';
+    end if;
+  end if;
+
+  v_signing := new.status = 'verified' and (tg_op = 'INSERT' or old.status <> 'verified'
+    or new.evidence_url is distinct from old.evidence_url or new.evidence_note <> old.evidence_note
+    or new.social_account_id is distinct from old.social_account_id);
+  if v_signing then
     -- Only a signed-in teammate signs off, never a connection, the worker or the service role.
     if auth.uid() is null or not public.is_team() then
       raise exception using errcode = '42501', message = 'Only a signed-in team member can mark an onboarding item verified.';
     end if;
+
+    -- Prerequisites: each dependency row must exist in this scope (or on the client) and be done.
+    foreach v_dep_key in array v_item.depends_on loop
+      select * into v_dep from public.onboarding_items where key = v_dep_key;
+      select o.status into v_dep_status from public.client_onboarding_items o
+      where o.client_id = new.client_id and o.item_key = v_dep_key
+        and (v_dep.scope = 'client' or (v_dep.scope = 'site' and o.site_id = new.site_id)
+             or (v_dep.scope = 'location' and o.location_id = new.location_id));
+      if not found then
+        raise exception using errcode = '23514', message = format('Prerequisite missing: "%s" has no checklist row here; run "Add missing items".', v_dep.title);
+      elsif v_dep_status not in ('verified','not_applicable') then
+        raise exception using errcode = '23514', message = format('Prerequisite not done: "%s".', v_dep.title);
+      end if;
+    end loop;
+
+    -- Scope decisions: verified means recorded and covered; "none" is not applicable, not verified.
+    if new.item_key in ('scope_sites','scope_locations') and exists (
+        select 1 from public.client_onboarding_gaps g where g.client_id = new.client_id
+          and g.kind = any (case new.item_key when 'scope_sites' then array['no_site','site_missing_items']
+                                               else array['no_location','location_missing_items'] end)) then
+      raise exception using errcode = '23514', message = case new.item_key
+        when 'scope_sites' then 'Record every website as a site with its checklist first. No website: mark not applicable with the reason.'
+        else 'Approve every eligible location on the Citations tab and add its checklist first. None eligible: mark not applicable with the reason.' end;
+    end if;
+
+    -- Exact site evidence: imports for this site's own host.
+    if v_item.evidence_source in ('gsc','ga4') then
+      select public.onboarding_host(s.url) into v_host from public.sites s where s.id = new.site_id;
+      if v_host is null then
+        raise exception using errcode = '23514', message = 'This site has no live URL on its record, so its own data cannot be matched.';
+      end if;
+    end if;
+    if new.item_key = 'gsc_verified' and not exists (
+        select 1 from public.gsc_performance_imports g where g.client_id = new.client_id and public.onboarding_host(g.property) = v_host) then
+      raise exception using errcode = '23514', message = format('No Search Console import for %s yet; another site''s property does not count.', v_host);
+    end if;
+    if new.item_key = 'ga4_reporting' and not exists (
+        select 1 from public.ga4_performance_imports g where g.client_id = new.client_id
+          and regexp_replace(lower(coalesce(g.data->>'host', '')), '^www\.', '') = v_host) then
+      raise exception using errcode = '23514', message = format('No GA4 import filtered to %s yet; client-wide or another site''s data does not count.', v_host);
+    end if;
+    if new.item_key = 'ga4_stream' and not exists (select 1 from public.sites s where s.id = new.site_id and s.ga4_measurement_id is not null)
+       and coalesce(new.evidence_note, '') !~ 'G-[A-Z0-9]{4,}' then
+      raise exception using errcode = '23514', message = 'Record this site''s GA4 measurement id (G-…) on the site or in the evidence.';
+    end if;
+
+    -- Exact profile / Page: a verified Zernio binding named on this very item.
+    if new.item_key in ('zernio_gbp','zernio_facebook') and not exists (
+        select 1 from public.social_accounts a where a.id = new.social_account_id
+          and a.publish_provider = 'zernio' and a.publish_verified_at is not null) then
+      raise exception using errcode = '23514', message = case new.item_key
+        when 'zernio_gbp' then 'Name this location''s own verified Zernio Business Profile binding; another location''s binding does not count.'
+        else 'Name this site''s own verified Zernio Facebook Page binding.' end;
+    end if;
+    if new.item_key = 'gbp_ownership' and new.social_account_id is null and not exists (
+        select 1 from public.citation_listing_overview o where o.location_id = new.location_id and o.directory_key = 'google_business_profile') then
+      raise exception using errcode = '23514', message = 'Name this location''s Business Profile, or record its GBP listing on the Citations tab first.';
+    end if;
+
     new.verified_by := auth.uid();
     new.last_verified_at := now();
   elsif new.status = 'verified' then
     -- An unchanged sign-off keeps who made it and when.
     new.verified_by := old.verified_by;
     new.last_verified_at := old.last_verified_at;
+  end if;
+
+  -- "None" can only be decided when there is none.
+  if new.status = 'not_applicable' and (tg_op = 'INSERT' or old.status <> 'not_applicable') then
+    if new.item_key = 'scope_sites' and exists (select 1 from public.sites s where s.client_id = new.client_id) then
+      raise exception using errcode = '23514', message = 'This client has a site on record; "no website" does not apply.';
+    end if;
+    if new.item_key = 'scope_locations' and exists (select 1 from public.citation_locations l where l.client_id = new.client_id and l.status = 'active') then
+      raise exception using errcode = '23514', message = 'This client has an approved location; "none eligible" does not apply.';
+    end if;
   end if;
 
   -- A listing is claimed / verified only when the Citation Tracker holds it.
@@ -217,16 +397,17 @@ create function public.record_client_onboarding_event() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if tg_op = 'INSERT' or new.status <> old.status or new.evidence_url is distinct from old.evidence_url
-     or new.evidence_note <> old.evidence_note or new.blocking_reason <> old.blocking_reason or new.next_action <> old.next_action then
-    insert into public.client_onboarding_events (item_id, client_id, status, evidence_url, evidence_note, blocking_reason, next_action, recorded_by)
-    values (new.id, new.client_id, new.status, new.evidence_url, new.evidence_note, new.blocking_reason, new.next_action, auth.uid());
+     or new.evidence_note <> old.evidence_note or new.blocking_reason <> old.blocking_reason or new.next_action <> old.next_action
+     or new.social_account_id is distinct from old.social_account_id then
+    insert into public.client_onboarding_events (item_id, client_id, status, evidence_url, evidence_note, blocking_reason, next_action, social_account_id, recorded_by)
+    values (new.id, new.client_id, new.status, new.evidence_url, new.evidence_note, new.blocking_reason, new.next_action, new.social_account_id, auth.uid());
   end if;
   return null;
 end $$;
 create trigger client_onboarding_items_history after insert or update on public.client_onboarding_items
   for each row execute function public.record_client_onboarding_event();
 
--- ── 3. Enrollment: idempotent, never overwrites ────────────────────────────
+-- ── 5. Enrollment: idempotent, never overwrites ────────────────────────────
 -- Adds the rows the client is missing (new items, new sites, new business
 -- locations); existing rows, their statuses and evidence are left alone.
 -- Runs as the caller, so RLS applies (team only). Returns rows added.
@@ -253,11 +434,11 @@ begin
   return v_count;
 end $$;
 
--- Future full-service clients start with the checklist (client-scoped rows;
--- site and location rows are added by re-running enrollment once those exist).
--- Definer, like the other onboarding triggers, so whoever inserts the client
--- (the team's New client dialog, a load run as the service role) gets the same
--- not-started rows; it never sets a status.
+-- Future full-service clients start with the checklist. Definer, like the
+-- other onboarding triggers, so whoever inserts the client (the team's New
+-- client dialog, a load run as the service role) gets the same not-started
+-- rows; it never sets a status. Map-tracking clients are excluded (their
+-- full-service onboarding is a deliberate step, 20261015170000).
 create function public.enroll_new_client_onboarding() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
@@ -267,43 +448,79 @@ end $$;
 create trigger clients_zz_onboarding_checklist after insert on public.clients
   for each row when (new.service_scope = 'full') execute function public.enroll_new_client_onboarding();
 
--- ── 4. Read model (invoker: RLS applies) ───────────────────────────────────
+-- A site or business location added later to an enrolled client gets its rows
+-- at once (client_onboarding_gaps still reports anything missed).
+create function public.extend_client_onboarding() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if exists (select 1 from public.client_onboarding_items where client_id = new.client_id) then
+    perform public.enroll_client_onboarding(new.client_id);
+  end if;
+  return null;
+end $$;
+create trigger sites_zz_onboarding_checklist after insert on public.sites
+  for each row execute function public.extend_client_onboarding();
+create trigger citation_locations_zz_onboarding_checklist after insert or update of status on public.citation_locations
+  for each row when (new.status = 'active') execute function public.extend_client_onboarding();
+
+-- ── 6. Read model (invoker: RLS applies) ───────────────────────────────────
 -- One row per checklist item with its scope label, the linked pipeline task
 -- and the evidence signal from existing records. Signals inform; they never
--- set the status.
+-- set the status. signal.scope says what a signal is about: 'exact' (this
+-- site / location / named account), 'unlinked' (no account named yet; the
+-- counts are client-wide) or 'client' (a client-scoped item).
 create view public.client_onboarding_overview with (security_invoker = true) as
-select ci.id, ci.client_id, ci.item_key, ci.site_id, ci.location_id, ci.status, ci.required, ci.owner, ci.due_on,
+select ci.id, ci.client_id, ci.item_key, ci.site_id, ci.location_id, ci.social_account_id, ci.status, ci.required, ci.owner, ci.due_on,
   ci.evidence_url, ci.evidence_note, ci.blocking_reason, ci.next_action, ci.last_verified_at, ci.verified_by,
   ci.updated_at, ci.created_at,
   i.section, i.scope, i.title, i.guidance, i.depends_on, i.evidence_source, i.citation_directory_key, i.pipeline_task_key,
   i.sort_order, i.standard_version, i.is_active as item_active,
   coalesce(s.url, l.label) as scope_label,
   l.hide_address as location_hide_address,
+  l.status as location_status,
+  c.service_scope as client_service_scope,
   pt.id as pipeline_task_id, pt.status::text as pipeline_task_status, pt.title as pipeline_task_title,
   case i.evidence_source
-    when 'access' then (select jsonb_build_object('requested', count(*) filter (where a.status = 'requested'),
+    when 'access' then (select jsonb_build_object('scope', 'client', 'requested', count(*) filter (where a.status = 'requested'),
         'granted', count(*) filter (where a.status = 'granted'), 'not_needed', count(*) filter (where a.status = 'not_needed'))
       from public.client_access a where a.client_id = ci.client_id)
-    when 'location_identity' then jsonb_build_object('identity_version', l.identity_version, 'hide_address', l.hide_address,
+    when 'scope' then case ci.item_key
+      when 'scope_sites' then jsonb_build_object('scope', 'client', 'records', (select count(*) from public.sites x where x.client_id = ci.client_id))
+      else jsonb_build_object('scope', 'client', 'records', (select count(*) from public.citation_locations x where x.client_id = ci.client_id and x.status = 'active')) end
+    when 'location_identity' then jsonb_build_object('scope', 'exact', 'identity_version', l.identity_version, 'hide_address', l.hide_address,
       'approved_at', l.approved_at, 'status', l.status)
-    when 'site' then jsonb_build_object('url', s.url, 'controlled_by_compass', s.controlled_by_compass)
-    when 'gsc' then jsonb_build_object('property', coalesce(c.gsc_property, ''),
-      'data_through', (select max(g.period_end) from public.gsc_performance_imports g where g.client_id = ci.client_id))
-    when 'ga4' then jsonb_build_object('property', coalesce(c.ga4_property, ''), 'measurement_id', coalesce(s.ga4_measurement_id, ''),
-      'data_through', (select max(g.period_end) from public.ga4_performance_imports g where g.client_id = ci.client_id))
-    when 'gbp_binding' then (select jsonb_build_object('bound', count(*), 'verified', count(*) filter (where a.publish_verified_at is not null))
-      from public.social_accounts a where a.client_id = ci.client_id and a.platform = 'google_business' and a.publish_provider = 'zernio')
-    when 'facebook_binding' then (select jsonb_build_object('bound', count(*), 'verified', count(*) filter (where a.publish_verified_at is not null),
-        'enabled', count(*) filter (where a.publish_enabled))
-      from public.social_accounts a where a.client_id = ci.client_id and a.platform = 'facebook' and a.publish_provider = 'zernio')
-    when 'citation' then (select jsonb_build_object('listings', count(*),
+    when 'site' then jsonb_build_object('scope', 'exact', 'url', s.url, 'controlled_by_compass', s.controlled_by_compass)
+    when 'gsc' then jsonb_build_object('scope', 'exact', 'host', h.host,
+      'property', (select g.property from public.gsc_performance_imports g where g.client_id = ci.client_id and public.onboarding_host(g.property) = h.host
+        order by g.period_end desc, g.created_at desc limit 1),
+      'data_through', (select max(g.period_end) from public.gsc_performance_imports g where g.client_id = ci.client_id and public.onboarding_host(g.property) = h.host),
+      'client_property', coalesce(c.gsc_property, ''))
+    when 'ga4' then jsonb_build_object('scope', 'exact', 'host', h.host, 'measurement_id', coalesce(s.ga4_measurement_id, ''),
+      'property', (select g.property from public.ga4_performance_imports g where g.client_id = ci.client_id
+        and regexp_replace(lower(coalesce(g.data->>'host', '')), '^www\.', '') = h.host order by g.period_end desc, g.created_at desc limit 1),
+      'data_through', (select max(g.period_end) from public.ga4_performance_imports g where g.client_id = ci.client_id
+        and regexp_replace(lower(coalesce(g.data->>'host', '')), '^www\.', '') = h.host),
+      'client_property', coalesce(c.ga4_property, ''))
+    when 'gbp_binding' then case when sa.id is not null then jsonb_build_object('scope', 'exact', 'account', sa.external_account_id,
+        'name', coalesce(sa.display_name, ''), 'provider', coalesce(sa.publish_provider, ''), 'verified_at', sa.publish_verified_at,
+        'gbp_listings', (select count(*) from public.citation_listing_overview o where o.location_id = ci.location_id and o.directory_key = 'google_business_profile'))
+      else (select jsonb_build_object('scope', 'unlinked', 'bound', count(*), 'verified', count(*) filter (where a.publish_verified_at is not null),
+        'gbp_listings', (select count(*) from public.citation_listing_overview o where o.location_id = ci.location_id and o.directory_key = 'google_business_profile'))
+        from public.social_accounts a where a.client_id = ci.client_id and a.platform = 'google_business' and a.publish_provider = 'zernio') end
+    when 'facebook_binding' then case when sa.id is not null then jsonb_build_object('scope', 'exact', 'account', sa.external_account_id,
+        'name', coalesce(sa.display_name, ''), 'provider', coalesce(sa.publish_provider, ''), 'verified_at', sa.publish_verified_at,
+        'enabled', coalesce(sa.publish_enabled, false))
+      else (select jsonb_build_object('scope', 'unlinked', 'bound', count(*), 'verified', count(*) filter (where a.publish_verified_at is not null),
+          'expected_account', (select w.facebook_account_id from public.client_brand_workspaces w where w.client_id = ci.client_id and w.blog_site_id = ci.site_id limit 1))
+        from public.social_accounts a where a.client_id = ci.client_id and a.platform = 'facebook' and a.publish_provider = 'zernio') end
+    when 'citation' then (select jsonb_build_object('scope', 'exact', 'listings', count(*),
         'verified', count(*) filter (where o.verification_status = 'verified_accurate'),
         'discrepancy', count(*) filter (where o.verification_status in ('discrepancy','needs_reverification')),
         'inaccessible', count(*) filter (where o.verification_status = 'inaccessible'),
         'open_tasks', coalesce(sum(o.open_tasks), 0), 'last_checked_on', max(o.last_checked_on),
         'listing_url', (array_agg(o.listing_url order by o.last_checked_on desc nulls last) filter (where o.listing_url is not null))[1])
       from public.citation_listing_overview o where o.location_id = ci.location_id and o.directory_key = i.citation_directory_key)
-    when 'website_pipeline' then jsonb_build_object('work_mode', s.work_mode, 'launched_at', s.launched_at, 'url', s.url,
+    when 'website_pipeline' then jsonb_build_object('scope', 'exact', 'work_mode', s.work_mode, 'launched_at', s.launched_at, 'url', s.url,
       'pipeline_status', (select cp.status::text from public.client_pipelines cp join public.pipelines p on p.id = cp.pipeline_id
         where cp.client_id = ci.client_id and p.key = 'website'))
   end as signal
@@ -312,14 +529,15 @@ join public.onboarding_items i on i.key = ci.item_key
 join public.clients c on c.id = ci.client_id
 left join public.sites s on s.id = ci.site_id
 left join public.citation_locations l on l.id = ci.location_id
+left join public.social_accounts sa on sa.id = ci.social_account_id
+cross join lateral (select public.onboarding_host(s.url) as host) h
 left join lateral (select t.id, t.status, t.title from public.tasks t
   where t.client_id = ci.client_id and i.pipeline_task_key is not null and t.key = i.pipeline_task_key
   order by (t.status = 'done'), t.created_at desc limit 1) pt on true;
 
--- ── 5. Pipeline templates: future enrollments only ────────────────────────
+-- ── 7. Pipeline templates: future enrollments only ────────────────────────
 -- Templates are copied into tasks at enrollment (create_stage_tasks), so these
--- edits change what NEW enrollments get. Completed tasks are never touched;
--- still-open legacy tasks are labelled so nobody buys a retired service.
+-- edits change what NEW enrollments get. No existing task is touched here.
 
 -- Social › Brand & Content Setup: Metricool is retired; Zernio is the transport.
 update public.task_templates tt
@@ -353,19 +571,7 @@ set title = 'Create or claim the core listings and record each on the Citations 
 from public.stages s join public.pipelines p on p.id = s.pipeline_id and p.key = 'seo'
 where tt.stage_id = s.id and tt.key = 'citation_submit';
 
--- Still-open legacy tasks: labelled, not closed, not deleted. Done tasks keep their record.
-update public.tasks
-set title = '[Legacy — do not buy] ' || title,
-    notes = concat_ws(E'\n', nullif(notes, ''), 'Oct 29 2026: BrightLocal rank / grid reports are retired; ranks come from rank-sync and Compass map grids. Close as not needed unless Tom says otherwise. Existing BrightLocal subscriptions are not cancelled here.')
-where key in ('brightlocal_lrt','brightlocal_lsg') and status <> 'done' and title not like '[Legacy%';
-update public.tasks t
-set title = '[Legacy] ' || t.title,
-    notes = concat_ws(E'\n', nullif(t.notes, ''), 'Oct 29 2026: Metricool is retired; connect and verify the Zernio destination (Onboarding checklist D).')
-from public.client_stages cs join public.stages s on s.id = cs.stage_id
-  join public.pipelines p on p.id = s.pipeline_id and p.key = 'social'
-where t.client_stage_id = cs.id and s.name = 'Brand & Content Setup' and t.title = 'Connect Metricool' and t.status <> 'done';
-
--- ── 6. Access: team only; history and registry read-only to the app ───────
+-- ── 8. Access: team only; history and registry read-only to the app ───────
 alter table public.onboarding_items enable row level security;
 alter table public.client_onboarding_items enable row level security;
 alter table public.client_onboarding_events enable row level security;
@@ -376,17 +582,20 @@ create policy "team client_onboarding_items" on public.client_onboarding_items t
 create policy "team client_onboarding_events" on public.client_onboarding_events to authenticated
   using ((select public.is_team())) with check ((select public.is_team()));
 revoke all on public.onboarding_items, public.client_onboarding_items, public.client_onboarding_events,
-  public.client_onboarding_overview from public, anon, authenticated, service_role;
-grant select on public.onboarding_items, public.client_onboarding_events, public.client_onboarding_overview to authenticated, service_role;
+  public.client_onboarding_overview, public.client_onboarding_gaps from public, anon, authenticated, service_role;
+grant select on public.onboarding_items, public.client_onboarding_events, public.client_onboarding_overview,
+  public.client_onboarding_gaps to authenticated, service_role;
 grant select, insert, update on public.client_onboarding_items to authenticated;
 grant select on public.client_onboarding_items to service_role;
 
 revoke all on function public.enroll_client_onboarding(uuid) from public, anon;
 grant execute on function public.enroll_client_onboarding(uuid) to authenticated;
+revoke all on function public.onboarding_host(text) from public, anon;
+grant execute on function public.onboarding_host(text) to authenticated, service_role;
 revoke all on function public.guard_client_onboarding_item(), public.record_client_onboarding_event(),
-  public.enroll_new_client_onboarding() from public, anon, authenticated;
+  public.enroll_new_client_onboarding(), public.extend_client_onboarding() from public, anon, authenticated;
 
--- Refuse the migration if the new onboarding trigger escaped the service-scope gate.
+-- Refuse the migration if the standard or the new-client gate is malformed.
 do $$
 begin
   if not exists (select 1 from pg_trigger g where g.tgrelid = 'public.clients'::regclass and g.tgname = 'clients_zz_onboarding_checklist'
@@ -396,5 +605,11 @@ begin
   if exists (select 1 from public.onboarding_items i where i.citation_directory_key is not null
       and not exists (select 1 from public.citation_directories d where d.key = i.citation_directory_key and d.is_active)) then
     raise exception 'onboarding item points at a missing directory';
+  end if;
+  -- A dependency is a known item, client-scoped or in the dependent's own scope (no cross-scope credit).
+  if exists (select 1 from public.onboarding_items i cross join unnest(i.depends_on) d(key)
+      left join public.onboarding_items x on x.key = d.key
+      where x.key is null or (x.scope <> 'client' and x.scope <> i.scope)) then
+    raise exception 'onboarding dependency is unknown or crosses scopes';
   end if;
 end $$;
