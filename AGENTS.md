@@ -18,6 +18,21 @@ setup counts; every brand and the parent/shared scope require their own review.
 Scope changes require renewed verification. No publisher, consent, billing,
 portal, or worker activation is part of a rollout review.
 
+## New Client Onboarding v1.0 (October 29, 2026; `20261029170000` written, **not applied**)
+
+See `docs/client-onboarding.md`. One reusable checklist per client / site /
+business location (`client_onboarding_items`, standard in `onboarding_items`),
+shown on the client's Onboarding tab and as one Control Center check. Items
+point at existing records (pipeline task keys, Citation Tracker listings,
+GSC / GA4 imports, Zernio bindings, sites); those are signals, never a
+sign-off. Only a signed-in teammate can mark an item verified; citation items
+are claimed / verified only against a recorded listing / current accurate
+check. Enrollment is idempotent and adds rows only; new full-service clients
+are enrolled on insert, existing clients from the tab. Future templates:
+Metricool → `zernio_connect`, BrightLocal LRT / LSG → `bing_webmaster` /
+`map_grid_profile`; open legacy tasks are relabelled, done ones untouched.
+Apply the migration before deploying the code.
+
 ## Client progress and backlinks (October 12, 2026)
 
 See `docs/client-growth-and-backlinks.md` for the Progress dashboard and backlink
