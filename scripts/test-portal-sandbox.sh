@@ -319,3 +319,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid_market_cen
 # dated evidence, the correction queue, admin-approved manual fulfillment
 # with cash and prepaid credits apart, team-only access (rolled back).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/citations.test.sql"
+# New Client Onboarding v1.0 (20261029170000): legacy BrightLocal / Metricool
+# tasks relabelled only while open (replay hooks), future templates,
+# idempotent enrollment, client / site / location isolation, evidence and
+# sign-off rules, the Citation Tracker gate, team-only access (rolled back).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_onboarding.test.sql"

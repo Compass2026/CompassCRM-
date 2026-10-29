@@ -1468,12 +1468,18 @@ on its own), close `ga4` with the property and id in `notes`. `skipped`
 (`GA4_ACCOUNT_ID` or the token missing) or `failed` → `owner = 'TOM'`,
 detail in `notes`, leave open.
 
-**BrightLocal** (`brightlocal_lrt`, `brightlocal_lsg`) are Tom's and
-billable; give each `notes` with the exact inputs: the location (name,
-city, GBP place id), the tracked list count and a Drive doc
-`Tracked Keywords — <Client>` in `03 Keywords` (one keyword per line,
-with city), the grid (center, size, spacing, the money keywords), and
-"paste the report id on the Keywords tab (LRT) / the grid config (LSG)".
+**Map grid and Bing** (`map_grid_profile`, `bing_webmaster`; since Oct 29
+2026 they replace the BrightLocal templates) are Tom's. Give
+`map_grid_profile` `notes` with the grid inputs (center, size, spacing,
+the money keywords) and "prepare the profile on Map rankings; weekly scans
+stay off until Tom enables them". Give `bing_webmaster` `notes` with the
+site URL and sitemap URL ("import from Search Console or verify by DNS;
+record the evidence on the Onboarding tab — this is not Bing Places").
+Never create a BrightLocal Local Rank Tracker or Local Search Grid report.
+Older clients may still carry open `brightlocal_lrt` / `brightlocal_lsg`
+tasks titled "[Legacy — do not buy]": leave them for Tom. The worker
+never marks an Onboarding checklist item verified (the database refuses
+anyone but a signed-in teammate).
 
 **First sync** (`first_sync`). Run the two read-only syncs for this
 client and see what lands:
@@ -1489,7 +1495,7 @@ done
 Both answer 202 and finish in the background; wait two minutes, then count
 `rank_snapshots` (via the client's keywords) and `gsc_snapshots` for the
 client recorded in the last ten minutes. Rows landed → close `first_sync`
-with the counts. Nothing landed (no BrightLocal reports yet, no GSC
+with the counts. Nothing landed (no rank-sync snapshots yet, no GSC
 property) → leave it open with a note saying which source is missing; it
 closes on a later run once Tom's tasks are done. Stage `complete` either
 way; evidence: location, tracked count, grid summary, GSC state, what the

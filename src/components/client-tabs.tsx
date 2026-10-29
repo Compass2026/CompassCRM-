@@ -11,6 +11,7 @@ const tabs = [
   { label: "Overview", segment: "" },
   { label: "Progress", segment: "growth" },
   { label: "Plan", segment: "plan" },
+  { label: "Onboarding", segment: "onboarding" },
   { label: "Agreements", segment: "agreements" },
   { label: "Brand", segment: "brand" },
   { label: "Documents", segment: "documents" },
