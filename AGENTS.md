@@ -40,6 +40,31 @@ changes no existing task; open legacy tasks are labelled only by the reviewed
 `supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
 before deploying the code.
 
+## Site-program readiness, Gate B / Gate C (October 29, 2026; `20261029200000` written, **not applied**)
+
+See `docs/site-program-readiness.md`. `site_program_readiness(client)` is a
+read-only report, one entry per site program:
+
+- **Gate B (Strategy Ready):** an approved site Core 50, owners per
+  `keyword_owner()`, and places tied to markets.
+- **Gate C (Content Ready):** evidence for safe drafting, never permission
+  to publish.
+- **Properties:** STABLE and security invoker. Teammates only (42501
+  otherwise). Approval is read from `status` / `approved_at`, never from
+  `source_ref`. Unknown figures are null, never 0.
+- **Places in keyword text:** these are read in SQL (`core_places_in` over
+  `place_names`, loaded by the data step `supabase/seeds/place-names-v1.sql`).
+  - A place named only in the text is never green: an unrecorded market is
+    blocked, and a recorded market without `market_id` / `city` is not
+    verified.
+  - With no seed loaded, every keyword is `geography_unassessed`.
+- **Claims and `brand_assets` carry no site:** for a multi-brand client they
+  are reported with scope `client`, and Gate C cannot be ready on them.
+  Missing own-work proof is `limited`, not blocked.
+- **Ownership:** it changes no existing gate. Slot, channel and destination
+  readiness stay with the Authority rollout (`social_slot_readiness`).
+- **Receipt:** `scripts/site-program-readiness.mjs`.
+
 ## Client progress and backlinks (October 12, 2026)
 
 See `docs/client-growth-and-backlinks.md` for the Progress dashboard and backlink

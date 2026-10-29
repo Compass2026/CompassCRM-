@@ -327,3 +327,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/citations.test.sql"
 # idempotent enrollment, client / site / location isolation, evidence and
 # sign-off rules, the Citation Tracker gate, team-only access (rolled back).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_onboarding.test.sql"
+# 20261029200000: site-program readiness (Gate B / Gate C), read-only: the
+# place matcher and its seed, per-site gates, text-only places, client-wide
+# evidence, isolation, access, no writes, BHG-shaped timing, rollback (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/site_program_readiness.test.sql" -o /dev/null
