@@ -950,7 +950,12 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   verified location, shared by every brand of the client), and an active
   keyword with a recorded intent, an approved service and an owner page.
   Anything else is skipped with the first reason, logged in
-  `delivery_queue_log` (team read-only).
+  `delivery_queue_log` (team read-only). The keyword check is judged once
+  per site, over the site's own approved list and the supporting terms
+  naming one of its keywords (`20261029030000`; same answers, proven
+  against the previous definition), and `keyword_owner`'s same-text lookup
+  uses `keywords_client_norm_kw`. At BHG's scale (3 × 50 plus supporting
+  terms) a week's readiness went from about 42 s to well under a second.
 - **Core keyword list** (Tom, Oct 27: every program derives from its
   approved core 50, **per site**). `core_keyword_lists` holds versioned
   lists per site program (`brand_workspace_id`: each brand site of a
