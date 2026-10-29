@@ -44,6 +44,21 @@ test("lint: a held offering is refused in any inflection, in the title, meta, sl
   assert.ok(!hit({}));
 });
 
+test("lint: a held phrase matches within one field or link address, never across them (20261029010000)", () => {
+  const b = brief();
+  const held = { ...b, excluded: { ...b.excluded, offerings: [{ offering: "Standalone roof consulting", phrases: ["roof consultation springfield", "roof consulting service"] }] } };
+  const hit = (over) => codes(lintBlog(held, { ...clone(GOOD_BLOG), ...over }, { gazetteer: GAZETTEER })).includes("held_offering");
+  // Across the slug's end and the next field's start: no match.
+  assert.ok(!hit({ tldr: "Springfield homeowners can bring these notes along.", slug: "what-to-gather-before-a-roof-consultation" }));
+  // A link's address next to a visible word: no match.
+  assert.ok(!hit({ body_markdown: `${GOOD_BLOG.body_markdown}\n\nBring them to a [roof replacement](https://example.test/roof/services/replacement) consultation.` }));
+  // The phrase inside any one field or address: a match.
+  assert.ok(hit({ title: "Roof consultation in Springfield" }));
+  assert.ok(hit({ slug: "roof-consultation-springfield" }));
+  assert.ok(hit({ cta: { text: "Get started", url: "https://example.test/roof-consulting-service" } }));
+  assert.ok(hit({ body_markdown: `${GOOD_BLOG.body_markdown}\n\nAsk about our [roof consulting service](https://example.test/x).` }));
+});
+
 test("brief: refusals — a web page, no intent, an unapproved board, no usable claim", () => {
   const no = (input, row, code) => {
     const r = buildBlogBrief(input, row);

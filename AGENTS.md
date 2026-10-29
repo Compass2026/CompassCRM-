@@ -1061,8 +1061,11 @@ service. The migration separates the two:
     copy may promote a held offering. Only a signed-in teammate releases a
     hold. Phrases match by word stem in any order within a short span
     (`core_hold_hit` / `holdHit`: "solar panel repairs", "we will monitor
-    your solar system"); prose they do not name is the reviewer's to
-    catch. The database checks the copy itself on every forward step —
+    your solar system") inside one field, one link address or one JSON
+    string value — never across fields, and never joining a link's
+    address to the words around it (`20261029010000`, after an approved
+    installation article matched across its topic and keyword fields);
+    prose they do not name is the reviewer's to catch. The database checks the copy itself on every forward step —
     review, approval, scheduling, the publisher's claim, an edit in any of
     those, a blog release and its claim, a page change, a planner slot —
     so content written before a hold stops at its next step: refused with

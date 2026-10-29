@@ -124,19 +124,36 @@ export function holdStem(word: string): string {
 }
 export const holdTokens = (s: string | null | undefined) => normWords(s).split(" ").filter(Boolean).map(holdStem);
 
+// core_hold_segments: a held phrase matches inside one segment only. Fields
+// are joined with HOLD_FIELD_SEP; each link address is its own segment, and
+// prose is read with its addresses taken out, so a link's address never
+// joins the visible words around it.
+export const HOLD_FIELD_SEP = "\u001f";
+const HOLD_URL_RE = /(?:https?:\/\/|www\.)[^\][()<>"'\s]+/gi;
+export function holdSegments(text: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const field of (text ?? "").split(HOLD_FIELD_SEP)) {
+    out.push(field.replace(HOLD_URL_RE, " "));
+    out.push(...(field.match(HOLD_URL_RE) ?? []));
+  }
+  return out.filter((s) => s.trim() !== "");
+}
+
 // core_hold_hit: the first held phrase whose words all occur, in any order,
-// within a span of the phrase's length + 2 words ("we will monitor your
-// solar system" meets "solar system monitoring"). Phrases are the offering's
-// words and its listed paraphrases; anything they do not name is the human
-// reviewer's to catch — this is not a promise that other prose is safe.
+// within a span of the phrase's length + 2 words of one segment ("we will
+// monitor your solar system" meets "solar system monitoring"). Phrases are
+// the offering's words and its listed paraphrases; anything they do not name
+// is the human reviewer's to catch — this is not a promise that other prose
+// is safe.
 export function holdHit(phrases: string[], text: string | null | undefined): string | null {
-  const t = holdTokens(text);
+  const t = holdSegments(text).flatMap((s) => [...holdTokens(s), "|"]);
   for (const p of phrases) {
     const ps = holdTokens(p);
     if (!ps.length) continue;
     for (let i = 0; i < t.length; i++) {
       if (!ps.includes(t[i])) continue;
-      const win = t.slice(i, i + ps.length + 2);
+      let win = t.slice(i, i + ps.length + 2);
+      if (win.includes("|")) win = win.slice(0, win.indexOf("|"));
       if (ps.every((s) => win.includes(s))) return p;
     }
   }

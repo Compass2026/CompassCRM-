@@ -408,4 +408,111 @@ select ko_test.ok('P3 the migration''s definition is back after the down script 
   and not has_function_privilege('authenticated', 'owner_page_check_targets(uuid,uuid)', 'execute')
   and has_function_privilege('service_role', 'owner_page_check_targets(uuid,uuid)', 'execute'));
 
+-- ── 8. Held phrases match within one field or link (20261029010000) ─────────
+-- An installation article shaped like the release's false positive, on
+-- fictional data: its topic ends "design consultation" and the keyword field follows;
+-- its body links the service page just before the word "consultation".
+-- Neither promotes the held offering, and neither may match. A held phrase
+-- inside any one field, link address or schema value still does.
+insert into client_promotion_holds (id, client_id, offering, phrases, source_ref, decided_on)
+values (ko_test.id('h.consult'), ko_test.id('R'), 'Standalone roof consulting; roof monitoring',
+        array['roof consultation oakfield mo', 'roof consulting service', 'proposal you have received', 'roof monitoring'],
+        'Fixture decision', current_date);
+-- The fixture writes the whole article in one insert, TL;DR included (the
+-- TL;DR's own write rules are blog_tldr.test.sql's).
+alter table content_drafts disable trigger content_drafts_tldr_guard;
+create function ko_test.fb_draft(k text, over jsonb default '{}') returns text language sql as $$
+  select ko_test.msg(format($q$insert into content_drafts (id, client_id, deliverable, topic, primary_keyword, keyword_id, search_intent,
+                                 service_id, status, title, meta_title, meta_description, h1, tldr, slug, body_markdown, cta, structured_data, brief)
+                               values (%L, %L, 'blog', %L, %L, %L, 'informational', %L, 'in_review', %L, %L, %L, %L, %L, %L, %L, %L::jsonb, %L::jsonb, %L::jsonb)$q$,
+     ko_test.id(k), ko_test.id('R'),
+     coalesce(over->>'topic', 'Roof replacement in Oakfield: what to gather before a design consultation'),
+     coalesce(over->>'primary_keyword', 'roof replacement oakfield mo'), ko_test.id('kInfoService'), ko_test.id('sRoof'),
+     coalesce(over->>'title', 'What to gather before your roof replacement design consultation'),
+     coalesce(over->>'meta_title', 'Before your roof design consultation'),
+     coalesce(over->>'meta_description', 'A short list of papers to bring along.'),
+     coalesce(over->>'h1', 'What to gather before your design consultation'),
+     coalesce(over->>'tldr', 'Bring your roof''s age, photos and questions.'),
+     coalesce(over->>'slug', 'roof-replacement-oakfield-design-consultation'),
+     coalesce(over->>'body_markdown', 'Bringing these to a [roof replacement](https://ridgeline.example.test/services/roof-replacement) consultation helps the design start from facts.'),
+     coalesce(over->'cta', '{"text": "Get your free quote", "url": "https://ridgeline.example.test/services/roof-replacement"}'),
+     coalesce(over->'structured_data', '{"@type": "Article", "about": {"@type": "Service", "name": "Roof replacement"}}'),
+     jsonb_build_object('target', jsonb_build_object('owner_page', jsonb_build_object('url', 'https://ridgeline.example.test/services/roof-replacement/'))))) $$;
+do $$
+declare a text; b text; c text;
+begin
+  a := ko_test.fb_draft('fb.install');
+  b := ko_test.msg(format($q$update content_drafts set meta_description = 'A short list of papers to bring to the design consultation.' where id = %L$q$,
+                          ko_test.id('fb.install')));
+  select string_agg(x.problem, '; ') into c from promotion_hold_conflicts(ko_test.id('R')) x where x.id = ko_test.id('fb.install');
+  -- The edit is the review guard's to refuse (in review); the hold passes it.
+  if a <> 'accepted' or b like '%held_offering%' or c is not null then
+    raise exception 'FAILED F1: enter review %, edit %, conflict %', a, b, c;
+  end if;
+  raise notice 'ok F1 (a) the installation article enters review, the hold passes its edit, and it is not listed as a conflict';
+end $$;
+set local session_replication_role = replica;
+insert into keywords (id, client_id, keyword, intent, service_id, core_parent_keyword_id, is_active) values
+  (ko_test.id('kConsultHeld'), ko_test.id('R'), 'roof consultation oakfield mo', 'commercial', ko_test.id('sRoof'), null, true),
+  (ko_test.id('kConsultChild'), ko_test.id('R'), 'roof consultation oakfield mo cost', 'commercial', ko_test.id('sRoof'), ko_test.id('kRoof'), true);
+set local session_replication_role = origin;
+do $$
+declare a text := core_promotion_hold(ko_test.id('R'), null, 'roof consultation oakfield mo', null, null);
+        b text := keyword_owner(ko_test.id('R'), null, ko_test.id('kConsultHeld'), 'add')->>'problem_code';
+        c text := keyword_owner(ko_test.id('R'), null, ko_test.id('kConsultChild'), 'add')->>'problem_code';
+        d text := core_keyword_eligibility(ko_test.id('R'), null, ko_test.id('kConsultChild'));
+begin
+  if a not like 'Standalone roof consulting%' or b is distinct from 'promotion_held' or c is distinct from 'promotion_held'
+     or d not like 'promotion_held:%' then
+    raise exception 'FAILED F2: text %, keyword %, supporting %, eligibility %', a, b, c, d;
+  end if;
+  raise notice 'ok F2 (b) the exact held keyword still holds, as a keyword and as a supporting term';
+end $$;
+do $$
+declare f record; r text; bad text := '';
+begin
+  for f in select * from (values
+    ('topic', '{"topic": "Book a roof consultation in Oakfield, MO"}'),
+    ('primary_keyword', '{"primary_keyword": "roof consultation oakfield mo"}'),
+    ('title', '{"title": "Roof consultation in Oakfield, MO"}'),
+    ('meta_title', '{"meta_title": "Our roof consulting service"}'),
+    ('meta_description', '{"meta_description": "Book our roof consulting service today."}'),
+    ('h1', '{"h1": "Roof consulting services"}'),
+    ('tldr', '{"tldr": "We offer roof monitoring."}'),
+    ('slug', '{"slug": "roof-consultation-oakfield-mo"}'),
+    ('body', '{"body_markdown": "Ask about our [roof consulting service](https://ridgeline.example.test/x)."}'),
+    ('body link address', '{"body_markdown": "Read [more](https://ridgeline.example.test/roof-consulting-service)."}'),
+    ('cta text', '{"cta": {"text": "Book roof monitoring", "url": "https://ridgeline.example.test/services/roof-replacement"}}'),
+    ('cta url', '{"cta": {"text": "Learn more", "url": "https://ridgeline.example.test/roof-monitoring"}}'),
+    ('schema value', '{"structured_data": {"@type": "Service", "name": "Roof consulting service"}}')) v(field, over) loop
+    r := ko_test.fb_draft('fb.held.' || f.field, f.over::jsonb);
+    if r not like '23514: held_offering:%' then bad := bad || format(' %s: %s;', f.field, r); end if;
+  end loop;
+  if bad <> '' then raise exception 'FAILED F3 a held phrase in one field was not refused:%', bad; end if;
+  raise notice 'ok F3 (c) a held phrase inside any one field, link address, CTA or schema value is refused';
+end $$;
+set local session_replication_role = replica;
+insert into content_posts (id, client_id, title, status, url) values
+  (ko_test.id('fb.monitoring'), ko_test.id('R'), 'Roof Monitoring: How It Works & Why It Matters', 'draft', null);
+set local session_replication_role = origin;
+select ko_test.ok('F4 (d) the proposal-review closing line and the monitoring article are still flagged',
+  ko_test.fb_draft('fb.proposal', '{"body_markdown": "You are welcome to bring any proposal you have received to Ridgeline for a plain-language conversation about it."}')
+    like '23514: held_offering: "proposal you have received"%'
+  and exists (select 1 from promotion_hold_conflicts(ko_test.id('R')) x where x.id = ko_test.id('fb.monitoring') and x.problem like '%"roof monitoring"%'));
+select ko_test.ok('F5 (e) an ordinary design consultation and comparison advice are allowed',
+  ko_test.fb_draft('fb.ordinary', '{"body_markdown": "Request a roof replacement design consultation for your home in Oakfield, MO. Bring the proposals you have collected and ask each roofer to walk through the differences."}')
+    = 'accepted');
+-- The released matcher, run and undone: the same article matched across fields.
+savepoint before_fb_down;
+\ir ../../rollback/20261029010000_promotion_hold_field_boundaries.down.sql
+select ko_test.ok('F6 under the released matcher the article was a conflict and its edit was refused (what this fixes)',
+  exists (select 1 from promotion_hold_conflicts(ko_test.id('R')) x where x.id = ko_test.id('fb.install'))
+  and ko_test.msg(format($q$update content_drafts set meta_description = 'Papers to bring along.' where id = %L$q$, ko_test.id('fb.install')))
+      like '23514: held_offering:%'
+  and to_regprocedure('core_hold_segments(text)') is null);
+rollback to savepoint before_fb_down;
+select ko_test.ok('F7 the field-aware matcher is back after the down script is undone',
+  to_regprocedure('core_hold_segments(text)') is not null
+  and core_hold_hit(array['roof consultation oakfield mo'], concat_ws(E'\x1f', 'before a design consultation', 'roof replacement oakfield mo')) is null);
+
 rollback;

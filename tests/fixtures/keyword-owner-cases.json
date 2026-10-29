@@ -165,7 +165,7 @@
   ],
   "hold_text_cases": {
     "about": "core_hold_hit / holdHit: the same phrase list, the same answer in SQL and TypeScript. hit is the first phrase, in list order, that matches; null means no phrase matches (not that the prose is safe).",
-    "phrases": ["solar panel repair", "solar repair", "inverter repair", "installed by another company", "other installers", "third party repair", "solar consultation", "solar monitoring", "solar system monitoring", "monitoring plan", "solar maintenance"],
+    "phrases": ["solar panel repair", "solar repair", "inverter repair", "installed by another company", "other installers", "third party repair", "solar consultation", "solar monitoring", "solar system monitoring", "monitoring plan", "solar maintenance", "solar consulting service", "solar consultation oakfield ks"],
     "cases": [
       {"name": "exact phrase", "text": "We offer solar panel repair.", "hit": "solar panel repair"},
       {"name": "plural, with the paraphrase after it", "text": "Book solar panel repairs for systems installed by another company.", "hit": "solar panel repair"},
@@ -185,7 +185,12 @@
       {"name": "installation education: little upkeep", "text": "Solar panels need very little maintenance once installed", "hit": null},
       {"name": "words too far apart", "text": "Solar roofs rarely need any repair", "hit": null},
       {"name": "a longer word is not the phrase", "text": "solar monitoringfoo", "hit": null},
-      {"name": "quote for installation", "text": "Get a free quote for solar panel installation", "hit": null}
+      {"name": "quote for installation", "text": "Get a free quote for solar panel installation", "hit": null},
+      {"name": "fields are matched one at a time (topic, then keyword)", "text": "What to gather before a design consultation\u001fsolar installation oakfield ks", "hit": null},
+      {"name": "a link's address does not join the words around it", "text": "Read about [installation](https://example.test/solar/services/installation) consultation steps.", "hit": null},
+      {"name": "a held phrase in a later field", "text": "A plain title\u001fWe offer solar panel repair.", "hit": "solar panel repair"},
+      {"name": "a held phrase in a link's address", "text": "See [our page](https://example.test/solar-repair) today.", "hit": "solar repair"},
+      {"name": "a held phrase in the visible words around a link", "text": "Ask about our [plans](https://example.test/p) for solar system monitoring.", "hit": "solar monitoring"}
     ]
   }
 }
