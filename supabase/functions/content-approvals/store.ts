@@ -72,10 +72,13 @@ export function createStore(supabase: Client): Store {
 // A copy edit's target (20261029180000): the post's own channel, type,
 // intent, service, keyword, CTA, offer, destination and brand-asset media,
 // plus the campaign mode a drafted post's run recorded. Read-only.
+// social_posts and drafter_runs are joined both ways (social_posts_drafter_run_fk
+// and drafter_runs_post_fk), so the embed names the post's own run; an
+// unqualified drafter_runs(...) is ambiguous to PostgREST (PGRST201).
 export function createPostTargetReader(supabase: Client) {
   return async function postTarget(clientId: string, postId: string): Promise<PostTarget | null> {
     const { data, error } = await supabase.from("social_posts")
-      .select("platform, post_type, search_intent, service_id, keyword_id, offer_id, cta_type, cta_url, social_account_id, drafter_runs(target), post_assets(brand_asset_id, sort_order, role)")
+      .select("platform, post_type, search_intent, service_id, keyword_id, offer_id, cta_type, cta_url, social_account_id, run:drafter_runs!social_posts_drafter_run_fk(target), post_assets(brand_asset_id, sort_order, role)")
       .eq("id", postId).eq("client_id", clientId).maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
@@ -83,7 +86,7 @@ export function createPostTargetReader(supabase: Client) {
       .filter((a) => a.role === "media" && a.brand_asset_id)
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((a) => a.brand_asset_id as string);
-    const mode = (data.drafter_runs as { target?: Json } | null)?.target?.campaignMode;
+    const mode = (data.run as { target?: Json } | null)?.target?.campaignMode;
     return {
       platform: data.platform, post_type: data.post_type, search_intent: data.search_intent,
       service_id: data.service_id, keyword_id: data.keyword_id, offer_id: data.offer_id,

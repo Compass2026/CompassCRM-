@@ -178,6 +178,11 @@ with one more change kind:
 Tests: `tests/content-edit-copy.test.mjs` (request validation, record → check
 → execute, lint refusals on the receipt, replay, no check deployed, and the
 copy check over the real drafter brief and linter);
+`tests/content-edit-copy-integration.mjs` (`npm run test:content-edit-copy`, in CI:
+the deployed handler, stores and copy check through PostgREST on the replayed
+schema; the post-target read on a drafted post (both `social_posts` ↔
+`drafter_runs` foreign keys, so the embed names `social_posts_drafter_run_fk`)
+and on a post with no run and media; refusals, the edit, replay);
 `supabase/tests/sandbox/content_edit_copy.test.sql` (CC1–CC9, including the
 rollback restoring the pre-release definitions byte for byte). Rollback:
 `supabase/rollback/20261029180000_content_edit_copy.down.sql` (stops if a
