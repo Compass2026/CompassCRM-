@@ -22,6 +22,7 @@ revised post in Compass.
 | Migration | Scope |
 | --- | --- |
 | `20261020200000` | Facebook and Business Profile posts in review; one operation, `replace_media`. |
+| `20261029180000` | A second operation on the same door, `replace_copy` (see "Copy edits" below). |
 
 The Edge Function is `content-approvals` (handler v3), with the same
 delegation key as approvals. The Executive OS tools are `content_stage_media`,
@@ -121,13 +122,71 @@ service role still cannot change a drafted post's media.
 
 ## Not covered (deliberately)
 
-- **Copy edits.** The routine edit needed now is media; adding copy is a new
-  operation plus the existing grounding.
+- **Copy edits** were left out in v1; `20261029180000` adds them (below).
 - **Approved, scheduled and published posts.** A published post's image is
   changed by a new post or a provider-side edit, under Tom's separate decision.
 - **Clients with brand workspaces.** A new asset is not assigned to a brand, so
   the resubmission fails grounding (`grounding_failed`) and nothing changes.
   Assign the asset in the workspace first.
+
+## Copy edits (`20261029180000`, content-approvals v4)
+
+The first copy correction (a Facebook post that did not answer its keyword
+question, Oct 29 2026) showed the gap: the media door could not answer it, and the only
+other route was a teammate withdrawing, retyping, relinking and resubmitting
+by hand, recorded as that person's edit. `replace_copy` is the same door
+with one more change kind:
+
+```json
+{ "mode": "revise", "change": { "kind": "replace_copy", "copy": "…", "claim_ids": ["…"] }, … }
+```
+
+1. **Record** the receipt as for media. A copy edit carries no file
+   (`stage_id`, `sha256` are refused) and the receipt has no stage.
+2. **Check the copy here.** content-approvals rebuilds the brief for the
+   post's own target (its channel, type, intent, service, keyword, CTA,
+   offer, destination and current media; a drafted post's campaign mode from
+   its run) from live Client Intelligence and runs the post-drafter's linter
+   on the proposed copy and claims (`copy-check.ts`, the drafter's own
+   `buildBrief` / `lintDraft`). A refusal is recorded on the receipt as
+   `lint_failed` (or `brief_refused`) with the problems; nothing changes.
+3. **Execute** in one transaction: every media-path check (policy, client,
+   channel, service, authority, destination, in review and unscheduled,
+   review hash, no Creative Engine media), then `lint_failed` unless the
+   function says the copy was checked clean **and** that copy is the
+   receipt's, `claims_unusable` unless every claim is a confirmed or sourced
+   claim of this client; then withdraw, set the copy, link exactly the listed
+   claims (unlinking the rest), resubmit through the existing grounding
+   check (the promotion hold and core-keyword gate apply as to anyone).
+
+- The authority must list `replace_copy` in `operations`. A standing policy
+  for `replace_media` does not cover copy.
+- The same post, slot, destination, keyword, service, CTA and media; only
+  the copy and claim links change. The receipt's result keeps the previous
+  and new copy hashes, the brief hash, lint warnings and the unlinked claims.
+- Gates: `social_posts_drafter_guard` admits the executing copy receipt
+  changing its own post's copy to exactly its copy (no other content field);
+  `post_links_drafter_guard` admits linking its listed claims and unlinking
+  others on its post. Without the receipt the service role still cannot
+  touch a drafted post's copy or claims, and a media receipt admits neither.
+- History and attribution are the media path's: `actor_kind = 'assistant'`
+  with the receipt, `updated_by` the authorizing admin.
+- **Executive OS** needs its side before anyone can use it: `content_revise`
+  accepting `change.kind = "replace_copy"` with `copy` and `claim_ids`, and
+  `replace_copy` as an editorial-policy operation. Until then nothing calls it.
+
+Tests: `tests/content-edit-copy.test.mjs` (request validation, record → check
+→ execute, lint refusals on the receipt, replay, no check deployed, and the
+copy check over the real drafter brief and linter);
+`tests/content-edit-copy-integration.mjs` (`npm run test:content-edit-copy`, in CI:
+the deployed handler, stores and copy check through PostgREST on the replayed
+schema; the post-target read on a drafted post (both `social_posts` ↔
+`drafter_runs` foreign keys, so the embed names `social_posts_drafter_run_fk`)
+and on a post with no run and media; refusals, the edit, replay);
+`supabase/tests/sandbox/content_edit_copy.test.sql` (CC1–CC9, including the
+rollback restoring the pre-release definitions byte for byte). Rollback:
+`supabase/rollback/20261029180000_content_edit_copy.down.sql` (stops if a
+copy-edit receipt exists; receipts are records); then content-approvals v3.
 
 ## Tests
 

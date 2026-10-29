@@ -65,6 +65,8 @@ jobs:
           sudo install /tmp/postgrest /usr/local/bin/postgrest
       - name: Review a fictional blog through the real browser and database
         run: npm run test:blog-drafter-ui
+      - name: Delegated copy edit through PostgREST on the replayed schema
+        run: npm run test:content-edit-copy
 
   citations-ui:
     runs-on: ubuntu-latest
