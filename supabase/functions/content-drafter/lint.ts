@@ -9,7 +9,7 @@
 // places the client has not approved. Then the article's own rules:
 // structure, length, links only to the client's approved pages, the
 // standing CTA, the keyword limit.
-import { holdHit } from "../authority/keyword-owner.ts";
+import { HOLD_FIELD_SEP, holdHit } from "../authority/keyword-owner.ts";
 import { citationUrl } from "./links.ts";
 import { COMMON_WORD_PLACES, PLACE_AFTER, PLACE_BEFORE } from "../post-drafter/lint.ts";
 import { DETECTORS, MATERIAL_RE, NUMBER_RE, PHONE_RE, digits, escapeRe, mask, ngrams, normalizeUrl, spansOf, words } from "../post-drafter/rules.ts";
@@ -80,8 +80,10 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
   }
   if ((draft.h1 ?? "").length > R.h1_max) add("h1_too_long", `Keep the H1 to ${R.h1_max} characters.`);
   if (/^#\s/m.test(body)) add("h1_in_body", "The H1 is its own field; the body starts at H2 (##).");
-  // Held offerings (20261028170000): never advertised while held, anywhere in the article.
-  const allText = [draft.title, draft.meta_title, draft.meta_description, draft.h1, draft.tldr, draft.slug, body, draft.cta?.text, draft.cta?.url].join(" ");
+  // Held offerings (20261028170000): never advertised while held, anywhere in
+  // the article. Each field is matched on its own (20261029010000).
+  const allText = [draft.title, draft.meta_title, draft.meta_description, draft.h1, draft.tldr, draft.slug, body, draft.cta?.text, draft.cta?.url]
+    .join(HOLD_FIELD_SEP);
   for (const h of brief.excluded.offerings ?? []) {
     const hit = holdHit(h.phrases, allText);
     if (hit) add("held_offering", `"${hit}" promotes ${h.offering}, which is held from promotion.`, hit);
