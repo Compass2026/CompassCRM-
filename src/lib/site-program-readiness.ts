@@ -25,7 +25,7 @@ export type ProgramReport = {
   } | null;
   geography: (Counts & { assessed: boolean }) | null;
   markets: { recorded: number; approved: number };
-  holds: { active: number; open_conflicts_client: number | null };
+  holds: { active: number; open_conflicts_client: number | null; open_conflicts_by_kind: Counts | null };
   brand: { approved: boolean; source: string };
   services_approved: number;
   claims: { scope: string; usable: number; confirmed: number; unverified: number; site_usable: number | null; newest_confirmed: string | null };
@@ -44,7 +44,12 @@ export type ReadinessReport = {
   client: string;
   as_of: string;
   multi_brand: boolean;
-  geography: { assessed: boolean; sources: { source: string; sha256: string; names: number; loaded_at: string }[] };
+  geography: {
+    assessed: boolean;
+    reference: { version: string; ok: boolean; problem: string | null; names: number; sources: number;
+                 expected: { source_sha256: string; names: number; digest: string } };
+    sources: { source: string; sha256: string; names: number; loaded_at: string }[];
+  };
   programs: ProgramReport[];
 };
 
@@ -71,7 +76,7 @@ export const REASON_TEXT: Record<string, string> = {
   place_without_market: "Keywords name a place that is not an approved market of this site.",
   place_text_only: "Keywords name an approved market only in their text; record keywords.market_id.",
   place_mismatch: "Keywords name a different place from their recorded city or market.",
-  geography_unassessed: "No place reference is loaded, so places named in keyword text are unchecked.",
+  geography_unassessed: "The place reference is not place-names-v1 exactly (missing, partial, altered or extended), so places named in keyword text are unchecked.",
   strategy_not_ready: "Gate B is not ready.",
   brand_not_approved: "The brand for this site is not approved.",
   services_missing: "The site has no approved service.",
@@ -86,15 +91,15 @@ export const REASON_TEXT: Record<string, string> = {
   blog_supply_low: "Fewer than eight keywords can anchor a new blog post.",
   claims_no_review_date: "Claims record no expiry or review date yet (W1).",
   claims_unconfirmed: "No claim is client-confirmed.",
-  hold_conflicts_open: "Existing content matches a held offering.",
-  hold_conflicts_unreadable: "Open hold conflicts could not be read by this caller.",
+  hold_conflicts_open: "Existing content promotes a held offering; each item is refused at its next step.",
+  hold_conflicts_unverified: "Existing content could not be checked for held offerings by this caller.",
   authority_never_run: "The Authority Engine has never run for this client.",
   authority_predates_list: "The latest Authority run predates this list's approval.",
 };
 
 // Codes whose database detail adds a fact (a version, a page, an intent);
 // for the rest the sentence above already says it.
-const SHOW_DETAIL = new Set(["list_not_approved", "intent_absent", "owner_concentration", "geography_unassessed"]);
+const SHOW_DETAIL = new Set(["list_not_approved", "intent_absent", "owner_concentration", "geography_unassessed", "hold_conflicts_open"]);
 const detailOf = (r: { code: string; detail?: string }) => (r.detail && SHOW_DETAIL.has(r.code) ? ` ${r.detail}` : "");
 
 export function reasonText(code: string): string {
@@ -143,8 +148,10 @@ export function programLines(p: ProgramReport): string[] {
 export function renderReadiness(r: ReadinessReport): string {
   const head = [
     `Site-program readiness — ${r.client} (${r.client_id})`,
-    `As of ${r.as_of}; ${r.version}; place reference ${r.geography.assessed ? r.geography.sources.map((s) => `${s.source} ${s.sha256.slice(0, 12)}`).join(", ") : NOT_VERIFIED}`,
-    "Gate C is evidence for safe drafting, never permission to publish.",
+    `As of ${r.as_of}; ${r.version}; place reference ${r.geography.assessed
+      ? `${r.geography.reference.version} (${r.geography.reference.names} places)`
+      : `${NOT_VERIFIED} (${r.geography.reference.problem ?? "unknown"})`}`,
+    "Gate B is whole-site strategy completeness and Gate C drafting evidence; each draft's own keyword and content gates still decide it, and neither is permission to publish.",
   ];
   return [...head, ...r.programs.flatMap((p) => ["", ...programLines(p)])].join("\n");
 }

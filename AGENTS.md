@@ -57,10 +57,22 @@ read-only report, one entry per site program:
   - A place named only in the text is never green: an unrecorded market is
     blocked, and a recorded market without `market_id` / `city` is not
     verified.
-  - With no seed loaded, every keyword is `geography_unassessed`.
+  - Unless the reference is place-names-v1 exactly (count and row digest
+    pinned in `place_reference_status()`), every keyword is
+    `geography_unassessed`. The seed is all or nothing.
 - **Claims and `brand_assets` carry no site:** for a multi-brand client they
   are reported with scope `client`, and Gate C cannot be ready on them.
   Missing own-work proof is `limited`, not blocked.
+- **Held offerings in existing content:** counted by
+  `promotion_hold_conflict_counts()`, a team-readable twin of
+  `promotion_hold_conflicts()`.
+  - It inlines the two helpers kept from `authenticated`; their grants are
+    unchanged.
+  - The sandbox proves the counts equal, and pins the three definitions'
+    md5s.
+  - Known conflicts make Gate C limited; unreadable ones make it not verified.
+- **Not per-draft gates:** Gate B scores whole-site strategy completeness.
+  Each draft is still decided by its own keyword and content gates.
 - **Ownership:** it changes no existing gate. Slot, channel and destination
   readiness stay with the Authority rollout (`social_slot_readiness`).
 - **Receipt:** `scripts/site-program-readiness.mjs`.

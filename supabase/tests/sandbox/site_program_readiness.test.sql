@@ -18,7 +18,12 @@
 --   N  no website, list, board, claims or assets     → blocked, nulls not 0
 --   M  three brand sites: M1 ready list, M2 a keyword on M1's host, M3 a
 --      49-keyword proposal; claims and photos are client-wide
+--   Q  as A, with a held offering promoted by one existing post, draft,
+--      article and planned slot                      → C limited
 --   B3 BHG-shaped scale: 3 × 50 core + 300 supporting terms (timing)
+-- The place reference is tested empty, partial, complete, re-applied,
+-- altered, extended and from another source; the seed must refuse to keep
+-- anything it cannot verify.
 begin;
 create schema spr;
 grant usage on schema spr to anon, authenticated, service_role;
@@ -149,6 +154,20 @@ select spr.id('M'), 'Zqx group claim ' || i, 'confirmed', 'fixture', 'Owner', no
 insert into brand_assets (client_id, kind, label, storage_path, content_hash, content_hashed_at, width, height, subjects, focal_x, focal_y, depicts_own_work, creative_use, creative_reviewed_at)
 select spr.id('M'), 'photo', 'Zqx group photo ' || i, 'spr/M/' || i || '.jpg', md5('M' || i) || md5(i || 'M'), now(), 1200, 800, array['roof'], 0.5, 0.5, true, 'approved', now()
 from generate_series(1, 8) i;
+select spr.single('Q', 'MO');
+insert into client_promotion_holds (client_id, offering, phrases, source_ref, decided_on)
+values (spr.id('Q'), 'Gutter guards', array['gutter guard'], 'test fixture: the owner''s words', current_date);
+insert into social_posts (id, client_id, platform, search_intent, copy, review_status)
+values (spr.id('Q:post'), spr.id('Q'), 'facebook', 'commercial', 'Ask about our gutter guard install this fall.', 'in_review');
+insert into content_drafts (id, client_id, deliverable, topic, title, body_markdown, status)
+values (spr.id('Q:draft'), spr.id('Q'), 'blog', 'Fall maintenance', 'Fall roof maintenance', 'Clean gutters, then add a gutter guard.', 'in_review');
+insert into content_posts (id, client_id, title, status)
+values (spr.id('Q:article'), spr.id('Q'), 'Why a gutter guard pays off', 'draft');
+insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic)
+values (spr.id('Q:slot'), spr.id('Q'), date '2026-11-02', 'blog', 'service', 'Gutter guard options');
+-- A rejected post and a slot already linked to a post never count.
+insert into social_posts (client_id, platform, search_intent, copy, review_status, reviewed_by, reviewed_at, review_note)
+values (spr.id('Q'), 'facebook', 'commercial', 'Our gutter guard offer.', 'rejected', spr.id('team'), now(), 'held offering');
 insert into authority_runs (client_id, mode, requested_via, status, engine_version, finished_at, report, input_hash, judged_at)
 values (spr.id('A'), 'full', 'team', 'completed', 'authority-v1.4', now() - interval '1 day', '{}', 'sha256:' || repeat('a', 64), now() - interval '1 day'),
        (spr.id('M'), 'full', 'team', 'completed', 'authority-v1.4', now() - interval '30 minutes', '{}', 'sha256:' || repeat('a', 64), now() - interval '30 minutes');
@@ -165,20 +184,66 @@ create function spr.reason(g jsonb, code text) returns jsonb language sql immuta
 create function spr.warn(p jsonb, code text) returns boolean language sql immutable as $$
   select exists (select 1 from jsonb_array_elements(p->'warnings') e where e->>'code' = code) $$;
 
--- ── Without a place reference: nothing is green ──────────────────────────────
-select spr.ok('U1 no place reference: geography unassessed, Gate B not verified, every keyword counted',
-  (spr.r('A')->'geography'->>'assessed')::boolean = false
+-- ── The place reference: only place-names-v1, complete, counts ─────────────
+create function spr.ref() returns jsonb language sql stable as $$ select place_reference_status() $$;
+create function spr.unassessed(code text, problem text) returns boolean language sql stable as $$
+  select (r->'geography'->>'assessed')::boolean = false
+     and r->'geography'->'reference'->>'problem' = problem
+     and (select bool_and(e->'gate_b'->>'status' <> 'ready' and e->'gate_c'->>'status' <> 'ready'
+                          and (e->'geography'->>'unassessed')::int = (e->'list'->>'size')::int
+                          and (e->'geography'->>'without_market')::int = 0)
+            from jsonb_array_elements(r->'programs') e)
+  from (select spr.r(code) r) x $$;
+select spr.ok('U1 empty reference: missing, every keyword unassessed, nothing green',
+  spr.ref()->>'problem' = 'missing' and not (spr.ref()->>'ok')::boolean
+  and spr.unassessed('A', 'missing')
   and spr.p('A')->'gate_b'->>'status' = 'not_verified'
   and spr.codes(spr.p('A')->'gate_b') = array['geography_unassessed']
   and (spr.reason(spr.p('A')->'gate_b', 'geography_unassessed')->>'count')::int = 50
+  and spr.reason(spr.p('A')->'gate_b', 'geography_unassessed')->>'detail' like '%(missing;%'
   and spr.p('A')->'gate_c'->>'status' = 'not_verified');
+-- A partial load: the right source row and one real row of it.
+insert into place_name_sources (source, source_sha256, names)
+values ('src/data/us-cities.json', 'baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4', 21316);
+insert into place_names (norm, state, name, population) values ('troy', 'IL', 'Troy', 10036);
+select spr.ok('U2 partial reference: partial, unassessed even where it would match ("troy il")',
+  spr.ref()->>'problem' = 'partial' and (spr.ref()->>'names')::int = 1
+  and spr.unassessed('A', 'partial') and spr.unassessed('G', 'partial'));
 
 -- ── Load the place reference (the data step, as the owner) ───────────────────
 \ir ../../seeds/place-names-v1.sql
-select spr.ok('U2 the seed loads once and is idempotent',
-  (select count(*) from place_name_sources) = 1 and (select count(*) from place_names) > 20000);
+select spr.ok('U3 the seed completes a partial load and verifies',
+  (spr.ref()->>'ok')::boolean and spr.ref()->'problem' = 'null'::jsonb
+  and (select count(*) from place_name_sources) = 1 and (select count(*) from place_names) = 21316
+  and (spr.r('A')->'geography'->>'assessed')::boolean);
 \ir ../../seeds/place-names-v1.sql
-select spr.ok('U3 a second load is a no-op', (select count(*) from place_name_sources) = 1);
+select spr.ok('U4 a repeated load is a no-op', (spr.ref()->>'ok')::boolean
+  and (select count(*) from place_name_sources) = 1 and (select count(*) from place_names) = 21316);
+-- Altered, extended, another source: never assessed.
+update place_names set population = population + 1 where norm = 'troy' and state = 'IL';
+select spr.ok('U5 one altered row: rows_mismatch, unassessed', spr.ref()->>'problem' = 'rows_mismatch' and spr.unassessed('A', 'rows_mismatch'));
+-- pglite:skip-begin (PGlite cannot recover from an error inside a script; tests/site-program-readiness-database.test.mjs repeats this outside it)
+-- The seed over an altered and incomplete reference: it would re-insert the
+-- 100 missing rows, fails to verify, and keeps nothing.
+delete from place_names where norm in (select norm from place_names where state = 'TX' order by norm limit 100) and state = 'TX';
+\set ON_ERROR_STOP 0
+savepoint spr_seed_refusal;
+\ir ../../seeds/place-names-v1.sql
+rollback to savepoint spr_seed_refusal;
+\set ON_ERROR_STOP 1
+select spr.ok('U6 the seed refuses an altered reference and keeps nothing',
+  (select count(*) from place_names) = 21216 and spr.ref()->>'problem' = 'partial');
+-- pglite:skip-end
+update place_names set population = population - 1 where norm = 'troy' and state = 'IL';
+\ir ../../seeds/place-names-v1.sql
+select spr.ok('U7 restored and completed, the reference verifies again', (spr.ref()->>'ok')::boolean);
+insert into place_names (norm, state, name, population) values ('zqxville', 'MO', 'Zqxville', 1);
+select spr.ok('U8 an extra row: extra_rows, unassessed', spr.ref()->>'problem' = 'extra_rows' and spr.unassessed('A', 'extra_rows'));
+delete from place_names where norm = 'zqxville';
+insert into place_name_sources (source, source_sha256, names) values ('another list', repeat('0', 64), 21316);
+select spr.ok('U9 a second source: source_mismatch, unassessed', spr.ref()->>'problem' = 'source_mismatch' and spr.unassessed('A', 'source_mismatch'));
+delete from place_name_sources where source = 'another list';
+select spr.ok('U10 back to place-names-v1 exactly', (spr.ref()->>'ok')::boolean and (spr.r('A')->'geography'->>'assessed')::boolean);
 
 -- ── The place matcher ───────────────────────────────────────────────────────
 select spr.ok('P1 a state-named small town is a place',
@@ -298,6 +363,25 @@ select spr.ok('E1 post / blog / refresh verdicts equal keyword_owner(…, purpos
      cross join unnest(array['post', 'blog', 'refresh']) pp
     where c.name like 'SPR Sample %'));
 
+-- ── Held offerings in existing content ──────────────────────────────────────
+select spr.ok('H1 the team-readable counts equal promotion_hold_conflicts() for every kind',
+  (select jsonb_object_agg(kind, n) from (select kind, count(*)::int n from promotion_hold_conflicts(spr.id('Q')) group by kind) x)
+    = spr.p('Q')->'holds'->'open_conflicts_by_kind'
+  and promotion_hold_conflict_counts(spr.id('Q'))
+    = '{"total": 4, "by_kind": {"social_post": 1, "content_draft": 1, "content_post": 1, "content_plan_item": 1}}'::jsonb
+  and (select bool_and(coalesce((select count(*) from promotion_hold_conflicts(c.id)), 0)
+                       = (promotion_hold_conflict_counts(c.id)->>'total')::int)
+         from clients c where c.name like 'SPR Sample %'));
+select spr.ok('H2 known conflicts: Gate B ready, Gate C limited with the count by kind',
+  spr.p('Q')->'gate_b'->>'status' = 'ready' and spr.p('Q')->'gate_c'->>'status' = 'limited'
+  and spr.codes(spr.p('Q')->'gate_c') = array['hold_conflicts_open']
+  and (spr.reason(spr.p('Q')->'gate_c', 'hold_conflicts_open')->>'count')::int = 4
+  and (spr.p('Q')->'holds'->>'open_conflicts_client')::int = 4);
+select spr.ok('H3 the three canonical definitions are the ones the twin mirrors (any change fails here until reviewed)',
+  md5(pg_get_functiondef('public.promotion_hold_conflicts(uuid)'::regprocedure)) = '9e2a9ac16d8a01f4d94aa5a92f2cf2f4'
+  and md5(pg_get_functiondef('public.content_draft_program(content_drafts)'::regprocedure)) = 'ed1fbd205e241e063a63d6da25d34d79'
+  and md5(pg_get_functiondef('public.content_draft_hold_text(content_drafts)'::regprocedure)) = 'cac7e98eb46807f12b98b4d0db65dd67');
+
 -- ── Access ──────────────────────────────────────────────────────────────────
 select spr.ok('X1 anon cannot run it or read places; the team cannot write places',
   not has_function_privilege('anon', 'public.site_program_readiness(uuid)', 'execute')
@@ -310,16 +394,25 @@ select spr.ok('X2 a signed-in non-team user is refused (42501)', spr.err('select
 select spr.as_owner();
 create temp table spr_owner as select spr.r('A') r;
 grant select on spr_owner to authenticated;
+create temp table spr_owner_q as select spr.r('Q') r;
+grant select on spr_owner_q to authenticated;
 select spr.as_user('5b700000-0000-4000-a000-000000000001');
--- Same figures and gates; the one difference is promotion_hold_conflicts(),
--- which a teammate cannot run: unknown (null + a warning), never 0.
-select spr.ok('X3 a teammate gets the owner''s gates and figures; unreadable hold conflicts are null, not 0',
-  (select (e - 'holds' - 'warnings') = (o - 'holds' - 'warnings')
+select spr.ok('X3 a teammate gets exactly the owner''s report, hold conflicts included; the original function is closed to them',
+  site_program_readiness(spr.id('A'))->'programs' = (select r->'programs' from spr_owner)
+  and site_program_readiness(spr.id('Q'))->'programs' = (select r->'programs' from spr_owner_q)
+  and spr.err('select count(*) from promotion_hold_conflicts(spr.id(''Q''))') = '42501');
+-- Unreadable evidence on an otherwise ready site: never ready.
+reset role;
+revoke execute on function promotion_hold_conflict_counts(uuid) from authenticated;
+select spr.as_user('5b700000-0000-4000-a000-000000000001');
+select spr.ok('X5 unreadable hold-conflict evidence: Gate B ready, Gate C not verified, the figure null',
+  (select e->'gate_b'->>'status' = 'ready' and e->'gate_c'->>'status' = 'not_verified'
+          and (select coalesce(array_agg(r->>'code' order by r->>'code'), '{}') from jsonb_array_elements(e->'gate_c'->'reasons') r)
+              = array['hold_conflicts_unverified']
           and e->'holds'->'open_conflicts_client' = 'null'::jsonb
-          and (o->'holds'->>'open_conflicts_client')::int = 0
-          and spr.warn(e, 'hold_conflicts_unreadable')
-     from jsonb_array_elements(site_program_readiness(spr.id('A'))->'programs') e,
-          jsonb_array_elements((select r->'programs' from spr_owner)) o));
+     from jsonb_array_elements(site_program_readiness(spr.id('A'))->'programs') e));
+reset role;
+grant execute on function promotion_hold_conflict_counts(uuid) to authenticated;
 select spr.as_owner();
 select spr.ok('X4 stable and security invoker; no policy reads all rows to everyone',
   (select provolatile = 's' and not prosecdef from pg_proc where oid = 'public.site_program_readiness(uuid)'::regprocedure)

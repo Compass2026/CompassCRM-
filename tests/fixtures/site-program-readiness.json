@@ -1,6 +1,6 @@
 {
  "G": {
-  "as_of": "2026-10-29T13:39:28.457791-05:00",
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
   "client": "SPR Sample G (fictional)",
   "version": "site-program-readiness/v1",
   "programs": [
@@ -11,7 +11,7 @@
      "status": "approved",
      "version": 1,
      "approved": true,
-     "approved_at": "2026-10-27T13:39:28.457791-05:00"
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
     },
     "name": "SPR Sample G (fictional)",
     "brand": {
@@ -20,7 +20,8 @@
     },
     "holds": {
      "active": 0,
-     "open_conflicts_client": 0
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
     },
     "proof": {
      "scope": "client",
@@ -187,15 +188,28 @@
      "names": 21316,
      "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
      "source": "src/data/us-cities.json",
-     "loaded_at": "2026-10-29T13:39:28.457791-05:00"
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
     }
    ],
-   "assessed": true
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
   },
   "multi_brand": false
  },
  "M": {
-  "as_of": "2026-10-29T13:39:28.457791-05:00",
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
   "client": "SPR Sample M Group (fictional)",
   "version": "site-program-readiness/v1",
   "programs": [
@@ -206,7 +220,7 @@
      "status": "approved",
      "version": 1,
      "approved": true,
-     "approved_at": "2026-10-27T13:39:28.457791-05:00"
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
     },
     "name": "SPR M1",
     "brand": {
@@ -215,7 +229,8 @@
     },
     "holds": {
      "active": 0,
-     "open_conflicts_client": 0
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
     },
     "proof": {
      "scope": "client",
@@ -301,7 +316,7 @@
      "scope": "client",
      "status": "completed",
      "age_days": 0,
-     "last_run_at": "2026-10-29T13:09:28.457791-05:00",
+     "last_run_at": "2026-10-29T13:59:56.15432-05:00",
      "engine_version": "authority-v1.4",
      "predates_list_approval": false
     },
@@ -340,7 +355,7 @@
      "status": "approved",
      "version": 1,
      "approved": true,
-     "approved_at": "2026-10-27T13:39:28.457791-05:00"
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
     },
     "name": "SPR M2",
     "brand": {
@@ -349,7 +364,8 @@
     },
     "holds": {
      "active": 0,
-     "open_conflicts_client": 0
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
     },
     "proof": {
      "scope": "client",
@@ -461,7 +477,7 @@
      "scope": "client",
      "status": "completed",
      "age_days": 0,
-     "last_run_at": "2026-10-29T13:09:28.457791-05:00",
+     "last_run_at": "2026-10-29T13:59:56.15432-05:00",
      "engine_version": "authority-v1.4",
      "predates_list_approval": false
     },
@@ -500,7 +516,7 @@
      "status": "approved",
      "version": 2,
      "approved": true,
-     "approved_at": "2026-10-29T13:39:28.457791-05:00"
+     "approved_at": "2026-10-29T14:29:56.15432-05:00"
     },
     "name": "SPR M3",
     "brand": {
@@ -509,7 +525,8 @@
     },
     "holds": {
      "active": 0,
-     "open_conflicts_client": 0
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
     },
     "proof": {
      "scope": "client",
@@ -598,7 +615,7 @@
      "scope": "client",
      "status": "completed",
      "age_days": 0,
-     "last_run_at": "2026-10-29T13:09:28.457791-05:00",
+     "last_run_at": "2026-10-29T13:59:56.15432-05:00",
      "engine_version": "authority-v1.4",
      "predates_list_approval": true
     },
@@ -638,15 +655,28 @@
      "names": 21316,
      "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
      "source": "src/data/us-cities.json",
-     "loaded_at": "2026-10-29T13:39:28.457791-05:00"
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
     }
    ],
-   "assessed": true
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
   },
   "multi_brand": true
  },
  "N": {
-  "as_of": "2026-10-29T13:39:28.457791-05:00",
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
   "client": "SPR Sample N (fictional)",
   "version": "site-program-readiness/v1",
   "programs": [
@@ -659,7 +689,8 @@
     },
     "holds": {
      "active": 0,
-     "open_conflicts_client": 0
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
     },
     "proof": {
      "scope": "client",
@@ -762,10 +793,195 @@
      "names": 21316,
      "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
      "source": "src/data/us-cities.json",
-     "loaded_at": "2026-10-29T13:39:28.457791-05:00"
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
     }
    ],
-   "assessed": true
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
+  },
+  "multi_brand": false
+ },
+ "Q": {
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
+  "client": "SPR Sample Q (fictional)",
+  "version": "site-program-readiness/v1",
+  "programs": [
+   {
+    "list": {
+     "id": "1c9b99a1-7468-495d-6c09-caa56efd59c3",
+     "size": 50,
+     "status": "approved",
+     "version": 1,
+     "approved": true,
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
+    },
+    "name": "SPR Sample Q (fictional)",
+    "brand": {
+     "source": "brand_board",
+     "approved": true
+    },
+    "holds": {
+     "active": 1,
+     "open_conflicts_client": 4,
+     "open_conflicts_by_kind": {
+      "social_post": 1,
+      "content_post": 1,
+      "content_draft": 1,
+      "content_plan_item": 1
+     }
+    },
+    "proof": {
+     "scope": "client",
+     "photos": 6,
+     "unreviewed": 0,
+     "newest_review": "2026-10-29",
+     "creative_approved": 6,
+     "own_work_approved": 6,
+     "site_own_work_approved": 6
+    },
+    "roles": {
+     "service": 50
+    },
+    "claims": {
+     "scope": "client",
+     "usable": 3,
+     "sourced": 0,
+     "confirmed": 3,
+     "unverified": 0,
+     "site_usable": 3,
+     "review_dates": null,
+     "newest_recorded": "2026-10-29",
+     "oldest_recorded": "2026-10-29",
+     "newest_confirmed": "2026-10-26",
+     "sourced_without_source": 0
+    },
+    "gate_b": {
+     "status": "ready",
+     "reasons": []
+    },
+    "gate_c": {
+     "status": "limited",
+     "reasons": [
+      {
+       "code": "hold_conflicts_open",
+       "count": 4,
+       "detail": "content_draft 1, content_plan_item 1, content_post 1, social_post 1",
+       "severity": "limited"
+      }
+     ]
+    },
+    "owners": {
+     "blog": {
+      "ok": 25,
+      "problems": {
+       "owner_role_not_allowed": 25
+      }
+     },
+     "post": {
+      "ok": 50,
+      "problems": {}
+     },
+     "refresh": {
+      "ok": 50,
+      "problems": {}
+     }
+    },
+    "intents": {
+     "none": 0,
+     "commercial": 13,
+     "navigational": 12,
+     "informational": 12,
+     "transactional": 13
+    },
+    "markets": {
+     "approved": 0,
+     "recorded": 0
+    },
+    "site_id": null,
+    "problems": [],
+    "site_url": "https://q.spr.example.test",
+    "warnings": [
+     {
+      "code": "claims_no_review_date",
+      "detail": "Claims record no expiry or review date yet (W1 / P0.3)."
+     },
+     {
+      "code": "authority_never_run"
+     }
+    ],
+    "authority": {
+     "scope": "client",
+     "status": null,
+     "age_days": null,
+     "last_run_at": null,
+     "engine_version": null,
+     "predates_list_approval": null
+    },
+    "geography": {
+     "none": 50,
+     "assessed": true,
+     "mismatch": 0,
+     "text_only": 0,
+     "structured": 0,
+     "unassessed": 0,
+     "without_market": 0
+    },
+    "onboarding": {
+     "site_level": {},
+     "client_level": {}
+    },
+    "program_id": null,
+    "owner_pages": {
+     "live": 5,
+     "urls": 5,
+     "stale": 0,
+     "top_url": "https://q.spr.example.test/services/zqx-1",
+     "not_live": [],
+     "top_share": 0.2,
+     "unchecked": 0,
+     "oldest_check": "2026-10-28",
+     "top_keywords": 10
+    },
+    "newer_proposal": null,
+    "services_approved": 5
+   }
+  ],
+  "client_id": "f871a41e-869c-189c-a6ad-ebcd32a27dfd",
+  "geography": {
+   "sources": [
+    {
+     "names": 21316,
+     "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
+     "source": "src/data/us-cities.json",
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
+    }
+   ],
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
   },
   "multi_brand": false
  }

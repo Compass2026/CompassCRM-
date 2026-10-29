@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { renderReadiness, programLines, fig, reasonText, REASON_TEXT, NOT_VERIFIED, STATUS_LABEL } from "../src/lib/site-program-readiness.ts";
-import { buildSeed, normPlace, SOURCE, SEED } from "../scripts/build-place-names-seed.mjs";
+import { buildSeed, normPlace, SOURCE, SEED, VERSION } from "../scripts/build-place-names-seed.mjs";
 import { normPlace as enginePlace } from "../supabase/functions/authority/urls.ts";
 
 const fixture = JSON.parse(fs.readFileSync("tests/fixtures/site-program-readiness.json", "utf8"));
@@ -16,8 +16,19 @@ test("the place seed is exactly what the generator writes from the bundled city 
   const { sql, count, sha } = buildSeed(fs.readFileSync(SOURCE, "utf8"));
   assert.equal(fs.readFileSync(SEED, "utf8"), sql, "regenerate with scripts/build-place-names-seed.mjs");
   assert.ok(count > 20000);
-  assert.match(sql, new RegExp(`source_sha256 = '${sha}'`));
+  assert.ok(sql.includes(`'${SOURCE}', '${sha}', ${count})`));
   assert.doesNotMatch(sql, /\('(arcadia|liberty|independence|union)', /, "common-word places are left out");
+});
+
+test("the migration pins exactly the reference the generator writes, and the seed is all or nothing", () => {
+  const { sql, count, sha, digest } = buildSeed(fs.readFileSync(SOURCE, "utf8"));
+  const pinned = MIGRATION.match(/values \('([a-z0-9-]+)'::text, '([0-9a-f]{64})'::text,\s+(\d+), '([0-9a-f]{32})'::text\)/);
+  assert.ok(pinned, "place_reference_status() constants not found");
+  assert.deepEqual(pinned.slice(1), [VERSION, sha, String(count), digest]);
+  // One block: insert what is missing, then verify or raise (nothing kept).
+  assert.equal(sql.match(/^do \$\$/gm).length, 1);
+  assert.match(sql, /s := place_reference_status\(\);\n  if not \(s->>'ok'\)::boolean then\n    raise exception/);
+  assert.doesNotMatch(sql, /return;|already loaded/, "no early exit that skips verification");
 });
 
 test("the seed's normalizer is the Authority engine's normPlace", () => {
@@ -31,6 +42,14 @@ test("every reason and warning code the migration emits has wording", () => {
   assert.ok(codes.size >= 25);
   for (const c of codes) assert.ok(REASON_TEXT[c], `no wording for ${c}`);
   assert.match(reasonText("owner:keyword_wrong_page"), /keyword wrong page/);
+});
+
+test("hold-conflict wording: known conflicts are a caveat, unreadable ones are not verified", () => {
+  const q = fixture.Q.programs[0];
+  assert.equal(q.gate_c.status, "limited");
+  assert.deepEqual(q.holds.open_conflicts_by_kind, { social_post: 1, content_draft: 1, content_post: 1, content_plan_item: 1 });
+  assert.match(programLines(q).join("\n"), /\[C LIMITED\] Existing content promotes a held offering.*\(4\) content_draft 1, content_plan_item 1, content_post 1, social_post 1/);
+  assert.match(reasonText("hold_conflicts_unverified"), /could not be checked/);
 });
 
 test("an unknown figure is NOT VERIFIED, never 0", () => {
@@ -66,6 +85,7 @@ test("a gate is labelled READY only when the database says ready", () => {
   assert.match(g, /"zqx interior designer edwardsville il": place text_only \[Edwardsville, IL \(market\)\]/);
 });
 
-test("every report says Gate C is not permission to publish", () => {
-  assert.match(renderReadiness(fixture.M), /never permission to publish/);
+test("every report says the gates are not per-draft permission or publish permission", () => {
+  assert.match(renderReadiness(fixture.M), /neither is permission to publish/);
+  assert.match(renderReadiness(fixture.M), /each draft's own keyword and content gates still decide it/);
 });

@@ -36,11 +36,22 @@ records already say, in one place.
   - There are usable claims (confirmed, or sourced with a source).
   - There is reviewed own-work proof.
 
+  - Hold-conflict evidence that can be read: existing content promoting a
+    held offering makes it **limited** (`hold_conflicts_open`); evidence that
+    cannot be read makes it **not verified** (`hold_conflicts_unverified`).
+
   Missing proof makes Gate C **limited**, not blocked. Content that needs no
   project proof can still be drafted with accurately labelled assets, and every
   draft's own claim and asset gates still apply. **Gate C is never permission
   to publish.** Approval, destination and receipts stay with the existing
   gates.
+
+**What the gates are not.** Gate B scores the completeness of a whole site's
+strategy. It is not a per-draft gate, and a Gate B that is not ready is no
+reason to abandon an otherwise valid individual brief: each draft is still
+decided by its own keyword gates (`keyword_owner`, eligibility, grounding)
+and content gates (review, claims, assets, holds). Gate C is a drafting
+evidence signal, never publishing authority.
 
 The "Proposed, not approved" text in `source_ref` is ignored. Approval is
 read only from `status` / `approved_at`. When no list is approved, the newest
@@ -80,10 +91,27 @@ Each keyword is then judged:
 | `text_only` | the text names an approved market of the site; the keyword has no `market_id` / `city` | **not_verified** (`place_text_only`) |
 | `without_market` | the text names a place that is not an approved market, including a held or excluded one | **blocked** (`place_without_market`) |
 | `mismatch` | the text names a place other than the structured city / market | **not_verified** (`place_mismatch`) |
-| `unassessed` | no place reference is loaded | **not_verified** (`geography_unassessed`) |
+| `unassessed` | the place reference is not place-names-v1 exactly (see below) | **not_verified** (`geography_unassessed`) |
 
-The check fails closed. Until the seed is loaded, every keyword is
-`unassessed` and no program can be green.
+The check fails closed. `place_reference_status()` accepts only
+**place-names-v1 exactly**: the migration pins its version, source sha256
+(`baa021df…`), row count (21,316) and the md5 of its rows
+(`f45e381b…`, "norm|state|name|population" lines in byte order). It
+recomputes the count and digest on every report. Anything else is not ok, and
+every keyword is then `unassessed`, with the problem named in the report:
+
+- `missing`: nothing is loaded.
+- `partial`: fewer rows than the reference.
+- `extra_rows`: rows beyond it.
+- `rows_mismatch`: same count, altered rows.
+- `source_mismatch`: no source row, or another one.
+
+The seed is all or nothing. One block inserts whatever is missing, then
+requires `place_reference_status()` to be ok, or raises so that nothing is
+kept. Re-running it is a no-op, and it completes a partial load. It refuses an
+altered or extended reference, and that reference stays exactly as it was.
+`tests/site-program-readiness.test.mjs` holds the migration's constants to the
+generator's output.
 
 Checked against the 673 live list keywords on Oct 29 2026 (scratch, read-only;
 no client data is committed). Expected results once the migration and seed
@@ -121,10 +149,24 @@ refuses to pretend.
   `owner_concentration` warning, an audit note, not a call for more pages).
 - `owners.blog`: the supply for new articles (`blog_supply_low` when below 8).
 - `markets`, `holds.active`.
-- `holds.open_conflicts_client` from `promotion_hold_conflicts()`. A signed-in
-  teammate cannot run that function today (it calls `content_draft_program`
-  without a grant), so for them the figure is `null` with
-  `hold_conflicts_unreadable`, never 0.
+- `holds.open_conflicts_client` / `open_conflicts_by_kind` come from
+  `promotion_hold_conflict_counts()`, a team-readable twin of
+  `promotion_hold_conflicts()`. The original cannot be run by a signed-in
+  teammate: it calls `content_draft_program()` and
+  `content_draft_hold_text()`, which `20261029013051` deliberately keeps
+  from `authenticated`.
+  - Rather than widening those grants, the twin inlines the two bodies
+    verbatim. It runs under the caller's RLS and returns counts only.
+  - The sandbox proves the counts equal for every kind (posts, drafts,
+    articles, planned slots).
+  - The suite pins the md5 of the three canonical definitions; they match
+    production on Oct 29 2026. A later change to any of them fails CI until
+    the twin is reviewed.
+  - If the twin is ever unreadable, the figure is `null` and Gate C is not
+    verified. The migration's verify block also refuses to apply if either
+    helper has become executable by `authenticated`.
+  - The counts are client-wide, since posts and drafts carry no reliable
+    site.
 - `authority`: the last run, its age, and whether it predates the list's
   approval. Authority is client-wide and not core-aware (P1.3).
 - `onboarding`: counts by status for the client-level and site-level rows.
@@ -158,8 +200,14 @@ as NOT VERIFIED.
   - purpose verdicts equal to direct `keyword_owner()` calls;
   - anon, non-team and team access;
   - zero rows changed;
-  - BHG-shaped timing (3 × 50 core plus 300 supporting terms: about 1.4 s
+  - BHG-shaped timing (3 × 50 core plus 300 supporting terms: about 1.5 s
     locally, limit 10 s);
+  - the reference empty, partial, completed by the seed, re-applied, altered,
+    extended and from another source, and the seed refusing an altered
+    reference with nothing kept;
+  - hold-conflict counts equal to the original for every kind, known
+    conflicts → limited, an unreadable twin → not verified on an otherwise
+    ready site, and the definition tripwire;
   - the down script and a re-apply.
 - **`tests/site-program-readiness.test.mjs`**:
   - The seed matches its generator byte for byte.
@@ -167,12 +215,29 @@ as NOT VERIFIED.
   - Every emitted code has wording.
   - The rendering never shows an unknown as 0 or an unready gate as READY.
 
+## Data corrections are separate (not in this PR)
+
+The checks against live keywords show what will read not green. Fixing that
+is a data step, each with Tom's own decision:
+
+- **Lucas.** Do not assume St. Louis is a market. Show Tom the eligibility
+  evidence, separating a served metro from a branch. Then either record the
+  exact market or submit a revised keyword for list approval. The 14
+  Wentzville keywords each need their exact market link, never a blanket
+  update.
+- **Logic.** The 3 text-only keywords are reconciled to the approved site
+  markets one by one before any change. The Overland Park GBP hold and the
+  Austin exclusion do not change.
+- **Ginger and BHG.** List research stays with the Authority rollout
+  (`3ab519f3`). Nothing here approves a list or creates a location page.
+
 ## Release (only with Tom's words)
 
 1. Apply the migration through the Supabase MCP. Rename the file to the
    applied version and record its md5.
-2. Run `supabase/seeds/place-names-v1.sql` once as the owner. It is a no-op if
-   already loaded.
+2. Run `supabase/seeds/place-names-v1.sql` once as the owner, then confirm
+   `select place_reference_status()->>'ok'` is `true`. A refusal leaves
+   nothing behind.
 3. Read-only: run `select site_program_readiness(id)` for Lucas, Logic, Ginger
    and BHG, and compare with the P0.2 audit (`b4a63aa2`, result `4587c2ae`).
 

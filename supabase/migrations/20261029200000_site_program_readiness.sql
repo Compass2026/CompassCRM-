@@ -27,8 +27,14 @@
 --   * A place named only in the keyword text ("interior designer troy il")
 --     is found here, in SQL, against place_names. Unrecorded place →
 --     blocked; recorded market but no keywords.market_id / city →
---     not_verified; no place reference loaded → every keyword without
---     structured geography is not_verified (geography_unassessed).
+--     not_verified. The place reference must be exactly place-names-v1
+--     (source sha256, row count and row digest, place_reference_status());
+--     a missing, partial, extended or altered reference → every keyword is
+--     not_verified (geography_unassessed).
+--   * Existing content promoting a held offering is counted by
+--     promotion_hold_conflict_counts(), a team-readable twin of
+--     promotion_hold_conflicts(). Known conflicts → Gate C limited;
+--     unreadable → Gate C not_verified (hold_conflicts_unverified).
 --   * Claims and brand_assets carry no site. For a multi-brand client they
 --     are reported with scope 'client' and the site-level figures are null
 --     (claims_client_scope → not_verified, proof_client_scope → limited).
@@ -95,6 +101,41 @@ create policy "team full access" on place_names for all to authenticated
 revoke all on place_name_sources, place_names from public, anon, authenticated;
 grant select on place_name_sources, place_names to authenticated, service_role;
 
+-- The one reference site_program_readiness trusts: place-names-v1 exactly as
+-- scripts/build-place-names-seed.mjs writes it (tests/site-program-readiness
+-- .test.mjs holds these constants to the generator). ok only when the single
+-- source row is that source and place_names holds exactly its rows: the
+-- count and the md5 of "norm|state|name|population" lines in byte order.
+-- problem: missing | source_mismatch | partial | extra_rows | rows_mismatch.
+-- The seed requires ok before it commits anything.
+create function place_reference_status() returns jsonb
+language sql stable security invoker set search_path = public, pg_temp as $$
+  with e(version, sha256, names, digest) as (
+    values ('place-names-v1'::text, 'baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4'::text,
+            21316, 'f45e381b2e2dd9a7f01ab1e3159425c0'::text)),
+  s as (select count(x.id)::int n, coalesce(bool_and(x.source_sha256 = e.sha256 and x.names = e.names), false) as expected
+          from e left join place_name_sources x on true group by e.sha256, e.names),
+  p as (select count(*)::int n,
+               md5(coalesce(string_agg(norm || '|' || state || '|' || name || '|' || population, E'\n'
+                                       order by norm collate "C", state collate "C"), '')) as digest
+          from place_names)
+  select jsonb_build_object(
+           'version', e.version,
+           'expected', jsonb_build_object('source_sha256', e.sha256, 'names', e.names, 'digest', e.digest),
+           'sources', s.n, 'names', p.n, 'digest', p.digest,
+           'ok', s.n = 1 and s.expected and p.n = e.names and p.digest = e.digest,
+           'problem', case
+             when s.n = 0 and p.n = 0 then 'missing'
+             when s.n <> 1 or not s.expected then 'source_mismatch'
+             when p.n < e.names then 'partial'
+             when p.n > e.names then 'extra_rows'
+             when p.digest <> e.digest then 'rows_mismatch'
+           end)
+    from e, s, p
+$$;
+revoke all on function place_reference_status() from public, anon;
+grant execute on function place_reference_status() to authenticated, service_role;
+
 -- Places a text names, longest span first; a span inside a longer one is
 -- dropped ("lake saint louis", not also "saint louis"). A gazetteer word
 -- counts as a place only when the text says so or it is plausible for the
@@ -136,7 +177,55 @@ $$;
 revoke all on function core_places_in(text, text[], text[]) from public, anon;
 grant execute on function core_places_in(text, text[], text[]) to authenticated, service_role;
 
--- ── 2. The report ───────────────────────────────────────────────────────────
+-- ── 2. Held offerings in existing content, team-readable ─────────────────────
+-- promotion_hold_conflicts() (20261029013051) counted by kind. A signed-in
+-- teammate cannot run the original: it calls content_draft_program() and
+-- content_draft_hold_text(), which 20261029013051 deliberately keeps from
+-- authenticated. Their bodies are inlined here verbatim instead of widening
+-- those grants; everything else is the same expression over the same rows,
+-- under the caller's RLS. The sandbox suite proves the counts equal for
+-- every kind and pins the md5 of the three canonical definitions, so a later
+-- change to any of them fails CI until this twin is reviewed. Counts only:
+-- no copy, title or id leaves the function.
+create function promotion_hold_conflict_counts(p_client_id uuid) returns jsonb
+language sql stable security invoker set search_path = public, pg_temp as $$
+  with x(kind, problem) as (
+    select 'social_post'::text,
+           core_copy_hold(p.client_id, coalesce(core_site_of_service(p.client_id, p.service_id),
+                          case when p.keyword_id is not null then core_site_of_keyword(p.client_id, p.keyword_id) end),
+                          concat_ws(E'\x1f', p.copy, (select k.keyword from keywords k where k.id = p.keyword_id)),
+                          p.service_id, nullif(btrim(coalesce(p.cta_url, '')), ''))
+    from social_posts p where p.client_id = p_client_id and p.review_status <> 'rejected'
+    union all
+    select 'content_draft',
+           core_copy_hold(d.client_id,
+                          -- content_draft_program(d)
+                          coalesce((select i.brand_workspace_id from content_plan_items i where i.id = d.plan_item_id),
+                                   core_site_of_service(d.client_id, d.service_id),
+                                   case when d.keyword_id is not null then core_site_of_keyword(d.client_id, d.keyword_id) end),
+                          -- content_draft_hold_text(d)
+                          concat_ws(E'\x1f', d.topic, d.primary_keyword, d.title, d.meta_title, d.meta_description, d.h1, d.tldr, d.slug,
+                                    d.body_markdown, core_hold_json_text(d.cta), core_hold_json_text(d.structured_data),
+                                    (select k.keyword from keywords k where k.id = d.keyword_id)),
+                          d.service_id, nullif(btrim(coalesce(d.target_url, '')), ''))
+    from content_drafts d where d.client_id = p_client_id and d.status <> 'rejected'
+    union all
+    select 'content_post',
+           core_copy_hold(c.client_id, null, concat_ws(E'\x1f', c.title, c.url), null, nullif(btrim(coalesce(c.url, '')), ''))
+    from content_posts c where c.client_id = p_client_id
+    union all
+    select 'content_plan_item',
+           core_copy_hold(i.client_id, i.brand_workspace_id,
+                          concat_ws(E'\x1f', i.topic, (select k.keyword from keywords k where k.id = i.keyword_id)),
+                          i.service_id, nullif(btrim(coalesce(i.target_url, '')), ''))
+    from content_plan_items i where i.client_id = p_client_id and i.content_post_id is null and i.social_post_id is null),
+  y as (select kind, count(*)::int n from x where problem is not null group by kind)
+  select jsonb_build_object('total', coalesce(sum(n), 0)::int, 'by_kind', coalesce(jsonb_object_agg(kind, n), '{}'::jsonb)) from y
+$$;
+revoke all on function promotion_hold_conflict_counts(uuid) from public, anon;
+grant execute on function promotion_hold_conflict_counts(uuid) to authenticated, service_role;
+
+-- ── 3. The report ───────────────────────────────────────────────────────────
 -- site_program_readiness(client) → {client_id, client, as_of, version,
 --   multi_brand, geography, programs: [...]}. One keyword_owner() call per
 --   list keyword; the post / blog / refresh verdicts are its purpose tail
@@ -151,6 +240,7 @@ declare
   la core_keyword_lists;
   v_multi boolean;
   v_geo boolean;
+  v_geo_status jsonb;
   v_programs jsonb := '[]'::jsonb;
   v_exclude text[];
   v_states text[];
@@ -160,6 +250,7 @@ declare
   v_own_work int;
   v_run record;
   v_conflicts int;
+  v_conflicts_by jsonb;
   v_kw jsonb;
   v_pages jsonb;
   v_b jsonb;
@@ -178,7 +269,8 @@ begin
     raise exception 'No client %.', p_client_id using errcode = 'P0002';
   end if;
   v_multi := exists (select 1 from client_brand_workspaces w where w.client_id = c.id);
-  v_geo := exists (select 1 from place_name_sources) and exists (select 1 from place_names);
+  v_geo_status := place_reference_status();
+  v_geo := coalesce((v_geo_status->>'ok')::boolean, false);
 
   -- Client-wide evidence, read once. Claims and assets carry no site.
   select jsonb_build_object(
@@ -206,12 +298,14 @@ begin
   select r.status, r.engine_version, coalesce(r.finished_at, r.created_at) as at into v_run
     from authority_runs r where r.client_id = c.id and r.status in ('completed', 'degraded')
    order by coalesce(r.finished_at, r.created_at) desc limit 1;
-  -- promotion_hold_conflicts() needs helpers a signed-in teammate cannot
-  -- execute (content_draft_program); then the count is unknown, never 0.
+  -- Unreadable (a grant changed under it) → unknown, never 0, and Gate C
+  -- cannot be ready.
   begin
-    select count(*) into v_conflicts from promotion_hold_conflicts(c.id);
+    v_conflicts_by := promotion_hold_conflict_counts(c.id);
+    v_conflicts := (v_conflicts_by->>'total')::int;
   exception when insufficient_privilege then
     v_conflicts := null;
+    v_conflicts_by := null;
   end;
 
   for prog in
@@ -390,7 +484,8 @@ begin
       if (v_kw->'geography'->>'unassessed')::int > 0 then
         v_b := v_b || jsonb_build_object('code', 'geography_unassessed', 'severity', 'not_verified',
                                           'count', (v_kw->'geography'->>'unassessed')::int,
-                                          'detail', 'No place reference is loaded (supabase/seeds/place-names-v1.sql).');
+                                          'detail', 'The place reference is not place-names-v1 as generated ('
+                                                    || coalesce(v_geo_status->>'problem', 'unknown') || '; supabase/seeds/place-names-v1.sql).');
       end if;
       v_warn := v_warn || coalesce((
         select jsonb_agg(jsonb_build_object('code', 'intent_absent', 'detail', i) order by i)
@@ -445,11 +540,16 @@ begin
         v_warn := v_warn || jsonb_build_object('code', 'claims_unconfirmed');
       end if;
     end if;
+    -- Existing content promoting a held offering (client-wide: posts and
+    -- drafts carry no reliable site). Known → limited: each item is refused
+    -- at its next step and new drafts are checked anyway. Unknown → not
+    -- verified.
     if v_conflicts is null then
-      v_warn := v_warn || jsonb_build_object('code', 'hold_conflicts_unreadable',
-                 'detail', 'promotion_hold_conflicts() is not available to this caller; open conflicts are not verified.');
+      v_c := v_c || jsonb_build_object('code', 'hold_conflicts_unverified', 'severity', 'not_verified',
+               'detail', 'promotion_hold_conflict_counts() is not readable by this caller.');
     elsif v_conflicts > 0 then
-      v_warn := v_warn || jsonb_build_object('code', 'hold_conflicts_open', 'count', v_conflicts);
+      v_c := v_c || jsonb_build_object('code', 'hold_conflicts_open', 'severity', 'limited', 'count', v_conflicts,
+               'detail', (select string_agg(k.key || ' ' || k.value, ', ' order by k.key) from jsonb_each_text(v_conflicts_by->'by_kind') k));
     end if;
     if v_run.at is null then
       v_warn := v_warn || jsonb_build_object('code', 'authority_never_run');
@@ -486,7 +586,8 @@ begin
       'holds', jsonb_build_object(
          'active', (select count(*) from client_promotion_holds h where h.client_id = c.id and h.status = 'held'
                      and (h.brand_workspace_id is null or h.brand_workspace_id is not distinct from prog.id)),
-         'open_conflicts_client', v_conflicts),
+         'open_conflicts_client', v_conflicts,
+         'open_conflicts_by_kind', v_conflicts_by->'by_kind'),
       'brand', jsonb_build_object('approved', v_brand_ok, 'source', case when v_multi then 'brand_site' else 'brand_board' end),
       'services_approved', v_services,
       'claims', v_claims || jsonb_build_object('scope', 'client',
@@ -517,7 +618,7 @@ begin
     'client', c.name,
     'as_of', now(),
     'multi_brand', v_multi,
-    'geography', jsonb_build_object('assessed', v_geo,
+    'geography', jsonb_build_object('assessed', v_geo, 'reference', v_geo_status,
        'sources', (select coalesce(jsonb_agg(jsonb_build_object('source', s.source, 'sha256', s.source_sha256,
                                     'names', s.names, 'loaded_at', s.loaded_at) order by s.loaded_at), '[]')
                      from place_name_sources s)),
@@ -526,14 +627,27 @@ end $$;
 revoke all on function site_program_readiness(uuid) from public, anon;
 grant execute on function site_program_readiness(uuid) to authenticated, service_role;
 
--- ── 3. Verify ───────────────────────────────────────────────────────────────
+-- ── 4. Verify ───────────────────────────────────────────────────────────────
 do $$
 begin
   if (select provolatile from pg_proc where oid = 'public.site_program_readiness(uuid)'::regprocedure) <> 's'
      or (select prosecdef from pg_proc where oid = 'public.site_program_readiness(uuid)'::regprocedure) then
     raise exception 'site_program_readiness must be stable and security invoker';
   end if;
+  if (select bool_or(provolatile <> 's' or prosecdef) from pg_proc
+       where oid in ('public.place_reference_status()'::regprocedure, 'public.promotion_hold_conflict_counts(uuid)'::regprocedure)) then
+    raise exception 'place_reference_status / promotion_hold_conflict_counts must be stable and security invoker';
+  end if;
+  if (place_reference_status()->>'ok')::boolean and not exists (select 1 from place_name_sources) then
+    raise exception 'place_reference_status: ok with nothing loaded';
+  end if;
+  if has_function_privilege('authenticated', 'content_draft_program(content_drafts)', 'execute')
+     or has_function_privilege('authenticated', 'content_draft_hold_text(content_drafts)', 'execute') then
+    raise exception 'the content draft hold helpers must stay revoked from authenticated';
+  end if;
   if has_function_privilege('anon', 'public.site_program_readiness(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.promotion_hold_conflict_counts(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.place_reference_status()', 'execute')
      or has_table_privilege('anon', 'public.place_names', 'select')
      or has_table_privilege('authenticated', 'public.place_names', 'insert, update, delete')
      or has_table_privilege('authenticated', 'public.place_name_sources', 'insert, update, delete') then

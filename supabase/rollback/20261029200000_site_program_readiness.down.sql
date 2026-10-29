@@ -3,7 +3,9 @@
 -- reference rows go with their tables (reload with
 -- supabase/seeds/place-names-v1.sql after re-applying).
 drop function if exists site_program_readiness(uuid);
+drop function if exists promotion_hold_conflict_counts(uuid);
 drop function if exists core_places_in(text, text[], text[]);
+drop function if exists place_reference_status();
 drop table if exists place_names;
 drop table if exists place_name_sources;
 drop function if exists core_us_states();
