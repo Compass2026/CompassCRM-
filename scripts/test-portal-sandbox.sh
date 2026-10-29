@@ -303,6 +303,9 @@ psql_as supabase_admin -d sandbox -v owner_cases="$(cat "$ROOT/tests/fixtures/ke
 # ...and its rollback (containment, down script, release), run and undone.
 # Some ERROR lines are expected there: the refusals it tests.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/keyword_owner_resolver_rollback.test.sql"
+# 20261029030000: keyword_owner's index and slot readiness judged per site;
+# the rows are compared with the previous definition (run and undone).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/readiness_scale.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
 
 # Map-tracking-only clients skip every onboarding trigger; full clients keep them.
