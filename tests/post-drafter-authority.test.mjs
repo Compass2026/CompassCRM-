@@ -44,6 +44,7 @@ function fakeStore(s = state()) {
     secret: async (n) => (n === "SYNC_CRON_SECRET" ? "cron-secret" : null),
     teamMemberForJwt: async () => null,
     input: async (id) => (id === CLIENT ? lucas() : null),
+    socialAccounts: async () => [],
     authority: async (c, o, now) => { calls.authority++; assert.equal(now.getTime(), NOW.getTime()); return typeof s === "function" ? s() : s; },
     attempts: async (_c, hash) => calls.runs.filter((r) => r.brief_hash === hash).length + calls.writes.filter((w) => w.brief_hash === hash).length,
     recordRun: async (r) => { calls.runs.push(r); },

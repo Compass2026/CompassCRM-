@@ -12,7 +12,7 @@ import gazetteer from "../supabase/functions/post-drafter/gazetteer.json" with {
 const snap = JSON.parse(readFileSync(new URL("./fixtures/drafter-authority-lucas.json", import.meta.url), "utf8"));
 const refuse = () => { throw new Error("writes are refused"); };
 const drafter = createPostDrafter({
-  store: { secret: async () => "s", teamMemberForJwt: async () => null, input: async () => snap.input, authority: async () => snap.authority, attempts: refuse, recordRun: refuse, write: refuse },
+  store: { secret: async () => "s", teamMemberForJwt: async () => null, input: async () => snap.input, socialAccounts: async () => [], authority: async () => snap.authority, attempts: refuse, recordRun: refuse, write: refuse },
   gazetteer, now: () => new Date(snap.captured_at),
 });
 const call = async (body) => {

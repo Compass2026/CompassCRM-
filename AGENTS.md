@@ -1790,6 +1790,13 @@ Design, gates, endpoints and Lucas state: `docs/zernio-publisher.md`.
   per concept (copy, image). It never approves, schedules or publishes.
   `source-assets` `upload_slot` / `register` file generated graphics into
   private storage as unreviewed `social_post` assets marked non-evidentiary.
+- **Business Profile drafts name their location** (`20261027190935`): a
+  brief reads the client's verified Zernio locations, takes the one
+  `socialAccountId` names (never a Page, an unverified or another client's
+  row), the only one when none is named, and with several refuses until the
+  draft names one. Until the Oct 29 2026 fix `post-drafter` loaded accounts
+  for Facebook briefs only, so a named location was always refused as
+  `social_account_unknown`; the weekly slot pilot drafted with it omitted.
 
 ## Business Profile through Zernio (Oct 11 2026; migration `20261011050000` not yet applied)
 

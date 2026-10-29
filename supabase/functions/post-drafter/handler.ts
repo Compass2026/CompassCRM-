@@ -143,10 +143,12 @@ export function createPostDrafter(deps: Deps) {
       throw e;
     }
     if (!input?.client) return { ok: false, status: 404, body: { error: "client_not_found" } };
-    // A Facebook brief also reads the client's Facebook Pages (v3).
-    const result = target.channel === "facebook"
-      ? buildBrief(input, target, { socialAccounts: workspaceAccounts(input, await store.socialAccounts(clientId)) })
-      : buildBrief(input, target);
+    // Every brief reads the client's destinations: a Facebook brief its Pages
+    // (v3), a Business Profile brief its verified locations, so a draft may
+    // name its own (20261027190935). Without them a named location was always
+    // refused as unknown, and a client with several locations was never asked
+    // to choose until drafter_write refused the draft.
+    const result = buildBrief(input, target, { socialAccounts: workspaceAccounts(input, await store.socialAccounts(clientId)) });
     if (!result.ok) return { ok: false, status: 422, body: { eligible: false, refusals: result.refusals } };
     return { ok: true, brief: result.brief, hash: await briefHash(result.brief), state: input.client.state ?? null };
   }
