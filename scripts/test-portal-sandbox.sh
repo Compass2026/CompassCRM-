@@ -331,3 +331,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_onboarding.t
 # place matcher and its seed, per-site gates, text-only places, client-wide
 # evidence, isolation, access, no writes, BHG-shaped timing, rollback (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/site_program_readiness.test.sql" -o /dev/null
+# 20261030180000: the weekly delivery standard (5 Facebook / 5 GBP / 3 blogs
+# per website per Chicago week): adoption from a future Monday, partial first
+# week, five-week months, month-boundary and DST weeks, two locations per
+# site, three brand sites on one location (one GBP post per location per day,
+# over-capacity flagged in readiness), v1 reconciliation without double
+# credit, monthly clients unchanged, the rollback (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_delivery_standard.test.sql" -o /dev/null
