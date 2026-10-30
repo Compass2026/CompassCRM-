@@ -11,6 +11,8 @@
 --      (Overland Park-like) that must not credit the first
 --   G  a 50-keyword proposal only (Ginger shaped)
 --   N  no list at all
+--   P  page checks: a real 404, an http soft_404 a newer rendered check
+--      settles as live, an unreadable page and a page never checked
 --   M  three brand sites with proposals of 49 / 46 / 28 (BHG shaped); M1
 --      approved later in the suite. A phrase both sites want is one row
 --      (M2's); M1's list names M2's keyword and a keyword whose page is on
@@ -101,6 +103,18 @@ update owner_page_checks set checked_at = now() - interval '46 days'
 select acs.single('G', 'IL', 63);
 select acs.list('G', 1, 'proposed', acs.kws('G', 1, 50));
 select acs.single('N', 'MO', 12);
+select acs.single('P', 'MO', 10);
+select acs.list('P', 1, 'approved', acs.kws('P', 1, 10));
+update owner_page_checks set verdict = 'missing', http_status = 404
+ where client_id = acs.id('P') and url_norm = core_norm_url(acs.host('P') || '/services/zqx-1');
+update owner_page_checks set verdict = 'soft_404', checked_at = now() - interval '1 day'
+ where client_id = acs.id('P') and url_norm = core_norm_url(acs.host('P') || '/services/zqx-2');
+insert into owner_page_checks (client_id, requested_url, url_norm, final_url, http_status, verdict, method, source_ref, checked_at)
+values (acs.id('P'), acs.host('P') || '/services/zqx-2', core_norm_url(acs.host('P') || '/services/zqx-2'), acs.host('P') || '/services/zqx-2',
+        200, 'live', 'rendered', 'test fixture', now() - interval '2 days');
+update owner_page_checks set verdict = 'unreadable'
+ where client_id = acs.id('P') and url_norm = core_norm_url(acs.host('P') || '/services/zqx-3');
+delete from owner_page_checks where client_id = acs.id('P') and url_norm = core_norm_url(acs.host('P') || '/services/zqx-4');
 
 -- M: three brand sites, five services each, 60 keywords each.
 insert into clients (id, name, status, website_url, state) values (acs.id('M'), 'ACS Sample M Group (fictional)', 'active', acs.host('M'), 'MO');
@@ -183,6 +197,20 @@ select acs.ok('S6 A: a place with no market, a market only in text, an excluded 
   and acs.k('A', 'A:k6')->>'geography' = 'text_only'
   and acs.k('A', 'A:k9')->>'geography' = 'without_market'
   and acs.k('A', 'A:k10')->>'geography' = 'none');
+
+select acs.ok('S7 the owner page''s latest check rides along, read as keyword_owner() reads it',
+  -- k5: service 1, a real 404
+  acs.k('P', 'P:k5')->'owner'->>'problem_code' = 'target_page_missing' and acs.k('P', 'P:k5')->'owner'->'check'->>'verdict' = 'missing'
+  -- k1: service 2, http soft_404 settled by the rendered check
+  and acs.k('P', 'P:k1')->'owner'->>'problem_code' is null and acs.k('P', 'P:k1')->'owner'->'check'->>'verdict' = 'live'
+  and acs.k('P', 'P:k1')->'owner'->'check'->>'method' = 'rendered'
+  -- k2: service 3, unreadable: the resolver says target_page_missing, the check says why
+  and acs.k('P', 'P:k2')->'owner'->>'problem_code' = 'target_page_missing' and acs.k('P', 'P:k2')->'owner'->'check'->>'verdict' = 'unreadable'
+  -- k3: service 4, never checked
+  and acs.k('P', 'P:k3')->'owner'->>'problem_code' = 'page_not_verified' and acs.k('P', 'P:k3')->'owner'->'check' = 'null'::jsonb
+  -- A: service 2 checked 46 days ago: live, stale
+  and acs.k('A', 'A:k1')->'owner'->'check'->>'verdict' = 'live'
+  and (acs.k('A', 'A:k1')->'owner'->'check'->>'checked_at')::timestamptz < now() - interval '45 days');
 
 -- ── Proposal only, nothing at all ──────────────────────────────────────────
 select acs.ok('G1 proposed only: no list, the proposal shown, nothing in scope (never all 63)',

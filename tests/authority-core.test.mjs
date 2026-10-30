@@ -189,8 +189,9 @@ test("holds, owner pages, markets and places named in text refuse with the resol
   assert.equal(c.core.verdict, null);
 });
 
+const MISSING = { verdict: "missing", method: "http", checked_at: "2026-10-28T12:00:00Z" };
 test("a page that does not exist yet: only its own absence is tolerated for a new service page", () => {
-  const ok = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, { purposes: { "kw-storm": { post: "target_page_missing" } } }); }));
+  const ok = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, { purposes: { "kw-storm": { post: "target_page_missing" } }, checks: { "kw-storm": MISSING } }); }));
   assert.equal(gate(byKey(ok, `service_page:${STORM}`), "core_keyword").pass, true);
   const held = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, { purposes: { "kw-storm": { post: "promotion_held" } } }); }));
   const h = byKey(held, `service_page:${STORM}`);
@@ -250,4 +251,106 @@ test("campaigns: a cluster holds only grounded keywords; the rest are excluded w
   const c = r.campaigns.find((x) => x.service_id === ROOF);
   assert.ok(!c.cluster.some((k) => k.id === "kw-info"));
   assert.deepEqual(c.excluded.find((e) => e.keyword === "how long does a roof last"), { keyword: "how long does a roof last", reason: "keyword_not_core" });
+});
+
+// ── Review fixes (ChatGPT, PR #206 at aaa14c4) ────────────────────────────────
+
+// Every Roof Replacement keyword a Business Profile post could target.
+const ROOF_POST_KWS = [KW, "kw-info", "kw-trans"];
+const allRoof = (opts) => Object.fromEntries(ROOF_POST_KWS.map((id) => [id, opts]));
+const gbp = (r, service = ROOF) => r.campaigns.find((c) => c.service_id === service).channels.find((c) => c.channel === "google_business");
+
+test("campaigns: an approved list whose every GBP keyword is held, stale or text-only never shows review_plan", () => {
+  const cases = [
+    [{ purposes: allRoof({ post: "promotion_held" }) }, "promotion_held"],
+    [{ purposes: allRoof({ post: "page_not_verified" }) }, "page_not_verified"],
+    [{ geography: allRoof("text_only") }, "place_text_only"],
+    [{ purposes: allRoof({ post: "market_unverified" }) }, "market_unverified"],
+  ];
+  for (const [opts, code] of cases) {
+    const r = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, opts); }));
+    const ch = gbp(r);
+    assert.notEqual(ch.status, "review_plan", code);
+    assert.equal(ch.status, "blocked", code);
+    assert.deepEqual(ch.opportunity_keys, [], code);
+    assert.ok(ch.blocked_by.length >= 1 && ch.blocked_by.every((b) => b.reason === code), `${code}: ${JSON.stringify(ch.blocked_by)}`);
+    // Grounded membership stays visible for reporting, with the code that stops each post.
+    const c = r.campaigns.find((x) => x.service_id === ROOF);
+    for (const id of ROOF_POST_KWS) assert.equal(c.cluster.find((k) => k.id === id)?.post, code, `${code} ${id}`);
+    assert.ok(!ready(r).some((o) => o.service_id === ROOF && o.content_type === "gbp_post"));
+  }
+});
+
+test("campaigns: one usable core keyword keeps its channel plan; the blocked ones are listed, not hidden", () => {
+  const r = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, { purposes: { [KW]: { post: "promotion_held" }, "kw-info": { post: "page_not_verified" } } }); }));
+  const ch = gbp(r);
+  assert.equal(ch.status, "review_plan");
+  assert.deepEqual(ch.opportunity_keys, [`gbp_post:${ROOF}:transactional`]);
+  assert.deepEqual(ch.blocked_by.map((b) => [b.key, b.reason]).sort(), [
+    [`gbp_post:${ROOF}:commercial`, "promotion_held"],
+    [`gbp_post:${ROOF}:informational`, "page_not_verified"],
+  ]);
+  // Every opportunity_key a campaign lists is actionable: tier A–C and no Core 50 refusal.
+  for (const c of r.campaigns) for (const x of c.channels) for (const k of x.opportunity_keys) {
+    const o = byKey(r, k);
+    assert.notEqual(o.tier, "none", k);
+    assert.equal(o.core?.verdict ?? null, null, k);
+  }
+});
+
+test("campaigns: blocked opportunities never plan a channel, across proposal-only and off-list states", () => {
+  // Proposal only: every site campaign. Roof's keywords off the list: Roof's
+  // campaign (Storm's new page, still on the list, rightly stays planned).
+  for (const [opts, only] of [[{ status: "proposed_only", proposal: PROPOSAL }, null], [{ exclude: ROOF_POST_KWS }, ROOF]]) {
+    const r = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, opts); }));
+    for (const c of r.campaigns.filter((x) => !only || x.service_id === only)) for (const ch of c.channels) {
+      assert.notEqual(ch.status, "review_plan", `${c.name} ${ch.channel}`);
+      assert.deepEqual(ch.opportunity_keys, []);
+    }
+  }
+});
+
+test("campaigns: an off-list primary is never the campaign's primary, objective or priority", () => {
+  const r = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, { exclude: [KW] }); }));
+  const c = r.campaigns.find((x) => x.service_id === ROOF);
+  assert.equal(c.primary, null);
+  assert.deepEqual(c.primary_excluded, { keyword: "roof replacement wentzville", reason: "keyword_not_core" });
+  assert.doesNotMatch(c.objective, /roof replacement wentzville/);
+  assert.ok(!c.cluster.some((k) => k.id === KW));
+  assert.ok(c.blockers.some((b) => /primary keyword "roof replacement wentzville" is not usable for this site \(keyword_not_core\)/.test(b)));
+  assert.deepEqual(c.priority, [4]);
+  assert.ok(c.channels.every((ch) => ch.status !== "review_plan"));
+  // With the primary on the list, it is the campaign's primary.
+  const on = runAuthority(lucasAuthority()).campaigns.find((x) => x.service_id === ROOF);
+  assert.equal(on.primary.id, KW);
+  assert.equal(on.primary_excluded, null);
+});
+
+test("new service page: an existing page that is unchecked, stale, unreadable, redirected or soft-404 is verified, never re-created", () => {
+  const stale = { verdict: "live", method: "http", checked_at: "2026-08-01T12:00:00Z" };
+  const cases = [
+    ["page_not_verified", null, /never checked/],
+    ["page_not_verified", stale, /live by http on 2026-08-01/],
+    ["target_page_missing", { verdict: "unreadable", method: "http", checked_at: "2026-10-28T12:00:00Z" }, /unreadable/],
+    ["target_page_missing", { verdict: "redirected", method: "http", checked_at: "2026-10-28T12:00:00Z" }, /redirected/],
+    ["target_page_missing", { verdict: "soft_404", method: "http", checked_at: "2026-10-28T12:00:00Z" }, /soft_404/],
+    ["target_page_missing", { verdict: "wrong_host", method: "http", checked_at: "2026-10-28T12:00:00Z" }, /wrong_host/],
+  ];
+  for (const [code, check, detail] of cases) {
+    const r = runAuthority(scoped((x) => { x.authority.core = approvedCore(x, { purposes: { "kw-storm": { post: code } }, checks: { "kw-storm": check } }); }));
+    const o = byKey(r, `service_page:${STORM}`);
+    assert.equal(o.core.verdict, "page_absence_unverified", `${code} ${check?.verdict}`);
+    assert.match(o.core.detail, /existing page that is not proven missing/);
+    assert.match(o.core.detail, detail);
+    assert.match(o.core.detail, /check it before proposing a new page/);
+    assert.equal(o.action, "blocked_data_prerequisite");
+    assert.notEqual(o.section, "fix_now");
+  }
+  // Proven absence: a real 404, or no page claimed at all.
+  const i = scoped((x) => { x.authority.core = approvedCore(x, { purposes: { "kw-storm": { post: "target_page_missing" } }, checks: { "kw-storm": MISSING } }); });
+  assert.equal(coreVerdict(i, "kw-storm", STORM, "add").ok, true);
+  const none = scoped((x) => { x.keywords.find((k) => k.id === "kw-storm").target_url = null; x.authority.core = approvedCore(x, { purposes: { "kw-storm": { post: "target_page_missing" } } }); });
+  assert.equal(coreVerdict(none, "kw-storm", STORM, "add").ok, true);
+  // The exception is for new pages only: the same keyword is still refused for a post.
+  assert.equal(coreVerdict(i, "kw-storm", STORM, "post").receipt.verdict, "target_page_missing");
 });

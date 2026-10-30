@@ -9,8 +9,10 @@
 //   grounded   the program's approved list names the keyword, or names its
 //              active core parent (a supporting child) — core_keyword_grounding().
 //   owner      keyword_owner() for the purpose (post / blog / refresh); add
-//              (a page that does not exist yet) tolerates only the page's
-//              own absence.
+//              (a new page) passes only over a proven absence: no page claims
+//              the keyword, or the owner page's latest check is a real 404
+//              (verdict missing). An unchecked, stale, unreadable, redirected
+//              or soft-404 page is an existing page to verify, never "missing".
 //   geography  places the keyword's text names: structured or none passes;
 //              text_only, without_market, mismatch and unassessed refuse
 //              (site_program_readiness() reads them the same way).
@@ -32,7 +34,11 @@ export type CoreProgram = {
 export type CoreKeyword = {
   keyword_id: string; keyword: string; program_id: string | null; relation: "core" | "child";
   list_id: string; list_version: number; core_keyword_id: string; service_id: string | null; intent: string | null;
-  owner: { url: string | null; role: string | null; market_id: string | null; market: string | null; problem_code: string | null; problem: string | null };
+  owner: {
+    url: string | null; role: string | null; market_id: string | null; market: string | null; problem_code: string | null; problem: string | null;
+    // the owner page's latest check, as keyword_owner() reads it (null: never checked)
+    check?: { verdict: string; method: string; checked_at: string } | null;
+  };
   purposes: { post: string | null; blog: string | null; refresh: string | null };
   geography: Geography; places: { place: string; state: string; basis: string; market: boolean }[]; structured_city: string | null;
 };
@@ -52,8 +58,12 @@ export type CoreReceipt = {
 };
 export type CoreVerdict = { ok: boolean; receipt: CoreReceipt };
 
-// A page that does not exist yet is what a service_page "create" builds.
-const ADD_TOLERATES = new Set(["target_page_missing", "page_not_verified"]);
+// A new page may be proposed only where the page provably does not exist.
+// keyword_owner() reports every non-live verdict as target_page_missing, so
+// the latest check itself decides: no claimed page at all, or a real 404.
+const pageAbsent = (k: CoreKeyword) =>
+  k.owner.problem_code === "target_page_missing" && (!k.owner.url || k.owner.check?.verdict === "missing");
+const PAGE_CODES = new Set(["target_page_missing", "page_not_verified"]);
 const GEO_REFUSES: Record<string, string> = {
   text_only: "names an approved market only in its text; link the keyword to that market first",
   without_market: "names a place that is not an approved market of this site",
@@ -102,8 +112,13 @@ export function coreVerdict(input: AuthorityInput, keywordId: string | null, ser
   });
   if (k.program_id !== prog.program_id || k.list_id !== prog.list.id) return no("keyword_wrong_program", "The keyword is grounded by another site program's list.");
   if (serviceId && k.service_id && k.service_id !== serviceId) return no("keyword_wrong_service", "The keyword's related service is another service.");
+  if (purpose === "add" && k.intent !== null && k.owner.problem_code && PAGE_CODES.has(k.owner.problem_code) && !pageAbsent(k)) {
+    const c = k.owner.check;
+    return no("page_absence_unverified", `${k.owner.url} is an existing page that is not proven missing (${c ? `${c.verdict} by ${c.method} on ${c.checked_at.slice(0, 10)}` : "never checked"}); `
+      + "check it before proposing a new page.");
+  }
   const code = purpose === "add"
-    ? (k.intent === null ? "intent_missing" : k.owner.problem_code && !ADD_TOLERATES.has(k.owner.problem_code) ? k.owner.problem_code : null)
+    ? (k.intent === null ? "intent_missing" : k.owner.problem_code && !pageAbsent(k) ? k.owner.problem_code : null)
     : k.purposes[purpose];
   if (code) return no(code, k.owner.problem_code === code ? k.owner.problem ?? code : code === "intent_missing" ? "The keyword has no recorded intent." : `The owner page may not anchor a ${purpose}.`);
   if (GEO_REFUSES[k.geography]) {

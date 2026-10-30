@@ -8,14 +8,15 @@ export const CORE_LIST = "c0re0000-0000-4000-8000-000000000002";
 
 export function approvedCore(input, opts = {}) {
   const { listId = CORE_LIST, version = 2, include = null, exclude = [], children = {}, purposes = {}, geography = {},
-    status = "approved", proposal = null, exempt = false } = opts;
+    status = "approved", proposal = null, exempt = false, checks = {} } = opts;
   const approved = new Set(input.services.filter((s) => s.status === "approved").map((s) => s.id));
   const active = input.keywords.filter((k) => k.is_active !== false);
   const ids = (include ?? active.filter((k) => approved.has(k.service_id)).map((k) => k.id)).filter((id) => !exclude.includes(id)).sort();
   const entry = (k, relation, parent) => ({
     keyword_id: k.id, keyword: k.keyword, program_id: null, relation, list_id: listId, list_version: version, core_keyword_id: parent,
     service_id: k.service_id ?? null, intent: k.intent ?? null,
-    owner: { url: k.target_url ?? null, role: "service", market_id: null, market: null, problem_code: purposes[k.id]?.post ?? null, problem: purposes[k.id]?.post ? `fixture: ${purposes[k.id].post}` : null },
+    owner: { url: k.target_url ?? null, role: "service", market_id: null, market: null, problem_code: purposes[k.id]?.post ?? null,
+      problem: purposes[k.id]?.post ? `fixture: ${purposes[k.id].post}` : null, check: checks[k.id] ?? null },
     purposes: { post: null, blog: null, refresh: null, ...(purposes[k.id] ?? {}) },
     geography: geography[k.id] ?? "none", places: [], structured_city: null,
   });

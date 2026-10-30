@@ -15,7 +15,7 @@ import { runAuthority } from "../supabase/functions/authority/engine.ts";
 import { coreVerdict } from "../supabase/functions/authority/core.ts";
 
 const SUITE = "supabase/tests/sandbox/authority_core_scope.test.sql";
-const LABELS = ["S1", "S2", "S3", "S4", "S5", "S6", "G1", "N1", "M1", "M2", "M3", "I1", "I2", "F1", "F2", "F3", "E1", "X1", "X2", "W1", "T1", "R1", "R2"];
+const LABELS = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "G1", "N1", "M1", "M2", "M3", "I1", "I2", "F1", "F2", "F3", "E1", "X1", "X2", "W1", "T1", "R1", "R2"];
 
 test("authority_core_scope: database suite, then the engine over authority_input_scoped()", async () => {
   const db = new PGlite({ extensions: { pgcrypto, uuid_ossp } });
@@ -117,6 +117,15 @@ test("authority_core_scope: database suite, then the engine over authority_input
       [`core_list:${await id("M2")}`, `core_list:${await id("M3")}`].sort());
     const m2kw = await id("M2:k10");
     assert.ok(!rm.opportunities.some((o) => o.section === "ready" && o.target.keyword_id === m2kw));
+    // P: a new page only over a real 404; an unreadable or never-checked
+    // existing page is verified first, over the database's own checks.
+    const p = await input("P");
+    const [p1, p2, p3, p4, s1, s3, s4] = [await id("P:k5"), await id("P:k1"), await id("P:k2"), await id("P:k3"), await id("P:s1"), await id("P:s3"), await id("P:s4")];
+    assert.equal(coreVerdict(p, p1, s1, "add").ok, true, "a confirmed 404");
+    assert.equal(coreVerdict(p, p2, null, "add").ok, true, "a live page passes the owner check");
+    assert.equal(coreVerdict(p, p3, s3, "add").receipt.verdict, "page_absence_unverified", "unreadable is not missing");
+    assert.equal(coreVerdict(p, p4, s4, "add").receipt.verdict, "page_absence_unverified", "never checked is not missing");
+    assert.equal(coreVerdict(p, p1, s1, "post").receipt.verdict, "target_page_missing", "a post still needs a live page");
     await db.exec("reset role");
   } finally {
     await db.close();

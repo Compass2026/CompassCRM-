@@ -74,6 +74,7 @@ with a code. Nothing falls back.
 | `keyword_wrong_program` | Another site's list grounds it |
 | `keyword_wrong_service` | The keyword's related service is another service |
 | resolver code | `promotion_held`, `page_not_verified`, `market_unverified`, `keyword_wrong_page`, `owner_role_not_allowed`, … |
+| `page_absence_unverified` | New service page only: the owner page exists but is not proven missing |
 | `place_text_only` / `place_without_market` / `place_mismatch` / `geography_unassessed` | A place named in the text with no structured, approved market of the site |
 
 An exempt client (Tom's recorded exemption) passes, labelled `exempt`. The
@@ -94,8 +95,17 @@ database's own core gates skip it too.
 ### Other opportunity types
 
 - **New service page** (`service_page` `create`): its keyword must be
-  grounded. The page's own absence is tolerated (`target_page_missing`,
-  `page_not_verified`); a hold or the wrong site is not.
+  grounded, and the page must provably not exist. That means either no page
+  claims the keyword, or the owner page's latest check is a real 404 (verdict
+  `missing`).
+  - The scope carries that check (`owner.check`), read as `keyword_owner()`
+    reads it: an http `soft_404` defers to the latest rendered check.
+  - An existing page that is unchecked, older than 45 days, `unreadable`,
+    `redirected`, `wrong_host` or an unresolved `soft_404` reads
+    `page_absence_unverified`: check it first, never re-create it.
+  - A hold or the wrong site refuses with its own code.
+  - The exception covers new pages only; every other purpose keeps the
+    resolver's code.
 - **Page improvement:** the fix stays, but an off-list keyword is dropped as
   its target, with a reason. The fix may only correct or remove wording.
 - **Unapproved list:** each site with no approved list gets one
@@ -105,9 +115,23 @@ database's own core gates skip it too.
 
 ### Campaigns, keywords and the run
 
-- **Campaigns** hold only grounded keywords. Everything else is in
-  `excluded` with its code, and a site without an approved list is a
-  campaign blocker.
+- **Campaigns** keep two sets apart:
+  - **`cluster`** is grounded membership, for reporting. Each entry's `post`
+    is `null` when a Business Profile post may target it now, or else the
+    code that stops it. Keywords outside the list are in `excluded` with
+    their code.
+  - **`opportunity_keys` and `review_plan`** come from actionable
+    opportunities only: tier A–C (a content action whose every gate passed,
+    cadence aside) and no Core 50 refusal.
+  - A channel whose opportunities all exist but cannot proceed is `blocked`,
+    with `blocked_by` listing each key and its reason. One usable keyword
+    still plans its channel; the blocked ones are listed, not hidden.
+  - **`primary`** is the service's primary keyword only when the list
+    grounds it. Otherwise it is `null`, `primary_excluded` gives the keyword
+    and its reason, a blocker names it, and neither `objective` nor
+    `priority` uses it.
+  - A site without an approved list is a campaign blocker.
+  - The Authority tab shows "Blocked: <reasons>" and "Not usable: <keyword>".
 - **Receipts:**
   - Every keyword-targeted opportunity carries `core`: purpose, program,
     list id and version, keyword, relation, core parent, owner URL and role,

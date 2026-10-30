@@ -142,6 +142,18 @@ begin
              case when g.intent is null then 'intent_missing'
                   when g.o->>'problem_code' is not null then g.o->>'problem_code'
                   when not core_owner_allows(g.o->>'role', 'refresh', g.intent) then 'owner_role_not_allowed' end as refresh_code,
+             -- The owner page's latest check, read as keyword_owner() reads it (an
+             -- http soft_404 defers to the latest rendered check). A new page
+             -- may be proposed only over a confirmed absence (verdict missing).
+             (select jsonb_build_object('verdict', x.verdict, 'method', x.method, 'checked_at', x.checked_at)
+                from (select h.id, (h.method = 'http' and h.verdict = 'soft_404') as soft
+                        from owner_page_checks h where h.client_id = c.id and h.url_norm = g.o->>'url'
+                       order by h.checked_at desc, h.id desc limit 1) f
+                cross join lateral (
+                  select r.verdict, r.method, r.checked_at from owner_page_checks r
+                   where r.client_id = c.id and r.url_norm = g.o->>'url'
+                     and (r.id = f.id or (f.soft and r.method = 'rendered'))
+                   order by (r.method = 'rendered') desc, r.checked_at desc, r.id desc limit 1) x) as page_check,
              case
                when not v_geo then 'unassessed'
                when g.structured_city is not null then
@@ -159,7 +171,8 @@ begin
              'list_id', j.list_id, 'list_version', j.list_version, 'core_keyword_id', j.core_keyword_id,
              'service_id', j.service_id, 'intent', j.intent,
              'owner', jsonb_build_object('url', j.o->>'url', 'role', j.o->>'role', 'market_id', j.o->>'market_id',
-                                         'market', j.o->>'market', 'problem_code', j.o->>'problem_code', 'problem', j.o->>'problem'),
+                                         'market', j.o->>'market', 'problem_code', j.o->>'problem_code', 'problem', j.o->>'problem',
+                                         'check', j.page_check),
              'purposes', jsonb_build_object('post', j.post_code, 'blog', j.blog_code, 'refresh', j.refresh_code),
              'geography', j.geography, 'places', coalesce(j.places, '[]'), 'structured_city', j.structured_city)
              order by (j.core_keyword_id <> j.id), j.id), '[]')
