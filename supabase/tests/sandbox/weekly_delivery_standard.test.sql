@@ -9,6 +9,8 @@
 --   W4  monthly standard only: must behave exactly as before
 --   W5  single site, starts Nov 2, first planned on Wed Nov 4 (no catch-up)
 --   W6  single site, starts Nov 2: the DST weeks
+-- Q1–Q3 swap in a stand-in for social_slot_readiness inside a savepoint
+-- (keyword eligibility is not under test there, the queue's horizon is).
 begin;
 create schema wd;
 create function wd.ok(label text, cond boolean) returns void language plpgsql as $$
@@ -226,13 +228,27 @@ select wd.ok('P8 the blog gate reads the weekly month target (room while deliver
 
 -- ── Partial first week, transition month ────────────────────────────────────
 select wd.keep('f1', plan_delivery_month(wd.id('W2'), '2026-11-01'));
-select wd.ok('F1 W2 (first week Nov 9) gets nothing before Nov 9 and full weeks from it: Nov 9, 16, 23, 30',
-  wd.got('f1')::int = 4 * 13
+select wd.ok('F1 W2 (first week Nov 9) gets nothing before Nov 9 and full weeks from it: Nov 9, 16, 23, 30, plus the month''s page refresh',
+  wd.got('f1')::int = 4 * 13 + 1
   and not exists (select 1 from content_plan_items where client_id = wd.id('W2') and planned_date < '2026-11-09')
-  and (select array_agg(distinct standard_week order by standard_week) from content_plan_items where client_id = wd.id('W2'))
+  and (select array_agg(distinct standard_week order by standard_week) from content_plan_items where client_id = wd.id('W2') and standard_week is not null)
       = array['2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30']::date[]
   and (select count(*) from wd.slots('W2', 'facebook_posts', '2026-11-09')) = 5
   and (select count(*) from wd.slots('W2', 'blog_posts', '2026-11-09')) = 3);
+select wd.keep('f1b', plan_delivery_month(wd.id('W2'), '2026-11-01'));
+select wd.ok('F1b a weekly client still gets one page-refresh slot per website per month (a fresh month with none), and a rerun opens no copy',
+  wd.got('f1b')::int = 0
+  and (select count(*) from content_plan_items where client_id = wd.id('W2') and standard_key = 'page_refreshes') = 1
+  and (select standard_month = '2026-11-01' and standard_week is null and deliverable = 'web_page' and standard_seq = 1
+         from content_plan_items where client_id = wd.id('W2') and standard_key = 'page_refreshes')
+  and wd.m('W2', '2026-11-01', 'WD W2', 'page_refreshes', 'target') = 1
+  and wd.m('W2', '2026-11-01', 'WD W2', 'page_refreshes', 'remaining') = 0);
+select wd.keep('f1c', plan_delivery_month(wd.id('W1'), '2026-12-01')), wd.keep('f1c.again', plan_delivery_month(wd.id('W1'), '2026-12-01'));
+select wd.ok('F1c W1''s December (no refresh slot yet): weeks Dec 7 – Dec 28 plus one refresh; the rerun opens nothing',
+  wd.got('f1c')::int = 4 * 13 + 1 and wd.got('f1c.again')::int = 0
+  and (select count(*) from content_plan_items where client_id = wd.id('W1') and standard_key = 'page_refreshes' and standard_month = '2026-12-01') = 1
+  and (select count(*) from content_plan_items where client_id = wd.id('W1') and standard_key = 'page_refreshes') = 2
+  and wd.m('W1', '2026-12-01', 'WD W1', 'page_refreshes', 'remaining') = 0);
 select wd.ok('F2 the transition month keeps v1 pro-rated for the days before the first week (8 × 5/21 weekdays = 2) plus the weekly days after (16 Facebook, 10 blogs)',
   wd.m('W2', '2026-11-01', 'WD W2', 'facebook_posts', 'target') = 18
   and wd.m('W2', '2026-11-01', 'WD W2', 'blog_posts', 'target') = 12
@@ -294,6 +310,25 @@ select wd.ok('C1 a week first planned on its Wednesday gets the target of the da
   and (select array_agg(planned_date) from wd.slots('W5', 'blog_posts', '2026-11-02')) = array['2026-11-04', '2026-11-06']::date[]
   and wd.got('c1.prev')::int = 0
   and not exists (select 1 from content_plan_items where client_id = wd.id('W5') and planned_date < '2026-11-04'));
+create function wd.counts(c text, w date) returns int[] language sql as $$
+  select array[(select count(*) from wd.slots(c, 'facebook_posts', w)), (select count(*) from wd.slots(c, 'gbp_posts', w)),
+               (select count(*) from wd.slots(c, 'blog_posts', w))]::int[] $$;
+select wd.keep('c2.same', plan_delivery_week(wd.id('W5'), '2026-11-02')), wd.keep('c2.month', plan_delivery_month(wd.id('W5'), '2026-11-01')),
+       wd.keep('c2.w1', plan_delivery_week(wd.id('W1'), '2026-11-02'));
+select wd.ok('C2 a second run the same Wednesday opens nothing in the week (Facebook stays 3, GBP 3, blogs 2), nor does the month planner (it opens only the later weeks), nor a rerun of a week planned before it began',
+  wd.got('c2.same')::int = 0 and wd.got('c2.w1')::int = 0
+  and wd.got('c2.month')::int = 4 * 13 + 1
+  and wd.counts('W5', '2026-11-02') = array[3, 3, 2]);
+select wd.today('2026-11-05');
+-- Wednesday's slots are missed (removed) before Thursday's run.
+delete from content_plan_items where client_id = wd.id('W5') and standard_week = '2026-11-02' and planned_date = '2026-11-04';
+select wd.keep('c3', plan_delivery_week(wd.id('W5'), '2026-11-02'));
+select wd.today('2026-11-06');
+select wd.keep('c3.fri', plan_delivery_week(wd.id('W5'), '2026-11-02'));
+select wd.ok('C3 reruns on Thursday and Friday add nothing back: the missed Wednesday stays missed (Facebook 2, GBP 2, blogs 1)',
+  wd.got('c3')::int = 0 and wd.got('c3.fri')::int = 0
+  and wd.counts('W5', '2026-11-02') = array[2, 2, 1]
+  and not exists (select 1 from content_plan_items where client_id = wd.id('W5') and planned_date = '2026-11-04'));
 select wd.today('2026-10-30');
 
 -- ── DST ─────────────────────────────────────────────────────────────────────
@@ -338,6 +373,61 @@ select wd.ok('U4 the Monday beat plans only clients with a weekly adoption whose
   and (select count(*) from content_plan_items where client_id = wd.id('W2'))::text = wd.got('u4.w2')
   and exists (select 1 from content_plan_items where client_id = wd.id('W3') and standard_week = '2026-11-02'));
 
+-- ── Drafting lead time ──────────────────────────────────────────────────────
+-- Monday's content must be queued for drafting before Monday. Approved core
+-- lists let the real blog queue run; social readiness is stood in for (all
+-- open Facebook / GBP slots ready) so the test sees only the horizon.
+savepoint lead_time;
+set local session_replication_role = replica;
+insert into core_keyword_lists (client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
+select wd.id(c), 1, 'approved', array[wd.id('kw.' || c)], 'test', (select id from team_members limit 1), now() from unnest(array['W1', 'W2', 'W4']) c;
+set local session_replication_role = origin;
+create or replace function social_slot_readiness(p_client_id uuid, p_from date, p_through date)
+returns table (plan_item_id uuid, client_id uuid, brand_workspace_id uuid, deliverable text, channel text, planned_date date,
+               social_account_id uuid, shared_same_day integer, core_list_id uuid, core_list_version integer, task_id uuid,
+               ready boolean, reason text)
+language sql stable set search_path = public, pg_temp as $$
+  select i.id, i.client_id, i.brand_workspace_id, i.standard_key, i.channel::text, i.planned_date, coalesce(i.gbp_location_id, i.client_id),
+         0, i.client_id, 1, (select t.id from tasks t where t.key = 'social_slot:' || i.id::text), true, null::text
+  from content_plan_items i
+  where i.client_id = p_client_id and i.standard_key in ('facebook_posts', 'gbp_posts') and i.planned_date between p_from and p_through
+    and i.hold is null and i.social_post_id is null
+  order by i.planned_date, i.id $$;
+-- A slot's queued task, if any.
+create function wd.queued(c text, d date, dk text) returns bigint language sql as $$
+  select count(*) from content_plan_items i join tasks t on t.client_id = i.client_id
+     and (t.key = 'social_slot:' || i.id::text or (t.key = 'blog_post' and t.notes like '%plan_item:' || i.id::text || '%'))
+   where i.client_id = wd.id(c) and i.planned_date = d and i.standard_key = dk $$;
+select wd.today('2026-11-04');
+select wd.keep('q1', create_weekly_blog_tasks());
+select wd.ok('Q1 the Wednesday beat (Nov 4) queues a weekly client''s NEXT week too: Monday Nov 9''s Facebook, GBP and blog drafts are queued five days ahead, W2''s first Monday included; nothing after Sunday Nov 15',
+  wd.queued('W1', '2026-11-09', 'facebook_posts') = 1 and wd.queued('W1', '2026-11-09', 'gbp_posts') = 1
+  and wd.queued('W1', '2026-11-09', 'blog_posts') = 1
+  and wd.queued('W1', '2026-11-10', 'facebook_posts') = 1
+  and wd.queued('W2', '2026-11-09', 'facebook_posts') = 1 and wd.queued('W2', '2026-11-09', 'blog_posts') = 1
+  and (select count(*) from tasks t join content_plan_items i on t.key = 'social_slot:' || i.id::text
+        where i.client_id in (wd.id('W1'), wd.id('W2')) and i.planned_date > '2026-11-15' and t.id <> wd.id('t.nov17')) = 0  -- the fixture's own task
+  and (select count(*) from tasks t where t.client_id in (wd.id('W1'), wd.id('W2')) and t.key = 'blog_post' and t.due_date > '2026-11-15') = 0
+  and (select due_date from tasks t join content_plan_items i on t.key = 'social_slot:' || i.id::text
+        where i.client_id = wd.id('W1') and i.standard_key = 'facebook_posts' and i.planned_date = '2026-11-09') = '2026-11-09');
+select wd.ok('Q1b a client on the monthly standard keeps this week''s horizon: W4''s Tuesday Nov 10 GBP slots are not queued on Nov 4',
+  wd.queued('W4', '2026-11-10', 'gbp_posts') = 0);
+-- (Other suites' fixture clients are in the database too; only this suite's are counted.)
+create function wd.ntasks() returns bigint language sql as $$
+  select count(*) from tasks where client_id in (select wd.id(c) from unnest(array['W1', 'W2', 'W3', 'W4', 'W5', 'W6']) c) $$;
+select wd.keep('q2.tasks', wd.ntasks());
+select wd.keep('q2', create_weekly_blog_tasks());
+select wd.ok('Q2 a second Wednesday run queues nothing twice', wd.ntasks()::text = wd.got('q2.tasks'));
+select wd.today('2026-11-16');
+select wd.keep('q3', plan_delivery_weeks());
+select wd.ok('Q3 the Monday beat (Nov 16, 04:00 Chicago) queues this week''s drafts for weekly clients whose first week has begun, so a week the Wednesday beat did not reach is not left until Wednesday; next week waits for its Wednesday',
+  wd.queued('W1', '2026-11-16', 'facebook_posts') = 1 and wd.queued('W1', '2026-11-16', 'blog_posts') = 1
+  and wd.queued('W2', '2026-11-16', 'facebook_posts') = 1
+  and wd.queued('W1', '2026-11-23', 'facebook_posts') = 0
+  and wd.queued('W4', '2026-11-16', 'gbp_posts') = 0);
+rollback to savepoint lead_time;
+select wd.today('2026-10-30');
+
 -- ── Access ──────────────────────────────────────────────────────────────────
 select wd.ok('S1 the beat and the guards are not callable by the API; readers are team-only; the clock override needs a superuser',
   not has_function_privilege('authenticated', 'plan_delivery_weeks()', 'execute')
@@ -346,6 +436,8 @@ select wd.ok('S1 the beat and the guards are not callable by the API; readers ar
   and not has_function_privilege('anon', 'plan_delivery_week(uuid, date)', 'execute')
   and not has_function_privilege('anon', 'delivery_items(uuid, date, date)', 'execute')
   and not has_function_privilege('authenticated', 'client_weekly_delivery_guard()', 'execute')
+  and not has_function_privilege('authenticated', 'queue_delivery_week_drafts(uuid, date)', 'execute')
+  and not has_function_privilege('anon', 'queue_delivery_week_drafts(uuid, date)', 'execute')
   and not has_table_privilege('anon', 'client_weekly_delivery_standards', 'select')
   and not has_table_privilege('authenticated', 'client_weekly_delivery_standards', 'delete')
   and exists (select 1 from pg_policies where tablename = 'client_weekly_delivery_standards' and qual like '%is_team()%'));
@@ -362,18 +454,21 @@ reset session authorization;
 savepoint before_down;
 select set_config('compass.weekly_rollback', 'confirmed', true);
 \ir ../../rollback/20261030180000_weekly_delivery_standard.down.sql
-select wd.ok('RB1 rollback with data: v1 holds restored, unattached weekly slots removed, attached kept, adoptions kept aside, functions exact, cron gone',
+select wd.ok('RB1 rollback with data: v1 holds restored, unattached weekly slots removed, attached and refresh slots kept, adoptions kept aside, functions exact, cron gone',
   (select hold is null from content_plan_items where id = wd.id('v1.fb.nov5'))
   and (select hold = 'blocked' and hold_reason = 'Waiting on photos.' from content_plan_items where id = wd.id('v1.blog.nov4'))
-  and (select count(*) from content_plan_items where client_id = wd.id('W1')) = 10
+  and (select count(*) from content_plan_items where client_id = wd.id('W1')) = 11   -- the 10 v1 rows + December's refresh slot (monthly, kept)
   and to_regclass('client_weekly_delivery_standards_rolled_back') is not null
   and to_regclass('client_weekly_delivery_standards') is null
   and to_regprocedure('delivery_targets_monthly(uuid,date)') is null
   and md5(pg_get_functiondef('delivery_targets(uuid,date)'::regprocedure)) = '4d67bf3ff886339f6675c56a73bbf311'
+  and md5(pg_get_functiondef('create_weekly_blog_tasks()'::regprocedure)) = 'fdddc0423cafc81c222fa4231938b6ad'
+  and md5(pg_get_functiondef('plan_delivery_month(uuid,date)'::regprocedure)) = '4a6fc125878f692f756e88e13ea45a53'
   and not exists (select 1 from cron.job where jobname = 'delivery-standard-week'));
 rollback to savepoint before_down;
 select wd.ok('RB2 undone: the weekly standard is back', to_regclass('client_weekly_delivery_standards') is not null
-  and strpos(pg_get_functiondef('social_slot_readiness(uuid,date,date)'::regprocedure), 'weekly_gbp_capacity_v1') > 0);
+  and strpos(pg_get_functiondef('social_slot_readiness(uuid,date,date)'::regprocedure), 'weekly_gbp_capacity_v1') > 0
+  and strpos(pg_get_functiondef('create_weekly_blog_tasks()'::regprocedure), 'weekly_delivery_v1') > 0);
 
 rollback;
 
@@ -389,6 +484,6 @@ do $$ begin
      or exists (select 1 from information_schema.columns where table_name = 'content_plan_items' and column_name in ('standard_week', 'retired_at')) then
     raise exception 'FAILED RB3 clean rollback left something behind';
   end if;
-  raise notice 'ok RB3 clean rollback removes everything, standard 2 included, and restores the three functions exactly';
+  raise notice 'ok RB3 clean rollback removes everything, standard 2 included, and restores the four functions exactly';
 end $$;
 rollback;

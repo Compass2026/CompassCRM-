@@ -5008,12 +5008,17 @@ export type Database = {
           output_url: string | null
           planned_date: string | null
           purpose: string
+          retired_at: string | null
+          retired_hold: string | null
+          retired_hold_reason: string | null
           search_intent: string | null
           service_id: string | null
           social_post_id: string | null
           standard_key: string | null
           standard_month: string | null
           standard_seq: number | null
+          standard_week: string | null
+          standard_week_seq: number | null
           target_url: string | null
           topic: string
           updated_at: string
@@ -5038,12 +5043,17 @@ export type Database = {
           output_url?: string | null
           planned_date?: string | null
           purpose: string
+          retired_at?: string | null
+          retired_hold?: string | null
+          retired_hold_reason?: string | null
           search_intent?: string | null
           service_id?: string | null
           social_post_id?: string | null
           standard_key?: string | null
           standard_month?: string | null
           standard_seq?: number | null
+          standard_week?: string | null
+          standard_week_seq?: number | null
           target_url?: string | null
           topic: string
           updated_at?: string
@@ -5068,12 +5078,17 @@ export type Database = {
           output_url?: string | null
           planned_date?: string | null
           purpose?: string
+          retired_at?: string | null
+          retired_hold?: string | null
+          retired_hold_reason?: string | null
           search_intent?: string | null
           service_id?: string | null
           social_post_id?: string | null
           standard_key?: string | null
           standard_month?: string | null
           standard_seq?: number | null
+          standard_week?: string | null
+          standard_week_seq?: number | null
           target_url?: string | null
           topic?: string
           updated_at?: string
@@ -5917,6 +5932,12 @@ export type Database = {
         Update: { client_id?: string; effective_month?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string }
         Relationships: []
       }
+      client_weekly_delivery_standards: {
+        Row: { client_id: string; effective_week: string; id: string; recorded_at: string; recorded_by: string | null; source_ref: string; standard_id: string; start_date: string }
+        Insert: { client_id: string; effective_week?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref: string; standard_id: string; start_date: string }
+        Update: { client_id?: string; effective_week?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string; start_date?: string }
+        Relationships: []
+      }
       core_keyword_lists: {
         Row: {
           approved_at: string | null; approved_by: string | null; brand_workspace_id: string | null; client_id: string; id: string; keyword_ids: string[]
@@ -5934,18 +5955,18 @@ export type Database = {
       }
       delivery_standards: {
         Row: {
-          blog_posts: number; decided_at: string; decided_by: string; exclusion_reason: string; exclusions: string[]
-          facebook_posts: number; gbp_posts: number; id: string; page_refreshes: number; recorded_at: string
+          blog_posts: number; cadence: string; decided_at: string; decided_by: string; exclusion_reason: string; exclusions: string[]
+          facebook_posts: number; gbp_daily_location_cap: number | null; gbp_posts: number; id: string; page_refreshes: number; recorded_at: string
           recorded_by: string | null; review_trigger: string; source_ref: string; version: number
         }
         Insert: {
-          blog_posts: number; decided_at: string; decided_by: string; exclusion_reason?: string; exclusions?: string[]
-          facebook_posts: number; gbp_posts: number; id?: string; page_refreshes: number; recorded_at?: string
+          blog_posts: number; cadence?: string; decided_at: string; decided_by: string; exclusion_reason?: string; exclusions?: string[]
+          facebook_posts: number; gbp_daily_location_cap?: number | null; gbp_posts: number; id?: string; page_refreshes: number; recorded_at?: string
           recorded_by?: string | null; review_trigger?: string; source_ref: string; version: number
         }
         Update: {
-          blog_posts?: number; decided_at?: string; decided_by?: string; exclusion_reason?: string; exclusions?: string[]
-          facebook_posts?: number; gbp_posts?: number; id?: string; page_refreshes?: number; recorded_at?: string
+          blog_posts?: number; cadence?: string; decided_at?: string; decided_by?: string; exclusion_reason?: string; exclusions?: string[]
+          facebook_posts?: number; gbp_daily_location_cap?: number | null; gbp_posts?: number; id?: string; page_refreshes?: number; recorded_at?: string
           recorded_by?: string | null; review_trigger?: string; source_ref?: string; version?: number
         }
         Relationships: []
@@ -13629,6 +13650,40 @@ export type Database = {
       plan_delivery_month: {
         Args: { p_client_id: string; p_month?: string }
         Returns: number
+      }
+      plan_delivery_week: { Args: { p_client_id: string; p_week?: string }; Returns: number }
+      plan_delivery_weeks: { Args: never; Returns: number }
+      queue_delivery_week_drafts: { Args: { p_client_id: string; p_through: string }; Returns: number }
+      delivery_today: { Args: never; Returns: string }
+      delivery_week_start: { Args: { p_date: string }; Returns: string }
+      delivery_next_monday: { Args: { p_date: string }; Returns: string }
+      delivery_daily_target: { Args: { p_date: string; p_weekly: number }; Returns: number }
+      delivery_day_rank: { Args: { p_date: string }; Returns: number }
+      client_weekly_delivery_standard: { Args: { p_client_id: string; p_date: string }; Returns: Database["public"]["Tables"]["delivery_standards"]["Row"] }
+      client_weekly_first_week: { Args: { p_client_id: string }; Returns: string | null }
+      delivery_v1_slot_retirable: { Args: { p_first_week: string; p_plan_item_id: string }; Returns: boolean }
+      delivery_gbp_locations: { Args: { p_client_id: string }; Returns: string[] }
+      gbp_slot_capacity_problem: { Args: { p_account_id: string; p_plan_item_id: string }; Returns: string | null }
+      delivery_weekly_month_target: { Args: { p_client_id: string; p_deliverable: string; p_month: string }; Returns: number | null }
+      delivery_targets_monthly: {
+        Args: { p_client_id?: string; p_month?: string }
+        Returns: Database["public"]["Functions"]["delivery_targets"]["Returns"]
+      }
+      delivery_items: {
+        Args: { p_client_id: string; p_from: string; p_through: string }
+        Returns: {
+          blocked: boolean; brand_workspace_id: string | null; client_id: string; content_post_id: string | null; created_at: string
+          deliverable: string; done: boolean; item_date: string; kind: string; plan_item_id: string | null; retired: boolean
+          social_account_id: string | null; social_post_id: string | null; unit_kind: string; week_start: string
+        }[]
+      }
+      delivery_week_report: {
+        Args: { p_client_id?: string; p_from?: string; p_preview_week?: string; p_through?: string }
+        Returns: {
+          brand_workspace_id: string | null; client_id: string; credited: number; deliverable: string; gbp_overflow: number | null
+          open_slots: number; over_capacity: number; over_target: number; published: number; remaining: number; standard: string
+          target: number; unit_kind: string; unit_name: string; v1_retired: number; v1_retiring: number; week_start: string
+        }[]
       }
       fire_foundation_worker: {
         Args: { p_client_id: string; p_reason: string }

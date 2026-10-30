@@ -69,11 +69,14 @@
 --
 -- Scheduling: one new pg_cron job, delivery-standard-week (Mondays 10:00 UTC,
 -- 04:00/05:00 Chicago), runs plan_delivery_weeks(), which plans the current
--- and next week for clients with a weekly adoption only — none today. The
--- existing jobs keep their definitions: delivery-standard-month and
--- weekly-blog-posts call plan_delivery_month(), which for a weekly client's
--- month plans that month's weeks (Mondays in the month, from the current
--- week) instead of monthly slots; for everyone else it is unchanged.
+-- and next week for clients with a weekly adoption only — none today — and
+-- queues this week's drafts for them. The existing jobs keep their cron
+-- definitions: delivery-standard-month and weekly-blog-posts call
+-- plan_delivery_month(), which for a weekly client's month plans that
+-- month's weeks (Mondays in the month, from the current week) and its one
+-- page refresh per site; for everyone else it is unchanged. The Wednesday
+-- beat (create_weekly_blog_tasks) queues a weekly client's drafts through
+-- NEXT Sunday, so Monday's content is drafted the Wednesday before.
 -- Drafting stays behind the readiness gates (brand board / site guidance,
 -- verified destination, approved core keyword list) and publishing behind
 -- Tom's approval, the publisher switch and the holds, all untouched.
@@ -88,14 +91,15 @@ comment on column delivery_standards.cadence is
 comment on column delivery_standards.gbp_daily_location_cap is
   'Weekly standards: at most this many Business Profile posts per location per America/Chicago day.';
 
--- Standard 2: Tom's decision of Oct 29 2026 (work order "weekly delivery
--- calendar"). Recorded here as v1 was; no client adopts it here.
+-- Standard 2: Tom's decision, Executive OS decision
+-- 0b407d66-de7d-4086-b6de-013f793bcbd4. Recorded here as v1 was; no client
+-- adopts it here.
 insert into delivery_standards (version, cadence, blog_posts, facebook_posts, gbp_posts, page_refreshes, gbp_daily_location_cap,
   exclusions, exclusion_reason, review_trigger, source_ref, decided_by, decided_at)
 values (2, 'weekly', 3, 5, 5, 1, 1, array['instagram', 'new_pages', 'linkedin', 'x', 'tiktok'],
   'Social is Facebook only for now. New page creation is not in the standard; a refresh updates an existing page.',
   'Tom changes the cadence, the channel or deliverable standard, or the per-location daily cap.',
-  'work_order:weekly-delivery-standard (Tom, Oct 29 2026: per website per week 5 Facebook, 5 GBP, 3 blogs; 1 refresh per month)',
+  'executive_os:decision/0b407d66-de7d-4086-b6de-013f793bcbd4 (per website per week 5 Facebook, 5 GBP, 3 blogs; 1 refresh per month)',
   'Tom', '2026-10-29 12:00:00 America/Chicago');
 
 -- A monthly adoption names a monthly standard.
@@ -509,9 +513,10 @@ comment on function delivery_targets(uuid, date) is
 -- ── 8. The weekly planner ───────────────────────────────────────────────────
 -- Opens the week's missing slots for each site and deliverable: what the
 -- week's target still has room for once the work and slots already dated in
--- the week are counted, never more than the target of the days left in the
--- week (today on; a past day is never planned, a past week never touched),
--- so there is no catch-up. Before that, the client's unattached v1 slots
+-- the week are counted, and never more than the target of the days left in
+-- the week (today on) less the work and slots already dated on those days.
+-- A past day is never planned, a past week never touched, and a rerun later
+-- in the week adds nothing back, so there is no catch-up. Before that, the client's unattached v1 slots
 -- from the first effective week on are retired (once). Blogs and Facebook
 -- posts go to the standard days (Mon/Wed/Fri, Mon–Fri) a site has free;
 -- Business Profile posts to free (location, day) cells, every site of the
@@ -533,7 +538,7 @@ declare
   dk text; n int; label text; v_deliv text; v_channel social_platform; v_purpose text;
   room int[]; ucount int[]; occ int[]; lload int[];
   u int; r int; k int; k2 int; j int; best_d int; best_l int; best_key numeric; key numeric;
-  existing int; dayroom int; nxt int; made int := 0; got int; d date;
+  existing int; later int; dayroom int; nxt int; made int := 0; got int; d date;
 begin
   if p_client_id is null then raise exception 'Choose a client' using errcode = '22023'; end if;
   std := client_weekly_delivery_standard(p_client_id, w);
@@ -568,18 +573,24 @@ begin
     label := case dk when 'blog_posts' then 'Blog' when 'facebook_posts' then 'Facebook post' else 'Business Profile post' end;
     select sum(delivery_daily_target(n, x::date))::int into dayroom from generate_series(first_day, w + 6, interval '1 day') x;
 
-    -- Room per site, and each site's items per weekday (index 1..7 = Mon..Sun).
+    -- Each site's items per weekday (index 1..7 = Mon..Sun), then its room:
+    -- the week's target less everything dated in the week, and the target of
+    -- the days left less what is already dated on them. A rerun later in the
+    -- week therefore opens nothing the first run did not, and a day that has
+    -- passed is never made up.
     room := array_fill(0, array[nu]); ucount := array_fill(0, array[nu * 7]);
     for u in 1..nu loop
-      select count(*) into existing from delivery_items(p_client_id, w, w + 6) x
-       where x.deliverable = dk and not x.retired and x.brand_workspace_id is not distinct from units[u]
-         and x.unit_kind <> 'unattributed';
-      room[u] := greatest(0, least(n - existing, dayroom));
       for j in 1..7 loop
         ucount[(u - 1) * 7 + j] := (select count(*) from delivery_items(p_client_id, w + j - 1, w + j - 1) x
           where x.deliverable = dk and not x.retired and x.brand_workspace_id is not distinct from units[u]
             and x.unit_kind <> 'unattributed');
       end loop;
+      select count(*) into existing from delivery_items(p_client_id, w, w + 6) x
+       where x.deliverable = dk and not x.retired and x.brand_workspace_id is not distinct from units[u]
+         and x.unit_kind <> 'unattributed';
+      later := 0;
+      for j in (first_day - w + 1)..7 loop later := later + ucount[(u - 1) * 7 + j]; end loop;
+      room[u] := greatest(0, least(n - existing, dayroom - later));
     end loop;
     continue when (select coalesce(sum(v), 0) from unnest(room) v) = 0;
 
@@ -659,7 +670,11 @@ end $$;
 revoke all on function plan_delivery_week(uuid, date) from public, anon;
 grant execute on function plan_delivery_week(uuid, date) to authenticated, service_role;
 
--- The Monday beat: this week and next, for clients with a weekly adoption.
+-- The Monday beat: this week and next, for clients with a weekly adoption,
+-- then the drafting queue for this week (queue_delivery_week_drafts is
+-- defined below) — the first week, and any slot the Wednesday beat could not
+-- queue, is drafted Monday morning rather than on Wednesday. Steady state,
+-- the Wednesday beat has already queued this week the Wednesday before.
 create function plan_delivery_weeks() returns integer
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare c record; made int := 0; w date := delivery_week_start(delivery_today());
@@ -667,6 +682,9 @@ begin
   for c in select cl.id from clients cl where cl.status in ('active', 'launching')
       and client_weekly_first_week(cl.id) <= w + 7 order by cl.id loop
     made := made + plan_delivery_week(c.id, w) + plan_delivery_week(c.id, w + 7);
+    if client_weekly_first_week(c.id) <= w then
+      perform queue_delivery_week_drafts(c.id, w + 6);
+    end if;
   end loop;
   return made;
 end $$;
@@ -674,27 +692,113 @@ revoke all on function plan_delivery_weeks() from public, anon, authenticated, s
 
 -- plan_delivery_month() (the 1st-of-month cron, the Wednesday beat and the
 -- planner's "Open this month's slots") plans a weekly client's month as its
--- weeks: every Monday in the month from the current week on. Other clients:
--- unchanged.
+-- weeks: every Monday in the month from the current week on. Its page
+-- refresh stays monthly: the monthly loop then runs for page_refreshes only,
+-- so the month's one refresh slot per site is still opened (and a rerun
+-- opens none, as before). Other clients: unchanged.
 do $migration$
 declare
   definition text := pg_get_functiondef('public.plan_delivery_month(uuid,date)'::regprocedure);
-  anchor text := $a$  first_day := greatest(m, today);
-$a$;
-  block text := $b$  -- weekly_delivery_v1 (20261030180000): a month the weekly standard governs is planned week by week.
+  edits text[][] := array[
+    -- The clock: delivery_today() (the Chicago date in production; a pinned date in the sandbox).
+    array[$a$  today date := (now() at time zone 'America/Chicago')::date;$a$, $b$  today date := delivery_today();$b$],
+    array[$a$  first_day := greatest(m, today);
+$a$, $b$  -- weekly_delivery_v1 (20261030180000): a month the weekly standard governs is planned week by week;
+  -- the monthly loop below then opens its page refresh only.
   if client_weekly_first_week(p_client_id) < m_end then
     for d in select x::date from generate_series(greatest(delivery_next_monday(m), delivery_week_start(delivery_today())), m_end - 1, interval '7 days') x loop
       made := made + plan_delivery_week(p_client_id, d);
     end loop;
-    return made;
+    if greatest(m, today) >= m_end then return made; end if;
   end if;
-$b$;
+  first_day := greatest(m, today);
+$b$],
+    array[$a$x.unit_kind in ('brand', 'client') and x.remaining > 0 loop$a$, $b$x.unit_kind in ('brand', 'client') and x.remaining > 0
+                 and (x.deliverable = 'page_refreshes' or coalesce(client_weekly_first_week(p_client_id) >= m_end, true)) loop$b$]];
+  i int;
 begin
   if strpos(definition, 'weekly_delivery_v1') > 0 then return; end if;
-  if (length(definition) - length(replace(definition, anchor, ''))) <> length(anchor) then
-    raise exception 'Unexpected plan_delivery_month definition; review before applying the weekly standard';
+  for i in 1..array_length(edits, 1) loop
+    if (length(definition) - length(replace(definition, edits[i][1], ''))) <> length(edits[i][1]) then
+      raise exception 'Unexpected plan_delivery_month definition (edit %); review before applying the weekly standard', i;
+    end if;
+    definition := replace(definition, edits[i][1], edits[i][2]);
+  end loop;
+  execute definition;
+end;
+$migration$;
+
+-- The drafting queue for a weekly client's week. Same gates as the Wednesday
+-- beat (create_weekly_blog_tasks): a launching client needs an approved brand
+-- site (or board), a blog needs the site's approved core list, a post needs
+-- social_slot_readiness; skips are logged. Queues every ready slot dated
+-- through p_through and fires the worker if anything was queued. Drafts stop
+-- for team review; nothing is scheduled or published.
+create function queue_delivery_week_drafts(p_client_id uuid, p_through date) returns integer
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  c record; site record; core_ok boolean; opened int := 0; social int;
+  week date := delivery_week_start(delivery_today());
+begin
+  select cl.id, cl.status into c from clients cl where cl.id = p_client_id and cl.status in ('active', 'launching');
+  if c.id is null or client_weekly_first_week(p_client_id) is null or p_through is null then return 0; end if;
+  perform pg_advisory_xact_lock(hashtextextended('blog:' || p_client_id::text, 0));
+  for site in select w.id, w.name, w.status = 'approved' as brand_ok from client_brand_workspaces w where w.client_id = c.id
+              union all
+              select null::uuid, null::text, exists (select 1 from brand_boards b where b.client_id = c.id and b.status = 'approved')
+              where not exists (select 1 from client_brand_workspaces w where w.client_id = c.id) loop
+    core_ok := exists (select 1 from core_keyword_lists l where l.client_id = c.id and l.status = 'approved'
+                        and l.brand_workspace_id is not distinct from site.id);
+    if c.status <> 'active' and not site.brand_ok then
+      insert into delivery_queue_log (client_id, deliverable, decision, reason)
+      values (c.id, 'blog_posts', 'skipped', left(coalesce('Launching client without an approved brand site: ' || site.name || '.',
+                                                           'Launching client without an approved brand board or brand site.'), 300));
+    elsif not core_ok then
+      insert into delivery_queue_log (client_id, deliverable, decision, reason)
+      values (c.id, 'blog_posts', 'skipped', left('No approved core keyword list' || coalesce(' for ' || site.name, '') || '.', 300));
+    else
+      opened := opened + queue_standard_blog_tasks_site(c.id, site.id, case when c.status = 'active' then null else week end, p_through);
+    end if;
+  end loop;
+  social := queue_standard_social_tasks(c.id, p_through);
+  if opened + social > 0 then
+    perform fire_foundation_worker(c.id, 'Weekly drafts: fill the standard blog, Facebook and Business Profile slots through '
+                                          || to_char(p_through, 'Mon FMDD') || ' from the core keywords and stop for team review');
   end if;
-  execute replace(definition, anchor, block || anchor);
+  return opened + social;
+end $$;
+revoke all on function queue_delivery_week_drafts(uuid, date) from public, anon, authenticated;
+grant execute on function queue_delivery_week_drafts(uuid, date) to service_role;
+
+-- The Wednesday beat queues a weekly client's NEXT week too (through next
+-- Sunday, after planning it), so Monday's and Tuesday's drafts are queued
+-- five days ahead instead of waiting for the Wednesday they fall in. Clients
+-- without a weekly adoption keep the old horizon (this week's Sunday).
+do $migration$
+declare
+  definition text := pg_get_functiondef('public.create_weekly_blog_tasks()'::regprocedure);
+  edits text[][] := array[
+    array[$a$declare c record; u record;$a$, $b$declare horizon date; c record; u record;$b$],
+    -- The clock: delivery_today() (the Chicago date in production; a pinned date in the sandbox).
+    array[$a$  week date:=date_trunc('week',now() at time zone 'America/Chicago')::date;$a$, $b$  week date:=delivery_week_start(delivery_today());$b$],
+    array[$a$    perform plan_delivery_month(c.id, week);
+$a$, $b$    perform plan_delivery_month(c.id, week);
+    -- weekly_delivery_v1 (20261030180000): a weekly client's next week is planned and queued now.
+    horizon := case when client_weekly_first_week(c.id) <= week + 7 then week + 13 else week + 6 end;
+    if horizon > week + 6 then perform plan_delivery_week(c.id, week + 7); end if;
+$b$],
+    array[$a$case when c.status = 'active' then null else week end, week+6)$a$, $b$case when c.status = 'active' then null else week end, horizon)$b$],
+    array[$a$social := queue_standard_social_tasks(c.id, week+6);$a$, $b$social := queue_standard_social_tasks(c.id, horizon);$b$]];
+  i int;
+begin
+  if strpos(definition, 'weekly_delivery_v1') > 0 then return; end if;
+  for i in 1..array_length(edits, 1) loop
+    if (length(definition) - length(replace(definition, edits[i][1], ''))) <> length(edits[i][1]) then
+      raise exception 'Unexpected create_weekly_blog_tasks definition (edit %); review before applying the weekly standard', i;
+    end if;
+    definition := replace(definition, edits[i][1], edits[i][2]);
+  end loop;
+  execute definition;
 end;
 $migration$;
 
@@ -817,11 +921,13 @@ begin
     raise exception 'The migration opens or retires no slot';
   end if;
   if strpos(pg_get_functiondef('public.social_slot_readiness(uuid,date,date)'::regprocedure), 'weekly_gbp_capacity_v1') = 0
-     or strpos(pg_get_functiondef('public.plan_delivery_month(uuid,date)'::regprocedure), 'weekly_delivery_v1') = 0 then
-    raise exception 'readiness or the monthly planner was not updated';
+     or strpos(pg_get_functiondef('public.plan_delivery_month(uuid,date)'::regprocedure), 'weekly_delivery_v1') = 0
+     or strpos(pg_get_functiondef('public.create_weekly_blog_tasks()'::regprocedure), 'weekly_delivery_v1') = 0 then
+    raise exception 'readiness, the monthly planner or the Wednesday beat was not updated';
   end if;
   if has_function_privilege('authenticated', 'public.plan_delivery_weeks()', 'execute')
      or has_function_privilege('service_role', 'public.plan_delivery_weeks()', 'execute')
+     or has_function_privilege('authenticated', 'public.queue_delivery_week_drafts(uuid,date)', 'execute')
      or has_function_privilege('anon', 'public.delivery_targets(uuid,date)', 'execute')
      or has_function_privilege('anon', 'public.delivery_week_report(uuid,date,date,date)', 'execute')
      or not has_function_privilege('authenticated', 'public.delivery_targets(uuid,date)', 'execute') then

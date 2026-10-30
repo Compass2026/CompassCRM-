@@ -1079,8 +1079,9 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
 
 ## Weekly delivery standard (Oct 30 2026; `20261030180000` written, **not applied**)
 
-Tom, Oct 29: per website per week 5 Facebook, 5 GBP, 3 blogs; 1 page
-refresh a month. Standard v2 (`cadence = 'weekly'`); rules, dry-run numbers
+Tom (Executive OS decision `0b407d66-de7d-4086-b6de-013f793bcbd4`): per
+website per week 5 Facebook, 5 GBP, 3 blogs; 1 page refresh a month.
+Standard v2 (`cadence = 'weekly'`); rules, dry-run numbers
 and open decisions in `docs/delivery-standard.md`; sandbox suite
 `weekly_delivery_standard.test.sql`.
 
@@ -1090,11 +1091,13 @@ and open decisions in `docs/delivery-standard.md`; sandbox suite
   opens no slot. Weeks are Monday–Sunday America/Chicago; an item counts in
   the week of its own date (published → publication date).
 - **First week starts at the next Monday, never pro-rated;** a week planned
-  late gets only the days left. No catch-up.
+  late gets only the days left, and a rerun later in the week adds nothing
+  back. No catch-up.
 - **GBP collision rule:** at most `gbp_daily_location_cap` (1) post per
   location per Chicago day. Over-capacity slots are opened and flagged by
   `social_slot_readiness` (`Over capacity: …`), never dropped, never queued.
-  Three sites on one location: 7 of 15 fit a week.
+  Three sites on one location: 7 of 15 fit a week — BHG's cadence is an
+  open decision for Tom; 7 does not meet the 15 he asked for.
 - **Reconciliation:** v1 slots with work attached stay and count once by
   date (the Oct 29 pilots in the week of Oct 26); unattached v1 slots from
   the first weekly week are retired (blocked, `retired_at`, old hold kept),
@@ -1103,9 +1106,11 @@ and open decisions in `docs/delivery-standard.md`; sandbox suite
   month for weekly clients (the v1 body is `delivery_targets_monthly`,
   unchanged for everyone else); the blog gate follows it.
 - **Cron:** new `delivery-standard-week` (Mon 10:00 UTC, weekly clients
-  only). `delivery-standard-month` / `weekly-blog-posts` keep their
-  definitions; `plan_delivery_month()` plans a weekly client's month week by
-  week.
+  only: plans this and next week, queues this week's drafts).
+  `delivery-standard-month` / `weekly-blog-posts` keep their definitions;
+  `plan_delivery_month()` plans a weekly client's month week by week plus
+  its monthly page refresh, and the Wednesday beat queues a weekly client's
+  drafts through **next** Sunday so Monday's content is drafted ahead.
 
 ## Keyword owner page vs related service (Oct 28 2026; `20261028170000` written, **not applied**)
 

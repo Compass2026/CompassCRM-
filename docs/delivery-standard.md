@@ -24,7 +24,7 @@ and `blog_publication_has_room()` keeps blog releases inside the month's
 target. Cron `delivery-standard-month` (1st, 11:00 UTC) plans each new month;
 the Wednesday beat (`weekly-blog-posts`) queues the week's slots.
 
-## Weekly standard (v2, Tom, Oct 29 2026)
+## Weekly standard (v2, Tom; Executive OS decision `0b407d66-de7d-4086-b6de-013f793bcbd4`)
 
 Not 20 / 20 / 12 a month: a weekly cadence. A month with five Mondays gets
 five weeks of work.
@@ -49,6 +49,16 @@ five weeks of work.
   post, any rounding rule is arbitrary, and it would tie the planner to the
   day the adoption happened to be typed in. A week that is planned late (the
   Monday run missed) gets only the target of the days left in it.
+- **Reruns add nothing back.** A site's room in a week is the smaller of the
+  week's target less everything dated in the week, and the target of the
+  days left less what is already dated on them. A Wednesday-first week opens
+  3 Facebook / 3 GBP / 2 blogs once; a second run that day, or on Thursday
+  or Friday, opens nothing, even if Wednesday's slots were removed. A missed
+  day stays missed.
+- **Page refresh stays monthly.** For a month the weekly standard governs,
+  `plan_delivery_month()` plans the weeks, then runs its monthly loop for
+  `page_refreshes` only: one refresh slot per website per month, as in v1, and
+  a rerun opens none.
 - **Standard days.** A weekly count lands on days in the order Mon, Wed, Fri,
   Tue, Thu, Sat, Sun: 5 → Mon–Fri, 3 → Mon / Wed / Fri. The planner prefers a
   site's free standard days; the month report uses the same days.
@@ -108,14 +118,27 @@ five weeks of work.
 - **New:** `delivery-standard-week`, Mondays 10:00 UTC (04:00 / 05:00
   Chicago): `plan_delivery_weeks()` plans the current and next week for
   active / launching clients with a weekly adoption whose first week has
-  arrived or is next. No adoption → it does nothing.
-- **Unchanged definitions:** `delivery-standard-month` and
+  arrived or is next, then queues this week's drafts
+  (`queue_delivery_week_drafts`) for those whose first week has begun. No
+  adoption → it does nothing.
+- **Unchanged cron definitions:** `delivery-standard-month` and
   `weekly-blog-posts` still call `plan_delivery_month()`; for a weekly
   client's month it now plans the month's weeks (Mondays in the month, from
-  the current week) instead of monthly slots. For every other client it is
-  unchanged. The Wednesday queue (`queue_standard_blog_tasks_site`,
-  `queue_standard_social_tasks`) is untouched and queues weekly slots like
-  any other standard slot.
+  the current week) and its one page refresh per website. For every other
+  client it is unchanged.
+- **Drafting lead time (Monday publication).** Drafts must exist, and be
+  reviewed, before their day. The Wednesday beat (`create_weekly_blog_tasks`)
+  used to queue only through the current Sunday, so next Monday's and
+  Tuesday's slots waited for the following Wednesday, two days late. For a
+  weekly client it now plans next week and queues through **next** Sunday:
+  Monday's drafts are queued five days ahead. Clients on the monthly
+  standard keep the old horizon. The Monday beat queues the current week as a
+  fallback (a first week adopted after the Wednesday before, or a slot the
+  Wednesday beat could not queue), so nothing waits for the Wednesday it
+  falls in. `queue_delivery_week_drafts` applies the Wednesday beat's gates
+  (brand, approved core list, `social_slot_readiness`) and logs every skip.
+  Both beats read `delivery_today()` (the Chicago date; a pinned date only in
+  the sandbox).
 - Drafting still needs readiness (brand board or site guidance, verified
   destination, approved core keyword list, holds); publishing still needs
   Tom's approval, the publisher switch and the holds. None of it changed.
@@ -130,7 +153,12 @@ where c.id in (<client ids>);
 ```
 
 Then run `select * from delivery_week_report(null, '<start>', '<start + 4 weeks>')`
-to see the first weeks before the Monday run plans them.
+to see the first weeks before the Monday run plans them. If the adoption is
+recorded after the Wednesday before the first week, plan and queue that week
+in the same step, so Monday's drafts do not wait for the Monday beat:
+`select plan_delivery_week(id, '<first Monday>'), queue_delivery_week_drafts(id, '<first Sunday>')`
+per client (service role). It queues drafts only; nothing is approved,
+scheduled or published.
 
 ### Dry run against production (Oct 30 2026, rolled back)
 
@@ -153,17 +181,21 @@ planned, all inside one transaction that raised at the end. 12 clients,
 ### Open decisions for Tom
 
 1. **Start date** (the only input the adoption needs), and which clients.
-2. **The three-site, one-location collision:** accept 7 GBP posts a week on
-   the shared profile (the 8 over-capacity slots stay visible as shortfall),
-   connect more locations, or record a standard with a higher daily cap.
+2. **The three-site, one-location collision (unresolved).** Tom asked for
+   15 GBP posts a week across BHG's three websites; one post per location
+   per day fits only 7 on its one shared profile, so the 7-post limit does
+   **not** fulfil the request. The planner opens all 15 and flags the other
+   8 "Over capacity" (never drafted) until Tom chooses: connect more
+   locations, record a standard with a higher daily cap, or accept a lower
+   count.
 3. Whether a shortfall week should ever be made up later (today: no).
 4. The weekday pattern (Mon–Fri for posts, Mon / Wed / Fri for blogs).
 
 ### Rollback
 
 `supabase/rollback/20261030180000_weekly_delivery_standard.down.sql`
-restores `social_slot_readiness`, `plan_delivery_month` and
-`delivery_targets` byte for byte (md5-checked) and unschedules
+restores `social_slot_readiness`, `plan_delivery_month`, `delivery_targets`
+and `create_weekly_blog_tasks` byte for byte (md5-checked) and unschedules
 `delivery-standard-week`. With no adoption it removes everything, standard 2
 included. Once a client has adopted it stops unless
 `compass.weekly_rollback = 'confirmed'`; then retired v1 slots get their
