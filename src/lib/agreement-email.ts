@@ -1,4 +1,4 @@
-import { agreementPrice, type Contract } from "./agreements.ts";
+import { agreementPrice, MANUAL_AGREEMENT_PAYMENT, type Contract } from "./agreements.ts";
 
 export type AgreementEmail = { subject: string; html: string; text: string; reply_to: string };
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) =>
@@ -25,7 +25,9 @@ export function buildAgreementEmail(
   const term = scope.plan.term_months ? `${scope.plan.term_months} months` : "Month-to-month";
   const subject = `${issuer}: ${contract.title}`;
   const explanation = "Verify your email, review your agreement, and electronically sign when you are ready.";
-  const payment = "Signing does not authorize payment. Monthly payment setup is completed separately through Stripe.";
+  const payment = scope.plan.collection === "external"
+    ? MANUAL_AGREEMENT_PAYMENT
+    : "Signing does not authorize payment. Monthly payment setup is completed separately through Stripe.";
   const buttonStyle = "display:inline-block;background:#f97316;color:#101e36;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;line-height:24px;text-decoration:none;padding:16px 26px;border-radius:8px;border:1px solid #f97316;text-align:center;";
   const button = signingUrl
     ? `<a href="${escapeHtml(signingUrl)}" style="${buttonStyle}">Review &amp; Sign Agreement</a>`

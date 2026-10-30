@@ -9,7 +9,7 @@ const contract = {
   recipient_name: "Fictional Recipient",
   snapshot: {
     issuer_name: "Compass Marketing Advisors LLC",
-    scope: { client_name: "Fictional Client", plan: { amount_cents: 50000, currency: "usd", interval: "month", interval_count: 1, term_months: null }, services: [] },
+    scope: { client_name: "Fictional Client", plan: { collection: "stripe", amount_cents: 50000, currency: "usd", interval: "month", interval_count: 1, term_months: null }, services: [] },
   },
 };
 
@@ -62,4 +62,22 @@ test("delivery rejects noncanonical signing URLs", () => {
   for (const bad of ["javascript:alert(1)", url.replace(origin, "https://other.example.test"), `${url}?tracking=1`, `${url}#fragment`, `${origin}/sign/short`]) {
     assert.throws(() => buildAgreementEmail(contract, origin, bad));
   }
+});
+
+test("external collection uses manual-payment wording in preview and delivery", () => {
+  const external = structuredClone(contract);
+  external.snapshot.scope.plan.collection = "external";
+  const before = JSON.stringify(external);
+  for (const signingUrl of [null, url]) {
+    const email = buildAgreementEmail(external, origin, signingUrl);
+    for (const body of [email.html, email.text]) {
+      assert.match(body, /\$500\.00 \/ month/);
+      assert.match(body, /Payments are made manually/);
+      assert.match(body, /No automatic billing or online payment setup is required/);
+      assert.doesNotMatch(body, /Stripe|payment processor|\/pay\//);
+    }
+    if (!signingUrl) assert.doesNotMatch(email.html, /href=|<form|\/sign\//);
+  }
+  assert.equal(JSON.stringify(external), before);
+  assert.match(buildAgreementEmail(contract, origin, url).text, /through Stripe/);
 });
