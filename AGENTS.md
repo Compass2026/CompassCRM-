@@ -1096,7 +1096,7 @@ and open decisions in `docs/delivery-standard.md`; sandbox suite
 - **GBP collision rule:** at most `gbp_daily_location_cap` (1) post per
   location per Chicago day. Over-capacity slots are opened and flagged by
   `social_slot_readiness` (`Over capacity: …`), never dropped, never queued.
-  Three sites on one location: 7 of 15 fit a week — BHG's cadence is an
+  Three sites on one location: 7 of 15 fit a week — that client's cadence is an
   open decision for Tom; 7 does not meet the 15 he asked for.
 - **Reconciliation:** v1 slots with work attached stay and count once by
   date (the Oct 29 pilots in the week of Oct 26); unattached v1 slots from

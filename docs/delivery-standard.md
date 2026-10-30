@@ -182,7 +182,7 @@ planned, all inside one transaction that raised at the end. 12 clients,
 
 1. **Start date** (the only input the adoption needs), and which clients.
 2. **The three-site, one-location collision (unresolved).** Tom asked for
-   15 GBP posts a week across BHG's three websites; one post per location
+   15 GBP posts a week across the three-site client's websites; one post per location
    per day fits only 7 on its one shared profile, so the 7-post limit does
    **not** fulfil the request. The planner opens all 15 and flags the other
    8 "Over capacity" (never drafted) until Tom chooses: connect more
