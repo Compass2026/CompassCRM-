@@ -13166,6 +13166,7 @@ export type Database = {
         Returns: string
       }
       authority_caller_is_service: { Args: never; Returns: boolean }
+      authority_core_scope: { Args: { p_client_id: string }; Returns: Json }
       authority_decide: {
         Args: { p_opportunity_id: string; p_payload?: Json; p_verb: string }
         Returns: Json
@@ -13177,6 +13178,7 @@ export type Database = {
       authority_draft_start: { Args: { p_task_id: string }; Returns: Json }
       authority_fingerprint: { Args: { p_client_id: string }; Returns: Json }
       authority_input: { Args: { p_client_id: string }; Returns: Json }
+      authority_input_scoped: { Args: { p_client_id: string }; Returns: Json }
       authority_link_state: {
         Args: {
           l: Database["public"]["Tables"]["authority_opportunity_links"]["Row"]

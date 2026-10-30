@@ -11,8 +11,10 @@
 // it may never introduce any of the above.
 import type { DrafterInput } from "../post-drafter/types.ts";
 import type { KeywordCampaign } from "./campaigns.ts";
+import type { CoreReceipt, CoreScope, CoreSummary } from "./core.ts";
 
-export const AUTHORITY_VERSION = "authority-v1.4";
+// v1.5 (P1.3): discovery is limited to each site's approved Core 50.
+export const AUTHORITY_VERSION = "authority-v1.5";
 
 // Every statement the engine makes carries one of these.
 export type Tag = "FACT" | "HEURISTIC" | "RESEARCH_REQUIRED" | "REQUIRES_CONFIRMATION";
@@ -94,6 +96,9 @@ export type AuthorityInput = DrafterInput & {
     changeLog: ChangeLogRow[];
     inventory: { fetched_at: string; pages: SitePage[] } | null;
     places?: string[];                             // gazetteer names for the client's state
+    // authority_core_scope() (P1.3), from authority_input_scoped(). Absent or
+    // null: no keyword is a content target (never the whole inventory).
+    core?: CoreScope | null;
   };
 };
 
@@ -126,6 +131,9 @@ export type KeywordAssignment = {
   // Places the query names that are not approved locations (v1.3), as the
   // place index spells them; the structured twin of the location_unapproved flag.
   unapproved_places: string[];
+  // Where the site's approved Core 50 puts the keyword (v1.5): core, child
+  // (through its core parent), off_list, no_approved_list, exempt, not_loaded.
+  core?: { status: string; program_id: string | null; list_version: number | null; core_keyword_id: string | null; post: string | null };
 };
 
 // The approved Home page group as the engine found it (C3).
@@ -178,6 +186,10 @@ export type Opportunity = {
   // missing from content_posts, normalised and sorted. Structured data for
   // writes; the reasons stay display-only. Absent on every other opportunity.
   candidate_paths?: string[];
+  // The Core 50 receipt (v1.5) on every keyword-targeted content opportunity:
+  // program, list id and version, keyword, core parent, owner, market,
+  // geography and the verdict.
+  core?: CoreReceipt;
 };
 
 export type AuthorityReport = {
@@ -192,4 +204,5 @@ export type AuthorityReport = {
   home: HomeSummary;
   opportunities: Opportunity[]; judgments: string[];
   campaigns?: KeywordCampaign[];
+  core?: CoreSummary;
 };

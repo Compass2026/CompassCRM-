@@ -5,6 +5,7 @@ import type { AuthorityInput, KeywordAssignment, Opportunity, Pillar } from "./t
 import { keywordCampaignRank } from "./opportunities.ts";
 import { latestWindow, gscCoverage } from "./gsc.ts";
 import { hostOf, normalizeUrl } from "../post-drafter/rules.ts";
+import { coreVerdict, groundingProblem } from "./core.ts";
 
 export type CampaignChannel = "website" | "blog" | "google_business" | "facebook" | "email" | "ads";
 export type KeywordCampaign = {
@@ -41,11 +42,15 @@ export function buildKeywordCampaigns(input: AuthorityInput, keywords: KeywordAs
     const owner = candidateOwner?.startsWith("https://") && hostOf(candidateOwner) === hostOf(input.client.website_url) ? candidateOwner : null;
     const primary = keywords.find((k) => k.keyword_id === service.primary_keyword_id && active.has(k.keyword_id));
     const mine = keywords.filter((k) => k.service_id === service.id && active.has(k.keyword_id));
-    const eligible = (k: KeywordAssignment) => ["primary", "supporting", "material_supported"].includes(k.role) && !k.intent_check.conflict;
+    // v1.5: a cluster holds only keywords the site's approved Core 50 grounds.
+    const grounding = (k: KeywordAssignment) => groundingProblem(coreVerdict(input, k.keyword_id, service.id, "post"));
+    const eligible = (k: KeywordAssignment) => ["primary", "supporting", "material_supported"].includes(k.role) && !k.intent_check.conflict && !grounding(k);
     const cluster = mine.filter(eligible).sort((a, b) => compare(keywordCampaignRank(a), keywordCampaignRank(b)) || a.keyword.localeCompare(b.keyword));
     const ids = new Set(cluster.map((k) => k.keyword_id));
     const text = new Set(cluster.map((k) => norm(k.keyword)));
     const blockers: string[] = [];
+    const listProblem = groundingProblem(coreVerdict(input, null, service.id, "post"));
+    if (listProblem && listProblem !== "keyword_missing") blockers.push(`The site's Core 50 is not usable: ${listProblem}.`);
     if (!primary || !ids.has(primary.keyword_id)) blockers.push("An active, validated primary keyword mapped to this service is required.");
     if (!owner || !input.pageGroups.some((g) => g.status === "approved" && normalizeUrl(g.target_url) === owner)) blockers.push("An approved owner page is required.");
     if (pillar?.owner.conflict) blockers.push("Owner-page candidates disagree.");
@@ -86,7 +91,7 @@ export function buildKeywordCampaigns(input: AuthorityInput, keywords: KeywordAs
       schema_version: 1, key: `keyword_campaign:${service.id}`, service_id: service.id, name: service.name,
       primary: primary ? { id: primary.keyword_id, keyword: primary.keyword, intent: primary.intent } : null,
       cluster: cluster.map((k) => ({ id: k.keyword_id, keyword: k.keyword, intent: k.intent })),
-      excluded: mine.filter((k) => !eligible(k)).map((k) => ({ keyword: k.keyword, reason: k.intent_check.conflict ? k.intent_check.reason : k.role })),
+      excluded: mine.filter((k) => !eligible(k)).map((k) => ({ keyword: k.keyword, reason: grounding(k) ?? (k.intent_check.conflict ? k.intent_check.reason : k.role) })),
       intent_mix: [...new Set(cluster.map((k) => k.intent).filter((i): i is string => !!i))].sort(), owner_url: owner,
       objective: `Build supported coverage for ${primary?.keyword ?? service.name} around one owner page.`,
       blockers, evidence_claim_ids: pillar?.evidence.relevant.map((c) => c.id) ?? [],

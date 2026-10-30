@@ -331,3 +331,4 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_onboarding.t
 # place matcher and its seed, per-site gates, text-only places, client-wide
 # evidence, isolation, access, no writes, BHG-shaped timing, rollback (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/site_program_readiness.test.sql" -o /dev/null
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_core_scope.test.sql" -o /dev/null
