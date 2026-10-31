@@ -17,9 +17,9 @@ export type InquiryActionState = { ok: boolean; message: string } | null;
 
 const SIGNED_OUT = "Your session expired. Sign in again and retry.";
 
-// Only the two places these forms live are revalidated.
+// Revalidate only known inquiry screens and the team workspace review route.
 function safePath(path: string): string | null {
-  return /^\/portal\/inquiries(\/[0-9a-f-]{36})?$/.test(path) || /^\/clients\/[0-9a-f-]{36}\/inquiries(\/[0-9a-f-]{36})?$/.test(path)
+  return /^\/clients\/[0-9a-f-]{36}\/workspace-preview$/.test(path) || /^\/portal\/inquiries(\/[0-9a-f-]{36})?$/.test(path) || /^\/clients\/[0-9a-f-]{36}\/inquiries(\/[0-9a-f-]{36})?$/.test(path)
     ? path : null;
 }
 
