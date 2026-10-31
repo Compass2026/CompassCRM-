@@ -55,6 +55,7 @@
     "@resvg/resvg-wasm": "2.6.2",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "@twilio/voice-sdk": "^2.18.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
@@ -83,6 +84,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
     "playwright-core": "^1.62.1",
+    "svix": "^2.9.1",
     "tailwindcss": "^4",
     "twilio": "^5.13.1",
     "typescript": "^5"
