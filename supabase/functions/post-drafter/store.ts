@@ -84,7 +84,17 @@ export function createStore(supabase: Client) {
         .select("id, platform, external_account_id, display_name, publish_provider, publish_page_id, publish_verified_at")
         .eq("client_id", clientId).in("platform", ["facebook", "google_business"]);
       if (error) throw new Error(error.message);
-      return (data ?? []) as SocialAccountRow[];
+      const rows = (data ?? []) as SocialAccountRow[];
+      // Each Business Profile location carries its recorded markets, so its
+      // brief approves only that location's places.
+      const { data: markets, error: mError } = await supabase.from("gbp_location_markets")
+        .select("social_account_id, market, kind").eq("client_id", clientId);
+      if (mError) throw new Error(mError.message);
+      for (const r of rows) {
+        if (r.platform !== "google_business") continue;
+        r.markets = (markets ?? []).filter((m) => m.social_account_id === r.id).map((m) => ({ market: m.market, kind: m.kind }));
+      }
+      return rows;
     },
 
     // Submits already made against this brief (any outcome).
