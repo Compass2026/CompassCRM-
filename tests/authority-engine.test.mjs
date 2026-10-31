@@ -10,9 +10,11 @@ import { GBP_CADENCE_DAYS } from "../supabase/functions/authority/coverage.ts";
 import { assessIntent } from "../supabase/functions/authority/intent.ts";
 import { buildPlaceIndex } from "../supabase/functions/authority/urls.ts";
 import { prioritize, demandBucket, actionForRefusals } from "../supabase/functions/authority/opportunities.ts";
+import { withCore } from "./fixtures/authority-core.mjs";
 import { lucasAuthority, page, ROOF, REPAIR, STORM, SITE, APPROVED_POST, REJECTED_POST } from "./fixtures/authority-lucas.mjs";
 
-const run = (mut) => { const i = lucasAuthority(); mut?.(i); return runAuthority(i); };
+// The default Core 50 scope is rebuilt after the mutation unless the test set its own.
+const run = (mut) => { const i = lucasAuthority(); const core = i.authority.core; mut?.(i); return runAuthority(withCore(i, core)); };
 const pillar = (r, name) => r.pillars.find((p) => p.name === name);
 const opp = (r, id) => r.opportunities.find((o) => o.id === id);
 const conflicts = (r, kind) => r.conflicts.filter((c) => c.kind === kind);

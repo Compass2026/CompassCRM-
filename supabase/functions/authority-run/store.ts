@@ -1,7 +1,8 @@
 // authority-run's only door to the database: supabase-js with the service
 // role, so every call reaches Postgres through PostgREST as authenticator +
 // service_role, the one session 0048's run functions admit. It reads through
-// authority_input / authority_fingerprint and the team-readable
+// authority_input_scoped (authority_input plus the site programs' approved
+// Core 50, 20261030190000) / authority_fingerprint and the team-readable
 // authority_runs, and writes only through authority_begin_run and
 // authority_record_run. It never writes a table directly.
 import type { Inventory } from "../authority/inventory.ts";
@@ -65,7 +66,7 @@ export function createStore(supabase: Client) {
     },
 
     async input(clientId: string): Promise<Record<string, unknown> | null> {
-      const { data, error } = await supabase.rpc("authority_input", { p_client_id: clientId });
+      const { data, error } = await supabase.rpc("authority_input_scoped", { p_client_id: clientId });
       if (error) throw new Error(error.message);
       return (data as Record<string, unknown> | null) ?? null;
     },

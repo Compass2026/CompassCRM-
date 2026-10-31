@@ -40,6 +40,31 @@ changes no existing task; open legacy tasks are labelled only by the reviewed
 `supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
 before deploying the code.
 
+## Core 50-aware Authority input (P1.3, October 30, 2026; `20261030190000` written, **not applied**; engine `authority-v1.5` not deployed)
+
+See `docs/authority-core-scope.md`. Authority discovery reads only each site
+program's approved Core 50.
+
+- **`authority_core_scope(client)`** returns per site the approved list (id,
+  version, sorted ids), or `proposed_only` / `missing`, and every keyword the
+  list grounds (`core_keyword_grounding()`), with three verdicts:
+  `keyword_owner()` per purpose, and the places its text names.
+- **`authority_input_scoped(client)`** is `authority_input()` plus
+  `authority.core`; `authority-run` reads it. `authority_input()` itself is
+  unchanged.
+- **The engine fails closed:**
+  - An off-list, other-site, held, unverified or text-only-place keyword is
+    never a Ready target. It is blocked with its code.
+  - A site with no approved list gets one `core_list:` decision, never the
+    full inventory.
+  - Opportunity keys are unchanged, so re-runs update rows; history is
+    untouched.
+  - Every keyword-targeted opportunity carries a `core` receipt.
+- **`authority_fingerprint()`** gains a `core` section (patched in place on
+  its md5-pinned 0048 definition).
+- **Deploy order:** apply the migration first, then deploy `authority-run`.
+  Runs are a separate authorization.
+
 ## Site-program readiness, Gate B / Gate C (October 29, 2026; `20261029200000` written, **not applied**)
 
 See `docs/site-program-readiness.md`. `site_program_readiness(client)` is a
