@@ -81,7 +81,7 @@ export function createEmailWebhook(
         )
           return new Response("Ignored", { status: 200 });
         const key = await db.rpc("get_secret", {
-          secret_name: b.data.api_key_secret,
+          secret_name: "CLIENT_RESEND_RECEIVING_API_KEY",
         });
         if (key.error || !key.data) throw Error("configuration");
         const r = await request(

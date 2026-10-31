@@ -30,7 +30,7 @@ import type { EventRow, InquiryRow, NoteRow } from "@/lib/inquiries-data";
 import { formatWhen, mailtoHref, telHref } from "@/lib/inquiries";
 import { cn } from "@/lib/utils";
 import { MailboxConnection, MailboxThread } from "./mailbox";
-import { LeadText, WorkspacePhone } from "./phone";
+import { LeadText, WorkspacePhone, LeadCalls } from "./phone";
 
 type Props = {
   clientId: string;
@@ -604,6 +604,11 @@ export function ClientWorkspace({
                       />
                     )}
                   </div>
+                  <LeadCalls
+                    key={`calls:${selected.id}`}
+                    clientId={clientId}
+                    inquiryId={selected.id}
+                  />
                   <details className="mt-5 rounded-xl border border-slate-200 p-4">
                     <summary className="cursor-pointer text-sm font-semibold">
                       Follow-up and internal notes

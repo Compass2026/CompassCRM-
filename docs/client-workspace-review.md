@@ -2,6 +2,7 @@
 
 The portal `/portal/inquiries` and team review route
 `/clients/{clientId}/workspace-preview` share a responsive lead dashboard.
+Enable `crm_lite_settings.workspace_enabled` for each reviewed client; other portals keep their existing inquiry screen.
 It shows real inquiries, filters, status, original messages, internal notes,
 and per-lead communication. Counts describe the loaded records, with a visible
 notice when the newest 200 records do not represent the whole list.
@@ -30,7 +31,7 @@ callbacks do not downgrade delivery or remove a bounce/complaint suppression.
 The UI distinguishes provider acceptance from actual delivery.
 
 Receiving needs an API key with permission to retrieve received email, not a
-sending-only key. Store it in Vault, referenced by `api_key_secret`. Store the
+sending-only key. Store it as `CLIENT_RESEND_RECEIVING_API_KEY` in Vault; the sender uses its domain-scoped key referenced by `api_key_secret`. Store the
 webhook signing secret as `CLIENT_RESEND_WEBHOOK_SECRET`. Keep `resend_ready`
 false until DNS, receiving permission and a controlled round trip are checked.
 The current composer supports plain text. Attachments are not displayed.

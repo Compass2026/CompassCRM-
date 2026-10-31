@@ -1,3 +1,4 @@
+import { voiceIdentity } from "./identity.ts";
 import { uuid } from "../client-mailbox/mail.ts";
 import type { DB } from "../client-mailbox/handler.ts";
 import { createTwilioProvider } from "../_shared/communications/twilio.ts";
@@ -189,7 +190,7 @@ export function createClientPhone(
             key: r.data.api_key,
             secret: r.data.api_secret,
             app: voice.application_sid,
-            identity: `crm_${cid}_${uid}`,
+            identity: voiceIdentity(cid, uid),
           }),
         });
       }
@@ -205,19 +206,17 @@ export function createClientPhone(
         if (typeof input.body !== "string" || input.body.length > 1600)
           throw Error("invalid_draft");
         await check(
-          db
-            .from("client_phone_drafts")
-            .upsert(
-              {
-                client_id: cid,
-                inquiry_id: i.id,
-                actor_id: uid,
-                body: input.body,
-                revision: crypto.randomUUID(),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "client_id,inquiry_id,actor_id" },
-            ),
+          db.from("client_phone_drafts").upsert(
+            {
+              client_id: cid,
+              inquiry_id: i.id,
+              actor_id: uid,
+              body: input.body,
+              revision: crypto.randomUUID(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "client_id,inquiry_id,actor_id" },
+          ),
         );
         return reply(200, await snapshot(cid, i, uid));
       }
@@ -248,17 +247,15 @@ export function createClientPhone(
         if (recent.length >= 5) throw Error("rate_limited");
         const id = crypto.randomUUID();
         await check(
-          db
-            .from("client_voice_calls")
-            .insert({
-              id,
-              client_id: cid,
-              inquiry_id: i.id,
-              actor_id: uid,
-              direction: "outbound",
-              from_number: number.phone_number_e164,
-              to_number: i.phone_e164,
-            }),
+          db.from("client_voice_calls").insert({
+            id,
+            client_id: cid,
+            inquiry_id: i.id,
+            actor_id: uid,
+            direction: "outbound",
+            from_number: number.phone_number_e164,
+            to_number: i.phone_e164,
+          }),
         );
         return reply(200, { intent: id });
       }

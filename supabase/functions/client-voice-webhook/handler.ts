@@ -1,3 +1,4 @@
+import { voiceIdentity } from "../client-phone/identity.ts";
 import { uuid } from "../client-mailbox/mail.ts";
 import type { DB } from "../client-mailbox/handler.ts";
 const esc = (v: unknown) =>
@@ -103,7 +104,7 @@ export function createVoiceWebhook(
         });
         if (
           !call ||
-          p.From !== `client:crm_${cid}_${call.actor_id}` ||
+          p.From !== `client:${voiceIdentity(cid, call.actor_id)}` ||
           !(await active(call.actor_id, cid)) ||
           Date.parse(call.expires_at) < Date.now()
         )
@@ -149,20 +150,18 @@ export function createVoiceWebhook(
           .order("received_at", { ascending: false })
           .limit(1);
         if (lead.error) throw Error("database");
-        const saved = await db
-          .from("client_voice_calls")
-          .upsert(
-            {
-              client_id: cid,
-              inquiry_id: lead.data?.[0]?.id || null,
-              provider_sid: p.CallSid,
-              direction: "inbound",
-              from_number: p.From,
-              to_number: p.To,
-              status: "ringing",
-            },
-            { onConflict: "provider_sid", ignoreDuplicates: true },
-          );
+        const saved = await db.from("client_voice_calls").upsert(
+          {
+            client_id: cid,
+            inquiry_id: lead.data?.[0]?.id || null,
+            provider_sid: p.CallSid,
+            direction: "inbound",
+            from_number: p.From,
+            to_number: p.To,
+            status: "ringing",
+          },
+          { onConflict: "provider_sid", ignoreDuplicates: true },
+        );
         if (saved.error) throw Error("database");
         const users = await db
           .from("portal_users")
@@ -182,7 +181,7 @@ export function createVoiceWebhook(
               )
             : xml("<Say>Please call again later.</Say><Hangup/>");
         return xml(
-          `<Dial timeout="20" action="${esc(base + "/finished")}" method="POST">${enabled.map((u) => `<Client>crm_${esc(cid)}_${esc(u)}</Client>`).join("")}</Dial>`,
+          `<Dial timeout="20" action="${esc(base + "/finished")}" method="POST">${enabled.map((u) => `<Client>${esc(voiceIdentity(cid, u))}</Client>`).join("")}</Dial>`,
         );
       }
       const sid = p.ParentCallSid || p.CallSid,

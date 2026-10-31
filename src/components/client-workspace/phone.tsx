@@ -367,3 +367,80 @@ export function WorkspacePhone({
     </section>
   );
 }
+
+export function LeadCalls({
+  clientId,
+  inquiryId,
+}: {
+  clientId: string;
+  inquiryId: string;
+}) {
+  const [calls, setCalls] = useState<PhoneSnapshot["calls"]>([]),
+    [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    phoneRequest(clientId, "load", { inquiry_id: inquiryId })
+      .then((d) => {
+        if (live) setCalls(d.calls);
+      })
+      .catch(() => {
+        if (live) setError("Call history could not be loaded.");
+      });
+    return () => {
+      live = false;
+    };
+  }, [clientId, inquiryId]);
+  async function refresh() {
+    try {
+      const d = await phoneRequest(clientId, "load", { inquiry_id: inquiryId });
+      setCalls(d.calls);
+      setError("");
+    } catch {
+      setError("Call history could not be loaded.");
+    }
+  }
+  return (
+    <section
+      className="mt-5 rounded-xl border border-slate-200 p-4"
+      aria-label="Lead call history"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Calls with this lead</h3>
+        <button
+          type="button"
+          onClick={refresh}
+          className="text-xs font-semibold text-blue-700"
+        >
+          Refresh calls
+        </button>
+      </div>
+      {!calls.length && !error && (
+        <p className="mt-2 text-xs text-slate-500">
+          No calls recorded through this workspace yet.
+        </p>
+      )}
+      <ul className="mt-2 space-y-2">
+        {calls.map((c) => (
+          <li
+            key={c.id}
+            className="flex flex-wrap justify-between gap-2 text-xs"
+          >
+            <span>
+              {c.direction === "inbound" ? "Incoming" : "Outgoing"} ·{" "}
+              {c.status.replaceAll("-", " ")}
+              {c.duration != null ? ` · ${c.duration}s` : ""}
+            </span>
+            <span className="text-slate-500">
+              {new Date(c.created_at).toLocaleString()}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}

@@ -2,21 +2,47 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { loadInquiries, loadInquiry } from "@/lib/inquiries-data";
 import { ClientWorkspace } from "@/components/client-workspace/workspace";
+import { InquiryList } from "@/components/inquiries/inquiry-views";
+import { isInquiryStatus } from "@/lib/inquiries";
 import { isUuid } from "@/lib/tasks";
 export default async function PortalInquiriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string }>;
+  searchParams: Promise<{ lead?: string; q?: string; status?: string }>;
 }) {
-  const { lead } = await searchParams;
+  const { lead, q = "", status } = await searchParams;
   if (lead && !isUuid(lead)) notFound();
   const supabase = await createClient();
   const [{ data: on }, { data: client }] = await Promise.all([
-    supabase.from("portal_crm_lite").select("client_id").maybeSingle(),
+    supabase.from("portal_crm_lite").select("*").maybeSingle(),
     supabase.from("portal_client").select("name").maybeSingle(),
   ]);
   if (!on?.client_id || !client) notFound();
-  const list = await loadInquiries(supabase, { kind: "portal" }, {});
+  const enhanced = "workspace_enabled" in on && on.workspace_enabled === true;
+  const list = await loadInquiries(
+    supabase,
+    { kind: "portal" },
+    enhanced ? {} : { q, status },
+  );
+  if (!enhanced)
+    return (
+      <div className="mx-auto max-w-3xl space-y-5">
+        <div>
+          <h1 className="page-title kicker mb-1">Inquiries</h1>
+          <p className="text-sm text-muted-foreground">
+            Website inquiries, newest first. Mark each one contacted, then
+            closed.
+          </p>
+        </div>
+        <InquiryList
+          basePath="/portal/inquiries"
+          rows={list.rows}
+          counts={list.counts}
+          q={q}
+          status={isInquiryStatus(status) ? status : null}
+        />
+      </div>
+    );
   const selectedId = lead || list.rows[0]?.id;
   const detail = selectedId
     ? await loadInquiry(supabase, { kind: "portal" }, selectedId)
