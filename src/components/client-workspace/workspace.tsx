@@ -30,6 +30,7 @@ import type { EventRow, InquiryRow, NoteRow } from "@/lib/inquiries-data";
 import { formatWhen, mailtoHref, telHref } from "@/lib/inquiries";
 import { cn } from "@/lib/utils";
 import { MailboxConnection, MailboxThread } from "./mailbox";
+import { LeadText, WorkspacePhone } from "./phone";
 
 type Props = {
   clientId: string;
@@ -73,7 +74,6 @@ export function ClientWorkspace({
   const [website, setWebsite] = useState("");
   const [recentOnly, setRecentOnly] = useState(false);
   const [channel, setChannel] = useState<"email" | "sms">("email");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const summary = useMemo(() => workspaceSummary(rows, now), [rows, now]);
   const visible = useMemo(
     () =>
@@ -86,7 +86,6 @@ export function ClientWorkspace({
     [rows, query, status, website, recentOnly, now],
   );
   const limited = total != null && total > rows.length;
-  const draftKey = `${selected?.id ?? "none"}:${channel}`;
   const leadLink = (id: string) => `${basePath}?lead=${encodeURIComponent(id)}`;
   const contactPath = selected
     ? `${inquiryBasePath}/${selected.id}`
@@ -211,13 +210,18 @@ export function ClientWorkspace({
           {preview && (
             <p className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-900">
               Review version using this client&apos;s real inquiries. Notes and
-              status changes save to the CRM. Once Gmail is connected, email
-              sends are real. Text messaging is not connected yet.
+              status changes save to the CRM. Enabled communication channels
+              send real messages.
             </p>
           )}
           <MailboxConnection
             clientId={clientId}
             onConnected={setMailConnected}
+          />
+          <WorkspacePhone
+            clientId={clientId}
+            inquiryId={selected?.id}
+            leadName={selected?.name}
           />
           {error && (
             <p
@@ -593,40 +597,11 @@ export function ClientWorkspace({
                         connected={mailConnected}
                       />
                     ) : (
-                      <div className="p-3">
-                        <p className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-                          Text messaging is not connected to this workspace yet.
-                          Sending requires your business number, verified
-                          registration and the lead&apos;s recorded consent.
-                        </p>
-                        <label className="sr-only" htmlFor="workspace-reply">
-                          Reply draft
-                        </label>
-                        <textarea
-                          id="workspace-reply"
-                          value={drafts[draftKey] ?? ""}
-                          onChange={(e) =>
-                            setDrafts({ ...drafts, [draftKey]: e.target.value })
-                          }
-                          rows={3}
-                          maxLength={1600}
-                          className="mt-3 w-full resize-y rounded-lg border border-slate-200 p-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                          placeholder="Try composing a reply. Nothing will be sent."
-                        />
-                        <div className="mt-2 flex items-center justify-between gap-3">
-                          <span className="text-[10px] leading-4 text-slate-500">
-                            Preview draft only. Not saved after leaving this
-                            page.
-                          </span>
-                          <button
-                            type="button"
-                            disabled
-                            className="rounded-lg bg-slate-200 px-4 py-2 text-xs font-medium text-slate-500"
-                          >
-                            Send text
-                          </button>
-                        </div>
-                      </div>
+                      <LeadText
+                        key={selected.id}
+                        clientId={clientId}
+                        inquiryId={selected.id}
+                      />
                     )}
                   </div>
                   <details className="mt-5 rounded-xl border border-slate-200 p-4">

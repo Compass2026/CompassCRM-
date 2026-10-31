@@ -149,6 +149,7 @@ export function createMailbox(
       const a = await actor(s.actor_id, s.client_id),
         b = await box(s.client_id);
       if (
+        b.provider === "resend" ||
         s.generation !== b.generation ||
         (!a.admin && (!a.portal || a.email !== b.expected_email))
       )
@@ -245,17 +246,15 @@ export function createMailbox(
     if (create && !t) {
       if (!email(i.email)) fail("lead_email_required");
       await checked(
-        db
-          .from("client_email_threads")
-          .upsert(
-            {
-              client_id: clientId,
-              inquiry_id: i.id,
-              recipient: i.email.toLowerCase(),
-              subject: "Following up on your inquiry",
-            },
-            { onConflict: "inquiry_id,client_id", ignoreDuplicates: true },
-          ),
+        db.from("client_email_threads").upsert(
+          {
+            client_id: clientId,
+            inquiry_id: i.id,
+            recipient: i.email.toLowerCase(),
+            subject: "Following up on your inquiry",
+          },
+          { onConflict: "inquiry_id,client_id", ignoreDuplicates: true },
+        ),
       );
       t = await one("client_email_threads", {
         client_id: clientId,
@@ -277,7 +276,7 @@ export function createMailbox(
       ? await db
           .from("client_email_messages")
           .select(
-            "id,sender,recipient,subject,body,status,error_code,message_at",
+            "id,sender,recipient,subject,body,status,delivery_status,error_code,message_at",
           )
           .eq("client_id", clientId)
           .eq("thread_id", t.id)
@@ -385,12 +384,10 @@ export function createMailbox(
         };
         // Never overwrite actor attribution or send receipts when a message already exists.
         await checked(
-          db
-            .from("client_email_messages")
-            .upsert(row, {
-              onConflict: "client_id,rfc_message_id",
-              ignoreDuplicates: true,
-            }),
+          db.from("client_email_messages").upsert(row, {
+            onConflict: "client_id,rfc_message_id",
+            ignoreDuplicates: true,
+          }),
         );
       }
     }
@@ -442,13 +439,21 @@ export function createMailbox(
         const b = await one("client_mailboxes", { client_id: cid });
         return json(200, {
           configured: !!b?.enabled,
-          connected: !!(b?.enabled && b.connected_email),
+          connected: !!(
+            b?.enabled &&
+            b.connected_email &&
+            (b.provider !== "resend" || b.resend_ready)
+          ),
+          provider: b?.provider || "google",
           email: b?.expected_email || null,
-          can_connect: a.admin || (a.portal && a.email === b?.expected_email),
+          can_connect:
+            b?.provider !== "resend" &&
+            (a.admin || (a.portal && a.email === b?.expected_email)),
         });
       }
       const b = await box(cid);
       if (input.mode === "connect") {
+        if (b.provider === "resend") fail("email_not_ready");
         if (!a.admin && (!a.portal || a.email !== b.expected_email))
           fail("forbidden");
         const setting = await one(
@@ -488,16 +493,14 @@ export function createMailbox(
             .eq("actor_id", uid),
         );
         await checked(
-          db
-            .from("client_mailbox_oauth")
-            .insert({
-              state_hash: await digest(state),
-              client_id: cid,
-              actor_id: uid,
-              generation: b.generation,
-              verifier,
-              return_to: back,
-            }),
+          db.from("client_mailbox_oauth").insert({
+            state_hash: await digest(state),
+            client_id: cid,
+            actor_id: uid,
+            generation: b.generation,
+            verifier,
+            return_to: back,
+          }),
         );
         const consent = new URL("https://accounts.google.com/o/oauth2/v2/auth");
         consent.search = new URLSearchParams({
@@ -522,31 +525,33 @@ export function createMailbox(
           fail("invalid_draft");
         await thread(cid, i, true);
         await checked(
-          db
-            .from("client_email_drafts")
-            .upsert(
-              {
-                client_id: cid,
-                inquiry_id: i.id,
-                actor_id: uid,
-                body: input.body,
-                revision: crypto.randomUUID(),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "client_id,inquiry_id,actor_id" },
-            ),
+          db.from("client_email_drafts").upsert(
+            {
+              client_id: cid,
+              inquiry_id: i.id,
+              actor_id: uid,
+              body: input.body,
+              revision: crypto.randomUUID(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "client_id,inquiry_id,actor_id" },
+          ),
         );
         return json(200, await snapshot(cid, i, uid));
       }
       if (input.mode === "sync") {
         const t = await thread(cid, i);
-        if (t) await sync(cid, t, b, await token(b));
+        if (t && b.provider !== "resend") await sync(cid, t, b, await token(b));
         return json(200, await snapshot(cid, i, uid));
       }
       if (input.mode === "send") {
         if (!uuid(input.revision)) fail("invalid_revision");
         const t = await thread(cid, i, true),
-          tok = await token(b);
+          tok =
+            b.provider === "resend"
+              ? await secret(b.api_key_secret || "CLIENT_RESEND_API_KEY")
+              : await token(b);
+        if (!tok) fail("email_not_ready");
         await actor(uid, cid); // active authorization checked again immediately before reservation
         const claim = await db.rpc("client_mailbox_claim_send", {
           p_client: cid,
@@ -557,6 +562,9 @@ export function createMailbox(
         if (claim.error) {
           const known = [
             "send_uncertain_refresh_first",
+            "email_not_ready",
+            "recipient_suppressed",
+            "rate_limited",
             "save_draft_first",
             "request_conflict",
           ];
@@ -582,19 +590,49 @@ export function createMailbox(
         if (previous.error) fail("send_uncertain_refresh_first");
         let res: Response;
         try {
-          res = await provider(GMAIL + "/messages/send", {
-            method: "POST",
-            headers: {
-              Authorization: "Bearer " + tok,
-              "Content-Type": "application/json",
+          res = await provider(
+            b.provider === "resend"
+              ? "https://api.resend.com/emails"
+              : GMAIL + "/messages/send",
+            {
+              method: "POST",
+              headers: {
+                Authorization: "Bearer " + tok,
+                "Content-Type": "application/json",
+                ...(b.provider === "resend"
+                  ? { "Idempotency-Key": "crm-" + m.request_id }
+                  : {}),
+              },
+              body: JSON.stringify(
+                b.provider === "resend"
+                  ? {
+                      from: b.sender_name
+                        ? `${b.sender_name.replace(/[<>\r\n]/g, "")} <${m.sender}>`
+                        : m.sender,
+                      to: [m.recipient],
+                      subject: m.subject,
+                      text: m.body,
+                      reply_to: `r.${t.reply_token}@${b.reply_domain}`,
+                      headers: {
+                        "Message-ID": m.rfc_message_id,
+                        ...(previous.data?.[0]?.rfc_message_id
+                          ? {
+                              "In-Reply-To": previous.data[0].rfc_message_id,
+                              References: previous.data[0].rfc_message_id,
+                            }
+                          : {}),
+                      },
+                      tags: [{ name: "crm_message_id", value: m.id }],
+                    }
+                  : {
+                      raw: mime(m, previous.data?.[0]?.rfc_message_id),
+                      ...(t.provider_thread_id
+                        ? { threadId: t.provider_thread_id }
+                        : {}),
+                    },
+              ),
             },
-            body: JSON.stringify({
-              raw: mime(m, previous.data?.[0]?.rfc_message_id),
-              ...(t.provider_thread_id
-                ? { threadId: t.provider_thread_id }
-                : {}),
-            }),
-          });
+          );
         } catch {
           return json(200, {
             ...(await snapshot(cid, i, uid)),
@@ -609,7 +647,7 @@ export function createMailbox(
           await checked(
             db
               .from("client_email_messages")
-              .update({ status, error_code: "gmail_" + res.status })
+              .update({ status, error_code: b.provider + "_" + res.status })
               .eq("id", m.id)
               .eq("client_id", cid),
           );
@@ -618,18 +656,19 @@ export function createMailbox(
             send_status: status,
           });
         }
-        if (!sent?.id || !sent?.threadId)
+        if (!sent?.id || (b.provider !== "resend" && !sent?.threadId))
           return json(200, {
             ...(await snapshot(cid, i, uid)),
             send_status: "unknown",
           });
-        await checked(
-          db
-            .from("client_email_threads")
-            .update({ provider_thread_id: sent.threadId })
-            .eq("id", t.id)
-            .eq("client_id", cid),
-        );
+        if (b.provider !== "resend")
+          await checked(
+            db
+              .from("client_email_threads")
+              .update({ provider_thread_id: sent.threadId })
+              .eq("id", t.id)
+              .eq("client_id", cid),
+          );
         await checked(
           db
             .from("client_email_messages")
@@ -668,6 +707,9 @@ export function createMailbox(
         "connect_mailbox_first",
         "reconnect_required",
         "gmail_unavailable",
+        "email_not_ready",
+        "recipient_suppressed",
+        "rate_limited",
         "invalid_draft",
         "invalid_revision",
         "send_uncertain_refresh_first",

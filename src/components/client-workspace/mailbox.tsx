@@ -1,8 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 const errors: Record<string, string> = {
+  email_not_ready: "Business email setup is still in progress.",
+  recipient_suppressed:
+    "Email to this address is blocked after a bounce or complaint. Contact Compass.",
+  rate_limited: "Please wait a minute before sending another email.",
   wrong_google_account:
     "Choose the business email shown below when connecting Google.",
   missing_email_permissions:
@@ -14,7 +17,7 @@ const errors: Record<string, string> = {
   forbidden: "Your account is not authorized for this action.",
   workspace_unavailable: "This workspace is currently unavailable.",
   send_uncertain_refresh_first:
-    "The last send has an uncertain result. Refresh replies to check Gmail before sending anything else.",
+    "The last send has an uncertain result. Refresh replies to check the provider before sending anything else.",
   request_uncertain_refresh:
     "The request timed out. Refresh replies to check its result before trying another send.",
   save_draft_first: "Save your draft before sending.",
@@ -45,12 +48,6 @@ async function call(
     );
   return data;
 }
-type Status = {
-  configured: boolean;
-  connected: boolean;
-  email: string | null;
-  can_connect: boolean;
-};
 export function MailboxConnection({
   clientId,
   onConnected,
@@ -58,11 +55,11 @@ export function MailboxConnection({
   clientId: string;
   onConnected: (value: boolean) => void;
 }) {
-  const [status, setStatus] = useState<Status | null>(null),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const params = useSearchParams(),
-    result = params.get("mailbox");
+  const [status, setStatus] = useState<{
+    email: string | null;
+    connected: boolean;
+  } | null>(null);
+  const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
     call(clientId, "status")
@@ -79,75 +76,26 @@ export function MailboxConnection({
       active = false;
     };
   }, [clientId, onConnected]);
-  async function connect() {
-    setBusy(true);
-    setError("");
-    try {
-      const r = await call(clientId, "connect");
-      window.location.assign(r.url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Connection unavailable");
-      setBusy(false);
-    }
-  }
   return (
     <section
       aria-label="Email connection"
       className="mb-5 rounded-xl border border-slate-200 bg-white p-4 text-sm"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold">Business email</p>
-          <p className="mt-1 text-xs text-slate-600">
-            {status?.email || "Loading mailbox settings…"}
-            {status?.email &&
-              (status.connected
-                ? " · Connected to Gmail"
-                : " · Connection needed")}
-          </p>
-        </div>
-        {status?.can_connect && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={connect}
-            className="rounded-lg bg-navy-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            {busy
-              ? "Opening Google…"
-              : status.connected
-                ? "Reconnect Gmail"
-                : "Connect Gmail"}
-          </button>
-        )}
-      </div>
-      {status && !status.configured && (
-        <p className="mt-2 text-xs">
-          Compass needs to configure this mailbox before it can be connected.
-        </p>
-      )}
-      {result === "connected" && status?.connected && (
-        <p className="mt-2 text-xs text-green-700">
-          Your business mailbox is connected. Open a lead to save a draft or
-          send an email.
-        </p>
-      )}
-      {result && result !== "connected" && (
-        <p role="alert" className="mt-2 text-xs text-red-700">
-          {errors[result] ||
-            "The mailbox connection did not finish. Please try again."}
-        </p>
-      )}
+      <p className="font-semibold">Lead email</p>
+      <p className="mt-1 text-xs text-slate-600">
+        {status
+          ? `${status.email || "Business email"} · ${status.connected ? "Ready" : "Setup in progress"}`
+          : "Loading email settings…"}
+      </p>
+      <p className="mt-2 text-xs text-slate-500">
+        Send and receive lead conversations here. Your regular business inbox
+        stays separate.
+      </p>
       {error && (
         <p role="alert" className="mt-2 text-xs text-red-700">
           {error}
         </p>
       )}
-      <p className="mt-2 text-xs leading-5 text-slate-500">
-        Google will request permission to send and read email. This CRM displays
-        conversations started from your leads. It does not import your whole
-        inbox. Replies update when you select Refresh replies.
-      </p>
     </section>
   );
 }
@@ -158,6 +106,7 @@ type Message = {
   subject: string;
   body: string;
   status: string;
+  delivery_status?: string | null;
   message_at: string;
   error_code: string | null;
 };
@@ -220,9 +169,9 @@ export function MailboxThread({
           : mode === "sync"
             ? "Conversation refreshed."
             : snapshot.send_status === "accepted"
-              ? "Gmail accepted your email. This does not confirm delivery."
+              ? "Email accepted. Delivery status will update when confirmed."
               : snapshot.send_status === "failed"
-                ? "Gmail rejected the send. Your draft is saved."
+                ? "The email provider rejected the send. Your draft is saved."
                 : "Send result is uncertain. Refresh replies before sending again.",
       );
     } catch (e) {
@@ -256,13 +205,15 @@ export function MailboxThread({
             <div className="flex flex-wrap justify-between gap-2 text-[11px] text-slate-500">
               <span>{m.sender}</span>
               <span>
-                {m.status === "accepted"
-                  ? "Sent to Gmail"
-                  : m.status === "received"
-                    ? "Received"
-                    : m.status === "unknown"
-                      ? "Send uncertain"
-                      : "Send failed"}
+                {m.delivery_status
+                  ? m.delivery_status.replaceAll("_", " ")
+                  : m.status === "accepted"
+                    ? "Accepted for delivery"
+                    : m.status === "received"
+                      ? "Received"
+                      : m.status === "unknown"
+                        ? "Send uncertain"
+                        : "Send failed"}
               </span>
             </div>
             <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">
@@ -281,8 +232,8 @@ export function MailboxThread({
       </div>
       {!connected && (
         <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-          Connect the business mailbox above before sending or receiving
-          replies.
+          Business email setup must be completed before sending or receiving
+          replies. Your drafts can be saved now.
         </p>
       )}
       {uncertain && (
@@ -291,7 +242,7 @@ export function MailboxThread({
           className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900"
         >
           A previous send has an uncertain result. Refresh replies to reconcile
-          it with Gmail. New sends are blocked to prevent duplicates.
+          its result. New sends are blocked to prevent duplicates.
         </p>
       )}
       <label

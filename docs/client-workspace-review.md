@@ -1,77 +1,84 @@
-# Client workspace review
+# CRM Lite lead workspace
 
-## Current implementation
+The portal `/portal/inquiries` and team review route
+`/clients/{clientId}/workspace-preview` share a responsive lead dashboard.
+It shows real inquiries, filters, status, original messages, internal notes,
+and per-lead communication. Counts describe the loaded records, with a visible
+notice when the newest 200 records do not represent the whole list.
 
-The team-only `/clients/{clientId}/workspace-preview` route renders a reusable lead dashboard using that client's authorized inquiry records. It does not change the live client portal.
+## Email
 
-Included: responsive overview, status and website summaries, combined search/status/website filters, inquiry detail, existing follow-up controls, internal notes and activity. The latest 200 records are loaded; an exact total and a visible limit notice avoid representing a capped list as the complete dataset. Recorded URL hosts are display labels only, not trusted intake-source attribution.
+Resend is the selected transport for lead email. Each client has a verified
+sender and receiving subdomain, with server-only configuration in
+`client_mailboxes`. Existing ordinary mailbox MX records stay unchanged.
+Google mailbox connection is unnecessary for Resend clients; legacy agency
+OAuth and existing client access are preserved.
 
-Notes and status changes use existing server actions and database authorization. The preview explains that those edits save to the CRM. Selected inquiry IDs are scoped to the route's client. There is an explicit team-membership check in the route as well as the existing application layout.
+`client-mailbox` authenticates each request and checks active client status,
+CRM settings, team membership or the exact client's active portal membership.
+Drafts are private to the actor. The saved revision reserves one send in a
+transaction before calling the provider. Unknown outcomes block new sends;
+there is no automatic resend. Resend also receives an idempotency key.
+Recipients come from the authorized inquiry, never a browser-supplied address.
 
-Email uses the mailbox connection, durable drafts and conversation workflow described below. SMS remains an explicitly disabled preview. No provider state, conversations, revenue, unread counts or reply history is fabricated.
+A random per-thread reply token and receiving domain route replies.
+`client-email-webhook` verifies the raw payload with the official Svix SDK,
+checks the lead participant and receiving domain, then retrieves the email
+body. The body is plain text, never HTML or executable instructions. Webhook
+receipts and message changes commit atomically; repeated and out-of-order
+callbacks do not downgrade delivery or remove a bounce/complaint suppression.
+The UI distinguishes provider acceptance from actual delivery.
 
-## SMS implementation remaining
+Receiving needs an API key with permission to retrieve received email, not a
+sending-only key. Store it in Vault, referenced by `api_key_secret`. Store the
+webhook signing secret as `CLIENT_RESEND_WEBHOOK_SECRET`. Keep `resend_ready`
+false until DNS, receiving permission and a controlled round trip are checked.
+The current composer supports plain text. Attachments are not displayed.
 
-Extend existing Communications and contacts. Do not build a second SMS transport. Add minimal client-scoped portal projections, explicit portal-author attribution and authorization at send time; keep provisioning and consent administration restricted to the team. Preserve existing consent, opt-out, verification, idempotency and signature checks.
+## Text messages
 
-## Release acceptance
+`client-phone` reuses the existing Communications transport and signed Twilio
+callbacks. `client_phone_begin_sms` is a service-only reservation function,
+separate from the existing team send function. It resolves the inquiry's
+contact, verifies the real actor and client, requires carrier approval and
+recorded consent, and applies the existing STOP/START rules. Portal users do
+not gain provisioning, consent administration or base-table permissions.
+Saved text drafts are actor-private and deduplicated by revision. The SMS
+history is shared across inquiries for the same client contact.
 
-This branch is a review interface with mailbox email, not a completed client release. Before client rollout, finish controlled send/reply verification and mobile checks. Use controlled test recipients only. Preserve existing client access while development continues. Client-specific operational decisions belong in the private work tracker, not this repository.
+## Calls
 
-Validation performed: production build, TypeScript check, lint (existing warnings only), and focused workspace/intake/invitation tests. Desktop browser review passed. Actual email/SMS send-and-reply tests remain outstanding.
+The Voice SDK loads only when the user connects the phone. Access tokens are
+short-lived and issued only to active workspace members. Outbound calls need a
+one-use server-created intent tied to the actor, client and inquiry's stored
+phone number. The signed TwiML callback cannot dial an arbitrary browser
+parameter. Signed callbacks record call status and duration.
 
-## Mailbox connection and lead email
+Inbound calls can ring active portal users who have connected their browsers.
+Unanswered calls redirect to the pre-existing Twilio Bin when configured.
+Preserve that fallback before changing number routing. This release does not
+replace the fallback's voicemail system or import voicemail recordings.
+Keep `client_voice_settings.enabled` false until the TwiML application and
+controlled call tests are ready. The number's existing route should only be
+changed after those tests.
 
-The review branch now includes `client-mailbox` and an authenticated same-origin
-`/api/client-mailbox` proxy. The mailbox is configured per client by an admin.
-Connecting requests only Google identity, Gmail send and Gmail read-only scopes.
-A `mailbox.` state prefix routes the existing registered `google-connect`
-callback into the separate mailbox handler; the agency OAuth behavior and
-`GOOGLE_OPS_REFRESH_TOKEN` are unchanged. Mailbox OAuth uses a separate external Google Cloud project with
-`CLIENT_MAILBOX_GOOGLE_CLIENT_ID` and `CLIENT_MAILBOX_GOOGLE_CLIENT_SECRET`
-in Vault. It never falls back to the internal agency OAuth application.
-Each client grant gets its own Vault secret reference. No refresh
-or access tokens reach the browser, database projections, responses or logs.
+## Deployment and verification
 
-The single-use, ten-minute state record binds actor, client, PKCE verifier,
-connection generation and an exactly allowlisted return origin. Both the start
-and callback check active actor/client access. Callback checks the actual Gmail
-profile against the configured email and requires send/read scopes. A new
-generation prevents late callbacks from overwriting a newer connection.
-Google app verification or Workspace policies can still block consent.
+Apply the mailbox migration followed by `20261031160538_client_resend_email.sql`
+and `20261031161048_client_phone_workspace.sql` after full schema replay checks.
+Deploy `client-mailbox`, `client-phone`, `client-email-webhook` and
+`client-voice-webhook` with gateway JWT verification disabled: user endpoints
+validate the user's JWT internally, webhook endpoints validate provider
+signatures. Never disable those internal checks.
 
-All new tables deny direct anon/authenticated access. The function authenticates
-the user's JWT and checks team membership or that client's active portal user,
-CRM enabled settings and client status on every request. The portal's existing
-scoped inquiry views remain unchanged. Tokens and OAuth state have no portal
-projections. Two service-role-only functions atomically consume OAuth state and
-reserve a send; neither is executable by a browser role.
+New tables are service-only, with RLS and no anon/authenticated privileges.
+The existing portal inquiry views and account invitations remain unchanged.
+No client-specific identifiers, addresses, credentials or operational decisions
+belong in this public repository.
 
-Drafts are durable, private per actor/inquiry, and explicitly saved. A saved
-revision is the send idempotency key. The recipient is resolved from the scoped
-inquiry and pinned to its conversation. Changed recipients require assistance.
-A conversation lock serializes reservation; uncertain sends block new sends.
-The receipt is stored before Gmail is called. Gmail acceptance is labelled
-“Sent to Gmail,” never delivered/read. Transport timeouts and provider 5xx
-responses remain uncertain; Refresh replies reconciles by the exact RFC
-Message-ID before any resend can occur. No automatic retry sends.
-
-Replies use Gmail's thread ID plus RFC reply headers. Refresh retrieves only
-threads started from a CRM inquiry and accepts participants matching the lead
-or connected mailbox. It never enumerates the mailbox inbox. Only plain text
-is rendered; HTML-only messages refer the user to Gmail for formatting and
-attachments. Attachments and automatic background synchronization are not
-included. The conversation shows its most recent 200 messages.
-
-Release steps: apply `20261031151105_client_mailbox.sql` after database checks;
-deploy client-mailbox with internal JWT authentication (gateway verify_jwt off
-for its state-protected callback), then the google-connect callback router with
-its existing verify_jwt=false setting; configure the pilot's expected mailbox
-and exact trusted origins privately; deploy the review branch. The live portal
-is not replaced before mailbox consent and a controlled send/reply test. SMS
-transport and production outbound settings are unchanged.
-
-Tests cover cross-client/inactive/unauthenticated requests, wrong Google account,
-header injection, required scopes, callback origin validation, single-use state,
-real PostgreSQL table/function privilege denial, send reservation/replay and
-ambiguous send behavior. Live send/reply remains pending mailbox authorization.
+Automated tests cover authorization, database permissions, actual PostgreSQL
+reservation behavior, sender suppression, webhook signatures, duplicate events
+and delivery ordering. Production acceptance additionally requires email
+send/reply, SMS send/reply and STOP handling with a consenting test recipient,
+and browser call/answer/fallback checks. Provider registration approval is an
+external prerequisite. Never label untested channels as live.
