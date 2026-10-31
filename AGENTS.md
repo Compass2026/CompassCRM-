@@ -1077,13 +1077,21 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   are queued, and a task whose location has other open slots that day
   tells the worker to choose a different service and topic.
 
-## Weekly delivery standard (Oct 30 2026; `20261030180000` written, **not applied**)
+## Weekly delivery standard (Oct 30 2026; `20261030180000` **applied Oct 31 2026**)
 
 Tom (Executive OS decision `0b407d66-de7d-4086-b6de-013f793bcbd4`): per
 website per week 5 Facebook, 5 GBP, 3 blogs; 1 page refresh a month.
 Standard v2 (`cadence = 'weekly'`); rules, dry-run numbers
 and open decisions in `docs/delivery-standard.md`; sandbox suite
 `weekly_delivery_standard.test.sql`.
+
+**Live since Oct 31 2026** (PR #205, merge `a2dfca4`; remote version
+`20261031153456`; Tom's go-ahead, Executive OS decision
+`fcdbcc8b-618b-42f9-8865-f4b18d283621`). Two clients are adopted from Mon
+Nov 2. Every other client is still monthly until Tom names them; the
+three-site client is excluded until its shared-profile cadence is decided.
+Missed work is reported, never added to later weeks. Release record:
+`docs/delivery-standard.md` "Release".
 
 - **Adoption is data:** `client_weekly_delivery_standards` (start date →
   `effective_week`, the first Monday on or after it; never in the past;

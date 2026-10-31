@@ -178,9 +178,53 @@ planned, all inside one transaction that raised at the end. 12 clients,
 - November month targets: Facebook 112 → 294, GBP 112 → 294, blogs
   112 → 182, refreshes 14 → 14.
 
+### Release (Oct 31 2026)
+
+Tom's go-ahead: Executive OS decision `fcdbcc8b-618b-42f9-8865-f4b18d283621`,
+after ChatGPT's re-review of `abc794b`. It covers the release, two adoptions
+from Mon Nov 2 and first-week drafts for review. It does not approve or
+publish any content.
+
+- **Checks:** main had one new commit (#208), which touches none of the
+  patched functions. Production's four patched functions still matched the
+  md5s the patch expects. Merged as `f7431ba`; CI green; `npm test` 1320/1320.
+- **Rehearsal (rolled back, in production, two clients):**
+  - Per client: November opened 65 slots (5 Monday weeks × 13), and a rerun
+    opened 0. December, a fresh month, opened 53 (4 × 13 + 1 refresh), and a
+    rerun opened 0.
+  - Week of Nov 2: 10 social slots ready; the pilots credited to the week
+    of Oct 26.
+  - No task, no worker fire, no other client touched.
+- **Applied:** remote version `20261031153456`. All 24 functions it defines
+  or patches hash the same as a sandbox replay of the repo file.
+  `delivery-standard-week` is scheduled (Mon 10:00 UTC). Grants are as
+  reviewed. Merged as `a2dfca4`; Vercel production deploy succeeded.
+- **Adoptions:** two rows, `effective_week = 2026-11-02`. Per client:
+  - 65 November weekly slots;
+  - 22 unattached v1 slots retired (8 blog, 7 Facebook, 7 GBP);
+  - the 2 pilot slots kept (no November credit);
+  - the November refresh slot kept.
+- **First week:** the adoption came after the Wednesday before, so the week
+  was queued at once with `queue_delivery_week_drafts(id, '2026-11-08')`, one
+  worker fire per client. Five existing in-review posts whose keywords are on
+  the approved core list filled week-1 slots first. They were linked the way
+  the Planner's "Link output" links them; the posts themselves are unchanged.
+  21 slots were queued for drafting.
+- **First week in review** (Oct 31, about an hour after the fires): each
+  site has 5 Facebook, 5 GBP and 3 blogs in review for the week of Nov 2,
+  every new item tied to its approved core list v2. Nothing is approved,
+  scheduled or published.
+  - **Defects found on reading the drafts, left for review:** a location with
+    no `gbp_location_markets` row gets copy written for the client's home
+    market, so an office profile in another city got home-market copy.
+    `content_revise` only replaces media; copy fixes are a review decision.
+  - **Images:** none attached to the new items. A client with no approved
+    brand photo needs a visual review, or illustrative images, before any are
+    attached.
+
 ### Open decisions for Tom
 
-1. **Start date** (the only input the adoption needs), and which clients.
+1. ~~Start date~~ Decided Oct 31: Mon Nov 2 for two clients; the rest join as their readiness is approved.
 2. **The three-site, one-location collision (unresolved).** Tom asked for
    15 GBP posts a week across the three-site client's websites; one post per location
    per day fits only 7 on its one shared profile, so the 7-post limit does
@@ -188,8 +232,8 @@ planned, all inside one transaction that raised at the end. 12 clients,
    8 "Over capacity" (never drafted) until Tom chooses: connect more
    locations, record a standard with a higher daily cap, or accept a lower
    count.
-3. Whether a shortfall week should ever be made up later (today: no).
-4. The weekday pattern (Mon–Fri for posts, Mon / Wed / Fri for blogs).
+3. ~~Make-up weeks~~ Decided Oct 31: missed work is reported, never added to later weeks.
+4. ~~Weekday pattern~~ Decided Oct 31: Mon–Fri for posts, Mon / Wed / Fri for blogs.
 
 ### Rollback
 
