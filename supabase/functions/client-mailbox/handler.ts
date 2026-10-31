@@ -85,8 +85,8 @@ export function createMailbox(
   }
   async function credentials() {
     const [id, key] = await Promise.all([
-      secret("GSC_CLIENT_ID"),
-      secret("GSC_CLIENT_SECRET"),
+      secret("CLIENT_MAILBOX_GOOGLE_CLIENT_ID"),
+      secret("CLIENT_MAILBOX_GOOGLE_CLIENT_SECRET"),
     ]);
     if (!id || !key) fail("oauth_not_configured");
     return { id, key };

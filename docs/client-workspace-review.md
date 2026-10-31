@@ -27,8 +27,10 @@ The review branch now includes `client-mailbox` and an authenticated same-origin
 Connecting requests only Google identity, Gmail send and Gmail read-only scopes.
 A `mailbox.` state prefix routes the existing registered `google-connect`
 callback into the separate mailbox handler; the agency OAuth behavior and
-`GOOGLE_OPS_REFRESH_TOKEN` are unchanged. OAuth application credentials are
-reused, but each client grant gets its own Vault secret reference. No refresh
+`GOOGLE_OPS_REFRESH_TOKEN` are unchanged. Mailbox OAuth uses a separate external Google Cloud project with
+`CLIENT_MAILBOX_GOOGLE_CLIENT_ID` and `CLIENT_MAILBOX_GOOGLE_CLIENT_SECRET`
+in Vault. It never falls back to the internal agency OAuth application.
+Each client grant gets its own Vault secret reference. No refresh
 or access tokens reach the browser, database projections, responses or logs.
 
 The single-use, ten-minute state record binds actor, client, PKCE verifier,

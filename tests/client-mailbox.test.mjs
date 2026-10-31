@@ -72,3 +72,13 @@ test('ambiguous provider send stays uncertain; repeating the saved revision does
  const handle=createMailbox(db,'https://project.example.test',provider);
  for(let i=0;i<2;i++){const r=await handle(req({client_id:client,mode:'send',inquiry_id:inquiry,revision}));assert.equal(r.status,200);assert.equal((await r.json()).send_status,'unknown');}assert.equal(sends,1);
 });
+
+test('mailbox connection fails closed without its separate external OAuth app',async()=>{
+ const db=fakeDB({member:true});
+ db.tables.app_settings=[{key:'client_mailbox_origins',value:['https://crm.example.test']}];
+ const requested=[];db.rpc=async(name,args)=>{assert.equal(name,'get_secret');requested.push(args.secret_name);return {data:null,error:null};};
+ const response=await createMailbox(db,'https://project.example.test')(req({client_id:client,mode:'connect',origin:'https://crm.example.test'}));
+ assert.equal(response.status,409);assert.equal((await response.json()).error,'oauth_not_configured');
+ assert.deepEqual(requested.sort(),['CLIENT_MAILBOX_GOOGLE_CLIENT_ID','CLIENT_MAILBOX_GOOGLE_CLIENT_SECRET']);
+ assert.equal(db.writes.length,0);
+});
