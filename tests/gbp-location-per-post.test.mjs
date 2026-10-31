@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { buildBrief } from "../supabase/functions/post-drafter/brief.ts";
 import { workspaceAccounts } from "../supabase/functions/post-drafter/workspace.ts";
 import { parsePlanFields } from "../src/lib/content-planner.ts";
-import { lucas, TARGET } from "./fixtures/drafter-lucas.mjs";
+import { lintDraft } from "../supabase/functions/post-drafter/lint.ts";
+import { lucas, TARGET, GOOD, GAZETTEER, OC, WARRANTY } from "./fixtures/drafter-lucas.mjs";
 
 const WICHITA = "c1000000-0000-4000-8000-0000000000c1";
 const OVERLAND = "c1000000-0000-4000-8000-0000000000c2";
@@ -63,4 +64,38 @@ test("a GBP slot's location is parsed only when the form offers it", () => {
   assert.equal(parsePlanFields(form({ gbp_location_id: "not-a-uuid" }), WEEK).ok, false);
   const blog = parsePlanFields((k) => ({ deliverable: "blog", purpose: "educational", topic: "x", gbp_location_id: WICHITA })[k] ?? null, WEEK);
   assert.equal(blog.ok, false, "only a Business Profile slot names a location");
+});
+
+// A location's recorded markets (gbp_location_markets) are its only approved
+// places: an office profile in one city never names the client's other
+// cities (Oct 31 2026: a Wichita office profile drafted for the client's
+// Kansas City suburbs).
+const withMarkets = (row, markets) => ({ ...row, markets });
+const placesOf = (r) => r.brief.allowed_facts.crm.places;
+
+test("a Business Profile brief approves only its location's recorded markets", () => {
+  const r = buildBrief(lucas(), { ...TARGET, socialAccountId: WICHITA },
+    { socialAccounts: [withMarkets(wichita, [{ market: "O'Fallon", kind: "office" }]), overland, facebook] });
+  assert.equal(r.ok, true, JSON.stringify(r.refusals));
+  assert.deepEqual(placesOf(r), ["O'Fallon"]);
+  assert.ok(r.brief.excluded.facts.some((f) => f.fact.includes("Wentzville")), "the client's other places are listed as excluded");
+  const lint = lintDraft(r.brief, { copy: GOOD, claim_ids: [OC, WARRANTY] }, { gazetteer: GAZETTEER });
+  assert.ok(lint.problems.some((p) => p.code === "unapproved_location"), "copy naming another city is refused");
+});
+
+test("the only connected location is scoped the same way when the brief names none", () => {
+  const r = buildBrief(lucas(), TARGET, { socialAccounts: [withMarkets(wichita, [{ market: "O'Fallon", kind: "service_area" }]), unbound] });
+  assert.deepEqual(placesOf(r), ["O'Fallon"]);
+});
+
+test("a shared 'all' profile, a location with nothing recorded, Facebook and blog briefs keep the client's places", () => {
+  const base = placesOf(buildBrief(lucas(), TARGET, { socialAccounts: [wichita] }));
+  assert.deepEqual(base, ["Wentzville"]);
+  const all = buildBrief(lucas(), TARGET, { socialAccounts: [withMarkets(wichita, [{ market: "All service markets", kind: "all" }])] });
+  assert.deepEqual(placesOf(all), base);
+  const blog = buildBrief(lucas(), TARGET, { socialAccounts: [withMarkets(wichita, [{ market: "O'Fallon", kind: "office" }])], purpose: "blog" });
+  assert.deepEqual(placesOf(blog), base);
+  const fb = buildBrief(lucas(), { ...TARGET, channel: "facebook", ctaType: null, socialAccountId: PAGE },
+    { socialAccounts: [withMarkets(wichita, [{ market: "O'Fallon", kind: "office" }]), facebook] });
+  assert.deepEqual(placesOf(fb), base);
 });
