@@ -49,7 +49,7 @@ export interface ClientRow {
   name: string;
   dba?: string | null;
   vertical: string | null;
-  business_type: "storefront" | "service_area" | null;
+  business_type: "storefront" | "service_area" | "ecommerce" | null;
   phone: string | null;
   city: string | null;
   state: string | null;
