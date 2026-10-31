@@ -304,7 +304,7 @@ export function ClientWorkspace({
                   <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-orange-300">
                     Your follow-up focus
                   </p>
-                  <h2 className="mt-3 max-w-md text-xl font-semibold leading-snug">
+                  <h2 className="mt-3 max-w-md text-xl font-semibold leading-snug text-white">
                     {summary.statuses.new
                       ? `${summary.statuses.new} new inquiries are ready for review.`
                       : "You are up to date on new inquiries."}
