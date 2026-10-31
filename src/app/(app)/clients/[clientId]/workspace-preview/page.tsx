@@ -48,6 +48,7 @@ export default async function WorkspacePreviewPage({
   return (
     <div data-wide-page>
       <ClientWorkspace
+        clientId={clientId}
         businessName={client.name}
         rows={list.rows}
         now={renderedAt}

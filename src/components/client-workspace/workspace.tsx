@@ -29,8 +29,10 @@ import {
 import type { EventRow, InquiryRow, NoteRow } from "@/lib/inquiries-data";
 import { formatWhen, mailtoHref, telHref } from "@/lib/inquiries";
 import { cn } from "@/lib/utils";
+import { MailboxConnection, MailboxThread } from "./mailbox";
 
 type Props = {
+  clientId: string;
   businessName: string;
   rows: InquiryRow[];
   now: number;
@@ -49,6 +51,7 @@ const smallLabel =
   "text-[11px] font-semibold uppercase tracking-[.13em] text-slate-500";
 
 export function ClientWorkspace({
+  clientId,
   businessName,
   rows,
   now,
@@ -64,6 +67,7 @@ export function ClientWorkspace({
   const [view, setView] = useState<"dashboard" | "leads" | "inbox">(
     "dashboard",
   );
+  const [mailConnected, setMailConnected] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [website, setWebsite] = useState("");
@@ -207,10 +211,14 @@ export function ClientWorkspace({
           {preview && (
             <p className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-900">
               Review version using this client&apos;s real inquiries. Notes and
-              status changes save to the CRM. Email and text sending are not
-              connected in this version.
+              status changes save to the CRM. Once Gmail is connected, email
+              sends are real. Text messaging is not connected yet.
             </p>
           )}
+          <MailboxConnection
+            clientId={clientId}
+            onConnected={setMailConnected}
+          />
           {error && (
             <p
               role="alert"
@@ -576,39 +584,50 @@ export function ClientWorkspace({
                         </button>
                       ))}
                     </div>
-                    <div className="p-3">
-                      <p className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-                        {channel === "email"
-                          ? "Email connection required. Sending and receiving email inside this workspace will be available after your business mailbox is connected."
-                          : "Text messaging is not connected to this workspace yet. Sending requires your business number, verified registration and the lead's recorded consent."}
-                      </p>
-                      <label className="sr-only" htmlFor="workspace-reply">
-                        Reply draft
-                      </label>
-                      <textarea
-                        id="workspace-reply"
-                        value={drafts[draftKey] ?? ""}
-                        onChange={(e) =>
-                          setDrafts({ ...drafts, [draftKey]: e.target.value })
-                        }
-                        rows={3}
-                        maxLength={channel === "sms" ? 1600 : 10000}
-                        className="mt-3 w-full resize-y rounded-lg border border-slate-200 p-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                        placeholder="Try composing a reply. Nothing will be sent."
+                    {channel === "email" ? (
+                      <MailboxThread
+                        key={selected.id}
+                        clientId={clientId}
+                        inquiryId={selected.id}
+                        recipient={selected.email}
+                        connected={mailConnected}
                       />
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <span className="text-[10px] leading-4 text-slate-500">
-                          Preview draft only. Not saved after leaving this page.
-                        </span>
-                        <button
-                          type="button"
-                          disabled
-                          className="rounded-lg bg-slate-200 px-4 py-2 text-xs font-medium text-slate-500"
-                        >
-                          {channel === "email" ? "Send email" : "Send text"}
-                        </button>
+                    ) : (
+                      <div className="p-3">
+                        <p className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                          Text messaging is not connected to this workspace yet.
+                          Sending requires your business number, verified
+                          registration and the lead&apos;s recorded consent.
+                        </p>
+                        <label className="sr-only" htmlFor="workspace-reply">
+                          Reply draft
+                        </label>
+                        <textarea
+                          id="workspace-reply"
+                          value={drafts[draftKey] ?? ""}
+                          onChange={(e) =>
+                            setDrafts({ ...drafts, [draftKey]: e.target.value })
+                          }
+                          rows={3}
+                          maxLength={1600}
+                          className="mt-3 w-full resize-y rounded-lg border border-slate-200 p-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                          placeholder="Try composing a reply. Nothing will be sent."
+                        />
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <span className="text-[10px] leading-4 text-slate-500">
+                            Preview draft only. Not saved after leaving this
+                            page.
+                          </span>
+                          <button
+                            type="button"
+                            disabled
+                            className="rounded-lg bg-slate-200 px-4 py-2 text-xs font-medium text-slate-500"
+                          >
+                            Send text
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                   <details className="mt-5 rounded-xl border border-slate-200 p-4">
                     <summary className="cursor-pointer text-sm font-semibold">
