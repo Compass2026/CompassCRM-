@@ -13943,7 +13943,7 @@ export type Database = {
         | "text"
         | "other"
       brand_font_role: "heading" | "body" | "accent" | "other"
-      business_type: "storefront" | "service_area"
+      business_type: "storefront" | "service_area" | "ecommerce"
       change_status: "proposed" | "approved" | "vetoed"
       city_tier: "1" | "2" | "fold"
       claim_status: "sourced" | "unverified" | "confirmed"
@@ -14179,7 +14179,7 @@ export const Constants = {
         "other",
       ],
       brand_font_role: ["heading", "body", "accent", "other"],
-      business_type: ["storefront", "service_area"],
+      business_type: ["storefront", "service_area", "ecommerce"],
       change_status: ["proposed", "approved", "vetoed"],
       city_tier: ["1", "2", "fold"],
       claim_status: ["sourced", "unverified", "confirmed"],
