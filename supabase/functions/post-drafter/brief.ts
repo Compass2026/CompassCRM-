@@ -212,6 +212,11 @@ export function buildBrief(
     // (drafter_write enforces the same; 20261027190935).
     const locations = (extra.socialAccounts ?? []).filter((a) => a.platform === "google_business"
       && a.publish_provider === "zernio" && !!a.publish_page_id && !!a.publish_verified_at);
+    // Blog briefs reuse these fact checks with a placeholder channel. Only
+    // an actual GBP post needs a separately verified eligible location.
+    if (input.client.business_type === "ecommerce" && (extra.purpose ?? "post") === "post" && locations.length === 0) {
+      refuse("gbp_location_required", "An online store needs a separately verified eligible Business Profile location. Use Facebook or website content while none is recorded.");
+    }
     if (target.socialAccountId) {
       const location = locations.find((a) => a.id === target.socialAccountId);
       if (!location) refuse("social_account_unknown", "The Business Profile location is not one of this client's verified locations.");

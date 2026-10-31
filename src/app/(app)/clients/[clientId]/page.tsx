@@ -109,6 +109,7 @@ export default async function OverviewPage({
                 <option value="">unset</option>
                 <option value="service_area">service area</option>
                 <option value="storefront">storefront</option>
+                <option value="ecommerce">e-commerce (online store)</option>
               </select>
             </div>
             <div className="space-y-1">
@@ -159,7 +160,7 @@ export default async function OverviewPage({
               </div>
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="service_area">Service area</Label>
+              <Label htmlFor="service_area">Service area / shipping market</Label>
               <Input id="service_area" name="service_area" defaultValue={client.service_area ?? ""} />
             </div>
             <div className="space-y-1">
