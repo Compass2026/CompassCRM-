@@ -360,11 +360,27 @@ export function buildBrief(
   // are approved places, so an office profile in one city never names the
   // client's other cities (Oct 31 2026). A shared 'all' profile, a location
   // with nothing recorded, Facebook and blog briefs keep the client's places.
-  const recorded = (extra.purpose ?? "post") === "post" ? (gbpLocation?.markets ?? []) : [];
+  const gbpPost = !!gbpLocation && (extra.purpose ?? "post") === "post";
+  const recorded = gbpPost ? (gbpLocation?.markets ?? []) : [];
   const scoped = recorded.length > 0 && !recorded.some((m) => m.kind === "all");
   const places = scoped
     ? [...new Set(recorded.map((m) => m.market.trim()).filter(Boolean))]
     : clientPlaces;
+  // A client with several offices (or locations) must say which market a
+  // profile serves before it is drafted for; otherwise the brief would offer
+  // every office's cities to every profile.
+  const offices = ownerCtx.markets.filter((m) => m.status === "approved" && m.basis === "office").length;
+  const verifiedLocations = (extra.socialAccounts ?? []).filter((a) => a.platform === "google_business"
+    && a.publish_provider === "zernio" && !!a.publish_page_id && !!a.publish_verified_at).length;
+  if (gbpPost && recorded.length === 0
+      && (offices > 1 || verifiedLocations > 1 || input.locations.filter((l) => l.is_active).length > 1)) {
+    refuse("location_market_unmapped", `${gbpLocation?.display_name ?? "This Business Profile location"} has no recorded market and the client has several offices or locations; record the location's market (gbp_location_markets) before drafting.`);
+  }
+  // A city keyword must be one of the location's markets (core_market_problem in SQL).
+  const keywordCity = ownerCtx.keywords.find((k) => k.id === target.keywordId)?.city?.trim();
+  if (scoped && keywordCity && !places.some((p) => p.toLowerCase() === keywordCity.toLowerCase())) {
+    refuse("market_not_applicable", `${keywordCity} is not a market of ${gbpLocation?.display_name ?? "this Business Profile location"} (${places.join(", ")}).`);
+  }
   // Offerings held from promotion: the linter refuses copy that names them.
   const heldOfferings = ownerCtx.holds.filter((h) => h.brand_workspace_id === null || h.brand_workspace_id === program)
     .map((h) => ({ offering: h.offering, phrases: h.phrases.map(normWords) }));

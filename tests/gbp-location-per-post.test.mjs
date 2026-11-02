@@ -4,11 +4,11 @@
 // supabase/tests/sandbox/gbp_location_per_post.test.sql.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBrief } from "../supabase/functions/post-drafter/brief.ts";
+import { buildBrief, ownerContextOf } from "../supabase/functions/post-drafter/brief.ts";
 import { workspaceAccounts } from "../supabase/functions/post-drafter/workspace.ts";
 import { parsePlanFields } from "../src/lib/content-planner.ts";
 import { lintDraft } from "../supabase/functions/post-drafter/lint.ts";
-import { lucas, TARGET, GOOD, GAZETTEER, OC, WARRANTY } from "./fixtures/drafter-lucas.mjs";
+import { lucas, TARGET, GOOD, GAZETTEER, OC, WARRANTY, KW } from "./fixtures/drafter-lucas.mjs";
 
 const WICHITA = "c1000000-0000-4000-8000-0000000000c1";
 const OVERLAND = "c1000000-0000-4000-8000-0000000000c2";
@@ -23,7 +23,9 @@ const facebook = { id: PAGE, platform: "facebook", external_account_id: "1039", 
 const codes = (r) => (r.refusals ?? []).map((f) => f.code);
 
 test("a Business Profile brief names its verified location and the brief carries it", () => {
-  const r = buildBrief(lucas(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: [wichita, overland, facebook] });
+  // Two verified locations: the named one has its market recorded.
+  const mapped = { ...wichita, markets: [{ market: "Wentzville", kind: "office" }] };
+  const r = buildBrief(lucas(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: [mapped, overland, facebook] });
   assert.deepEqual(codes(r).filter((c) => c.startsWith("social_account")), []);
   assert.deepEqual(r.brief.target.social_account, { id: WICHITA, page_id: "locations/6226831491529440170", name: "Logic Solar Wichita" });
 });
@@ -98,4 +100,27 @@ test("a shared 'all' profile, a location with nothing recorded, Facebook and blo
   const fb = buildBrief(lucas(), { ...TARGET, channel: "facebook", ctaType: null, socialAccountId: PAGE },
     { socialAccounts: [withMarkets(wichita, [{ market: "O'Fallon", kind: "office" }]), facebook] });
   assert.deepEqual(placesOf(fb), base);
+});
+
+test("a city keyword outside the location's markets is refused (market_not_applicable)", () => {
+  const input = lucas();
+  const ctx = ownerContextOf(input);
+  const cityKeyword = { ...input, owner_context: { ...ctx, keywords: ctx.keywords.map((k) => (k.id === KW ? { ...k, city: "Wentzville" } : k)) } };
+  const off = buildBrief(cityKeyword, { ...TARGET, socialAccountId: WICHITA },
+    { socialAccounts: [withMarkets(wichita, [{ market: "O'Fallon", kind: "office" }]), overland] });
+  assert.ok(codes(off).includes("market_not_applicable"));
+  const on = buildBrief(cityKeyword, { ...TARGET, socialAccountId: WICHITA },
+    { socialAccounts: [withMarkets(wichita, [{ market: "Wentzville", kind: "office" }]), overland] });
+  assert.ok(!codes(on).includes("market_not_applicable"));
+});
+
+test("an unmapped profile of a client with several offices or locations is refused, never given every city", () => {
+  const twoOffices = { ...lucas(), locations: [...lucas().locations, { name: "O'Fallon, MO", city: "O'Fallon", state: "MO", is_active: true }] };
+  assert.ok(codes(buildBrief(twoOffices, TARGET, { socialAccounts: [wichita] })).includes("location_market_unmapped"));
+  assert.ok(codes(buildBrief(twoOffices, { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: [wichita, overland] })).includes("location_market_unmapped"));
+  // Mapped, or a single-office client: drafted as before.
+  assert.ok(!codes(buildBrief(twoOffices, TARGET, { socialAccounts: [withMarkets(wichita, [{ market: "Wentzville", kind: "office" }])] })).includes("location_market_unmapped"));
+  assert.ok(!codes(buildBrief(lucas(), TARGET, { socialAccounts: [wichita] })).includes("location_market_unmapped"));
+  // Blog briefs are never refused for it.
+  assert.ok(!codes(buildBrief(twoOffices, TARGET, { socialAccounts: [wichita], purpose: "blog" })).includes("location_market_unmapped"));
 });

@@ -1059,6 +1059,10 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   places to its location's `office` / `service_area` markets, so the copy
   names no other city (the linter refuses one); an `all` profile, a
   location with no rows, Facebook and blog briefs keep the client's places.
+  The brief also refuses a city keyword outside the location's markets
+  (`market_not_applicable`) and, for a client with several offices,
+  locations or verified profiles, a profile with no recorded market
+  (`location_market_unmapped`) instead of offering it every city.
   The rows take effect on insert (there is no proposed state), so
   `supabase/seeds/gbp-location-markets-v1-after-scope-confirmation.sql`
   (Logic Wichita office, BHG shared HQ all) refuses to run until
