@@ -10,6 +10,7 @@ import {
   Globe2,
   Inbox,
   LayoutDashboard,
+  GitBranch,
   Mail,
   MessageSquare,
   Phone,
@@ -30,6 +31,7 @@ import { formatWhen, mailtoHref, telHref } from "@/lib/inquiries";
 import { cn } from "@/lib/utils";
 import { MailboxConnection, MailboxThread } from "./mailbox";
 import { LeadText, WorkspacePhone, LeadCalls } from "./phone";
+import { LeadPipeline } from "./pipeline";
 
 type Props = {
   clientId: string;
@@ -64,7 +66,7 @@ export function ClientWorkspace({
   error,
   preview = false,
 }: Props) {
-  const [view, setView] = useState<"dashboard" | "leads" | "inbox">(
+  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "inbox">(
     openLead ? "leads" : "dashboard",
   );
   const [mailConnected, setMailConnected] = useState(false);
@@ -130,6 +132,7 @@ export function ClientWorkspace({
               [
                 { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
                 { key: "leads", label: "Leads", icon: Users },
+                { key: "pipeline", label: "Pipeline", icon: GitBranch },
                 { key: "inbox", label: "Inbox", icon: MessageSquare },
               ] as const
             ).map((item) => (
@@ -186,6 +189,8 @@ export function ClientWorkspace({
               <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
                 {view === "dashboard"
                   ? "Your next opportunity starts here."
+                  : view === "pipeline"
+                    ? "Move every lead forward."
                   : view === "leads"
                     ? "Every lead. One place."
                     : "Keep the conversation going."}
@@ -193,6 +198,8 @@ export function ClientWorkspace({
               <p className="mt-2 text-sm text-slate-500">
                 {view === "dashboard"
                   ? "See what came in, what needs attention, and what happens next."
+                  : view === "pipeline"
+                    ? "Track first contact, ongoing follow-up, and closed inquiries."
                   : view === "leads"
                     ? "Find an inquiry, review the details, and keep your follow-up moving."
                     : "A workspace for email, text messages and your team's notes."}
@@ -233,6 +240,29 @@ export function ClientWorkspace({
               Showing the newest {rows.length} of {total} inquiries. Summary
               cards, search and filters below apply to these loaded records.
             </p>
+          )}
+
+          {(view === "dashboard" || view === "pipeline") && (
+            <LeadPipeline
+              rows={rows}
+              basePath={basePath}
+              board={view === "pipeline"}
+              unavailable={!!error}
+              onStage={(stage) => {
+                setStatus(stage);
+                setQuery("");
+                setWebsite("");
+                setRecentOnly(false);
+                setView("leads");
+              }}
+              onOpen={() => {
+                setStatus("");
+                setQuery("");
+                setWebsite("");
+                setRecentOnly(false);
+                setView("leads");
+              }}
+            />
           )}
 
           {view === "dashboard" && (
@@ -385,7 +415,7 @@ export function ClientWorkspace({
             </>
           )}
 
-          <section
+          {view !== "pipeline" && <section
             className={cn(panel, "overflow-hidden")}
             aria-label="Lead workspace"
           >
@@ -663,7 +693,7 @@ export function ClientWorkspace({
                 </div>
               )}
             </div>
-          </section>
+          </section>}
         </section>
       </div>
     </div>

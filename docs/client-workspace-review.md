@@ -112,3 +112,16 @@ readiness gate, or other contact's scope changes as part of the migration.
 Verification: the migration replay includes two-client view/RPC and billing
 runtime role tests. The CRM UI integration checks direct URLs, notes, mobile
 layout, team-only preview, and preservation of another client's reporting.
+
+## Lead pipeline
+
+Dashboard stage bubbles filter the authorized lead list. The Pipeline tab groups
+loaded inquiries into New, Contacted, and Closed with first-contact and follow-up
+hints. Cards open the existing lead detail and reuse the authenticated status
+action for moves, closure, and reopening. Counts refresh from saved records.
+Expected-status checks refuse stale changes; existing history records each move.
+No schema, client assignments, communication gates, or automatic outreach changes.
+The board stacks on mobile and the loaded-record limit remains visible.
+
+The CRM browser suite verifies bubble filtering, saved moves/counts, reopen,
+lead notes, stale-write protection, and mobile layout with fictional clients.
