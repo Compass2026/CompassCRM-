@@ -257,7 +257,7 @@ try {
     await portal.goto(`${base}/portal/${path}`, { waitUntil: "networkidle" });
     assert.match(portal.url(), /\/portal\/inquiries$/, `blocked ${path}`);
   }
-  assert.deepEqual(await portal.locator('nav[aria-label="Workspace"] button').allTextContents(), ["Dashboard", "Leads3", "Inbox"]);
+  assert.deepEqual(await portal.locator('nav[aria-label="Workspace"] button').allTextContents(), ["Dashboard", "Leads3", "Pipeline", "Inbox"]);
   assert.equal(await portal.getByRole("link", { name: "Billing", exact: true }).count(), 0);
   assert.equal(await portal.getByRole("link", { name: "Settings", exact: true }).count(), 0);
   assert.ok(await portal.getByRole("button", { name: "Sign out", exact: true }).isVisible());
@@ -269,6 +269,35 @@ try {
   await portal.getByText("Leads-only access still works.", { exact: true }).waitFor();
   assert.equal(await portal.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await shot(portal, "leads-only-mobile");
+  // Pipeline uses the same scoped status action and real database history.
+  await portal.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await portal.getByRole("button", { name: "New: 3 leads", exact: true }).click();
+  assert.equal(await portal.getByLabel("Filter by status").inputValue(), "new");
+  await portal.getByRole("button", { name: "Pipeline", exact: true }).click();
+  const pipelineLead = portal.locator(`[data-pipeline-lead="${first.inquiry_id}"]`);
+  await pipelineLead.getByRole("button", { name: "Mark contacted", exact: true }).click();
+  await portal.locator(`[data-pipeline-stage="contacted"] [data-pipeline-lead="${first.inquiry_id}"]`).waitFor();
+  assert.equal(sql(`select status from inquiries where id='${first.inquiry_id}'`), "contacted");
+  assert.ok(await portal.getByRole("button", { name: "New: 2 leads", exact: true }).isVisible());
+  assert.ok(await portal.getByRole("button", { name: "Contacted: 1 leads", exact: true }).isVisible());
+  await pipelineLead.getByRole("button", { name: "Close", exact: true }).click();
+  await portal.locator(`[data-pipeline-stage="closed"] [data-pipeline-lead="${first.inquiry_id}"]`).waitFor();
+  assert.equal(sql(`select status from inquiries where id='${first.inquiry_id}'`), "closed");
+  await pipelineLead.getByRole("button", { name: "Reopen", exact: true }).click();
+  await portal.locator(`[data-pipeline-stage="new"] [data-pipeline-lead="${first.inquiry_id}"]`).waitFor();
+  assert.equal(await portal.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await shot(portal, "pipeline-mobile");
+  await pipelineLead.getByRole("link").click();
+  await portal.getByText("Follow-up and internal notes", { exact: true }).click();
+  await portal.getByText("Leads-only access still works.", { exact: true }).waitFor();
+  assert.equal(await portal.getByRole("region", { name: "Lead workspace", exact: true }).isVisible(), true);
+  await portal.getByRole("button", { name: "Pipeline", exact: true }).click();
+  // Another session changes a lead after this board was loaded.
+  sql(`set session authorization authenticator; set role authenticated; set request.jwt.claims='{"sub":"${TEAM.id}","role":"authenticated"}'; select crm_inquiry_set_status('${first.inquiry_id}', 'contacted', 'new')`);
+  await pipelineLead.getByRole("button", { name: "Close", exact: true }).click();
+  await portal.locator(`[data-pipeline-stage="contacted"] [data-pipeline-lead="${first.inquiry_id}"]`).waitFor();
+  assert.equal(sql(`select status from inquiries where id='${first.inquiry_id}'`), "contacted", "stale move cannot overwrite another session");
+  ok("Pipeline: stage bubbles filter leads; moves persist and refresh counts; closed leads reopen; mobile fits; lead details retain notes; stale moves cannot overwrite");
   await portal.goto(`${base}/workspace-preview/${CLIENT_A}`, { waitUntil: "networkidle" });
   assert.equal(await portal.locator("[data-client-workspace]").count(), 0, "portal contact cannot use team preview");
   await team.goto(`${base}/clients/${CLIENT_A}/workspace-preview`, { waitUntil: "networkidle" });
@@ -277,6 +306,8 @@ try {
   assert.equal(await team.getByRole("link", { name: "Production", exact: true }).count(), 0);
   assert.equal(await team.getByRole("link", { name: "Settings", exact: true }).count(), 0);
   await shot(team, "clean-workspace-preview");
+  await team.getByRole("button", { name: "Pipeline", exact: true }).click();
+  await shot(team, "pipeline-desktop");
   await other.goto(`${base}/portal`, { waitUntil: "networkidle" });
   assert.ok(await other.getByRole("link", { name: "Reports", exact: true }).isVisible(), "other clients retain reporting");
   ok("Leads-only: home and direct reporting URLs redirect; notes and mobile workspace work; preview is team-only without agency navigation; other clients retain reporting");

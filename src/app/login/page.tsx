@@ -84,7 +84,7 @@ export default function LoginPage() {
           </svg>
           </span>
           <CardTitle className="text-xl font-bold">Compass Client Platform</CardTitle>
-          <CardDescription>Team sign-in</CardDescription>
+          <CardDescription>Client and team sign-in</CardDescription>
         </CardHeader>
         <CardContent>
           {sent ? (
@@ -101,7 +101,7 @@ export default function LoginPage() {
                   type="email"
                   required
                   autoComplete="email"
-                  placeholder="you@compassmarketing.ai"
+                  placeholder="you@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
