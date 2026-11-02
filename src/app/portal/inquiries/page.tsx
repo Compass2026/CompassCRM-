@@ -1,3 +1,4 @@
+import { hasPortalReportingAccess } from "@/lib/portal-access";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { loadInquiries, loadInquiry } from "@/lib/inquiries-data";
@@ -18,7 +19,7 @@ export default async function PortalInquiriesPage({
     supabase.from("portal_client").select("name").maybeSingle(),
   ]);
   if (!on?.client_id || !client) notFound();
-  const enhanced = "workspace_enabled" in on && on.workspace_enabled === true;
+  const enhanced = !(await hasPortalReportingAccess(supabase)) || ("workspace_enabled" in on && on.workspace_enabled === true);
   const list = await loadInquiries(
     supabase,
     { kind: "portal" },
@@ -61,7 +62,7 @@ export default async function PortalInquiriesPage({
       notes={detail?.notes ?? []}
       events={detail?.events ?? []}
       basePath="/portal/inquiries"
-      inquiryBasePath="/portal/inquiries"
+        openLead={!!lead}
       error={list.error}
     />
   );

@@ -55,7 +55,8 @@ do $$ declare n int; payload text; begin
  begin
   update portal_growth_measurements set value=999;
   raise exception 'portal wrote through a view';
- exception when insufficient_privilege then null; end;
+ -- Scope wrapping makes the projection non-updatable as well as SELECT-only.
+ exception when insufficient_privilege or object_not_in_prerequisite_state then null; end;
 end $$;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000012',true);
 do $$ begin

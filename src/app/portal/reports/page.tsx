@@ -1,3 +1,4 @@
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMonth, formatNumber } from "@/lib/portal";
@@ -10,6 +11,7 @@ type Summary = {
 
 export default async function PortalReportsPage() {
   const supabase = await createClient();
+  await requirePortalReportingAccess(supabase);
   const { data: reports } = await supabase
     .from("portal_reports")
     .select("*")

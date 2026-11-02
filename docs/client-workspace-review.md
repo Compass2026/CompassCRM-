@@ -83,3 +83,32 @@ and delivery ordering. Production acceptance additionally requires email
 send/reply, SMS send/reply and STOP handling with a consenting test recipient,
 and browser call/answer/fallback checks. Provider registration approval is an
 external prerequisite. Never label untested channels as live.
+
+
+## Leads-only portal scope
+
+`portal_users.access_scope` defaults to `full`; a team-managed `leads_only`
+assignment keeps an active contact in the lead workspace. Scope is independent
+of communication readiness and is checked from the database on each request.
+The portal home and reporting routes redirect to `/portal/inquiries`. Reporting
+and billing views, callable billing projections, and both billing transports
+refuse leads-only contacts. Inquiry notes/status and client communication
+ownership checks retain their existing client boundary. Never use JWT user
+metadata or menu visibility as authorization.
+
+The clean team preview lives at `/workspace-preview/[clientId]`, outside the
+agency layouts. The original client preview URL redirects there. It shares the
+portal shell and workspace; it still authorizes a real team member and labels
+real-data writes. It is not impersonation. Lead links from existing alerts open
+the same workspace for leads-only contacts.
+
+Release order: apply `portal_leads_only_scope`, deploy the app, then set selected
+contacts to `leads_only`. If the legacy stripe-billing Edge Function is deployed,
+update its scope filter first; a retired function must remain retired.
+The dedicated billing runtime is protected by its existing RLS SELECT policy,
+now restricted to full-scope contacts. No account, invitation, session, provider
+readiness gate, or other contact's scope changes as part of the migration.
+
+Verification: the migration replay includes two-client view/RPC and billing
+runtime role tests. The CRM UI integration checks direct URLs, notes, mobile
+layout, team-only preview, and preservation of another client's reporting.

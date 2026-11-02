@@ -8,12 +8,14 @@
 // quantity changes) is re-checked by the function before every session.
 
 import { redirect } from "next/navigation";
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { callStripeBilling } from "@/lib/stripe-billing-call";
 import { MANAGE_BILLING_UNAVAILABLE } from "@/lib/portal-billing";
 
 export async function openPortalBillingAction() {
   const supabase = await createClient();
+  await requirePortalReportingAccess(supabase);
   const answer = await callStripeBilling(supabase, { action: "create_portal_session" });
   const url = answer.status === 200 ? answer.body?.url : null;
   if (typeof url !== "string" || !url.startsWith("https://")) {

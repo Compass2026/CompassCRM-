@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   ArrowRight,
-  ArrowUpRight,
   CheckCircle2,
   ChevronRight,
   Compass,
@@ -42,7 +41,7 @@ type Props = {
   notes: NoteRow[];
   events: EventRow[];
   basePath: string;
-  inquiryBasePath: string;
+  openLead?: boolean;
   error?: string | null;
   preview?: boolean;
 };
@@ -61,12 +60,12 @@ export function ClientWorkspace({
   notes,
   events,
   basePath,
-  inquiryBasePath,
+  openLead = false,
   error,
   preview = false,
 }: Props) {
   const [view, setView] = useState<"dashboard" | "leads" | "inbox">(
-    "dashboard",
+    openLead ? "leads" : "dashboard",
   );
   const [mailConnected, setMailConnected] = useState(false);
   const [query, setQuery] = useState("");
@@ -87,9 +86,6 @@ export function ClientWorkspace({
   );
   const limited = total != null && total > rows.length;
   const leadLink = (id: string) => `${basePath}?lead=${encodeURIComponent(id)}`;
-  const contactPath = selected
-    ? `${inquiryBasePath}/${selected.id}`
-    : inquiryBasePath;
   const phone = selected && telHref(selected.phone_e164, selected.phone);
   const email = selected && mailtoHref(selected.email, businessName);
 
@@ -517,13 +513,7 @@ export function ClientWorkspace({
                           "Contact information not provided"}
                       </p>
                     </div>
-                    <Link
-                      href={contactPath}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-700"
-                    >
-                      Full record{" "}
-                      <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                    </Link>
+
                   </div>
                   <div className="my-4 flex flex-wrap gap-2">
                     <StatusBadge status={selected.status} />
