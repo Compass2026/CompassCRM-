@@ -124,3 +124,83 @@ test("an unmapped profile of a client with several offices or locations is refus
   // Blog briefs are never refused for it.
   assert.ok(!codes(buildBrief(twoOffices, TARGET, { socialAccounts: [wichita], purpose: "blog" })).includes("location_market_unmapped"));
 });
+
+// ── Logic-shaped production data (Nov 2 2026) ─────────────────────────────────
+// One verified profile (Wichita, recorded as its office market); Overland
+// Park is an office with no connected profile (its verification hold); the
+// Kansas City suburbs are approved markets of the client, not of Wichita; the
+// client's phone is its Kansas City number. Fictional ids; real place names.
+import { createCopyCheck } from "../supabase/functions/content-approvals/copy-check.ts";
+import realGazetteer from "../supabase/functions/post-drafter/gazetteer.json" with { type: "json" };
+
+const KS = realGazetteer.KS;
+const KC_PHONE = "816-300-5781";
+const KC_PLACES = ["Overland Park", "Kansas City", "Lenexa", "Olathe", "Shawnee"];
+const market = (city, state, basis) => ({ id: `m-${city}-${state}`, city, state, basis, status: "approved", brand_workspace_id: null });
+function logicShaped() {
+  const base = lucas();
+  const input = { ...base, client: { ...base.client, phone: KC_PHONE, state: "KS" },
+    locations: [{ name: "Wichita, KS", city: "Wichita", state: "KS", is_active: true }, { name: "Overland Park, KS", city: "Overland Park", state: "KS", is_active: true }] };
+  const ctx = ownerContextOf(input);
+  return { ...input, owner_context: { ...ctx, markets: [market("Wichita", "KS", "office"), market("Overland Park", "KS", "office"),
+    market("Kansas City", "KS", "recorded_decision"), market("Kansas City", "MO", "recorded_decision"),
+    market("Lenexa", "KS", "recorded_decision"), market("Olathe", "KS", "recorded_decision"), market("Shawnee", "KS", "recorded_decision")] } };
+}
+const wichitaOffice = withMarkets(wichita, [{ market: "Wichita", kind: "office" }]);
+const ACCOUNTS = [wichitaOffice, facebook];
+const WICHITA_COPY = GOOD.replace("Wentzville", "Wichita");
+
+test("Logic-shaped: the Wichita profile's brief approves Wichita only, carries no phone, and lists the Kansas City places as excluded", () => {
+  const r = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: ACCOUNTS });
+  assert.equal(r.ok, true, JSON.stringify(r.refusals));
+  assert.deepEqual(placesOf(r), ["Wichita"]);
+  assert.equal(r.brief.client.phone, "");
+  assert.equal(r.brief.allowed_facts.crm.phone, "");
+  const excluded = r.brief.excluded.facts.map((f) => f.fact).join(" | ");
+  for (const p of KC_PLACES) assert.ok(excluded.includes(p), p);
+  assert.ok(r.brief.excluded.facts.some((f) => f.fact === "The client's phone number"));
+  assert.ok(!JSON.stringify(r.brief).includes(KC_PHONE), "the Kansas City number is nowhere in the brief");
+  assert.equal(r.brief.target.cta.type, "LEARN_MORE");
+});
+
+test("Logic-shaped: Wichita copy naming a Kansas City place or the phone is refused; plain Wichita copy passes", () => {
+  const r = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: ACCOUNTS });
+  const lint = (copy) => lintDraft(r.brief, { copy, claim_ids: [OC, WARRANTY] }, { gazetteer: KS });
+  const clean = lint(WICHITA_COPY);
+  assert.deepEqual(clean.problems.filter((p) => ["unapproved_location", "wrong_phone"].includes(p.code)), []);
+  for (const p of KC_PLACES) {
+    const out = lint(`${WICHITA_COPY} We also serve ${p}.`);
+    assert.ok(out.problems.some((x) => x.code === "unapproved_location" && x.message.includes(p)), p);
+  }
+  const phone = lint(`${WICHITA_COPY} Call ${KC_PHONE}.`);
+  assert.ok(phone.problems.some((x) => x.code === "wrong_phone" && x.message === "This post names no phone number."));
+});
+
+test("Logic-shaped: a Call button is refused for the Wichita profile; Learn More to the owner page is the button", () => {
+  const r = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", socialAccountId: WICHITA }, { socialAccounts: ACCOUNTS });
+  assert.ok(codes(r).includes("cta_invalid"));
+  assert.match(r.refusals.find((x) => x.code === "cta_invalid").message, /no recorded phone; use Learn More/);
+});
+
+test("Logic-shaped: Facebook and blog briefs keep the client's places and phone", () => {
+  const fb = buildBrief(logicShaped(), { ...TARGET, channel: "facebook", ctaType: null, socialAccountId: PAGE }, { socialAccounts: ACCOUNTS });
+  assert.equal(fb.ok, true, JSON.stringify(fb.refusals));
+  for (const p of ["Wichita", ...KC_PLACES]) assert.ok(placesOf(fb).includes(p), p);
+  assert.equal(fb.brief.client.phone, KC_PHONE);
+  const blog = buildBrief(logicShaped(), TARGET, { socialAccounts: ACCOUNTS, purpose: "blog" });
+  for (const p of ["Wichita", ...KC_PLACES]) assert.ok(placesOf(blog).includes(p), p);
+  assert.equal(blog.brief.client.phone, KC_PHONE);
+});
+
+test("Logic-shaped: the content-approvals copy check enforces the same rule on a copy edit", async () => {
+  const post = { platform: "google_business", post_type: "standard", search_intent: "commercial", service_id: TARGET.serviceId,
+    keyword_id: KW, offer_id: null, cta_type: "LEARN_MORE", cta_url: null, social_account_id: WICHITA, asset_ids: [], campaign_mode: "keyword" };
+  const check = createCopyCheck({ postTarget: async () => post, input: async () => logicShaped(), socialAccounts: async () => ACCOUNTS, gazetteer: realGazetteer });
+  const ok = await check("client", "post", WICHITA_COPY, [OC, WARRANTY]);
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  const olathe = await check("client", "post", `${WICHITA_COPY} Now serving Olathe.`, [OC, WARRANTY]);
+  assert.equal(olathe.ok, false);
+  assert.ok(olathe.problems.some((p) => p.code === "unapproved_location"));
+  const phone = await check("client", "post", `${WICHITA_COPY} Call ${KC_PHONE}.`, [OC, WARRANTY]);
+  assert.ok(phone.problems.some((p) => p.code === "wrong_phone"));
+});

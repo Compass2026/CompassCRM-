@@ -388,6 +388,16 @@ export function buildBrief(
   if (filled(input.client.service_area)) {
     excludedFacts.push({ fact: `Service area text: "${input.client.service_area}"`, reason: "Only active locations are approved places; the free-text service area is not." });
   }
+  // The client's phone is not recorded for any one location, so a post scoped
+  // to a location carries no phone and no Call button; its button is Learn
+  // More to the owner page (Nov 2 2026).
+  const phone = scoped ? "" : input.client.phone ?? "";
+  if (scoped && ctaType === "CALL") {
+    refuse("cta_invalid", `${gbpLocation?.display_name ?? "This Business Profile location"} has no recorded phone; use Learn More to the owner page.`);
+  }
+  if (scoped && filled(input.client.phone)) {
+    excludedFacts.push({ fact: "The client's phone number", reason: `Not recorded for this Business Profile location (${places.join(", ")}); the post names no phone.` });
+  }
   const elsewhere = scoped ? clientPlaces.filter((p) => !places.some((q) => q.toLowerCase() === p.toLowerCase())) : [];
   if (elsewhere.length) {
     excludedFacts.push({ fact: `Places outside this Business Profile location: ${elsewhere.join(", ")}`,
@@ -405,7 +415,7 @@ export function buildBrief(
   const brief: Brief = {
     version: DRAFTER_VERSION,
     as_of: input.asOf,
-    client: { id: input.client.id, name: input.client.name, phone: input.client.phone ?? "", website: input.client.website_url ?? "" },
+    client: { id: input.client.id, name: input.client.name, phone, website: input.client.website_url ?? "" },
     gate,
     target: {
       channel: target.channel as Brief["target"]["channel"],
@@ -425,7 +435,7 @@ export function buildBrief(
     allowed_facts: {
       crm: {
         business_name: input.client.name,
-        phone: input.client.phone ?? "",
+        phone,
         website: input.client.website_url ?? "",
         places,
         services: service ? [service.name] : input.services.filter((s) => s.status === "approved").map((s) => s.name),
