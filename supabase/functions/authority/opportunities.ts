@@ -11,12 +11,13 @@ import { cadence, GBP_CADENCE_DAYS } from "./coverage.ts";
 import { aboutUnconfirmed } from "./keywords.ts";
 import { normPath, normPlace, placesIn, type PlaceIndex } from "./urls.ts";
 import { demandNote } from "./gsc.ts";
+import { coreReason, coreScopeOf, coreVerdict, type CoreReceipt } from "./core.ts";
 import type {
   Action, AuthorityInput, ContentType, CoverageItem, Gate, HomeSummary, KeywordAssignment, Opportunity, Pillar, Reason,
   Section, SupportingTopic, Tag, Tier,
 } from "./types.ts";
 
-type Draft = Omit<Opportunity, "tier" | "order" | "provenance" | "section" | "objective"> & { value: number; severity: number; impressions: number; deferred: boolean };
+type Draft = Omit<Opportunity, "tier" | "order" | "provenance" | "section" | "objective"> & { value: number; severity: number; impressions: number; deferred: boolean; core?: CoreReceipt };
 
 const TAGS: Tag[] = ["FACT", "HEURISTIC", "RESEARCH_REQUIRED", "REQUIRES_CONFIRMATION"];
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -96,8 +97,11 @@ export function buildOpportunities(ctx: {
     // ── Owner page missing / broken → create it (or finish the proposal) ──
     if (p.owner.state !== "live") {
       const hasEvidence = relevant.length > 0;
-      const foundation = !!primary && !primary.intent_check.conflict && !p.owner.conflict;
-      const reasons: Reason[] = [...p.owner.reasons];
+      // The page's keyword must be grounded by the site's approved Core 50
+      // (the page itself is what is missing, so only its absence is tolerated).
+      const core = coreVerdict(input, primary?.keyword_id ?? null, p.service_id, "add");
+      const foundation = !!primary && !primary.intent_check.conflict && !p.owner.conflict && core.ok;
+      const reasons: Reason[] = [...p.owner.reasons, coreReason(core)];
       if (p.owner.pending_proposal) reasons.push({ tag: "HEURISTIC", text: "Finish the pending proposal rather than starting a second page." });
       if (p.gsc.impressions) reasons.push({ tag: "FACT", text: `Search demand already exists: ${p.gsc.impressions} impressions in ${p.gsc.window}${demandNote(p.gsc.coverage)}, best position ${p.gsc.best_position ?? "–"}, landing on ${p.gsc.landing_pages.map((l) => l.path).join(", ")}.` });
       out.push(base({
@@ -106,14 +110,16 @@ export function buildOpportunities(ctx: {
         target: { keyword_id: primary?.keyword_id ?? null, keyword: primary?.keyword ?? null, intent: primary?.intent ?? "commercial", location: null, owner_path: p.owner.path, cta: null },
         evidence_claim_ids: relevant, existing_coverage: cov,
         gap: `The owner page ${p.owner.path ?? "(none)"} is ${p.owner.state === "none" ? "not defined" : p.owner.state.replace("_", " ")}.`,
-        blockers: [...(!foundation ? ["Resolve primary keyword, intent and owner-page conflicts before creating a page."] : []), ...(hasEvidence ? [] : ["No usable claim relevant to this service."])],
+        blockers: [...(!foundation ? ["Resolve primary keyword, intent and owner-page conflicts before creating a page."] : []),
+          ...(core.ok ? [] : [`Core 50: ${core.receipt.detail}`]), ...(hasEvidence ? [] : ["No usable claim relevant to this service."])],
         gates: [
           { gate: "keyword_foundation", pass: foundation, detail: "A validated primary keyword and unambiguous owner are required." },
+          { gate: "core_keyword", pass: core.ok, detail: core.ok ? `Core 50 v${core.receipt.list_version ?? "–"} (${core.receipt.relation}).` : core.receipt.verdict! },
           { gate: "approved_service", pass: true, detail: "Approved service." },
           { gate: "evidence", pass: hasEvidence, detail: `${relevant.length} relevant usable claim(s).` },
           { gate: "owner_page", pass: true, detail: "This opportunity creates it." },
         ],
-        reasons, value, severity: 4, impressions: p.gsc.impressions,
+        reasons, value, severity: 4, impressions: p.gsc.impressions, core: core.receipt,
       }));
     }
 
@@ -125,9 +131,14 @@ export function buildOpportunities(ctx: {
       if (p.gsc.impressions > 0 && p.gsc.owner_impressions === 0) reasons.push({ tag: "FACT", text: `The owner page earned 0 of ${p.gsc.impressions} impressions for this topic in ${p.gsc.window}${demandNote(p.gsc.coverage)}.` });
       if (reasons.length) {
         reasons.push({ tag: "HEURISTIC", text: "Fix the headings to the approved location and remove wording no claim supports; link to the owner from the pages Google currently prefers." });
+        // A refresh may target a keyword only when the site's Core 50 grounds it;
+        // otherwise the fix stays, with no keyword target.
+        const core = coreVerdict(input, primary?.keyword_id ?? null, p.service_id, "refresh");
+        if (!core.ok) reasons.push({ tag: "FACT", text: `No keyword target: Core 50 ${core.receipt.verdict} — ${core.receipt.detail} The fix may only correct or remove wording.` });
+        const tk = core.ok ? primary : null;
         out.push(base({
           id: `page_improvement:${slug(p.name)}`, key: `page_improvement:${p.service_id}`, topic: p.name, service_id: p.service_id, action: "improve", content_type: "page_improvement",
-          target: { keyword_id: primary?.keyword_id ?? null, keyword: primary?.keyword ?? null, intent: primary?.intent ?? null, location: null, owner_path: p.owner.path, cta: null },
+          target: { keyword_id: tk?.keyword_id ?? null, keyword: tk?.keyword ?? null, intent: tk?.intent ?? null, location: null, owner_path: p.owner.path, cta: null },
           evidence_claim_ids: relevant, existing_coverage: cov,
           gap: p.page_issues.length ? "The owner page's headings conflict with the governed rules." : "Google does not yet associate the topic with its owner page.",
           gates: [
@@ -137,6 +148,7 @@ export function buildOpportunities(ctx: {
             { gate: "no_new_claims", pass: true, detail: `Fix removes or corrects wording; ${relevant.length} relevant usable claim(s) available for anything added.` },
           ],
           reasons, value, severity: p.page_issues.some((r) => !/not an approved location/.test(r.text)) || (p.gsc.impressions > 0 && p.gsc.owner_impressions === 0) ? 3 : 2, impressions: p.gsc.impressions,
+          core: core.receipt,
         }));
       }
 
@@ -146,14 +158,23 @@ export function buildOpportunities(ctx: {
       const intents = [...new Set(keywords.filter((k) => k.service_id === p.service_id && k.intent && (k.role === "primary" || k.role === "supporting") && !k.flags.includes("intent_conflict")).map((k) => k.intent!))].sort();
       for (const intent of intents) {
         if (intent === "navigational") continue;
-        const kw = bestKeyword(keywords, p.service_id, intent);
+        // Only the site's approved Core 50 (or a supporting child of it) can
+        // be the target: the best core-eligible keyword, else the best one
+        // with the reason it is not, never the wider inventory as ready.
+        const eligible = keywords.filter((k) => k.service_id === p.service_id && coreVerdict(input, k.keyword_id, p.service_id, "post").ok);
+        const kw = bestKeyword(eligible, p.service_id, intent) ?? bestKeyword(keywords, p.service_id, intent);
         if (!kw) continue;
-        const gates: Gate[] = [];
-        const reasons: Reason[] = [];
+        const core = coreVerdict(input, kw.keyword_id, p.service_id, "post");
+        const gates: Gate[] = [{ gate: "core_keyword", pass: core.ok, detail: core.ok ? `Core 50 v${core.receipt.list_version ?? "–"} (${core.receipt.relation}).` : core.receipt.verdict! }];
+        const reasons: Reason[] = [coreReason(core)];
         const blockers: string[] = [];
         let action: Action = "create";
         let evidence: string[] = [];
-        if (gap) {
+        if (!core.ok) {
+          blockers.push(`Core 50: ${core.receipt.detail}`);
+          gates.push({ gate: "drafter_brief", pass: false, detail: "Not attempted: the keyword is not an approved, usable Core 50 target." });
+          action = "blocked_data_prerequisite";
+        } else if (gap) {
           blockers.push(`The service record's page is ${gap.recorded ?? "empty"} while the live owner is ${gap.owner}; resolve data_fix:service-page:${slug(p.name)} first.`);
           gates.push({ gate: "data_prerequisite", pass: false, detail: "The service record does not name its live owner page, so the drafter cannot build a brief." });
           gates.push({ gate: "drafter_brief", pass: false, detail: "Not attempted until the data prerequisite is reconciled." });
@@ -188,7 +209,7 @@ export function buildOpportunities(ctx: {
           target: { keyword_id: kw.keyword_id, keyword: kw.keyword, intent, location: null, owner_path: p.owner.path, cta: "LEARN_MORE" },
           evidence_claim_ids: evidence, existing_coverage: cov.filter((c) => c.kind === "gbp_post"),
           gap: `A ${intent} Business Profile post for "${kw.keyword}".`, blockers, gates, eligible_from: deferred ? cad.eligible_from : null,
-          reasons, value, severity: 2, impressions: p.gsc.impressions, deferred,
+          reasons, value, severity: 2, impressions: p.gsc.impressions, deferred, core: core.receipt,
         }));
       }
     }
@@ -225,6 +246,32 @@ export function buildOpportunities(ctx: {
         value: polluted.some((k) => k.money) ? 3 : 2, severity: 3, impressions: p.gsc.impressions,
       }));
     }
+  }
+
+  // ── A site with no approved Core 50: one explicit decision, never a fallback ──
+  const scope = coreScopeOf(input);
+  if (!scope) out.push(base({
+    id: "core_list:scope", key: "core_list:scope", topic: "Core 50 scope", action: "blocked_data_prerequisite", content_type: "data_fix",
+    gap: "The run has no Core 50 scope, so no keyword can be a content target.",
+    blockers: ["Load authority_input_scoped(): every keyword-targeted opportunity is blocked until the approved list is read."],
+    gates: [{ gate: "core_keyword", pass: false, detail: "core_scope_missing" }],
+    reasons: [{ tag: "FACT", text: "authority.core is absent; the engine does not fall back to the client's whole keyword inventory." }],
+    value: 3, severity: 4,
+  }));
+  else if (!scope.exempt) for (const prog of scope.programs.filter((x) => x.status !== "approved")) {
+    out.push(base({
+      id: `core_list:${slug(prog.name)}`, key: `core_list:${prog.program_id ?? "client"}`, topic: `Core 50: ${prog.name}`,
+      action: "requires_confirmation", content_type: "data_fix",
+      target: { keyword_id: null, keyword: null, intent: null, location: null, owner_path: null, cta: null },
+      gap: prog.proposal ? `${prog.name}'s Core 50 v${prog.proposal.version} (${prog.proposal.count} keywords) is proposed, not approved.` : `${prog.name} has no Core 50 list.`,
+      blockers: [`No keyword-targeted content for ${prog.name} until its Core 50 is approved; the other keywords are not used instead.`],
+      gates: [{ gate: "core_keyword", pass: false, detail: prog.status === "proposed_only" ? "core_list_not_approved" : "core_list_missing" }],
+      reasons: [
+        { tag: "FACT", text: prog.proposal ? `Proposal ${prog.proposal.id}, v${prog.proposal.version}, ${prog.proposal.count} keywords, proposed ${prog.proposal.proposed_at.slice(0, 10)}.` : "No list, proposed or approved." },
+        { tag: "REQUIRES_CONFIRMATION", text: "Approving (or revising) the list is Tom's decision on the list itself; this analysis never approves one." },
+      ],
+      value: 3, severity: 4,
+    }));
   }
 
   // ── The home page's own headings (it earns most impressions today) ──

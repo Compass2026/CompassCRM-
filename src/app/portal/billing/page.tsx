@@ -1,3 +1,4 @@
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { agreedPriceText, formatMoney } from "@/lib/billing";
 import { formatDate } from "@/lib/portal";
@@ -27,6 +28,7 @@ export default async function PortalBillingPage({
 }) {
   const { error } = await searchParams;
   const supabase = await createClient();
+  await requirePortalReportingAccess(supabase);
   const [{ data: summary }, { data: services }, { data: invoices }] = await Promise.all([
     supabase.from("portal_billing_summary").select("*").maybeSingle(),
     supabase.from("portal_entitlements").select("service_key, service_name, kind, quantity, unit, period, sort_order").order("sort_order"),

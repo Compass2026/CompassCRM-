@@ -1,3 +1,4 @@
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,6 +14,7 @@ import { propertySearchTotals } from "@/lib/search-totals";
 
 export default async function PortalSearchPage() {
   const supabase = await createClient();
+  await requirePortalReportingAccess(supabase);
 
   const { data: periods } = await supabase
     .from("portal_search_performance")

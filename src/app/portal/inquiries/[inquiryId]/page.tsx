@@ -1,4 +1,5 @@
-import { notFound } from "next/navigation";
+import { hasPortalReportingAccess } from "@/lib/portal-access";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { InquiryDetail } from "@/components/inquiries/inquiry-views";
 import { loadInquiry } from "@/lib/inquiries-data";
@@ -16,6 +17,7 @@ export default async function PortalInquiryPage({ params }: { params: Promise<{ 
     supabase.from("portal_client").select("name").maybeSingle(),
   ]);
   if (!inquiry) notFound();
+  if (!(await hasPortalReportingAccess(supabase))) redirect(`/portal/inquiries?lead=${inquiryId}`);
   return (
     <div className="mx-auto max-w-3xl">
       <InquiryDetail inquiry={inquiry} notes={notes} events={events} basePath="/portal/inquiries" businessName={client?.name ?? "us"} />

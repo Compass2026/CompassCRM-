@@ -158,11 +158,10 @@ begin
     = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'blog_publication_cancel', 'blog_publication_queue', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'content_delegation_configure', 'content_delegation_configure_edits', 'content_delegation_exclude', 'content_delegation_include', 'content_draft_approve', 'content_draft_regenerate', 'content_draft_request', 'crm_confirm_delivery_test', 'crm_inquiry_add_note', 'crm_inquiry_set_status', 'crm_notification_block_reason', 'crm_record_notification_consent', 'crm_set_sms_alerts', 'crm_set_sms_sender', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'publisher_set_account_enabled', 'publisher_set_gbp_transport', 'publisher_unbind_account', 'secret_present', 'social_history_set_learning', 'social_history_style_review', 'social_post_readiness']);
 
 
-  -- portal_client and portal_site are simple views, so Postgres would let a
-  -- write through them (as the owner, bypassing RLS) if a grant allowed it.
-  -- The grants in A3 are what stop that; this records why they matter.
-  perform t.ok('A8 portal_client / portal_site are auto-updatable, so the SELECT-only grant is load-bearing',
-    pg_relation_is_updatable('public.portal_client', false) > 0 and pg_relation_is_updatable('public.portal_site', false) > 0);
+  -- Identity remains a simple view; the scope-wrapped site projection is no
+  -- longer auto-updatable. A3 still pins SELECT-only grants on every view.
+  perform t.ok('A8 identity grant is load-bearing and scoped site is not auto-updatable',
+    pg_relation_is_updatable('public.portal_client', false) > 0 and pg_relation_is_updatable('public.portal_site', false) = 0);
 end $$;
 
 -- ── B. Anonymous caller ─────────────────────────────────────────────────────

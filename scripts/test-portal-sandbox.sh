@@ -90,6 +90,7 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billin
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth_portal_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_access.test.sql"
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_leads_only.test.sql"
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth_portal_teardown.sql" -o /dev/null
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_teardown.sql" -o /dev/null
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_teardown.sql" -o /dev/null
@@ -338,3 +339,7 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/site_program_
 # over-capacity flagged in readiness), v1 reconciliation without double
 # credit, monthly clients unchanged, the rollback (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_delivery_standard.test.sql" -o /dev/null
+# 20261030190000: the Authority engine's Core 50 scope, read-only: grounding,
+# per-purpose owner verdicts, places, three brand sites, scoped input, the
+# fingerprint's core section, access, no writes, BHG-shaped timing, rollback.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_core_scope.test.sql" -o /dev/null

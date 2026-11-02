@@ -28,6 +28,7 @@ const upstream=http.createServer(async(req,res)=>{
  if(url.pathname==='/auth/v1/user')return reply(user(actor));
  if(url.pathname==='/rest/v1/rpc/is_team')return reply(actor===teamId);
  if(url.pathname==='/rest/v1/rpc/portal_seen')return reply(null);
+ if(url.pathname==='/rest/v1/rpc/portal_has_reporting_access')return reply(actor===portalId);
  if(url.pathname==='/rest/v1/team_members')return reply(actor===teamId?[{id:teamId}]:[]);
  if(url.pathname==='/rest/v1/clients')return reply(client);
  if(url.pathname==='/rest/v1/portal_client')return reply(client);
