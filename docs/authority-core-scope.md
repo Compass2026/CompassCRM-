@@ -126,12 +126,21 @@ database's own core gates skip it too.
   - A channel whose opportunities all exist but cannot proceed is `blocked`,
     with `blocked_by` listing each key and its reason. One usable keyword
     still plans its channel; the blocked ones are listed, not hidden.
+  - **Status and keys always agree:** a channel is `review_plan` exactly
+    when it lists `opportunity_keys`, and a `blocked` channel lists none.
   - **`primary`** is the service's primary keyword only when the list
     grounds it. Otherwise it is `null`, `primary_excluded` gives the keyword
-    and its reason, a blocker names it, and neither `objective` nor
-    `priority` uses it.
-  - A site without an approved list is a campaign blocker.
-  - The Authority tab shows "Blocked: <reasons>" and "Not usable: <keyword>".
+    and its reason, and neither `objective` nor `priority` uses it.
+  - **An excluded primary is a warning, not a blocker** (`warnings`). The
+    service's other approved, verified keywords still plan their channels on
+    their own. No keyword is promoted in the primary's place, and the
+    service's recorded primary is not changed.
+  - **Campaign blockers** stop every channel: a site without an approved
+    list, no primary recorded at all, no approved owner page, or competing
+    owners. Such a channel lists no keys; an opportunity that would
+    otherwise be actionable is in `blocked_by` as `foundation_blocked`.
+  - The Authority tab shows "Blocked: <reasons>", "Not usable: <keyword>"
+    and the warnings.
 - **Receipts:**
   - Every keyword-targeted opportunity carries `core`: purpose, program,
     list id and version, keyword, relation, core parent, owner URL and role,
@@ -198,7 +207,7 @@ every draft's own gates still decide each draft.
 
 ## Tests
 
-- **`tests/authority-core.test.mjs`** (pure, 16 tests):
+- **`tests/authority-core.test.mjs`** (pure, 24 tests):
   - 50 approved out of a wider inventory that outranks them;
   - an intent with no usable core keyword;
   - a retired member;
@@ -208,7 +217,11 @@ every draft's own gates still decide each draft.
   - holds, stale pages, markets and places named in text;
   - new pages and page improvements;
   - receipts, key stability from proposal to approval, determinism,
-    exemption and campaigns.
+    exemption and campaigns;
+  - an off-list primary beside an approved, verified supporting keyword
+    (the channel plans that keyword only; the primary is not replaced), a
+    campaign blocker (no keys, `foundation_blocked`), and a check that status
+    and keys agree in every Core 50 state.
 - **`supabase/tests/sandbox/authority_core_scope.test.sql`** (native in
   `scripts/test-portal-sandbox.sh`, and in PGlite in
   `tests/authority-core-database.test.mjs`, which then feeds
