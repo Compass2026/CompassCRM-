@@ -356,9 +356,15 @@ set local session_replication_role = origin;
 select acs.as_user('acc00000-0000-4000-a000-000000000001');
 create temp table acs_t as select clock_timestamp() t0;
 create temp table acs_s3 as select authority_core_scope(acs.id('B3')) s;
-select acs.ok(format('T1 BHG-shaped scope (204 active: 150 core + 30 children in scope, 24 off-list) in %s ms (limit 10000)',
-                     round(extract(epoch from clock_timestamp() - (select t0 from acs_t)) * 1000)),
-  extract(epoch from clock_timestamp() - (select t0 from acs_t)) < 10
+-- The budget is 10 s on native PostgreSQL (this script, CI's database and
+-- verify jobs). The PGlite replay (tests/authority-core-database.test.mjs)
+-- runs WebAssembly beside the parallel npm test files, which measures the
+-- runner rather than the function, so it sets acs.t1_limit_ms wider.
+select acs.ok(format('T1 BHG-shaped scope (204 active: 150 core + 30 children in scope, 24 off-list) in %s ms (limit %s)',
+                     round(extract(epoch from clock_timestamp() - (select t0 from acs_t)) * 1000),
+                     coalesce(nullif(current_setting('acs.t1_limit_ms', true), ''), '10000')),
+  extract(epoch from clock_timestamp() - (select t0 from acs_t)) * 1000
+    < coalesce(nullif(current_setting('acs.t1_limit_ms', true), ''), '10000')::numeric
   and (select jsonb_array_length(s->'keywords') from acs_s3) = 180
   and (select count(*) from acs_s3, jsonb_array_elements(s->'keywords') e where e->>'relation' = 'child') = 30
   and (select (s->>'off_list')::int from acs_s3) = 24

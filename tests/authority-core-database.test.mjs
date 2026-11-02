@@ -33,6 +33,10 @@ test("authority_core_scope: database suite, then the engine over authority_input
     const suite = readFileSync(SUITE, "utf8")
       .replace(/^\\ir (.+)$/gm, (_, rel) => readFileSync(path.join(path.dirname(SUITE), rel), "utf8"))
       .replace(/\nrollback;\s*$/, "\n");   // keep the fixtures for the engine below
+    // T1's 10 s budget holds on native PostgreSQL (scripts/test-portal-sandbox.sh,
+    // CI's database job). WebAssembly beside the parallel test files measures
+    // the runner, not the function (15.9 s in CI where native took 4.5 s).
+    await db.exec("set acs.t1_limit_ms = '60000'");
     await db.exec(suite, { onNotice: (n) => notices.push(n.message) });
     const ok = notices.filter((m) => m.startsWith("ok "));
     for (const label of LABELS) assert.ok(ok.some((m) => m.startsWith(`ok ${label} `)), `${label} did not run`);
