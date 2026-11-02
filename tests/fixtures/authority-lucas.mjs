@@ -4,6 +4,7 @@
 // as fetched read-only that day). Keyword and GSC rows are a representative
 // subset, not the full export.
 import { lucas as drafterLucas, SITE, PAGE, ROOF, KW, OC, WARRANTY, GAZETTEER } from "./drafter-lucas.mjs";
+import { approvedCore } from "./authority-core.mjs";
 
 export { SITE, PAGE, ROOF, KW, OC, WARRANTY };
 export const REPAIR = "c1c55a67-bc9f-43d1-a3a6-ad9bfe96841d";
@@ -125,5 +126,7 @@ export function lucasAuthority() {
     ] },
     places: [...GAZETTEER, "Saint Louis", "Troy", "Chesterfield"],
   };
+  // Every active keyword of an approved service is in its approved Core 50.
+  input.authority.core = approvedCore(input);
   return input;
 }

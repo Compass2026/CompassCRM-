@@ -2,6 +2,7 @@
 // full AuthorityInput: claims, posts, Search Console and ranks empty; the
 // state gazetteer the authority-run function adds.
 import { readFileSync } from "node:fs";
+import { withCore } from "../fixtures/authority-core.mjs";
 
 const FX = JSON.parse(readFileSync(new URL("../fixtures/authority-lucas-home.json", import.meta.url), "utf8"));
 const GAZ = JSON.parse(readFileSync(new URL("../../supabase/functions/post-drafter/gazetteer.json", import.meta.url), "utf8"));
@@ -19,5 +20,7 @@ export function lucasHomeInput(mut) {
     },
   };
   mut?.(input);
-  return input;
+  // Every active keyword of an approved service is in its approved Core 50,
+  // read after the mutation (unless the test set its own scope).
+  return withCore(input, undefined);
 }

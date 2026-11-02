@@ -13,6 +13,7 @@ import { findConflicts, pageWordingIssues } from "./conflicts.ts";
 import { buildOpportunities } from "./opportunities.ts";
 import { homeContext } from "./home.ts";
 import { buildKeywordCampaigns } from "./campaigns.ts";
+import { coreSummary, keywordCore } from "./core.ts";
 import { classifyPages, prefixes, slugWords, type ClassifiedPage } from "./site.ts";
 import { buildInventory, normPath, placesIn, buildPlaceIndex, type Inventory, type PlaceIndex } from "./urls.ts";
 import {
@@ -214,7 +215,8 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
   const unconfirmed = unconfirmedServicePages(input, pages, [...owners.values()], inv);
   const ownerPathByService = new Map(approved.map((s) => [s.id, owners.get(s.id)!.path]));
   const home = homeContext(input, inv, places, unconfirmed);
-  const keywords = classifyKeywords(input, { ownerPathByService, cityPrefix, places, citable, unconfirmed, clientName: input.client.name, home });
+  const keywords = classifyKeywords(input, { ownerPathByService, cityPrefix, places, citable, unconfirmed, clientName: input.client.name, home })
+    .map((k) => ({ ...k, core: keywordCore(input, k.keyword_id) }));
   const homeSummary = {
     ...home.summary,
     eligible: keywords.filter((k) => k.flags.includes("home_eligible")).length,
@@ -303,6 +305,7 @@ export function runAuthority(input: AuthorityInput): AuthorityReport {
     },
     pillars, keywords, conflicts, supporting, home: homeSummary, opportunities, judgments: judgments(input, pillars),
     campaigns: buildKeywordCampaigns(input, keywords, pillars, opportunities),
+    core: coreSummary(input, opportunities.filter((o) => o.core && o.core.verdict).map((o) => o.core!.verdict!)),
   };
 }
 

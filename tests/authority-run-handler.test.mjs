@@ -69,7 +69,7 @@ test("version: the engine, modes, limits and whether DNS works here", async () =
   const { call } = harness({ store: fakeStore().store });
   const v = await call({ mode: "version" });
   assert.equal(v.status, 200);
-  assert.equal(v.body.engine, "authority-v1.4");
+  assert.equal(v.body.engine, "authority-v1.5");
   assert.deepEqual(v.body.modes, [...MODES]);
   assert.deepEqual(v.body.limits, { maxPages: 150, concurrency: 4, timeoutMs: 20000, budgetMs: 120000, maxBytes: 2000000, textChars: 4000 });
   assert.equal(v.body.dns, true);
@@ -130,7 +130,7 @@ test("full: 202 {run_id}, fingerprint before input, then one completed record wi
   const { id, p } = calls.record[0];
   assert.equal(id, RUN);
   assert.equal(p.status, "completed", JSON.stringify(p.inventory?.health));
-  assert.equal(p.engine_version, "authority-v1.4");
+  assert.equal(p.engine_version, "authority-v1.5");
   assert.match(p.input_hash, /^sha256:[0-9a-f]{64}$/);
   assert.deepEqual(p.section_hashes, FP);
   assert.equal(p.report.client.id, CLIENT);
@@ -294,4 +294,34 @@ test("payload validation mirrors authority_record_run", () => {
   assert.match(validatePayload({ ...base(), input_hash: "md5:x" }, CLIENT), /input_hash/);
   assert.match(validatePayload({ ...base(), engine_version: "v1" }, CLIENT), /engine_version/);
   assert.equal(safeError(new Error("x".repeat(900))).length, 500);
+});
+
+test("v1.5: an input with no Core 50 scope fails the run; nothing else is recorded and nothing else is called", async () => {
+  const { i } = siteInput();
+  delete i.authority.core;
+  const called = [];
+  const base = fakeStore({ input: async () => structuredClone(i) }).store;
+  const store = Object.fromEntries(Object.entries(base).map(([k, f]) => [k, async (...a) => { called.push(k); return f(...a); }]));
+  const recorded = [];
+  store.record = async (id, p) => { called.push("record"); recorded.push(p); return { run_id: id, status: p.status }; };
+  let invCalls = 0;
+  const { call, settle } = harness({ store, inventory: async () => { invCalls++; return invFrom([]); } });
+  assert.equal((await call({ mode: "full", client_id: CLIENT })).status, 202);
+  await settle();
+  assert.equal(invCalls, 0, "the site is not fetched");
+  assert.deepEqual(recorded, [{ status: "failed", error: "authority_input_scoped returned no Core 50 scope for this client" }]);
+  assert.deepEqual(called, ["secret", "client", "begin", "fingerprint", "input", "record"]);
+});
+
+test("v1.5: a scoped run records the Core 50 receipts in the immutable report, through record only", async () => {
+  const { store, calls } = fakeStore();
+  const { call, settle } = harness({ store });
+  await call({ mode: "full", client_id: CLIENT });
+  await settle();
+  const { p } = calls.record[0];
+  assert.equal(p.engine_version, "authority-v1.5");
+  assert.equal(p.report.core.loaded, true);
+  assert.ok(p.report.core.programs[0].keyword_ids.length > 0);
+  assert.ok(p.report.opportunities.filter((o) => o.key.startsWith("gbp_post:")).every((o) => o.core?.schema === "authority-core-v1"));
+  assert.equal(validatePayload(p, CLIENT), null);
 });
