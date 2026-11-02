@@ -73,6 +73,13 @@ const gateway = http.createServer(async (req, res) => {
     res.writeHead(u ? 200 : 401, { "content-type": "application/json" });
     return res.end(JSON.stringify(u ? { ...u, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-09-01T00:00:00Z" } : { message: "invalid JWT" }));
   }
+  // Communication UI status only. Mutations are never simulated as successful.
+  if (["/functions/v1/client-mailbox", "/functions/v1/client-phone"].includes(url.pathname)) {
+    const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+    if (!["status", "load"].includes(body.mode)) unexpected.push(`communication mutation: ${body.mode}`);
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ email: "leads@example.test", connected: false, draft: null, messages: [], calls: [], number: null, can_send: false, voice_ready: false, reason: "outbound_disabled" }));
+  }
   const fn = url.pathname === "/functions/v1/inquiry-intake" ? intake : url.pathname === "/functions/v1/crm-lite" ? crm : null;
   if (fn) {
     const headers = {};
@@ -241,6 +248,38 @@ try {
   assert.equal(res.status(), 404);
   assert.ok(!(await other.content()).includes("remodeling our kitchen"));
   ok("Portal: client B cannot open client A's inquiry (404)");
+
+  sql(`update portal_users set access_scope='leads_only' where auth_user_id='${PORTAL_A.id}'`);
+  await portal.goto(`${base}/portal`, { waitUntil: "networkidle" });
+  assert.match(portal.url(), /\/portal\/inquiries$/);
+  await portal.locator("[data-client-workspace]").waitFor();
+  for (const path of ["growth", "backlinks", "rankings", "search", "work-log", "reports", "billing"]) {
+    await portal.goto(`${base}/portal/${path}`, { waitUntil: "networkidle" });
+    assert.match(portal.url(), /\/portal\/inquiries$/, `blocked ${path}`);
+  }
+  assert.deepEqual(await portal.locator('nav[aria-label="Workspace"] button').allTextContents(), ["Dashboard", "Leads3", "Inbox"]);
+  assert.equal(await portal.getByRole("link", { name: "Billing", exact: true }).count(), 0);
+  assert.equal(await portal.getByRole("link", { name: "Settings", exact: true }).count(), 0);
+  assert.ok(await portal.getByRole("button", { name: "Sign out", exact: true }).isVisible());
+  await portal.goto(`${base}/portal/inquiries/${first.inquiry_id}`, { waitUntil: "networkidle" });
+  assert.match(portal.url(), new RegExp(`lead=${first.inquiry_id}`));
+  await portal.getByText("Follow-up and internal notes", { exact: true }).click();
+  await portal.getByLabel("Add a follow-up note").fill("Leads-only access still works.");
+  await portal.getByRole("button", { name: "Add note", exact: true }).click();
+  await portal.getByText("Leads-only access still works.", { exact: true }).waitFor();
+  assert.equal(await portal.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await shot(portal, "leads-only-mobile");
+  await portal.goto(`${base}/workspace-preview/${CLIENT_A}`, { waitUntil: "networkidle" });
+  assert.equal(await portal.locator("[data-client-workspace]").count(), 0, "portal contact cannot use team preview");
+  await team.goto(`${base}/clients/${CLIENT_A}/workspace-preview`, { waitUntil: "networkidle" });
+  assert.equal(team.url(), `${base}/workspace-preview/${CLIENT_A}`);
+  await team.locator("[data-client-workspace]").waitFor();
+  assert.equal(await team.getByRole("link", { name: "Production", exact: true }).count(), 0);
+  assert.equal(await team.getByRole("link", { name: "Settings", exact: true }).count(), 0);
+  await shot(team, "clean-workspace-preview");
+  await other.goto(`${base}/portal`, { waitUntil: "networkidle" });
+  assert.ok(await other.getByRole("link", { name: "Reports", exact: true }).isVisible(), "other clients retain reporting");
+  ok("Leads-only: home and direct reporting URLs redirect; notes and mobile workspace work; preview is team-only without agency navigation; other clients retain reporting");
 
   assert.equal(twilio.sent.length, 0, "no text was sent");
   assert.deepEqual(errors, []);

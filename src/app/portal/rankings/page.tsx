@@ -1,3 +1,4 @@
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +30,7 @@ const excluded = (s: string | null) => s === "third_party" || s === "unverified"
 
 export default async function PortalRankingsPage() {
   const supabase = await createClient();
+  await requirePortalReportingAccess(supabase);
   const { data: rankings } = await supabase.from("portal_rankings").select("*");
 
   const byKeyword = new Map<string, Row>();

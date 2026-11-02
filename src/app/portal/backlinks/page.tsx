@@ -1,6 +1,7 @@
 import { GrowthAnalytics } from "@/components/growth-charts";
 import { growthRange } from "@/lib/client-growth";
 import { notFound } from "next/navigation";
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { loadPortalBacklinks, loadGrowth } from "@/lib/growth-data";
 import { backlinkStatus } from "@/lib/backlinks";
@@ -8,6 +9,7 @@ import { growthDate } from "@/lib/client-growth";
 
 export default async function PortalBacklinksPage() {
   const db=await createClient();
+  await requirePortalReportingAccess(db);
   const {data:client}=await db.from("portal_client").select("id").maybeSingle();
   if(!client?.id) notFound();
   const [{rows,error},profile]=await Promise.all([loadPortalBacklinks(db,client.id),loadGrowth(db,client.id,true)]);

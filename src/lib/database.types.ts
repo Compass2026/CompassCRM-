@@ -8727,6 +8727,7 @@ export type Database = {
       }
       portal_users: {
         Row: {
+          access_scope: "full" | "leads_only"
           auth_user_id: string | null
           client_id: string
           created_at: string
@@ -8739,6 +8740,7 @@ export type Database = {
           name: string | null
         }
         Insert: {
+          access_scope?: "full" | "leads_only"
           auth_user_id?: string | null
           client_id: string
           created_at?: string
@@ -8751,6 +8753,7 @@ export type Database = {
           name?: string | null
         }
         Update: {
+          access_scope?: "full" | "leads_only"
           auth_user_id?: string | null
           client_id?: string
           created_at?: string
@@ -13152,6 +13155,7 @@ export type Database = {
       }
     }
     Functions: {
+      portal_has_reporting_access: { Args: Record<PropertyKey, never>; Returns: boolean }
       enroll_client_onboarding: {
         Args: { p_client_id: string }
         Returns: number
