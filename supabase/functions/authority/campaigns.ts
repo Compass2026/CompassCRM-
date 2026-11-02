@@ -11,7 +11,8 @@ export type CampaignChannel = "website" | "blog" | "google_business" | "facebook
 export type KeywordCampaign = {
   schema_version: 1; key: string; service_id: string; name: string;
   // The service's primary keyword only when the site's approved Core 50
-  // grounds it and it is otherwise eligible; else null, with primary_excluded.
+  // grounds it and it is otherwise eligible; else null, with primary_excluded
+  // and a warning. No other keyword is promoted in its place.
   primary: { id: string; keyword: string; intent: string | null } | null;
   primary_excluded?: { keyword: string; reason: string } | null;
   // Grounded membership (reporting). post: null when a Business Profile post
@@ -19,10 +20,12 @@ export type KeywordCampaign = {
   cluster: { id: string; keyword: string; intent: string | null; post?: string | null }[];
   excluded: { keyword: string; reason: string }[];
   intent_mix: string[]; owner_url: string | null; objective: string;
-  blockers: string[]; evidence_claim_ids: string[]; priority: number[];
+  // blockers stop every channel; warnings (an excluded primary) do not.
+  blockers: string[]; warnings?: string[]; evidence_claim_ids: string[]; priority: number[];
   // opportunity_keys and review_plan: actionable opportunities only (a content
   // action, every gate but cadence passed, no Core 50 refusal). Opportunities
-  // that exist but cannot proceed are blocked_by, with their reason.
+  // that exist but cannot proceed are blocked_by, with their reason. A
+  // blocked channel never lists opportunity_keys.
   channels: { channel: CampaignChannel; objective: string; opportunity_keys: string[]; existing: number; status: "review_plan" | "existing_content" | "not_planned" | "blocked";
     blocked_by?: { key: string; reason: string }[] }[];
   measurement: {
@@ -67,9 +70,12 @@ export function buildKeywordCampaigns(input: AuthorityInput, keywords: KeywordAs
     const primaryExcluded = recorded && !primary
       ? { keyword: recorded.keyword, reason: grounding(recorded) ?? (recorded.intent_check.conflict ? recorded.intent_check.reason : recorded.role) } : null;
     const blockers: string[] = [];
+    const warnings: string[] = [];
     const listProblem = groundingProblem(coreVerdict(input, null, service.id, "post"));
     if (listProblem && listProblem !== "keyword_missing") blockers.push(`The site's Core 50 is not usable: ${listProblem}.`);
-    if (primaryExcluded) blockers.push(`The service's primary keyword "${primaryExcluded.keyword}" is not usable for this site (${primaryExcluded.reason}).`);
+    // A recorded primary the list does not ground is a warning: the service's
+    // other approved keywords may still plan a channel on their own.
+    if (primaryExcluded) warnings.push(`The service's primary keyword "${primaryExcluded.keyword}" is not usable for this site (${primaryExcluded.reason}); no other keyword replaces it.`);
     else if (!primary) blockers.push("An active, validated primary keyword mapped to this service is required.");
     if (!owner || !input.pageGroups.some((g) => g.status === "approved" && normalizeUrl(g.target_url) === owner)) blockers.push("An approved owner page is required.");
     if (pillar?.owner.conflict) blockers.push("Owner-page candidates disagree.");
@@ -104,8 +110,9 @@ export function buildKeywordCampaigns(input: AuthorityInput, keywords: KeywordAs
     };
     const channels = (Object.keys(objectives) as CampaignChannel[]).map((channel) => {
       const mineOps = ops.filter((o) => channelOf(o) === channel);
-      const planned = mineOps.filter((o) => actionable(o) && ids.has(o.target.keyword_id!));
-      const held = mineOps.filter((o) => !planned.includes(o)).map((o) => ({ key: o.key, reason: blockReason(o) }));
+      // A campaign blocker stops the channel, so nothing in it is planned.
+      const planned = blockers.length ? [] : mineOps.filter((o) => actionable(o) && ids.has(o.target.keyword_id!));
+      const held = mineOps.filter((o) => !planned.includes(o)).map((o) => ({ key: o.key, reason: blockers.length && actionable(o) ? "foundation_blocked" : blockReason(o) }));
       const existing = channel === "blog" ? content.length : channel === "website" ? Number(pillar?.owner.state === "live") : social.filter((p) => p.platform === channel).length;
       const status = blockers.length ? "blocked" : planned.length ? "review_plan" : held.length ? "blocked" : existing ? "existing_content" : "not_planned";
       return { channel, objective: objectives[channel], opportunity_keys: planned.map((o) => o.key), existing,
@@ -119,7 +126,7 @@ export function buildKeywordCampaigns(input: AuthorityInput, keywords: KeywordAs
       excluded: mine.filter((k) => !eligible(k)).map((k) => ({ keyword: k.keyword, reason: grounding(k) ?? (k.intent_check.conflict ? k.intent_check.reason : k.role) })),
       intent_mix: [...new Set(cluster.map((k) => k.intent).filter((i): i is string => !!i))].sort(), owner_url: owner,
       objective: `Build supported coverage for ${primary?.keyword ?? service.name} around one owner page.`,
-      blockers, evidence_claim_ids: pillar?.evidence.relevant.map((c) => c.id) ?? [],
+      blockers, warnings, evidence_claim_ids: pillar?.evidence.relevant.map((c) => c.id) ?? [],
       priority: primary ? keywordCampaignRank(primary) : [4], channels,
       measurement: { window: window.label, coverage: gscCoverage(window.rows.length),
         impressions: window.label ? rows.reduce((n, r) => n + r.impressions, 0) : null,

@@ -30,6 +30,7 @@ export function KeywordCampaigns({ campaigns }: { campaigns: KeywordCampaign[] }
               <div><dt className="font-medium">Authority objective</dt><dd>{campaign.objective}</dd></div>
             </dl>
             {campaign.blockers.length > 0 && <ul className="list-disc space-y-1 rounded-md bg-amber-50 p-4 pl-8 text-amber-950">{campaign.blockers.map((b) => <li key={b}>{b}</li>)}</ul>}
+            {(campaign.warnings?.length ?? 0) > 0 && <ul aria-label="Warnings" className="list-disc space-y-1 rounded-md border p-4 pl-8">{campaign.warnings!.map((w) => <li key={w}>{w}</li>)}</ul>}
             <div><h3 className="font-medium">Supporting keyword cluster</h3><p>{campaign.cluster.filter((k) => k.id !== campaign.primary?.id).map((k) => `${k.keyword} (${k.intent ?? "unlabelled"})`).join("; ") || "No supporting keywords mapped."}</p></div>
             <div className="overflow-x-auto"><table className="w-full text-left">
               <caption className="sr-only">Channel plan for {campaign.name}</caption>

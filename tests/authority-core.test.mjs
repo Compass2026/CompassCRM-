@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runAuthority } from "../supabase/functions/authority/engine.ts";
 import { coreVerdict } from "../supabase/functions/authority/core.ts";
+import { actionable } from "../supabase/functions/authority/campaigns.ts";
 import { lucasAuthority, ROOF, REPAIR, STORM, KW } from "./fixtures/authority-lucas.mjs";
 import { approvedCore, CORE_LIST } from "./fixtures/authority-core.mjs";
 
@@ -317,9 +318,9 @@ test("campaigns: an off-list primary is never the campaign's primary, objective 
   assert.deepEqual(c.primary_excluded, { keyword: "roof replacement wentzville", reason: "keyword_not_core" });
   assert.doesNotMatch(c.objective, /roof replacement wentzville/);
   assert.ok(!c.cluster.some((k) => k.id === KW));
-  assert.ok(c.blockers.some((b) => /primary keyword "roof replacement wentzville" is not usable for this site \(keyword_not_core\)/.test(b)));
+  assert.ok(c.warnings.some((w) => /primary keyword "roof replacement wentzville" is not usable for this site \(keyword_not_core\); no other keyword replaces it/.test(w)));
+  assert.ok(!c.blockers.some((b) => /primary keyword/.test(b)), "an excluded primary is a warning, not a blocker");
   assert.deepEqual(c.priority, [4]);
-  assert.ok(c.channels.every((ch) => ch.status !== "review_plan"));
   // With the primary on the list, it is the campaign's primary.
   const on = runAuthority(lucasAuthority()).campaigns.find((x) => x.service_id === ROOF);
   assert.equal(on.primary.id, KW);
@@ -353,4 +354,93 @@ test("new service page: an existing page that is unchecked, stale, unreadable, r
   assert.equal(coreVerdict(none, "kw-storm", STORM, "add").ok, true);
   // The exception is for new pages only: the same keyword is still refused for a post.
   assert.equal(coreVerdict(i, "kw-storm", STORM, "post").receipt.verdict, "target_page_missing");
+});
+
+// ── Review fix (ChatGPT, PR #206 at b048460): status and keys agree ───────────
+
+// Every channel of every campaign: review_plan exactly when it lists keys,
+// every key is an actionable opportunity of that service and channel, and no
+// actionable, grounded opportunity of an unblocked campaign is left out.
+const CHANNEL = { gbp_post: "google_business", blog_post: "blog", blog_refresh: "blog", service_page: "website", location_page: "website", page_improvement: "website" };
+function assertConsistent(r, label) {
+  for (const c of r.campaigns) for (const ch of c.channels) {
+    const at = `${label}: ${c.name} ${ch.channel}`;
+    assert.equal(ch.status === "review_plan", ch.opportunity_keys.length > 0, `${at} status ${ch.status} with ${ch.opportunity_keys.length} keys`);
+    if (ch.status === "blocked") assert.deepEqual(ch.opportunity_keys, [], at);
+    for (const k of ch.opportunity_keys) {
+      const o = byKey(r, k);
+      assert.ok(actionable(o), `${at} lists ${k}, which is not actionable`);
+      assert.equal(o.service_id, c.service_id, at);
+      assert.equal(CHANNEL[o.content_type], ch.channel, at);
+    }
+    const ids = new Set(c.cluster.map((k) => k.id));
+    const usable = r.opportunities.filter((o) => o.service_id === c.service_id && CHANNEL[o.content_type] === ch.channel && o.target.keyword_id && ids.has(o.target.keyword_id) && actionable(o)).map((o) => o.key).sort();
+    assert.deepEqual([...ch.opportunity_keys].sort(), c.blockers.length ? [] : usable, at);
+    // Nothing usable is hidden: an actionable opportunity that is not planned is blocked_by.
+    for (const k of usable) assert.ok(ch.opportunity_keys.includes(k) || ch.blocked_by?.some((b) => b.key === k), `${at} drops ${k}`);
+  }
+}
+
+test("campaigns: an off-list primary with an approved, verified supporting keyword plans that keyword only; the primary is never replaced", () => {
+  const fresh = { verdict: "live", method: "http", checked_at: "2026-10-28T12:00:00Z" };
+  const i = scoped((x) => { x.authority.core = approvedCore(x, { exclude: [KW], geography: { "kw-trans": "structured" }, checks: { "kw-trans": fresh } }); });
+  const recordedPrimary = i.services.find((s) => s.id === ROOF).primary_keyword_id;
+  const r = runAuthority(i);
+  const c = r.campaigns.find((x) => x.service_id === ROOF);
+  // The primary stays excluded and visible; nothing is promoted in its place.
+  assert.equal(c.primary, null);
+  assert.deepEqual(c.primary_excluded, { keyword: "roof replacement wentzville", reason: "keyword_not_core" });
+  assert.equal(i.services.find((s) => s.id === ROOF).primary_keyword_id, recordedPrimary);
+  assert.equal(recordedPrimary, KW);
+  assert.deepEqual(c.blockers, []);
+  assert.equal(c.warnings.length, 1);
+  // The supporting keyword is grounded, owner- and market-verified, and passes the drafter gate.
+  const trans = byKey(r, `gbp_post:${ROOF}:transactional`);
+  assert.equal(trans.target.keyword_id, "kw-trans");
+  assert.equal(trans.section, "ready");
+  assert.equal(trans.action, "create");
+  assert.equal(trans.core.verdict, null);
+  assert.equal(trans.core.relation, "core");
+  assert.ok(gate(trans, "core_keyword").pass && gate(trans, "drafter_brief").pass);
+  // The channel plans exactly the actionable keys and names the refused one.
+  const ch = gbp(r);
+  assert.equal(ch.status, "review_plan");
+  assert.ok(ch.opportunity_keys.includes(`gbp_post:${ROOF}:transactional`));
+  assert.ok(!ch.opportunity_keys.includes(`gbp_post:${ROOF}:commercial`));
+  assert.deepEqual(ch.blocked_by, [{ key: `gbp_post:${ROOF}:commercial`, reason: "keyword_not_core" }]);
+  assert.ok(ch.opportunity_keys.every((k) => byKey(r, k).target.keyword_id !== KW), "the off-list primary is never a planned target");
+  assertConsistent(r, "off-list primary");
+});
+
+test("campaigns: a campaign blocker blocks every channel and lists no keys; its usable opportunities read foundation_blocked", () => {
+  const i = lucasAuthority();
+  const keyword = i.keywords.find((k) => k.id === KW);
+  i.keywords.push({ ...keyword, id: "duplicate-keyword", target_url: "https://lucasconstructionmo.com/competing" });
+  i.authority.core = approvedCore(i);
+  const r = runAuthority(i);
+  const c = r.campaigns.find((x) => x.service_id === ROOF);
+  assert.ok(c.blockers.some((b) => b.includes("more than one owner")));
+  const ch = gbp(r);
+  assert.equal(ch.status, "blocked");
+  assert.deepEqual(ch.opportunity_keys, []);
+  const usable = r.opportunities.filter((o) => o.service_id === ROOF && o.content_type === "gbp_post" && actionable(o));
+  assert.ok(usable.length > 0, "the fixture has usable posts behind the blocker");
+  for (const o of usable) assert.deepEqual(ch.blocked_by.find((b) => b.key === o.key), { key: o.key, reason: "foundation_blocked" });
+  assertConsistent(r, "campaign blocker");
+});
+
+test("campaigns: status and opportunity_keys agree in every Core 50 state", () => {
+  const cases = {
+    approved: {},
+    "off-list primary": { exclude: [KW] },
+    "off-list primary, rest held": { exclude: [KW], purposes: { "kw-info": { post: "promotion_held" }, "kw-trans": { post: "promotion_held" } } },
+    "all held": { purposes: allRoof({ post: "promotion_held" }) },
+    "mixed": { purposes: { [KW]: { post: "promotion_held" }, "kw-info": { post: "page_not_verified" } } },
+    "text only": { geography: allRoof("text_only") },
+    "roof off list": { exclude: ROOF_POST_KWS },
+    "proposal only": { status: "proposed_only", proposal: PROPOSAL },
+    "missing": { status: "missing" },
+  };
+  for (const [label, opts] of Object.entries(cases)) assertConsistent(runAuthority(scoped((x) => { x.authority.core = approvedCore(x, opts); })), label);
+  assertConsistent(runAuthority(scoped((x) => { x.authority.core = null; })), "no scope");
 });

@@ -44,3 +44,16 @@ test("campaign UI: a channel blocked by its opportunities names the reason; an o
   assert.doesNotMatch(html, /Review opportunities/);
   assert.match(html, /Not usable: roof replacement wentzville \(keyword not core\)/);
 });
+
+test("campaign UI: an excluded primary is a warning while a usable keyword's channel shows its review count", () => {
+  const i = lucasAuthority();
+  i.authority.core = approvedCore(i, { exclude: [KW] });
+  const campaign = runAuthority(i).campaigns.find((c) => c.service_id === ROOF);
+  const gbp = campaign.channels.find((c) => c.channel === "google_business");
+  const html = render([campaign]);
+  assert.match(html, /aria-label="Warnings"/);
+  assert.match(html, /primary keyword &quot;roof replacement wentzville&quot; is not usable for this site \(keyword_not_core\); no other keyword replaces it/);
+  assert.match(html, /Not usable: roof replacement wentzville \(keyword not core\)/);
+  assert.ok(html.includes(`Review opportunities (${gbp.opportunity_keys.length})`));
+  assert.doesNotMatch(html, /Foundation blocked/);
+});
