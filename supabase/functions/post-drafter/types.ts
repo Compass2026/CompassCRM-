@@ -101,6 +101,9 @@ export type SocialAccountRow = {
   id: string; platform: string; external_account_id: string | null; display_name: string | null;
   // Business Profile locations: the Zernio binding (20261011050000).
   publish_provider?: string | null; publish_page_id?: string | null; publish_verified_at?: string | null;
+  // A location's recorded markets (gbp_location_markets): an office, a
+  // service area, or 'all' for a shared profile.
+  markets?: { market: string; kind: string }[];
 };
 
 export type Refusal = { code: string; message: string };

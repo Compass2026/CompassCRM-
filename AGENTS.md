@@ -1078,7 +1078,16 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   Business Profile location takes (`office` / `service_area` / `all` for a
   shared profile). A city keyword posted to a location must be one of its
   markets (`market_not_applicable`); a client with a single verified
-  location and no rows is unaffected, which is every client today.
+  location and no rows is unaffected. Since Oct 31 2026 the only row is
+  Logic's Wichita office (Tom's confirmation; the seed's BHG row is not
+  applied). post-drafter v9 also limits a Business Profile brief's approved
+  places to its location's `office` / `service_area` markets, so the copy
+  names no other city (the linter refuses one); an `all` profile, a
+  location with no rows, Facebook and blog briefs keep the client's places.
+  The brief also refuses a city keyword outside the location's markets
+  (`market_not_applicable`) and, for a client with several offices,
+  locations or verified profiles, a profile with no recorded market
+  (`location_market_unmapped`) instead of offering it every city.
   The rows take effect on insert (there is no proposed state), so
   `supabase/seeds/gbp-location-markets-v1-after-scope-confirmation.sql`
   (Logic Wichita office, BHG shared HQ all) refuses to run until

@@ -102,7 +102,7 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
   const canonicalPhone = digits(brief.client.phone);
   for (const m of copy.matchAll(PHONE_RE)) {
     if (digits(m[0]) === canonicalPhone) spans.push([m.index!, m.index! + m[0].length]);
-    else add("wrong_phone", `The only phone number is ${brief.client.phone}.`, m[0]);
+    else add("wrong_phone", brief.client.phone ? `The only phone number is ${brief.client.phone}.` : "This post names no phone number.", m[0]);
   }
   for (const name of [brief.client.name, ...brief.allowed_facts.crm.services]) spans.push(...spansOf(copy, name));
   let masked = mask(copy, spans);

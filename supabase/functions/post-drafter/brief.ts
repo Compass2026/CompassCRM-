@@ -199,6 +199,8 @@ export function buildBrief(
   // ── Facebook: a standard post with no button, on a named Page of this client ──
   const facebook = target.channel === "facebook";
   let socialAccount: Brief["target"]["social_account"] | null = null;
+  // The Business Profile location a post goes to (named, or the only one).
+  let gbpLocation: SocialAccountRow | null = null;
   if (facebook) {
     if (target.postType !== "standard") refuse("post_type_invalid", "Facebook drafts are standard posts in v1.");
     if (target.ctaType?.trim() || target.ctaUrl?.trim()) refuse("cta_not_applicable", "Facebook posts carry no button.");
@@ -220,9 +222,14 @@ export function buildBrief(
     if (target.socialAccountId) {
       const location = locations.find((a) => a.id === target.socialAccountId);
       if (!location) refuse("social_account_unknown", "The Business Profile location is not one of this client's verified locations.");
-      else socialAccount = { id: location.id, page_id: location.publish_page_id ?? null, name: location.display_name };
+      else {
+        socialAccount = { id: location.id, page_id: location.publish_page_id ?? null, name: location.display_name };
+        gbpLocation = location;
+      }
     } else if (locations.length > 1) {
       refuse("social_account_missing", `This client has ${locations.length} Business Profile locations; the draft names one (socialAccountId).`);
+    } else if (locations.length === 1) {
+      gbpLocation = locations[0];
     }
   }
 
@@ -344,16 +351,57 @@ export function buildBrief(
   if (assets.length > 1) refuse("too_many_assets", facebook ? "Facebook posts take one image in v1." : "Business Profile posts take one image in v1.");
 
   // ── Facts a draft may state; what it may not ──
-  const places = [...new Set([
+  const clientPlaces = [...new Set([
     ...input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name),
     ...approvedMarketPlaces(ownerCtx, program),
   ].filter(Boolean) as string[])];
+  // A Business Profile post speaks for its own location. When the location's
+  // markets are recorded (an office or a service area, not 'all'), only those
+  // are approved places, so an office profile in one city never names the
+  // client's other cities (Oct 31 2026). A shared 'all' profile, a location
+  // with nothing recorded, Facebook and blog briefs keep the client's places.
+  const gbpPost = !!gbpLocation && (extra.purpose ?? "post") === "post";
+  const recorded = gbpPost ? (gbpLocation?.markets ?? []) : [];
+  const scoped = recorded.length > 0 && !recorded.some((m) => m.kind === "all");
+  const places = scoped
+    ? [...new Set(recorded.map((m) => m.market.trim()).filter(Boolean))]
+    : clientPlaces;
+  // A client with several offices (or locations) must say which market a
+  // profile serves before it is drafted for; otherwise the brief would offer
+  // every office's cities to every profile.
+  const offices = ownerCtx.markets.filter((m) => m.status === "approved" && m.basis === "office").length;
+  const verifiedLocations = (extra.socialAccounts ?? []).filter((a) => a.platform === "google_business"
+    && a.publish_provider === "zernio" && !!a.publish_page_id && !!a.publish_verified_at).length;
+  if (gbpPost && recorded.length === 0
+      && (offices > 1 || verifiedLocations > 1 || input.locations.filter((l) => l.is_active).length > 1)) {
+    refuse("location_market_unmapped", `${gbpLocation?.display_name ?? "This Business Profile location"} has no recorded market and the client has several offices or locations; record the location's market (gbp_location_markets) before drafting.`);
+  }
+  // A city keyword must be one of the location's markets (core_market_problem in SQL).
+  const keywordCity = ownerCtx.keywords.find((k) => k.id === target.keywordId)?.city?.trim();
+  if (scoped && keywordCity && !places.some((p) => p.toLowerCase() === keywordCity.toLowerCase())) {
+    refuse("market_not_applicable", `${keywordCity} is not a market of ${gbpLocation?.display_name ?? "this Business Profile location"} (${places.join(", ")}).`);
+  }
   // Offerings held from promotion: the linter refuses copy that names them.
   const heldOfferings = ownerCtx.holds.filter((h) => h.brand_workspace_id === null || h.brand_workspace_id === program)
     .map((h) => ({ offering: h.offering, phrases: h.phrases.map(normWords) }));
   const excludedFacts: Brief["excluded"]["facts"] = [];
   if (filled(input.client.service_area)) {
     excludedFacts.push({ fact: `Service area text: "${input.client.service_area}"`, reason: "Only active locations are approved places; the free-text service area is not." });
+  }
+  // The client's phone is not recorded for any one location, so a post scoped
+  // to a location carries no phone and no Call button; its button is Learn
+  // More to the owner page (Nov 2 2026).
+  const phone = scoped ? "" : input.client.phone ?? "";
+  if (scoped && ctaType === "CALL") {
+    refuse("cta_invalid", `${gbpLocation?.display_name ?? "This Business Profile location"} has no recorded phone; use Learn More to the owner page.`);
+  }
+  if (scoped && filled(input.client.phone)) {
+    excludedFacts.push({ fact: "The client's phone number", reason: `Not recorded for this Business Profile location (${places.join(", ")}); the post names no phone.` });
+  }
+  const elsewhere = scoped ? clientPlaces.filter((p) => !places.some((q) => q.toLowerCase() === p.toLowerCase())) : [];
+  if (elsewhere.length) {
+    excludedFacts.push({ fact: `Places outside this Business Profile location: ${elsewhere.join(", ")}`,
+      reason: `This location's recorded markets are ${places.join(", ")}; the client's other places belong to other locations or the website.` });
   }
   if (filled(input.client.address_line1)) excludedFacts.push({ fact: "Street address", reason: "Never stated (hard rule)." });
   for (const d of differentiators) {
@@ -367,7 +415,7 @@ export function buildBrief(
   const brief: Brief = {
     version: DRAFTER_VERSION,
     as_of: input.asOf,
-    client: { id: input.client.id, name: input.client.name, phone: input.client.phone ?? "", website: input.client.website_url ?? "" },
+    client: { id: input.client.id, name: input.client.name, phone, website: input.client.website_url ?? "" },
     gate,
     target: {
       channel: target.channel as Brief["target"]["channel"],
@@ -387,7 +435,7 @@ export function buildBrief(
     allowed_facts: {
       crm: {
         business_name: input.client.name,
-        phone: input.client.phone ?? "",
+        phone,
         website: input.client.website_url ?? "",
         places,
         services: service ? [service.name] : input.services.filter((s) => s.status === "approved").map((s) => s.name),
