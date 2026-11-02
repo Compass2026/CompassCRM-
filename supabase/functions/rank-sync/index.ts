@@ -37,6 +37,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { keywordSite, onKeywordSite, type RankSiteClient } from "../_shared/rank-site.ts";
 
+import { localRankBlock } from "./market.ts";
+
 const DFS = "https://api.dataforseo.com/v3/serp/google/organic";
 const BATCH = 100;
 const CONCURRENCY = 10;
@@ -117,8 +119,8 @@ Deno.serve(async (req) => {
   };
 
   // ── Shared: who counts as "us", and the location row for a keyword ──────
-  type ClientRow = RankSiteClient & { id: string; city: string | null; state: string | null };
-  const CLIENT_COLUMNS = "id, name, dba, city, state, website_url, sites(id, url), client_brand_workspaces(id, name, website_url, blog_site_id, service_ids)";
+  type ClientRow = RankSiteClient & { id: string; city: string | null; state: string | null; business_type: string | null };
+  const CLIENT_COLUMNS = "id, name, dba, city, state, business_type, website_url, sites(id, url), client_brand_workspaces(id, name, website_url, blog_site_id, service_ids)";
   const identity = (ourHost: string, names: string[]) => {
     const ourNames = names.map((n) => norm(n));
     const onSite = (it: Item) => onKeywordSite(it.domain ?? it.url, ourHost);
@@ -194,6 +196,11 @@ Deno.serve(async (req) => {
         .eq("is_active", true)
         .eq("is_tracked", true);
       if (!tracked?.length) continue;
+      const marketBlock = localRankBlock(client.business_type);
+      if (marketBlock) {
+        posted.push({ client: client.name, keywords: tracked.length, tasks: 0, cost: 0, errors: [marketBlock] });
+        continue;
+      }
       // Only keywords whose own website is known are checked.
       const unsited: string[] = [];
       const kws = tracked.filter((k) => {
@@ -306,7 +313,7 @@ Deno.serve(async (req) => {
     const locFor = new Map<string, Awaited<ReturnType<typeof locationResolver>>>();
     for (const c of (clients ?? []) as ClientRow[]) {
       clientFor.set(c.id, c);
-      locFor.set(c.id, await locationResolver(c));
+      if (!localRankBlock(c.business_type)) locFor.set(c.id, await locationResolver(c));
     }
 
     const rows: Record<string, unknown>[] = [];
@@ -315,6 +322,8 @@ Deno.serve(async (req) => {
     await pool(tagged, CONCURRENCY, async (r) => {
       const kw = kwById.get(r.tag!);
       if (!kw) return; // a task from another tool on the same account
+      const marketBlock = localRankBlock(clientFor.get(kw.client_id)?.business_type);
+      if (marketBlock) { errors.push(`${kw.keyword}: ${marketBlock}`); return; }
       const got = await dfs(`/task_get/advanced/${r.id}`);
       const t = got.json?.tasks?.[0];
       if (!got.ok || !t || t.status_code !== 20000) { errors.push(`${kw.keyword}: ${t?.status_message ?? got.status}`); return; }

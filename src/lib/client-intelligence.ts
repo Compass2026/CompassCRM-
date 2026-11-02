@@ -168,14 +168,15 @@ export function assessIntelligence(input: IntelligenceInput): AreaReport[] {
     const gaps: string[] = [];
     if (!filled(client.phone)) gaps.push("Add the business phone.");
     if (!filled(client.website_url)) gaps.push("Add the website URL.");
-    if (!client.business_type) gaps.push("Set the business type: storefront or service area.");
+    if (!client.business_type) gaps.push("Set the business type: storefront, service area, or e-commerce.");
     if (client.business_type === "storefront" && !filled(client.address_line1)) gaps.push("Add the street address for a storefront.");
-    if (!filled(client.city) || !filled(client.state)) gaps.push("Add the home city and state.");
+    if (client.business_type !== "ecommerce" && (!filled(client.city) || !filled(client.state))) gaps.push("Add the home city and state.");
     if (client.business_type === "service_area" && !filled(client.service_area)) gaps.push("Describe the service area.");
+    if (client.business_type === "ecommerce" && !filled(client.service_area)) gaps.push("Describe the shipping market for the online store.");
     add({
       key: "facts",
       label: "Business facts",
-      summary: [client.phone, client.city && client.state ? `${client.city}, ${client.state}` : null, client.business_type?.replace("_", " ")]
+      summary: [client.phone, client.business_type === "ecommerce" ? client.service_area : client.city && client.state ? `${client.city}, ${client.state}` : null, client.business_type?.replace("_", " ")]
         .filter(Boolean)
         .join(" · ") || "No contact facts yet.",
       gaps,
@@ -232,15 +233,17 @@ export function assessIntelligence(input: IntelligenceInput): AreaReport[] {
   {
     const active = input.locations.filter((l) => l.is_active);
     const serviceArea = filled(client.service_area);
+    const ecommerce = client.business_type === "ecommerce";
+    const ready = ecommerce ? serviceArea : active.length > 0 || serviceArea;
     add({
       key: "locations",
-      label: "Locations",
-      summary: active.length
+      label: ecommerce ? "Shipping market" : "Locations",
+      summary: ecommerce ? (serviceArea ? "Shipping market described; no local location implied." : "No shipping market.") : active.length
         ? `${plural(active.length, "tracked location")}${serviceArea ? "; service area described" : ""}.`
         : serviceArea ? "Service area described; no tracked locations." : "No locations.",
-      gaps: active.length || serviceArea ? [] : ["Add the home location (Keywords › Tracked locations) or describe the service area."],
+      gaps: ready ? [] : [ecommerce ? "Describe the shipping market for the online store." : "Add the home location (Keywords › Tracked locations) or describe the service area."],
       blocking: true,
-      status: active.length || serviceArea ? "ready" : "missing",
+      status: ready ? "ready" : "missing",
     });
   }
 

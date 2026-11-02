@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
-// rank-sync imports its site resolver; load it into the same context first.
+// rank-sync imports pure helpers; load them into the same context first.
 function loadRankSync(context,file='supabase/functions/rank-sync/index.ts'){
  const exportsObj={};context.exports=exportsObj;
- vm.runInContext(ts.transpileModule(readFileSync('supabase/functions/_shared/rank-site.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,context);
+ for (const helper of ['supabase/functions/_shared/rank-site.ts', 'supabase/functions/rank-sync/market.ts']) {
+  vm.runInContext(ts.transpileModule(readFileSync(helper,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,context);
+ }
  Object.assign(context,exportsObj);
  const source=readFileSync(file,'utf8').replace(/^import .*?;\n/gm,'');
  vm.runInContext(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText,context);
@@ -89,4 +91,12 @@ test('multi-brand: a keyword no brand site owns is not recorded, and the run say
 test('single-site: the stored host is the client\'s one website',async()=>{
  const {organic}=await collectFixture([{type:'organic',rank_group:2,title:'Roofer',domain:'fixture-roofer.test',url:'https://fixture-roofer.test/'}]);
  assert.equal(organic.position,2);assert.equal(organic.site_host,'fixture-roofer.test');
+});
+
+test('online stores do not collect local ranks or silently use their mailing city',async()=>{
+ const {rows,body}=await collectFixture(thirdParty,undefined,{
+  clients:{data:[{id:'client',name:'Online Store',business_type:'ecommerce',city:'Mailing City',state:'CO',website_url:'https://fixture-roofer.test',sites:[]}]},
+ });
+ assert.equal(rows.length,0);
+ assert.ok(body.errors.some(e=>e.includes('no city fallback used')));
 });

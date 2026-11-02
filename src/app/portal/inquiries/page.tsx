@@ -1,25 +1,68 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { loadInquiries, loadInquiry } from "@/lib/inquiries-data";
+import { ClientWorkspace } from "@/components/client-workspace/workspace";
 import { InquiryList } from "@/components/inquiries/inquiry-views";
-import { loadInquiries } from "@/lib/inquiries-data";
 import { isInquiryStatus } from "@/lib/inquiries";
-
-// Portal › Inquiries (CRM Lite): the client's own website inquiries, through
-// the portal_* views (filtered to this sign-in's client, only while Compass
-// has turned portal access on).
-export default async function PortalInquiriesPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
-  const { q = "", status } = await searchParams;
+import { isUuid } from "@/lib/tasks";
+export default async function PortalInquiriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lead?: string; q?: string; status?: string }>;
+}) {
+  const { lead, q = "", status } = await searchParams;
+  if (lead && !isUuid(lead)) notFound();
   const supabase = await createClient();
-  const { data: on } = await supabase.from("portal_crm_lite").select("client_id").maybeSingle();
-  if (!on) notFound();
-  const { rows, counts } = await loadInquiries(supabase, { kind: "portal" }, { q, status });
-  return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <div>
-        <h1 className="page-title kicker mb-1">Inquiries</h1>
-        <p className="text-sm text-muted-foreground">Website inquiries, newest first. Mark each one contacted, then closed.</p>
+  const [{ data: on }, { data: client }] = await Promise.all([
+    supabase.from("portal_crm_lite").select("*").maybeSingle(),
+    supabase.from("portal_client").select("name").maybeSingle(),
+  ]);
+  if (!on?.client_id || !client) notFound();
+  const enhanced = "workspace_enabled" in on && on.workspace_enabled === true;
+  const list = await loadInquiries(
+    supabase,
+    { kind: "portal" },
+    enhanced ? {} : { q, status },
+  );
+  if (!enhanced)
+    return (
+      <div className="mx-auto max-w-3xl space-y-5">
+        <div>
+          <h1 className="page-title kicker mb-1">Inquiries</h1>
+          <p className="text-sm text-muted-foreground">
+            Website inquiries, newest first. Mark each one contacted, then
+            closed.
+          </p>
+        </div>
+        <InquiryList
+          basePath="/portal/inquiries"
+          rows={list.rows}
+          counts={list.counts}
+          q={q}
+          status={isInquiryStatus(status) ? status : null}
+        />
       </div>
-      <InquiryList basePath="/portal/inquiries" rows={rows} counts={counts} q={q} status={isInquiryStatus(status) ? status : null} />
-    </div>
+    );
+  const selectedId = lead || list.rows[0]?.id;
+  const detail = selectedId
+    ? await loadInquiry(supabase, { kind: "portal" }, selectedId)
+    : null;
+  if (lead && !detail?.inquiry) notFound();
+  // eslint-disable-next-line react-hooks/purity -- Request-time server snapshot.
+  const now = Date.now();
+  return (
+    <ClientWorkspace
+      clientId={on.client_id}
+      businessName={client.name || "Your business"}
+      rows={list.rows}
+      now={now}
+      total={list.counts.all}
+      selected={detail?.inquiry ?? null}
+      notes={detail?.notes ?? []}
+      events={detail?.events ?? []}
+      basePath="/portal/inquiries"
+      inquiryBasePath="/portal/inquiries"
+      error={list.error}
+    />
   );
 }
