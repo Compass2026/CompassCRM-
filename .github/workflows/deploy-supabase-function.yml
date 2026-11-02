@@ -98,4 +98,6 @@ jobs:
           case "$FUNCTION_NAME" in
             twilio-webhook|stripe-webhook|inquiry-intake) EXTRA=(--no-verify-jwt) ;;
           esac
-          supabase functions deploy "$FUNCTION_NAME" --project-ref "$PROJECT_REF" --use-api "${EXTRA[@]}"
+          # The CLI asks to confirm a deploy and cannot ask in CI; the
+          # workflow's own DEPLOY input and the commit check are the confirmation.
+          supabase functions deploy "$FUNCTION_NAME" --project-ref "$PROJECT_REF" --use-api --yes "${EXTRA[@]}"
