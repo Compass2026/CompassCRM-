@@ -102,8 +102,9 @@ portal shell and workspace; it still authorizes a real team member and labels
 real-data writes. It is not impersonation. Lead links from existing alerts open
 the same workspace for leads-only contacts.
 
-Release order: apply `portal_leads_only_scope`, deploy the legacy stripe-billing
-store's scope filter and the app, then set selected contacts to `leads_only`.
+Release order: apply `portal_leads_only_scope`, deploy the app, then set selected
+contacts to `leads_only`. If the legacy stripe-billing Edge Function is deployed,
+update its scope filter first; a retired function must remain retired.
 The dedicated billing runtime is protected by its existing RLS SELECT policy,
 now restricted to full-scope contacts. No account, invitation, session, provider
 readiness gate, or other contact's scope changes as part of the migration.
