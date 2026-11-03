@@ -263,10 +263,17 @@ begin
     select claim_phone_digits(p) digits from (select c.phone p union all select ws.phone from ws) x
      where claim_phone_digits(p) is not null
   ),
+  -- Approved means approved by someone (ChatGPT 42aca6fb final review):
+  -- approved_at is NOT NULL DEFAULT now() on citation_locations, so every row
+  -- has one; approved_by records who approved it. An active location without
+  -- a recorded approver is not an approved identity, and its number is not
+  -- treated as one.
   location_phones as (
     select claim_phone_digits(l.phone) digits, l.label
       from citation_locations l
-     where l.client_id = c.id and l.status = 'active' and claim_phone_digits(l.phone) is not null
+     where l.client_id = c.id and l.status = 'active'
+       and l.approved_at is not null and l.approved_by is not null
+       and claim_phone_digits(l.phone) is not null
   ),
   base as (
     select cl.*, iv.review_days, iv.authoritative_methods, coalesce(iv.kind, 'unclassified') eff_kind,

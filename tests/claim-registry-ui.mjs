@@ -63,6 +63,7 @@ insert into claims (id, client_id, claim, status, source, confirmed_by, confirme
   ('${id(24)}', '${M}', 'Heavy equipment operator classes', 'sourced', 'https://heavy.training.example.test/', null, null, now() - interval '20 days');
 insert into citation_locations (id, client_id, label, business_name, address_line1, city, region, postal_code, phone)
 values ('${id(35)}', '${L}', 'North office', 'Fictional Roofing Co', '1 Example Way', 'Northtown', 'MO', '63000', '555.010.0777');
+update citation_locations set approved_by = '${TEAM.id}' where id = '${id(35)}';
 insert into client_brand_workspaces (id, client_id, slug, name, website_url, phone, positioning, voice_tone, standing_cta, hard_rules,
                                      service_ids, claim_ids, asset_ids, status, approved_by, approved_at, created_at) values
   ('${id(31)}', '${M}', 'safety', 'Fictional Safety', 'https://safety.training.example.test', '555-010-0002', 'Safety', 'Clear', 'Call', array['Sourced claims only'],

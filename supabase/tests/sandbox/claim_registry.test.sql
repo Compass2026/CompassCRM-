@@ -80,16 +80,25 @@ insert into claims (id, client_id, claim, status, source, confirmed_by, confirme
    'https://crt-l.example.test/about', null, null, now() - interval '50 days'),
   (crt.id('L11'), crt.id('L'), 'Zqx open Mon–Fri 8–5', 'sourced', 'https://www.google.com/maps?cid=123', null, null, now() - interval '50 days'),
   (crt.id('L13'), crt.id('L'), 'Zqx north office line (555) 010-0777', 'sourced', 'https://www.google.com/maps?cid=456', null, null, now() - interval '50 days'),
+  (crt.id('L14'), crt.id('L'), 'Zqx south office line (555) 010-0555', 'sourced', 'https://www.google.com/maps?cid=789', null, null, now() - interval '50 days'),
+  (crt.id('L15'), crt.id('L'), 'Zqx east office line (555) 010-0666', 'sourced', 'https://www.google.com/maps?cid=790', null, null, now() - interval '50 days'),
   (crt.id('M1'), crt.id('M'), 'Zqx safety audits', 'sourced', 'https://s.crt-m.example.test/audits', null, null, now() - interval '20 days'),
   (crt.id('M2'), crt.id('M'), 'Zqx founded 2014', 'sourced', 'https://s.crt-m.example.test/about', null, null, now() - interval '20 days'),
   (crt.id('M3'), crt.id('M'), 'Zqx 65+ years combined experience', 'sourced', 'https://crt-m.example.test/', null, null, now() - interval '20 days'),
   (crt.id('M4'), crt.id('M'), 'Zqx heavy equipment classes', 'sourced', 'https://h.crt-m.example.test/', null, null, now() - interval '20 days'),
   (crt.id('X1'), crt.id('X'), 'Zqx other client fact', 'confirmed', 'Confirmed', 'x@example.test', now() - interval '5 days', now() - interval '5 days');
 
--- One approved location with its own number (citation_locations): a claim
--- naming that number is the location's, not a client-wide conflict.
-insert into citation_locations (id, client_id, label, business_name, address_line1, city, region, postal_code, phone)
-values (crt.id('loc-north'), crt.id('L'), 'North office', 'CRT Single Roofing', '1 Zqx Way', 'Northtown', 'MO', '63000', '555.010.0777');
+-- Locations with their own numbers (citation_locations). North is active and
+-- approved by a teammate: a claim naming its number is the location's, not a
+-- client-wide conflict. South is active but has no recorded approver
+-- (approved_at is filled by default): its number is not an approved identity.
+-- East was approved and is archived.
+insert into citation_locations (id, client_id, label, business_name, address_line1, city, region, postal_code, phone, status, approved_by) values
+  (crt.id('loc-north'), crt.id('L'), 'North office', 'CRT Single Roofing', '1 Zqx Way', 'Northtown', 'MO', '63000', '555.010.0777', 'active',
+   'c4700000-0000-4000-a000-000000000001'),
+  (crt.id('loc-south'), crt.id('L'), 'South office', 'CRT Single Roofing', '2 Zqx Way', 'Southtown', 'MO', '63001', '555.010.0555', 'active', null),
+  (crt.id('loc-east'), crt.id('L'), 'East office', 'CRT Single Roofing', '3 Zqx Way', 'Easttown', 'MO', '63002', '555.010.0666', 'archived',
+   'c4700000-0000-4000-a000-000000000001');
 
 insert into client_brand_workspaces (id, client_id, slug, name, website_url, phone, positioning, voice_tone, standing_cta,
                                      hard_rules, service_ids, claim_ids, asset_ids, status, approved_by, approved_at, created_at) values
@@ -138,7 +147,7 @@ begin
   perform crt.ok('R1 one program for a single-site client, nothing classified, nothing verified',
     r->>'version' = 'claim-registry/v1' and not (r->>'multi_site')::boolean
     and jsonb_array_length(r->'programs') = 1 and r->'programs'->0->>'scope' = 'client'
-    and (r->'programs'->0->'counts'->>'total')::int = 12 and (t->>'total')::int = 12
+    and (r->'programs'->0->'counts'->>'total')::int = 14 and (t->>'total')::int = 14
     and (t->>'verified')::int = 0 and t->'unassigned' = 'null'::jsonb and t->'shared' = 'null'::jsonb);
   c := crt.claim(r, 'L1');
   perform crt.ok('R2 the confirmed 3-year warranty: citable under current rules, NOT independently verified, needs review',
@@ -183,14 +192,20 @@ begin
     and crt.claim(r, 'L13')->>'phone_location' = 'North office'
     and crt.claim(r, 'L7')->'reasons' ? 'phone_potential_mismatch' and crt.claim(r, 'L7')->>'bucket' = 'needs_review'
     and (crt.claim(r, 'L7')->>'legacy_usable')::boolean);
+  perform crt.ok('R13 an active location with no recorded approver, or an archived one, is not an approved location phone: potential mismatch only',
+    (select approved_at is not null and approved_by is null and status = 'active' from citation_locations where id = crt.id('loc-south'))
+    and crt.claim(r, 'L14')->'reasons' ? 'phone_potential_mismatch' and not crt.claim(r, 'L14')->'reasons' ? 'matches_location_phone'
+    and crt.claim(r, 'L14')->'phone_location' = 'null'::jsonb
+    and crt.claim(r, 'L15')->'reasons' ? 'phone_potential_mismatch' and not crt.claim(r, 'L15')->'reasons' ? 'matches_location_phone'
+    and crt.claim(r, 'L14')->>'bucket' = 'needs_review' and (crt.claim(r, 'L14')->>'legacy_usable')::boolean);
   perform crt.ok('R8 a legacy confirmation 120 days old is stale under the 90-day unclassified review',
     crt.claim(r, 'L8')->>'bucket' = 'stale' and crt.claim(r, 'L8')->'freshness'->>'state' = 'overdue'
     and (crt.claim(r, 'L8')->'freshness'->>'days_left')::int < 0);
   perform crt.ok('R9 totals add up and match the legacy rule',
     (t->>'stale')::int = 1 and (t->>'unverified')::int = 1 and (t->>'missing_source')::int = 1
-    and (t->>'needs_review')::int = 9 and (t->>'legacy_usable')::int = 10
+    and (t->>'needs_review')::int = 11 and (t->>'legacy_usable')::int = 12
     and (t->>'cited_while_unusable')::int = 1 and (t->>'published_while_unusable')::int = 1
-    and (select count(*) from jsonb_array_elements(r->'claims')) = 12
+    and (select count(*) from jsonb_array_elements(r->'claims')) = 14
     and (select bool_and(x->>'verification_state' = 'not_independently_verified') from jsonb_array_elements(r->'claims') x));
   perform crt.ok('R10 ordered by bucket: unverified before missing_source before stale before needs_review',
     r->'claims'->0->>'bucket' = 'unverified' and r->'claims'->1->>'bucket' = 'missing_source'
@@ -419,7 +434,7 @@ set session authorization authenticator;
 set local role authenticated;
 select set_config('request.jwt.claims', '{"role": "authenticated", "sub": "c4700000-0000-4000-a000-000000000001"}', true);
 select crt.ok('B3 up again: the registry answers and the columns start empty',
-  (crt.reg('L')->'totals'->>'total')::int = 12 and (crt.reg('L')->'totals'->>'verified')::int = 0
+  (crt.reg('L')->'totals'->>'total')::int = 14 and (crt.reg('L')->'totals'->>'verified')::int = 0
   and crt.claim(crt.reg('L'), 'L2')->>'bucket' = 'unverified');
 reset role;
 set session authorization supabase_admin;

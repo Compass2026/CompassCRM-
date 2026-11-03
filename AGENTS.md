@@ -79,8 +79,8 @@ each claim on the Intelligence tab.
   independently verified (`verification_state`).
 - **Indicators only:** an 8-character id in another claim's note is a
   tentative `supersession_mentioned`. A phone matching an approved
-  `citation_locations` number is that location's; any other number is only a
-  potential mismatch.
+  `citation_locations` number (active, `approved_at` and `approved_by` set) is
+  that location's; any other number is only a potential mismatch.
 - **BHG:** one program per brand workspace (`claim_ids`). Shared and
   unassigned claims are labelled. A draft workspace's counts are null, never
   0.

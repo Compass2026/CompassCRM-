@@ -86,7 +86,7 @@ authoritative evidence specific to the subject and an authorized reviewer
   - `conflict_noted`: the text mentions a conflict or inconsistency.
 - **Structured-field precedence (D6)**: a phone in a claim is compared with the client-wide numbers (the client and its brand workspaces) and with each approved location's own number (`citation_locations`).
   - A client-wide match is a duplicate: the record governs.
-  - A location match is that location's number: no conflict.
+  - A match with an **approved** location's number is that location's: no conflict. Approved means `status = 'active'`, `approved_at` set and a recorded approver (`approved_by`). `approved_at` defaults to `now()` on every row, so the approver is what proves an approval. An active location with no approver, or an archived one, does not count.
   - Anything else is only a **potential mismatch**, because other location-specific numbers (for example a GBP location phone) are not evaluated yet.
   - Nothing is retired automatically.
 - **Affected content**: posts (`post_claims`) and drafts (`content_draft_claims`) with their review / publish state, published URL and a CRM link. `cited_while_unusable` / `published_while_unusable` mark content standing on a claim today's rule would refuse. Corrections belong to the content team; the registry does not touch content.
