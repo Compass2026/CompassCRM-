@@ -390,14 +390,17 @@ export function buildBrief(
   }
   // The client's phone is not recorded for any one location, so a post scoped
   // to a location carries only the location's own recorded phone
-  // (gbp_location_phones, Nov 3 2026). With none recorded it names no phone
-  // and takes no Call button; its button is Learn More to the owner page
-  // (Nov 2 2026). An unscoped profile keeps the client's phone.
+  // (gbp_location_phones, Nov 3 2026), in the copy only. It never takes a
+  // Call button: the publisher cannot send one through Zernio (cta_call), so
+  // its button is Learn More to the owner page (Nov 2 2026). With no number
+  // recorded it names no phone. An unscoped profile keeps the client's phone.
   const locationName = gbpLocation?.display_name ?? "This Business Profile location";
   const locationPhone = scoped ? (gbpLocation?.phone ?? "").trim() : "";
   const phone = scoped ? locationPhone : input.client.phone ?? "";
-  if (scoped && !locationPhone && ctaType === "CALL") {
-    refuse("cta_invalid", `${locationName} has no recorded phone; use Learn More to the owner page.`);
+  if (scoped && ctaType === "CALL") {
+    refuse("cta_invalid", locationPhone
+      ? `A Call button cannot be published for ${locationName}; name ${locationPhone} in the copy and use Learn More to the owner page.`
+      : `${locationName} has no recorded phone; use Learn More to the owner page.`);
   }
   if (scoped && !locationPhone && filled(input.client.phone)) {
     excludedFacts.push({ fact: "The client's phone number", reason: `Not recorded for this Business Profile location (${places.join(", ")}); the post names no phone.` });

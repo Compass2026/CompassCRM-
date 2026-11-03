@@ -206,8 +206,9 @@ test("Logic-shaped: the content-approvals copy check enforces the same rule on a
 });
 
 // ── A phone recorded for one location (gbp_location_phones, Nov 3 2026) ──────
-// The scoped profile carries its own recorded number and may take a Call
-// button; the client-wide number is "not this location's number" there.
+// The scoped profile carries its own recorded number in the copy, never a
+// Call button (the publisher cannot send one); the client-wide number is
+// "not this location's number" there.
 // Without a recorded phone the profile stays phone-free (tests above).
 // Synthetic 555-01xx number; the store attaches it (last test).
 import { createStore } from "../supabase/functions/post-drafter/store.ts";
@@ -240,19 +241,20 @@ test("location phone: copy with the location's number passes; the client-wide 81
   assert.ok(wrong.problems.some((p) => p.code === "wrong_phone" && p.message === `The only phone number is ${LOCATION_PHONE}.`));
 });
 
-test("location phone: a Call button is accepted only for a location with a recorded phone", () => {
+test("location phone: a Call button is refused even with a recorded phone (the publisher cannot send it); Learn More is the button", () => {
   const withPhone = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", socialAccountId: WICHITA }, { socialAccounts: PHONE_ACCOUNTS });
-  assert.equal(withPhone.ok, true, JSON.stringify(withPhone.refusals));
-  assert.deepEqual(withPhone.brief.target.cta, { type: "CALL", url: null, in_copy_phrase: withPhone.brief.target.cta.in_copy_phrase });
+  assert.equal(withPhone.ok, false);
+  const refusal = withPhone.refusals.find((x) => x.code === "cta_invalid");
+  assert.ok(refusal && refusal.message.includes(LOCATION_PHONE) && /Learn More/.test(refusal.message), JSON.stringify(withPhone.refusals));
+  const learnMore = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: PHONE_ACCOUNTS });
+  assert.equal(learnMore.ok, true, JSON.stringify(learnMore.refusals));
+  assert.equal(learnMore.brief.target.cta.type, "LEARN_MORE");
   const without = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", socialAccountId: WICHITA }, { socialAccounts: ACCOUNTS });
   assert.ok(codes(without).includes("cta_invalid"));
   // A phone recorded for another location does not lend this one a Call button.
   const elsewhere = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", socialAccountId: WICHITA },
     { socialAccounts: [wichitaOffice, { ...overland, phone: "(913) 555-0107", markets: [{ market: "Overland Park", kind: "office" }] }, facebook] });
   assert.ok(codes(elsewhere).includes("cta_invalid"));
-  // A Call button still takes no link.
-  const linked = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", ctaUrl: "https://example.test/x", socialAccountId: WICHITA }, { socialAccounts: PHONE_ACCOUNTS });
-  assert.ok(codes(linked).includes("cta_invalid"));
 });
 
 test("location phone: a scoped location without a recorded phone is unchanged (phone-free, Learn More)", () => {
@@ -280,7 +282,7 @@ test("location phone: Facebook, blog, unscoped and 'all' profiles keep the clien
 
 test("location phone: the content-approvals copy check inherits it", async () => {
   const post = { platform: "google_business", post_type: "standard", search_intent: "commercial", service_id: TARGET.serviceId,
-    keyword_id: KW, offer_id: null, cta_type: "CALL", cta_url: null, social_account_id: WICHITA, asset_ids: [], campaign_mode: "keyword" };
+    keyword_id: KW, offer_id: null, cta_type: "LEARN_MORE", cta_url: null, social_account_id: WICHITA, asset_ids: [], campaign_mode: "keyword" };
   const deps = (accounts) => ({ postTarget: async () => post, input: async () => logicShaped(), socialAccounts: async () => accounts, gazetteer: realGazetteer });
   const check = createCopyCheck(deps(PHONE_ACCOUNTS));
   const ok = await check("client", "post", `${WICHITA_COPY} Call ${LOCATION_PHONE}.`, [OC, WARRANTY]);
@@ -288,11 +290,14 @@ test("location phone: the content-approvals copy check inherits it", async () =>
   const wrong = await check("client", "post", `${WICHITA_COPY} Call ${KC_PHONE}.`, [OC, WARRANTY]);
   assert.equal(wrong.ok, false);
   assert.ok(wrong.problems.some((p) => p.code === "wrong_phone"));
-  // The same Call-button post on a location with no recorded phone is refused at the brief.
-  const none = await createCopyCheck(deps(ACCOUNTS))("client", "post", WICHITA_COPY, [OC, WARRANTY]);
-  assert.equal(none.ok, false);
-  assert.equal(none.code, "brief_refused");
-  assert.ok(none.problems.some((p) => p.code === "cta_invalid"));
+  // A Call-button post is refused at the brief, with or without a recorded phone.
+  const callPost = { ...post, cta_type: "CALL" };
+  for (const accounts of [PHONE_ACCOUNTS, ACCOUNTS]) {
+    const call = await createCopyCheck({ ...deps(accounts), postTarget: async () => callPost })("client", "post", WICHITA_COPY, [OC, WARRANTY]);
+    assert.equal(call.ok, false);
+    assert.equal(call.code, "brief_refused");
+    assert.ok(call.problems.some((p) => p.code === "cta_invalid"));
+  }
 });
 
 test("location phone: the store attaches each Business Profile location's recorded phone, and a missing table reads as none", async () => {

@@ -1109,13 +1109,15 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   team-managed row per location, guarded to the client's own Business
   Profile location, `source_ref` names the decision) records a location's
   own number: post-drafter v10 (`gbp_location_phone`) then puts that number
-  in the scoped brief, allows a Call button, and lists the client-wide
-  number as "not this location's number", which the linter refuses
-  (`wrong_phone`). A recorded phone is not evidence of a staffed office.
-  Facebook, blogs, unscoped profiles and single-location clients keep
-  `clients.phone`. content-approvals' copy check imports the same brief, so
-  deploy both functions from one SHA. Zernio still cannot publish a Call
-  button (`cta_call`).
+  in the scoped brief's copy and lists the client-wide number as "not this
+  location's number", which the linter refuses (`wrong_phone`). The button
+  stays Learn More: a scoped brief refuses a Call button even with a
+  recorded phone (`cta_invalid`), because the publisher cannot send one
+  through Zernio (`cta_call`). A recorded phone is not evidence of a staffed
+  office. Facebook, blogs, unscoped profiles and single-location clients
+  keep `clients.phone`. content-approvals' copy check imports the same
+  brief, so deploy both functions from one SHA. Not a prerequisite for
+  phone-free Wichita posts.
 - **Worker:** one token per run (`worker-routine:<run id>`, reused on
   retries) → `social_slot_claim` (the binding one-hour claim, same door as
   `authority_draft_claim`; refuses a slot no longer eligible) →
