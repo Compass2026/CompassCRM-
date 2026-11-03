@@ -1103,6 +1103,19 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   (Logic Wichita office, BHG shared HQ all) refuses to run until
   `compass.market_scope_confirmed` names Tom's confirmation; it is not one
   of the keyword proposal seeds.
+- **Location phones.** A brief scoped to a location's markets names no phone
+  and refuses a Call button (`cta_invalid`), because `clients.phone` is not
+  recorded for any one location. `gbp_location_phones` (20261103170000; one
+  team-managed row per location, guarded to the client's own Business
+  Profile location, `source_ref` names the decision) records a location's
+  own number: post-drafter v10 (`gbp_location_phone`) then puts that number
+  in the scoped brief, allows a Call button, and lists the client-wide
+  number as "not this location's number", which the linter refuses
+  (`wrong_phone`). A recorded phone is not evidence of a staffed office.
+  Facebook, blogs, unscoped profiles and single-location clients keep
+  `clients.phone`. content-approvals' copy check imports the same brief, so
+  deploy both functions from one SHA. Zernio still cannot publish a Call
+  button (`cta_call`).
 - **Worker:** one token per run (`worker-routine:<run id>`, reused on
   retries) → `social_slot_claim` (the binding one-hour claim, same door as
   `authority_draft_claim`; refuses a slot no longer eligible) →
