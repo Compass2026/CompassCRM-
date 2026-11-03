@@ -128,6 +128,27 @@ test('schema defaults off, enforces dependencies, protects data, and leases work
  const s=(await db.query('select * from client_voice_settings')).rows[0];assert.equal(s.recording_enabled,false);assert.equal(s.email_summaries,false);assert.equal(s.retention_days,30);
  await assert.rejects(db.exec('update client_voice_settings set summaries_enabled=true'),/voice_summary_requires_recording/);
  await assert.rejects(db.exec('update client_voice_settings set retention_days=0'),/check/);
+  // Exercise the real admin save against PostgreSQL constraints, not only an
+  // in-memory upsert. INSERT validates the candidate before conflict handling.
+  await db.exec(`insert into auth.users values('${other}');update client_voice_settings set application_sid='AP${'1'.repeat(32)}',intelligence_service_sid='${ga}',summary_operator_sid='${ly}' where client_id='${cid}';`);
+  const admin=dbFixture(),fallback=admin.from.bind(admin);
+  admin.tables.team_members=[{auth_user_id:other,role:'admin',email:'owner@example.test'}];
+  admin.tables.communication_numbers=[{client_id:cid,is_primary:true,status:'active',voice_enabled:true}];
+  admin.from=table=>{
+   if(table!=='client_voice_settings')return fallback(table);
+   let values=null,operation='select',filter=null;
+   const run=async()=>{try{
+    if(operation==='select')return{data:(await db.query('select * from client_voice_settings where client_id=$1',[filter])).rows};
+    const keys=Object.keys(values),columns=keys.map(k=>'"'+k+'"');
+    const typed='jsonb_populate_record(null::client_voice_settings,$1::jsonb) as input';
+    const sql=operation==='update'?`update client_voice_settings as target set ${columns.map(k=>k+'=input.'+k).join(',')} from ${typed} where target.client_id=$2`:
+     `insert into client_voice_settings (${columns.join(',')}) select ${columns.join(',')} from ${typed} on conflict(client_id) do update set ${columns.map(k=>k+'=excluded.'+k).join(',')}`;
+    await db.query(sql,operation==='update'?[JSON.stringify(values),filter]:[JSON.stringify(values)]);return{data:[]};
+   }catch(error){return{data:null,error};}};
+   const q={select(){return q;},eq(_,v){filter=v;return q;},update(v){operation='update';values=v;return q;},upsert(v){operation='upsert';values=v;return q;},insert(v){operation='insert';values=v;return q;},async maybeSingle(){const r=await run();return{...r,data:r.data?.[0]||null};},then(resolve,reject){return run().then(resolve,reject);}};return q;
+  };
+  await voiceAdmin(admin,cid,other,{mode:'save_voice_settings',settings:{enabled:true,recording_enabled:true,summaries_enabled:true,email_summaries:false,retention_days:30,summary_user_ids:[other]}},base,()=>{throw Error('must not call provider');});
+  const saved=(await db.query('select * from client_voice_settings')).rows[0];assert.equal(saved.summaries_enabled,true);assert.equal(saved.intelligence_service_sid,ga);assert.equal(saved.summary_operator_sid,ly);
  await db.exec(`insert into client_voice_recordings(client_id,call_id,account_sid,recording_sid,duration,state,expires_at)values('${cid}','${id}','${ac}','${re}',20,'queued',now()+interval '1 day')`);
  assert.equal((await db.query('select * from client_voice_claim_recording()')).rows.length,1);assert.equal((await db.query('select * from client_voice_claim_recording()')).rows.length,0);
  await db.exec(`create table client_email_webhook_events(id text primary key,event_type text);create table client_email_suppressions(client_id uuid,email text,reason text,primary key(client_id,email));insert into auth.users values('${uid}');insert into client_voice_summary_emails(id,client_id,recording_id,user_id,recipient,sender,body)select '${id}','${cid}',id,'${uid}','agent@example.test','calls@example.test','summary' from client_voice_recordings;`);

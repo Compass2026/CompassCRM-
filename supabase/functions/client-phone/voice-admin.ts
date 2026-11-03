@@ -22,7 +22,12 @@ export async function voiceAdmin(db: DB, cid: string, uid: string, input: DB, ba
     const r = await q.maybeSingle(); if (r.error) throw Error("database_unavailable"); return r.data;
   }
   async function save(values: DB) {
-    const r = await db.from("client_voice_settings").upsert({ client_id: cid, ...values, updated_by: uid, updated_at: new Date().toISOString() });
+    const payload = { ...values, updated_by: uid, updated_at: new Date().toISOString() };
+    // INSERT checks run before ON CONFLICT. Update the existing row so its
+    // provider identifiers participate in the summary dependency constraints.
+    const r = settings
+      ? await db.from("client_voice_settings").update(payload).eq("client_id", cid)
+      : await db.from("client_voice_settings").insert({ client_id: cid, ...payload });
     if (r.error) throw Error("invalid_settings");
   }
   const settings = await one("client_voice_settings", { client_id: cid });
