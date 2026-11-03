@@ -39,6 +39,10 @@ on:
           - social-history
           - inquiry-intake
           - crm-lite
+          - client-phone
+          - client-voice-webhook
+          - client-call-worker
+          - client-email-webhook
       expected_sha:
         description: "Exact main commit SHA approved for deployment"
         required: true
@@ -96,7 +100,7 @@ jobs:
           # Every other function keeps verify_jwt.
           EXTRA=()
           case "$FUNCTION_NAME" in
-            twilio-webhook|stripe-webhook|inquiry-intake) EXTRA=(--no-verify-jwt) ;;
+            twilio-webhook|stripe-webhook|inquiry-intake|client-phone|client-voice-webhook|client-call-worker|client-email-webhook) EXTRA=(--no-verify-jwt) ;;
           esac
           # The CLI asks to confirm a deploy and cannot ask in CI; the
           # workflow's own DEPLOY input and the commit check are the confirmation.

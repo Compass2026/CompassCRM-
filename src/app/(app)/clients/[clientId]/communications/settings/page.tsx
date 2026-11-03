@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FunctionButton, SettingsForm } from "@/components/communications/forms";
 import { fmtDateTime } from "@/components/communications/format";
 import { credentialPresence, isAdmin, loadCommsSetup } from "@/lib/communications-data";
+import { VoiceSettings } from "@/components/communications/voice-settings";
 
 // Settings: the per-client switch (no row = off) and the configuration as it
 // stands. Display only: no credential is ever shown; Vault is answered yes /
@@ -17,6 +18,7 @@ export default async function CommsSettingsPage({ params }: { params: Promise<{ 
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
+      {admin && <VoiceSettings clientId={clientId} />}
       <Card>
         <CardHeader><CardTitle>Communications for this client</CardTitle></CardHeader>
         <CardContent>

@@ -40,6 +40,8 @@ export async function POST(req: NextRequest) {
         signal: AbortSignal.timeout(55000),
       },
     );
+    if (body.mode === "recording" && response.ok && response.headers.get("content-type")?.startsWith("audio/"))
+      return new Response(response.body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
     const data = await response
       .json()
       .catch(() => ({ error: "service_unavailable" }));

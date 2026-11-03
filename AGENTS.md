@@ -10,6 +10,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Compass Client Platform
 
+## Client calling and summaries
+
+See `docs/client-calling-rollout.md`. Calling, consent-based recordings,
+Twilio Conversation Intelligence, and Resend summaries are configured per
+client, with service-only tables and authenticated playback. The additive
+`20261102231538_client_call_intelligence.sql` migration enables no client.
+Deploy the phone, voice webhook, email webhook, and call worker together;
+register the worker cron after deployment. Live audio, caller ID, privacy,
+and summary delivery require a controlled pilot test before broader rollout.
+
 ## Agency rollout reviews (October 14, 2026)
 
 See `docs/agency-rollout.md`. The team-only append-only review ledger keeps
