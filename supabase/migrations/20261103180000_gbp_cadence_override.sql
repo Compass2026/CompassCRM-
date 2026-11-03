@@ -1,7 +1,7 @@
 -- Business Profile cadence override (Tom, Nov 3 2026; Executive OS task
 -- 3ab519f3, decision message 367b12c0). Needs 20261030180000_weekly_delivery_standard.
 -- Sandbox suite: supabase/tests/sandbox/gbp_cadence_override.test.sql.
--- Rollback: supabase/rollback/20261103170000_gbp_cadence_override.down.sql.
+-- Rollback: supabase/rollback/20261103180000_gbp_cadence_override.down.sql.
 -- Design: docs/delivery-standard.md ("Cadence overrides").
 --
 -- Under the weekly standard each brand site wants 5 Business Profile posts a
@@ -186,13 +186,13 @@ declare
   pdw text[][] := array[
     array[$a$  existing int; later int; dayroom int; nxt int; made int := 0; got int; d date;
 $a$, $b$  existing int; later int; dayroom int; nxt int; made int := 0; got int; d date;
-  -- delivery_override_v1 (20261103170000): the client's Business Profile cadence override, if any.
+  -- delivery_override_v1 (20261103180000): the client's Business Profile cadence override, if any.
   ovr client_delivery_overrides; ex int[] := '{}'; left_room int; dayocc int[]; pos record;
 $b$],
     array[$a$   where i.client_id = p_client_id and delivery_v1_slot_retirable(i.id, first_week);
 $a$, $b$   where i.client_id = p_client_id and delivery_v1_slot_retirable(i.id, first_week);
 
-  -- delivery_override_v1 (20261103170000): under a cadence override, the week's Business Profile
+  -- delivery_override_v1 (20261103180000): under a cadence override, the week's Business Profile
   -- slots the standard opened with nothing attached are retired (kept as history), once.
   ovr := client_delivery_override(p_client_id, 'gbp_posts', w);
   if ovr.id is not null then
@@ -214,7 +214,7 @@ $b$],
 $a$, $b$      room[u] := greatest(0, least(n - existing, dayroom - later));
       ex[u] := existing;
     end loop;
-    -- delivery_override_v1 (20261103170000): a site's room is its share of the override's round
+    -- delivery_override_v1 (20261103180000): a site's room is its share of the override's round
     -- robin for the week less its work dated in the week; the week's, weekly_total less all of it.
     if dk = 'gbp_posts' and ovr.id is not null then
       for u in 1..nu loop
@@ -225,7 +225,7 @@ $a$, $b$      room[u] := greatest(0, least(n - existing, dayroom - later));
     end if;
 $b$],
     array[$a$    -- Round-robin: round r gives each site (rotated order) its r-th slot.
-$a$, $b$    -- delivery_override_v1 (20261103170000): the override's positions in order, one a day. A
+$a$, $b$    -- delivery_override_v1 (20261103180000): the override's positions in order, one a day. A
     -- position opens its site's slot on its own day unless the day has passed or already carries a
     -- Business Profile item, at a location with room that day (else the least loaded one, which
     -- readiness then flags). The standard's round robin below does not run for it.
@@ -275,11 +275,11 @@ $a$, $b$    -- delivery_override_v1 (20261103170000): the override's positions i
 $b$]];
   dwr text[][] := array[
     array[$a$                                        else (g.std).gbp_posts end end as target,$a$,
-          $b$                                        -- delivery_override_v1 (20261103170000): the site's share under a cadence override.
+          $b$                                        -- delivery_override_v1 (20261103180000): the site's share under a cadence override.
                                         else coalesce(delivery_override_week_target(g.client_id, 'gbp_posts', g.bid, g.w), (g.std).gbp_posts) end end as target,$b$]];
   dtg text[][] := array[
     array[$a$                else delivery_weekly_month_target(m.client_id, m.deliverable, m.month) end as target,$a$,
-          $b$                -- delivery_override_v1 (20261103170000): 0 without a cadence override.
+          $b$                -- delivery_override_v1 (20261103180000): 0 without a cadence override.
                 else delivery_weekly_month_target(m.client_id, m.deliverable, m.month)
                      + delivery_override_month_delta(m.client_id, m.deliverable, m.month, m.brand_workspace_id) end as target,$b$]];
   edits text[][];

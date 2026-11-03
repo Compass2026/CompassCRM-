@@ -1,4 +1,4 @@
--- Rollback of 20261103170000_gbp_cadence_override.sql. Run as one
+-- Rollback of 20261103180000_gbp_cadence_override.sql. Run as one
 -- transaction, and before any rollback of 20261030180000 (the weekly
 -- standard). Restores plan_delivery_week, delivery_week_report and
 -- delivery_targets exactly as 20261030180000 left them (md5 of
@@ -22,7 +22,7 @@ do $guard$
 begin
   if exists (select 1 from client_delivery_overrides)
      and coalesce(current_setting('compass.delivery_override_rollback', true), '') <> 'confirmed' then
-    raise exception 'rollback 20261103170000: delivery overrides are recorded; set compass.delivery_override_rollback = ''confirmed'' to return those clients to the standard (see the header)';
+    raise exception 'rollback 20261103180000: delivery overrides are recorded; set compass.delivery_override_rollback = ''confirmed'' to return those clients to the standard (see the header)';
   end if;
 end $guard$;
 
@@ -35,13 +35,13 @@ declare
   pdw text[][] := array[
     array[$a$  existing int; later int; dayroom int; nxt int; made int := 0; got int; d date;
 $a$, $b$  existing int; later int; dayroom int; nxt int; made int := 0; got int; d date;
-  -- delivery_override_v1 (20261103170000): the client's Business Profile cadence override, if any.
+  -- delivery_override_v1 (20261103180000): the client's Business Profile cadence override, if any.
   ovr client_delivery_overrides; ex int[] := '{}'; left_room int; dayocc int[]; pos record;
 $b$],
     array[$a$   where i.client_id = p_client_id and delivery_v1_slot_retirable(i.id, first_week);
 $a$, $b$   where i.client_id = p_client_id and delivery_v1_slot_retirable(i.id, first_week);
 
-  -- delivery_override_v1 (20261103170000): under a cadence override, the week's Business Profile
+  -- delivery_override_v1 (20261103180000): under a cadence override, the week's Business Profile
   -- slots the standard opened with nothing attached are retired (kept as history), once.
   ovr := client_delivery_override(p_client_id, 'gbp_posts', w);
   if ovr.id is not null then
@@ -63,7 +63,7 @@ $b$],
 $a$, $b$      room[u] := greatest(0, least(n - existing, dayroom - later));
       ex[u] := existing;
     end loop;
-    -- delivery_override_v1 (20261103170000): a site's room is its share of the override's round
+    -- delivery_override_v1 (20261103180000): a site's room is its share of the override's round
     -- robin for the week less its work dated in the week; the week's, weekly_total less all of it.
     if dk = 'gbp_posts' and ovr.id is not null then
       for u in 1..nu loop
@@ -74,7 +74,7 @@ $a$, $b$      room[u] := greatest(0, least(n - existing, dayroom - later));
     end if;
 $b$],
     array[$a$    -- Round-robin: round r gives each site (rotated order) its r-th slot.
-$a$, $b$    -- delivery_override_v1 (20261103170000): the override's positions in order, one a day. A
+$a$, $b$    -- delivery_override_v1 (20261103180000): the override's positions in order, one a day. A
     -- position opens its site's slot on its own day unless the day has passed or already carries a
     -- Business Profile item, at a location with room that day (else the least loaded one, which
     -- readiness then flags). The standard's round robin below does not run for it.
@@ -124,11 +124,11 @@ $a$, $b$    -- delivery_override_v1 (20261103170000): the override's positions i
 $b$]];
   dwr text[][] := array[
     array[$a$                                        else (g.std).gbp_posts end end as target,$a$,
-          $b$                                        -- delivery_override_v1 (20261103170000): the site's share under a cadence override.
+          $b$                                        -- delivery_override_v1 (20261103180000): the site's share under a cadence override.
                                         else coalesce(delivery_override_week_target(g.client_id, 'gbp_posts', g.bid, g.w), (g.std).gbp_posts) end end as target,$b$]];
   dtg text[][] := array[
     array[$a$                else delivery_weekly_month_target(m.client_id, m.deliverable, m.month) end as target,$a$,
-          $b$                -- delivery_override_v1 (20261103170000): 0 without a cadence override.
+          $b$                -- delivery_override_v1 (20261103180000): 0 without a cadence override.
                 else delivery_weekly_month_target(m.client_id, m.deliverable, m.month)
                      + delivery_override_month_delta(m.client_id, m.deliverable, m.month, m.brand_workspace_id) end as target,$b$]];
   edits text[][];
@@ -174,6 +174,6 @@ begin
   if md5(pg_get_functiondef('public.plan_delivery_week(uuid,date)'::regprocedure)) <> '849de48f5843cfd2a64ccab09093fd4b'
      or md5(pg_get_functiondef('public.delivery_week_report(uuid,date,date,date)'::regprocedure)) <> 'd1be320ef0de398b314b39c68fcaf724'
      or md5(pg_get_functiondef('public.delivery_targets(uuid,date)'::regprocedure)) <> '82b6e7c31c83e498aa8a5861bd5a6a46' then
-    raise exception 'rollback 20261103170000: a function was not restored exactly';
+    raise exception 'rollback 20261103180000: a function was not restored exactly';
   end if;
 end $verify$;

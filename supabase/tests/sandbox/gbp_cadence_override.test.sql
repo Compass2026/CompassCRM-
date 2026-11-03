@@ -1,4 +1,4 @@
--- 20261103170000: the Business Profile cadence override. Fictional clients
+-- 20261103180000: the Business Profile cadence override. Fictional clients
 -- only; everything is rolled back. "Today" is pinned with
 -- compass.delivery_today (a superuser session only) to Fri Nov 6 2026.
 --   OV  three brand sites on ONE Business Profile location, weekly from
@@ -114,7 +114,7 @@ create function ov.snap_reads() returns text language sql as $$
 
 -- ── N1, first half: the previous definitions (rolled back afterwards) ───────
 savepoint before_override;
-\ir ../../rollback/20261103170000_gbp_cadence_override.down.sql
+\ir ../../rollback/20261103180000_gbp_cadence_override.down.sql
 select ov.ok('V0 with no override recorded the rollback removes everything and restores the three functions exactly',
   to_regclass('client_delivery_overrides') is null
   and to_regprocedure('delivery_override_allocation(uuid,text,date)') is null
@@ -286,7 +286,7 @@ reset role;
 -- ── Rollback, with overrides recorded (confirmed) ───────────────────────────
 savepoint before_down;
 select set_config('compass.delivery_override_rollback', 'confirmed', true);
-\ir ../../rollback/20261103170000_gbp_cadence_override.down.sql
+\ir ../../rollback/20261103180000_gbp_cadence_override.down.sql
 select ov.ok('RB1 rollback with data: functions exact, overrides kept aside, column gone, nothing deleted (retired slots stay retired)',
   to_regclass('client_delivery_overrides') is null
   and (select count(*) from client_delivery_overrides_rolled_back) = 3

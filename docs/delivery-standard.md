@@ -99,7 +99,7 @@ five weeks of work.
 Tom's call for the three-site client on one shared location: **7 Business
 Profile posts a week in total, at most one a day, alternating between the
 businesses.** Facebook (5 a site), blogs (3 a site) and the monthly refresh
-are unchanged. Migration `20261103170000_gbp_cadence_override.sql`, sandbox
+are unchanged. Migration `20261103180000_gbp_cadence_override.sql`, sandbox
 suite `gbp_cadence_override.test.sql`.
 
 - **Data, not code.** `client_delivery_overrides (client_id, deliverable
@@ -244,8 +244,8 @@ planned, all inside one transaction that raised at the end. 12 clients,
 
 ### Rollback
 
-Roll back `20261103170000` first:
-`supabase/rollback/20261103170000_gbp_cadence_override.down.sql` restores
+Roll back `20261103180000` first:
+`supabase/rollback/20261103180000_gbp_cadence_override.down.sql` restores
 `plan_delivery_week`, `delivery_week_report` and `delivery_targets` byte for
 byte (md5-checked) and removes the override's table, column and functions.
 Once an override is recorded it stops unless

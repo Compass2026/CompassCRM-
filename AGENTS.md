@@ -1142,7 +1142,7 @@ and open decisions in `docs/delivery-standard.md`; sandbox suite
   `social_slot_readiness` (`Over capacity: …`), never dropped, never queued.
   Three sites on one location: 7 of 15 fit a week. Tom decided that client's
   cadence on Nov 3 2026 (decision `367b12c0`): see the cadence override below.
-- **Cadence override** (`20261103170000`, **not applied**; sandbox suite
+- **Cadence override** (`20261103180000`, **not applied**; sandbox suite
   `gbp_cadence_override.test.sql`): `client_delivery_overrides` is a
   per-client, append-only record (`gbp_posts`, `round_robin`, 1–7 a week,
   from a Monday not in the past; `standard` ends it). In weeks the weekly

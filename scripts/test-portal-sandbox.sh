@@ -339,7 +339,7 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/site_program_
 # over-capacity flagged in readiness), v1 reconciliation without double
 # credit, monthly clients unchanged, the rollback (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_delivery_standard.test.sql" -o /dev/null
-# 20261103170000: a per-client Business Profile cadence override (7 a week
+# 20261103180000: a per-client Business Profile cadence override (7 a week
 # across three sites on one location, one a day, continuous round robin):
 # placement, rotation across weeks, reruns, retirement of the standard's
 # slots, week report and month targets, Facebook / blogs unchanged, clients
