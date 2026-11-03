@@ -1,6 +1,7 @@
 import { voiceIdentity } from "../client-phone/identity.ts";
 import { uuid } from "../client-mailbox/mail.ts";
 import type { DB } from "../client-mailbox/handler.ts";
+import { consentPrompt, voiceProvider, sid as validSid } from "../client-phone/voice-provider.ts";
 const esc = (v: unknown) =>
   String(v ?? "").replace(
     /[<>&"']/g,
@@ -27,6 +28,7 @@ export function createVoiceWebhook(
     url: string,
     p: Record<string, string>,
   ) => boolean,
+  request: typeof fetch = fetch,
 ) {
   async function one(t: string, f: Record<string, unknown>, cols = "*") {
     let q = db.from(t).select(cols);
@@ -62,7 +64,7 @@ export function createVoiceWebhook(
       url = new URL(req.url),
       route = url.pathname.split("client-voice-webhook")[1] || "";
     if (
-      !["/outbound", "/inbound", "/finished", "/status"].includes(route) ||
+      !["/outbound", "/inbound", "/finished", "/status", "/consent", "/consent-result", "/inbound-consent", "/recording"].includes(route) ||
       !/^AC[0-9a-fA-F]{32}$/.test(p.AccountSid || "") ||
       !/^CA[0-9a-fA-F]{32}$/.test(p.CallSid || "")
     )
@@ -91,10 +93,52 @@ export function createVoiceWebhook(
       const cid = account.client_id,
         config = await one("client_voice_settings", {
           client_id: cid,
-          enabled: true,
         });
-      if (!config)
+      // Completion callbacks must still be accepted after the calling switch is off.
+      if (!config || (!config.enabled && ["/outbound","/inbound","/consent","/consent-result","/inbound-consent"].includes(route)))
         return xml("<Say>Calling is currently unavailable.</Say><Hangup/>");
+      if (route === "/recording") {
+        if (!uuid(url.searchParams.get("call")) || !validSid(p.RecordingSid,"RE")) return new Response("Invalid recording",{status:400});
+        const call = await one("client_voice_calls",{id:url.searchParams.get("call"),client_id:cid});
+        if (!call || call.recording_consent !== "accepted" || !call.recording_requested ||
+          ![call.provider_sid,call.consent_child_sid].includes(p.CallSid)) return new Response("Forbidden",{status:403});
+        if (p.RecordingStatus !== "completed") return xml("");
+        const duration=Number(p.RecordingDuration);
+        if (!Number.isInteger(duration) || duration<0) return new Response("Invalid recording",{status:400});
+        const saved=await db.from("client_voice_recordings").upsert({client_id:cid,call_id:call.id,
+          account_sid:p.AccountSid,recording_sid:p.RecordingSid,duration,
+          state:config.summaries_enabled ? "queued":"recorded",
+          service_sid:config.summaries_enabled ? config.intelligence_service_sid:null,
+          operator_sid:config.summaries_enabled ? config.summary_operator_sid:null,
+          expires_at:new Date(Date.parse(call.created_at)+config.retention_days*86400000).toISOString(),
+        },{onConflict:"recording_sid",ignoreDuplicates:true});
+        if(saved.error) throw Error("database");
+        return xml("");
+      }
+      if (route === "/consent" || route === "/consent-result") {
+        const call=await one("client_voice_calls",{id:url.searchParams.get("call"),client_id:cid,direction:"outbound"});
+        if (!call || !call.recording_requested || !config.recording_enabled || !(await active(call.actor_id,cid))) return xml("");
+        const provider=await voiceProvider(db,p.AccountSid,request);
+        // Validate the child against the reserved call, never a caller-supplied destination.
+        const child=await provider.call(`/Calls/${p.CallSid}.json`);
+        if(child.parent_call_sid!==call.provider_sid) return new Response("Forbidden",{status:403});
+        if(route==="/consent") return xml(consentPrompt(base+"/consent-result?call="+call.id));
+        const accepted=p.Digits==="1";
+        const claimed=await db.from("client_voice_calls").update({recording_consent:accepted?"accepted":"declined",
+          consent_at:new Date().toISOString(),consent_child_sid:p.CallSid,recording_started:accepted})
+          .eq("id",call.id).eq("client_id",cid).eq("recording_consent","pending").select("id");
+        if(claimed.error) throw Error("database");
+        if(claimed.data?.length!==1) return xml("");
+        if(accepted) {
+          // Start only AFTER affirmative consent. A lost response is never blindly retried.
+          try { await provider.call(`/Calls/${p.CallSid}/Recordings.json`,"POST",{
+            RecordingChannels:"dual", RecordingTrack:"both", RecordingStatusCallback:base+"/recording?call="+call.id,
+            RecordingStatusCallbackMethod:"POST",RecordingStatusCallbackEvent:"completed",
+          }); } catch { return xml("<Say>Recording could not be confirmed. Please call again.</Say><Hangup/>"); }
+          return xml("<Say>Thank you. Recording will begin now.</Say>");
+        }
+        return xml("<Say>Continuing without recording.</Say>");
+      }
       if (route === "/outbound") {
         if (!uuid(p.Intent)) return xml("<Hangup/>");
         const call = await one("client_voice_calls", {
@@ -131,10 +175,10 @@ export function createVoiceWebhook(
         if (claimed.error) throw Error("database");
         if (claimed.data?.length !== 1) return xml("<Hangup/>");
         return xml(
-          `<Dial callerId="${esc(call.from_number)}" timeout="30" action="${esc(base + "/finished")}" method="POST"><Number statusCallback="${esc(base + "/status")}" statusCallbackEvent="initiated ringing answered completed" statusCallbackMethod="POST">${esc(call.to_number)}</Number></Dial>`,
+          `<Dial callerId="${esc(call.from_number)}" timeLimit="${config.max_call_seconds || 3600}" answerOnBridge="true" timeout="30" action="${esc(base + "/finished")}" method="POST"><Number${call.recording_requested && config.recording_enabled ? ` url="${esc(base+"/consent?call="+call.id)}" method="POST"` : ""} statusCallback="${esc(base + "/status")}" statusCallbackEvent="initiated ringing answered completed" statusCallbackMethod="POST">${esc(call.to_number)}</Number></Dial>`,
         );
       }
-      if (route === "/inbound") {
+      if (route === "/inbound" || route === "/inbound-consent") {
         const n = await one("communication_numbers", {
           client_id: cid,
           phone_number_e164: p.To,
@@ -159,10 +203,24 @@ export function createVoiceWebhook(
             from_number: p.From,
             to_number: p.To,
             status: "ringing",
+            recording_requested: config.recording_enabled === true,
+            recording_consent: config.recording_enabled ? "pending" : "not_requested",
           },
           { onConflict: "provider_sid", ignoreDuplicates: true },
         );
         if (saved.error) throw Error("database");
+        const call=await one("client_voice_calls",{provider_sid:p.CallSid,client_id:cid,direction:"inbound"});
+        if(!call) throw Error("database");
+        if(route==="/inbound" && call.recording_requested && config.recording_enabled)
+          return xml(consentPrompt(base+"/inbound-consent"));
+        let record=false;
+        if(route==="/inbound-consent" && call.recording_requested && config.recording_enabled) {
+          const accepted=p.Digits==="1";
+          const consent=await db.from("client_voice_calls").update({recording_consent:accepted?"accepted":"declined",consent_at:new Date().toISOString()})
+            .eq("id",call.id).eq("client_id",cid).eq("recording_consent","pending").select("id");
+          if(consent.error) throw Error("database");
+          record=accepted && (consent.data?.length===1 || call.recording_consent==="accepted");
+        }
         const users = await db
           .from("portal_users")
           .select("auth_user_id")
@@ -181,7 +239,7 @@ export function createVoiceWebhook(
               )
             : xml("<Say>Please call again later.</Say><Hangup/>");
         return xml(
-          `<Dial timeout="20" action="${esc(base + "/finished")}" method="POST">${enabled.map((u) => `<Client>${esc(voiceIdentity(cid, u))}</Client>`).join("")}</Dial>`,
+          `${record?"<Say>Thank you. Recording will begin when connected.</Say>":""}<Dial timeLimit="${config.max_call_seconds || 3600}" timeout="20" action="${esc(base + "/finished")}" method="POST"${record ? ` record="record-from-answer-dual" recordingStatusCallback="${esc(base+"/recording?call="+call.id)}" recordingStatusCallbackMethod="POST" recordingStatusCallbackEvent="completed"` : ""}>${enabled.map((u) => `<Client>${esc(voiceIdentity(cid, u))}</Client>`).join("")}</Dial>`,
         );
       }
       const sid = p.ParentCallSid || p.CallSid,

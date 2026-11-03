@@ -3,6 +3,8 @@ import { uuid } from "../client-mailbox/mail.ts";
 import type { DB } from "../client-mailbox/handler.ts";
 import { createTwilioProvider } from "../_shared/communications/twilio.ts";
 import { ProviderError } from "../_shared/communications/provider.ts";
+import { voiceAdmin } from "./voice-admin.ts";
+import { voiceProvider, sid } from "./voice-provider.ts";
 const reply = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 export function createClientPhone(
@@ -142,10 +144,13 @@ export function createClientPhone(
                   )
                 ? "This lead needs recorded permission for text messages."
                 : null;
+    const recordings = calls.length ? await check(db.from("client_voice_recordings")
+      .select("id,call_id,state,duration,summary,expires_at,error_code")
+      .eq("client_id",cid).in("call_id",calls.map((c: DB)=>c.id)).neq("state","deleted").gt("expires_at",new Date().toISOString())) : [];
     return {
       draft,
       messages: messages.reverse(),
-      calls,
+      calls: calls.map((c: DB)=>({...c,recordings:recordings.filter((r: DB)=>r.call_id===c.id)})),
       number: number?.phone_number_e164 || null,
       can_send: !reason,
       reason,
@@ -168,6 +173,29 @@ export function createClientPhone(
       if (error || !data?.user) return reply(401, { error: "unauthorized" });
       const uid = data.user.id;
       await actor(uid, cid);
+      if (["voice_setup","provision_voice","provision_summaries","save_voice_settings","route_inbound"].includes(input.mode))
+        return reply(200, await voiceAdmin(db,cid,uid,input,base,request));
+      if (input.mode === "voice_status") {
+        const v = await one("client_voice_settings",{client_id:cid});
+        const n = await one("communication_numbers",{client_id:cid,is_primary:true,status:"active"});
+        return reply(200,{ enabled: !!(v?.enabled && v.application_sid && n?.voice_enabled), number:n?.phone_number_e164 || null,
+          recording_enabled: !!v?.recording_enabled, summaries_enabled: !!v?.summaries_enabled });
+      }
+      if(input.mode === "stop_recording") {
+        if(!sid(input.call_sid,"CA")) throw Error("recording_unavailable");
+        const account=await one("communication_accounts",{client_id:cid,provider:"twilio",status:"active"});
+        if(!account)throw Error("voice_not_ready");
+        const provider=await voiceProvider(db,account.provider_account_sid,request);
+        const remote=await provider.call(`/Calls/${input.call_sid}.json`);
+        const call=await one("client_voice_calls",{client_id:cid,provider_sid:remote.parent_call_sid || remote.sid});
+        if(!call || (call.direction==="outbound" && call.actor_id!==uid)) throw Error("forbidden");
+        for(const callSid of [call.provider_sid,call.consent_child_sid].filter(Boolean)) {
+          const list=await provider.call(`/Calls/${callSid}/Recordings.json`);
+          for(const rec of list.recordings || []) if(["in-progress","paused"].includes(rec.status) && sid(rec.sid,"RE"))
+            await provider.call(`/Calls/${callSid}/Recordings/${rec.sid}.json`,"POST",{Status:"stopped"});
+        }
+        return reply(200,{stopped:true});
+      }
       if (input.mode === "voice_token") {
         const voice = await one("client_voice_settings", {
           client_id: cid,
@@ -201,6 +229,19 @@ export function createClientPhone(
         "id,contact_id,phone_e164",
       );
       if (!i) throw Error("inquiry_not_found");
+      if (input.mode === "recording" || input.mode === "transcript") {
+        if (!uuid(input.recording_id)) throw Error("recording_unavailable");
+        const rec = await one("client_voice_recordings",{id:input.recording_id,client_id:cid});
+        const call = rec && await one("client_voice_calls",{id:rec.call_id,client_id:cid,inquiry_id:i.id});
+        if (!call || rec.state === "deleted" || Date.parse(rec.expires_at)<=Date.now()) throw Error("recording_unavailable");
+        if(input.mode==="transcript") return reply(200,{transcript:rec.transcript});
+        const provider = await voiceProvider(db,rec.account_sid,request);
+        const audio = await request(`https://api.twilio.com/2010-04-01/Accounts/${rec.account_sid}/Recordings/${rec.recording_sid}.mp3`,{
+          headers:{Authorization:provider.authorization}, redirect:"error",signal:AbortSignal.timeout(30000),
+        });
+        if (!audio.ok) throw Error("recording_unavailable");
+        return new Response(audio.body,{headers:{"Content-Type":"audio/mpeg","Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
+      }
       if (input.mode === "load") return reply(200, await snapshot(cid, i, uid));
       if (input.mode === "save_draft") {
         if (typeof input.body !== "string" || input.body.length > 1600)
@@ -255,6 +296,8 @@ export function createClientPhone(
             direction: "outbound",
             from_number: number.phone_number_e164,
             to_number: i.phone_e164,
+            recording_requested: voice.recording_enabled === true,
+            recording_consent: voice.recording_enabled ? "pending" : "not_requested",
           }),
         );
         return reply(200, { intent: id });
@@ -349,6 +392,7 @@ export function createClientPhone(
       return reply(400, { error: "unknown_mode" });
     } catch (e) {
       const safe = [
+        "invalid_settings", "provider_not_ready", "summaries_not_ready", "email_not_ready", "summary_operator_unavailable", "fallback_review_required", "recording_unavailable",
         "forbidden",
         "voice_not_ready",
         "inquiry_not_found",

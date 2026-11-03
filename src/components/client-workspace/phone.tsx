@@ -46,6 +46,7 @@ type PhoneSnapshot = {
     status: string;
     duration: number | null;
     created_at: string;
+    recordings?: {id:string;state:string;duration:number;summary:string|null;transcript:string|null;expires_at:string;error_code:string|null}[];
   }[];
   number: string | null;
   can_send: boolean;
@@ -198,6 +199,10 @@ export function WorkspacePhone({
     [connected, setConnected] = useState(false),
     [hasCall, setHasCall] = useState(false),
     [error, setError] = useState("");
+  const [readiness,setReadiness]=useState<{enabled:boolean;number:string|null;recording_enabled:boolean;summaries_enabled:boolean}|null>(null);
+  const [muted,setMuted]=useState(false);
+  const [recordingStopped,setRecordingStopped]=useState(false);
+  useEffect(()=>{let live=true;phoneRequest(clientId,"voice_status").then(d=>{if(live)setReadiness(d);}).catch(()=>{});return()=>{live=false;};},[clientId]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -210,12 +215,15 @@ export function WorkspacePhone({
   function bind(c: Call) {
     call.current = c;
     setHasCall(true);
+    setRecordingStopped(false);
     const done = () => {
       call.current = null;
       if (mounted.current) {
         setIncoming(false);
         setHasCall(false);
+        setMuted(false);
         setStatus("Phone ready");
+        window.dispatchEvent(new Event("compass-call-ended"));
       }
     };
     c.on("disconnect", done);
@@ -242,6 +250,7 @@ export function WorkspacePhone({
       ]);
       if (!mounted.current) return;
       const d = new Device(r.token, { logLevel: 0 });
+      device.current?.destroy();
       device.current = d;
       d.on("registered", () => {
         if (mounted.current) {
@@ -276,6 +285,7 @@ export function WorkspacePhone({
             "The phone connection failed. Check microphone permission and reconnect.",
           );
       });
+      d.on("unregistered",()=>{if(mounted.current){setConnected(false);setStatus("Reconnect phone");}});
       await d.register();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Phone unavailable.");
@@ -307,7 +317,7 @@ export function WorkspacePhone({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-semibold">Business phone</p>
+          <p className="font-semibold">Business phone{readiness?.number ? ` · ${readiness.number}`:""}</p>
           <p role="status" className="mt-1 text-xs text-slate-600">
             {status}
           </p>
@@ -317,10 +327,10 @@ export function WorkspacePhone({
             <button
               type="button"
               onClick={connect}
-              disabled={busy}
+              disabled={busy || !readiness?.enabled}
               className="rounded-lg border px-3 py-2 text-xs"
             >
-              Connect phone
+              {readiness && !readiness.enabled ? "Calling setup pending":"Connect phone"}
             </button>
           ) : (
             <button
@@ -342,6 +352,12 @@ export function WorkspacePhone({
             </button>
           )}
           {hasCall && (
+            <button type="button" onClick={()=>{call.current?.mute(!muted);setMuted(!muted);}} className="rounded-lg border px-3 py-2 text-xs" aria-pressed={muted}>{muted?"Unmute":"Mute"}</button>
+          )}
+          {hasCall && !incoming && readiness?.recording_enabled && <button type="button" disabled={busy || recordingStopped} onClick={async()=>{
+            setBusy(true);try{await phoneRequest(clientId,"stop_recording",{call_sid:call.current?.parameters.CallSid});setRecordingStopped(true);}catch{setError("Recording could not be stopped. End the call if recording must stop.");}finally{setBusy(false);}
+          }} className="rounded-lg border px-3 py-2 text-xs disabled:opacity-40">{recordingStopped?"Recording stopped":"Stop recording"}</button>}
+          {hasCall && (
             <button
               type="button"
               onClick={() => {
@@ -359,6 +375,7 @@ export function WorkspacePhone({
         Keep this page open to receive calls. Your browser will request
         microphone access when needed.
       </p>
+      {readiness?.recording_enabled && <p className="mt-2 text-xs text-slate-600">Recording is offered with the caller’s permission.{readiness.summaries_enabled?" A transcript and AI summary will appear in call history when ready.":""}</p>}
       {error && (
         <p role="alert" className="mt-2 text-xs text-red-700">
           {error}
@@ -423,7 +440,7 @@ export function LeadCalls({
         {calls.map((c) => (
           <li
             key={c.id}
-            className="flex flex-wrap justify-between gap-2 text-xs"
+            className="rounded-lg border border-slate-100 p-3 text-xs"
           >
             <span>
               {c.direction === "inbound" ? "Incoming" : "Outgoing"} ·{" "}
@@ -433,6 +450,7 @@ export function LeadCalls({
             <span className="text-slate-500">
               {new Date(c.created_at).toLocaleString()}
             </span>
+            {c.recordings?.map(r=><CallRecording key={r.id} recording={r} clientId={clientId} inquiryId={inquiryId}/>)}
           </li>
         ))}
       </ul>
@@ -443,4 +461,21 @@ export function LeadCalls({
       )}
     </section>
   );
+}
+
+function CallRecording({recording:r,clientId,inquiryId}:{recording:NonNullable<PhoneSnapshot["calls"][number]["recordings"]>[number];clientId:string;inquiryId:string}) {
+  const [audio,setAudio]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
+  const [transcript,setTranscript]=useState<string|null>(null);
+  useEffect(()=>()=>{if(audio)URL.revokeObjectURL(audio);},[audio]);
+  async function play(){setBusy(true);setError("");try{
+    const res=await fetch("/api/client-phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:"recording",client_id:clientId,inquiry_id:inquiryId,recording_id:r.id})});
+    if(!res.ok)throw Error("Recording could not be loaded.");setAudio(URL.createObjectURL(await res.blob()));
+  }catch(e){setError(e instanceof Error?e.message:"Recording unavailable.");}finally{setBusy(false);}}
+  return <div className="mt-3 space-y-3 border-t pt-3">
+    {audio?<audio controls src={audio} className="w-full" aria-label="Call recording"/>:<button type="button" disabled={busy} onClick={play} className="font-semibold text-blue-700">{busy?"Loading recording…":"Listen to recording"}</button>}
+    <p className="text-slate-500">Available until {new Date(r.expires_at).toLocaleDateString()}</p>
+    {r.summary?<div><p className="font-semibold">AI call summary</p><p className="mt-1 whitespace-pre-wrap">{r.summary}</p><p className="mt-2 text-slate-500">Check against the recording before acting.</p></div>:<p className="text-slate-500">{["failed","uncertain"].includes(r.state)?"Summary needs attention from your Compass team.":["queued","submitted"].includes(r.state)?"Transcript and summary are processing.":"Recording saved."}</p>}
+    {r.state==="ready" && <details onToggle={async e=>{if(e.currentTarget.open && !transcript){try{const d=await phoneRequest(clientId,"transcript",{inquiry_id:inquiryId,recording_id:r.id});setTranscript(d.transcript || "Transcript unavailable.");}catch{setError("Transcript could not be loaded.");}}}}><summary className="cursor-pointer font-semibold">View transcript</summary><p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap">{transcript || "Loading transcript…"}</p></details>}
+    {error && <p role="alert" className="text-red-700">{error}</p>}
+  </div>;
 }

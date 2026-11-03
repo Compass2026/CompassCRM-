@@ -126,6 +126,16 @@ export function createEmailWebhook(
         const id = Array.isArray(data.tags)
           ? data.tags.find((t: DB) => t.name === "crm_message_id")?.value
           : data.tags?.crm_message_id;
+        const callSummaryId = Array.isArray(data.tags)
+          ? data.tags.find((t: DB) => t.name === "crm_call_summary_id")?.value
+          : data.tags?.crm_call_summary_id;
+        if (delivery[event.type] && uuid(callSummaryId) && data.to?.length === 1) {
+          const saved = await db.rpc("client_voice_summary_email_event", { p: { ...p,
+            message_id: callSummaryId, sender: address(data.from), recipient: address(data.to[0]), delivery: delivery[event.type],
+          } });
+          if(saved.error) throw Error("database");
+          return new Response("OK",{status:200});
+        }
         if (!delivery[event.type] || !uuid(id) || data.to?.length !== 1)
           return new Response("Ignored", { status: 200 });
         Object.assign(p, {
