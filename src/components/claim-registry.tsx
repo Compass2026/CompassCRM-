@@ -9,6 +9,7 @@ import {
   SOURCE_CLASS_LABEL,
   STATUS_LABEL,
   affectedLinks,
+  eligibilityLabels,
   fig,
   groupByBucket,
   reasonLines,
@@ -50,6 +51,8 @@ export function ClaimRegistrySection({
           What every claim stands on: its source, who verified it and when, when it is due for review, which brand
           site may use it, and which posts and drafts cite it. This view changes nothing. Posts and drafts still
           follow today&apos;s rule: a confirmed claim, or a sourced one with a source, and never an unverified one.
+          &ldquo;Citable under current rules&rdquo; is that rule; &ldquo;independently verified&rdquo; needs a recorded
+          method and evidence, which the verification workflow will add.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -162,6 +165,7 @@ function ClaimRow({
   programs: RegistryProgram[];
 }) {
   const links = affectedLinks(clientId, c);
+  const eligibility = eligibilityLabels(c);
   const reasons = reasonLines(c);
   const siteName = (slug: string) => programs.find((p) => p.slug === slug)?.name ?? slug;
   return (
@@ -171,8 +175,15 @@ function ClaimRow({
         <Badge variant="outline" className="ml-auto">
           {STATUS_LABEL[c.status]}
         </Badge>
-        <Badge variant="outline" className={toneStyles[c.legacy_usable ? "ok" : "bad"]}>
-          {c.legacy_usable ? "citable today" : "not citable"}
+        <Badge variant="outline" className={toneStyles[c.legacy_usable ? "ok" : "bad"]} data-citable={c.legacy_usable}>
+          {eligibility.citable}
+        </Badge>
+        <Badge
+          variant="outline"
+          className={c.verification_state === "independently_verified" ? toneStyles.ok : undefined}
+          data-verification={c.verification_state}
+        >
+          {eligibility.verified}
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground" data-source={c.source.class}>

@@ -79,11 +79,17 @@ insert into claims (id, client_id, claim, status, source, confirmed_by, confirme
   (crt.id('L10'), crt.id('L'), 'Zqx 45+ years combined experience (conflicts with the homepage figure)', 'sourced',
    'https://crt-l.example.test/about', null, null, now() - interval '50 days'),
   (crt.id('L11'), crt.id('L'), 'Zqx open Mon–Fri 8–5', 'sourced', 'https://www.google.com/maps?cid=123', null, null, now() - interval '50 days'),
+  (crt.id('L13'), crt.id('L'), 'Zqx north office line (555) 010-0777', 'sourced', 'https://www.google.com/maps?cid=456', null, null, now() - interval '50 days'),
   (crt.id('M1'), crt.id('M'), 'Zqx safety audits', 'sourced', 'https://s.crt-m.example.test/audits', null, null, now() - interval '20 days'),
   (crt.id('M2'), crt.id('M'), 'Zqx founded 2014', 'sourced', 'https://s.crt-m.example.test/about', null, null, now() - interval '20 days'),
   (crt.id('M3'), crt.id('M'), 'Zqx 65+ years combined experience', 'sourced', 'https://crt-m.example.test/', null, null, now() - interval '20 days'),
   (crt.id('M4'), crt.id('M'), 'Zqx heavy equipment classes', 'sourced', 'https://h.crt-m.example.test/', null, null, now() - interval '20 days'),
   (crt.id('X1'), crt.id('X'), 'Zqx other client fact', 'confirmed', 'Confirmed', 'x@example.test', now() - interval '5 days', now() - interval '5 days');
+
+-- One approved location with its own number (citation_locations): a claim
+-- naming that number is the location's, not a client-wide conflict.
+insert into citation_locations (id, client_id, label, business_name, address_line1, city, region, postal_code, phone)
+values (crt.id('loc-north'), crt.id('L'), 'North office', 'CRT Single Roofing', '1 Zqx Way', 'Northtown', 'MO', '63000', '555.010.0777');
 
 insert into client_brand_workspaces (id, client_id, slug, name, website_url, phone, positioning, voice_tone, standing_cta,
                                      hard_rules, service_ids, claim_ids, asset_ids, status, approved_by, approved_at, created_at) values
@@ -132,11 +138,12 @@ begin
   perform crt.ok('R1 one program for a single-site client, nothing classified, nothing verified',
     r->>'version' = 'claim-registry/v1' and not (r->>'multi_site')::boolean
     and jsonb_array_length(r->'programs') = 1 and r->'programs'->0->>'scope' = 'client'
-    and (r->'programs'->0->'counts'->>'total')::int = 11 and (t->>'total')::int = 11
+    and (r->'programs'->0->'counts'->>'total')::int = 12 and (t->>'total')::int = 12
     and (t->>'verified')::int = 0 and t->'unassigned' = 'null'::jsonb and t->'shared' = 'null'::jsonb);
   c := crt.claim(r, 'L1');
-  perform crt.ok('R2 the confirmed 3-year warranty: confirmed, usable today, unclassified so needs review, names L2 superseded',
+  perform crt.ok('R2 the confirmed 3-year warranty: citable under current rules, NOT independently verified, needs review',
     c->>'status' = 'confirmed' and (c->>'legacy_usable')::boolean and c->>'bucket' = 'needs_review'
+    and c->>'verification_state' = 'not_independently_verified'
     and c->'reasons' ? 'unclassified' and c->'reasons' ? 'method_unrecorded'
     and c->'verification'->>'last_verified_at' is not null and c->'freshness'->>'state' = 'current'
     and (c->'freshness'->>'interval_days')::int = 90 and c->>'kind_label' = 'Not yet classified'
@@ -151,10 +158,11 @@ begin
     and c->'affected'->'posts'->0->>'published_url' = 'https://local.example.test/posts/p1'
     and (select bool_and(d->>'status' = 'in_review') from jsonb_array_elements(c->'affected'->'drafts') d)
     and c->'reasons' ? 'cited_while_unusable' and c->'reasons' ? 'published_while_unusable'
-    and c->'reasons' ? 'named_as_superseded' and c->'named_superseded_by' = jsonb_build_array(crt.id('L1')::text)
-    and c->>'superseded_by' is null and c->'source'->>'class' = 'client_site');
-  perform crt.ok('R12 only the claim the note names is flagged (an id prefix is read as a word naming one claim)',
-    (select count(*) from jsonb_array_elements(r->'claims') x where x->'reasons' ? 'named_as_superseded') = 1);
+    and c->'reasons' ? 'supersession_mentioned' and c->'supersession_mentioned_by' = jsonb_build_array(crt.id('L1')::text)
+    and c->>'superseded_by' is null and c->>'bucket' <> 'superseded' and c->'source'->>'class' = 'client_site');
+  perform crt.ok('R12 a supersession note is tentative: only the claim it names is flagged, and nothing is superseded by it',
+    (select count(*) from jsonb_array_elements(r->'claims') x where x->'reasons' ? 'supersession_mentioned') = 1
+    and (t->>'superseded')::int = 0);
   perform crt.ok('R4 a sourced claim with a client-site URL is never verified because of the URL',
     crt.claim(r, 'L3')->>'bucket' = 'needs_review' and crt.claim(r, 'L3')->'reasons' ? 'never_verified'
     and crt.claim(r, 'L3')->'source'->>'class' = 'client_site' and crt.claim(r, 'L3')->'source'->>'host' = 'crt-l.example.test'
@@ -169,17 +177,21 @@ begin
     and crt.claim(r, 'L9')->'source'->>'class' = 'government'
     and crt.claim(r, 'L11')->'source'->>'class' = 'google'
     and crt.claim(r, 'L10')->'reasons' ? 'conflict_noted');
-  perform crt.ok('R7 structured phone precedence: a matching claim is a duplicate, a different one is a conflict',
-    crt.claim(r, 'L6')->'reasons' ? 'duplicates_structured_phone' and not crt.claim(r, 'L6')->'reasons' ? 'phone_differs_from_structured'
-    and crt.claim(r, 'L7')->'reasons' ? 'phone_differs_from_structured');
+  perform crt.ok('R7 structured phones: client-wide match is a duplicate, a location''s own number is that location''s, anything else only a potential mismatch',
+    crt.claim(r, 'L6')->'reasons' ? 'duplicates_structured_phone' and not crt.claim(r, 'L6')->'reasons' ? 'phone_potential_mismatch'
+    and crt.claim(r, 'L13')->'reasons' ? 'matches_location_phone' and not crt.claim(r, 'L13')->'reasons' ? 'phone_potential_mismatch'
+    and crt.claim(r, 'L13')->>'phone_location' = 'North office'
+    and crt.claim(r, 'L7')->'reasons' ? 'phone_potential_mismatch' and crt.claim(r, 'L7')->>'bucket' = 'needs_review'
+    and (crt.claim(r, 'L7')->>'legacy_usable')::boolean);
   perform crt.ok('R8 a legacy confirmation 120 days old is stale under the 90-day unclassified review',
     crt.claim(r, 'L8')->>'bucket' = 'stale' and crt.claim(r, 'L8')->'freshness'->>'state' = 'overdue'
     and (crt.claim(r, 'L8')->'freshness'->>'days_left')::int < 0);
   perform crt.ok('R9 totals add up and match the legacy rule',
     (t->>'stale')::int = 1 and (t->>'unverified')::int = 1 and (t->>'missing_source')::int = 1
-    and (t->>'needs_review')::int = 8 and (t->>'legacy_usable')::int = 9
+    and (t->>'needs_review')::int = 9 and (t->>'legacy_usable')::int = 10
     and (t->>'cited_while_unusable')::int = 1 and (t->>'published_while_unusable')::int = 1
-    and (select count(*) from jsonb_array_elements(r->'claims')) = 11);
+    and (select count(*) from jsonb_array_elements(r->'claims')) = 12
+    and (select bool_and(x->>'verification_state' = 'not_independently_verified') from jsonb_array_elements(r->'claims') x));
   perform crt.ok('R10 ordered by bucket: unverified before missing_source before stale before needs_review',
     r->'claims'->0->>'bucket' = 'unverified' and r->'claims'->1->>'bucket' = 'missing_source'
     and r->'claims'->2->>'bucket' = 'stale' and r->'claims'->3->>'bucket' = 'needs_review');
@@ -232,70 +244,102 @@ begin
     (claim_registry(crt.id('L'), (now() at time zone 'America/Chicago')::date + 400)->'totals'->>'stale')::int = 2);
 end $$;
 
--- ── V. Verification through the guard (a person) ────────────────────────────
--- verified_by is stamped from the session even when the caller names
--- someone else.
-update claims set kind = 'warranty_guarantee', verification_method = 'client_contract', verified_at = now(),
-                  verified_by = crt.id('other')
+-- ── V. The registry columns are locked (ChatGPT review 42aca6fb) ─────────────
+-- A signed-in teammate cannot set any of them, by any route; ordinary claim
+-- edits still work. The suites seed them as a superuser (platform
+-- administration), which the CRM never is.
+select crt.ok('V1 a signed-in teammate cannot classify, verify, date or supersede a claim, nor insert one so',
+  crt.err(format('update claims set kind = %L where id = %L', 'warranty_guarantee', crt.id('L1'))) = '42501'
+  and crt.err(format('update claims set verification_method = %L, verified_at = now() where id = %L', 'client_contract', crt.id('L1'))) = '42501'
+  and crt.err(format('update claims set verified_by = %L where id = %L', crt.id('member'), crt.id('L1'))) = '42501'
+  and crt.err(format('update claims set review_by = current_date + 30 where id = %L', crt.id('L1'))) = '42501'
+  and crt.err(format('update claims set superseded_by = %L where id = %L', crt.id('L1'), crt.id('L2'))) = '42501'
+  and crt.err(format($q$insert into claims (client_id, claim, status, source, kind) values (%L, 'x', 'sourced', 'y', 'offering')$q$, crt.id('L'))) = '42501'
+  and (select kind is null and verified_at is null and superseded_by is null from claims where id = crt.id('L1')));
+update claims set kind = null, review_by = null where id = crt.id('L1');
+update claims set source = 'https://www.osha.gov/fall-protection/general' where id = crt.id('L9');
+select crt.ok('V2 … a write that leaves them unchanged, and ordinary edits, still work and are recorded as the teammate''s',
+  (select source = 'https://www.osha.gov/fall-protection/general' from claims where id = crt.id('L9'))
+  and (select e.actor_kind = 'team' and e.actor_id = crt.id('member') and e.changes ? 'source'
+         from creative_governance_events e where e.subject_type = 'claim' and e.subject_id = crt.id('L9') order by e.id desc limit 1)
+  and not exists (select 1 from creative_governance_events e where e.subject_id = crt.id('L1')));
+reset role;
+set session authorization supabase_admin;
+update claims set kind = 'warranty_guarantee', verification_method = 'client_contract', verified_at = now(), verified_by = crt.id('other')
  where id = crt.id('L1');
+set session authorization authenticator;
+set local role authenticated;
 do $$
 declare c jsonb := crt.claim(crt.reg('L'), 'L1');
 begin
-  perform crt.ok('V1 verified_by is the signed-in teammate, never the caller''s value',
-    (select verified_by from claims where id = crt.id('L1')) = crt.id('member'));
-  perform crt.ok('V2 classified + authoritative method + current → verified',
-    c->>'bucket' = 'verified' and (c->'verification'->>'authoritative')::boolean
-    and c->'verification'->>'verified_by_name' = 'Crt Member' and (c->'freshness'->>'interval_days')::int = 180
-    and (c->'freshness'->>'days_left')::int between 179 and 180 and not c->'reasons' ? 'unclassified');
-  perform crt.ok('V3 history: one updated event with the diff and the session actor',
+  perform crt.ok('V3 classified + authoritative method + current → verified, independently',
+    c->>'bucket' = 'verified' and c->>'verification_state' = 'independently_verified'
+    and (c->'verification'->>'authoritative')::boolean and c->'verification'->>'verified_by_name' = 'Crt Other'
+    and (c->'freshness'->>'interval_days')::int = 180 and (c->'freshness'->>'days_left')::int between 179 and 180
+    and not c->'reasons' ? 'unclassified');
+  perform crt.ok('V4 history records the administrative seed as the superuser''s, with the diff',
     (select count(*) from creative_governance_events e where e.subject_type = 'claim' and e.subject_id = crt.id('L1')) = 1
-    and (select e.actor_kind = 'team' and e.actor_id = crt.id('member') and e.action = 'updated'
+    and (select e.actor_kind = 'superuser' and e.actor_id is null and e.action = 'updated'
                 and e.changes ? 'kind' and e.changes ? 'verified_by' and e.changes->'kind'->>'to' = 'warranty_guarantee'
            from creative_governance_events e where e.subject_type = 'claim' and e.subject_id = crt.id('L1')));
 end $$;
+reset role;
+set session authorization supabase_admin;
 update claims set review_by = (now() at time zone 'America/Chicago')::date + 5 where id = crt.id('L1');
-select crt.ok('V4 a document expiry earlier than the interval wins → due',
+set session authorization authenticator;
+set local role authenticated;
+select crt.ok('V5 a document expiry earlier than the interval wins → due',
   crt.claim(crt.reg('L'), 'L1')->>'bucket' = 'due' and (crt.claim(crt.reg('L'), 'L1')->'freshness'->>'days_left')::int = 5);
+reset role;
+set session authorization supabase_admin;
 update claims set verification_method = 'third_party', review_by = null where id = crt.id('L1');
-select crt.ok('V5 a method that is not authoritative for the kind → needs review',
-  crt.claim(crt.reg('L'), 'L1')->>'bucket' = 'needs_review' and crt.claim(crt.reg('L'), 'L1')->'reasons' ? 'method_not_authoritative');
+set session authorization authenticator;
+set local role authenticated;
+select crt.ok('V6 a method that is not authoritative for the kind → needs review, not independently verified',
+  crt.claim(crt.reg('L'), 'L1')->>'bucket' = 'needs_review' and crt.claim(crt.reg('L'), 'L1')->'reasons' ? 'method_not_authoritative'
+  and crt.claim(crt.reg('L'), 'L1')->>'verification_state' = 'not_independently_verified');
+reset role;
+set session authorization supabase_admin;
 update claims set verification_method = 'client_contract', verified_at = now() - interval '1 minute' where id = crt.id('L1');
+set session authorization authenticator;
+set local role authenticated;
 update claims set claim = 'Zqx 3-Year Workmanship Warranty (edited)' where id = crt.id('L1');
-select crt.ok('V6 a material change after verification asks for re-verification at once',
+select crt.ok('V7 a teammate''s material change after verification asks for re-verification at once',
   crt.claim(crt.reg('L'), 'L1')->>'bucket' = 'needs_review' and crt.claim(crt.reg('L'), 'L1')->'reasons' ? 'changed_since_verified');
-update claims set verified_at = null, verification_method = null where id = crt.id('L1');
-select crt.ok('V7 clearing a verification clears the verifier', (select verified_by from claims where id = crt.id('L1')) is null);
-select crt.ok('V8 a successor must be the same client''s claim',
+reset role;
+set session authorization supabase_admin;
+select crt.ok('V8 even the administrative path keeps a successor to the same client, and a verification whole',
   crt.err(format('update claims set superseded_by = %L where id = %L', crt.id('X1'), crt.id('L2'))) = '23503'
   and crt.err(format('update claims set superseded_by = %L where id = %L', crt.id('L2'), crt.id('L2'))) = '23514'
   and crt.err(format('update claims set kind = %L where id = %L', 'unclassified', crt.id('L2'))) = '23514'
   and crt.err(format('update claims set kind = %L where id = %L', 'made_up', crt.id('L2'))) = '23503'
-  and crt.err(format('update claims set verified_at = now() where id = %L', crt.id('L2'))) = '23514');
+  and crt.err(format('update claims set verified_at = now() where id = %L', crt.id('L2'))) = '23514'
+  and crt.err(format('update claims set verified_by = %L where id = %L', crt.id('member'), crt.id('L2'))) = '23514');
 update claims set superseded_by = crt.id('L1') where id = crt.id('L2');
+update claims set kind = 'service_description' where id = crt.id('L3');
+set session authorization authenticator;
+set local role authenticated;
 do $$
 declare r jsonb := crt.reg('L');
 begin
-  perform crt.ok('V9 superseded wins over every other bucket and the successor lists it',
+  perform crt.ok('V9 only a recorded superseded_by supersedes: it wins over every other bucket and the successor lists it',
     crt.claim(r, 'L2')->>'bucket' = 'superseded' and crt.claim(r, 'L2')->'reasons' ? 'cited_while_superseded'
     and crt.claim(r, 'L1')->'supersedes' = jsonb_build_array(crt.id('L2')::text));
 end $$;
-select crt.ok('V10 the approved post standing on a claim keeps its approval and hash',
+select crt.ok('V10 the approved post standing on a classified claim keeps its approval and hash',
   (select review_status = 'approved' and approved_hash = crt.get('hash_p3') from social_posts where id = crt.id('P3')));
-update claims set kind = 'service_description' where id = crt.id('L3');
-select crt.ok('V11 classifying the claim it stands on changes neither',
-  (select review_status = 'approved' and approved_hash = crt.get('hash_p3') from social_posts where id = crt.id('P3')));
-select crt.ok('V12 nobody writes history directly',
+select crt.ok('V11 nobody writes history directly',
   crt.err(format($q$insert into creative_governance_events (client_id, subject_type, subject_id, actor_kind, action)
                     values (%L, 'claim', %L, 'team', 'forged')$q$, crt.id('L'), crt.id('L1'))) = '42501'
   and crt.err('update creative_governance_events set note = ''x'' where subject_type = ''claim''') = '42501'
   and crt.err('delete from creative_governance_events where subject_type = ''claim''') = '42501');
-select crt.ok('V13 the review intervals are read-only to the team',
+select crt.ok('V12 the review intervals are read-only to the team',
   crt.err('update claim_review_intervals set review_days = 1') = '42501'
   and crt.err($q$insert into claim_review_intervals values ('x_kind', 'X', 1, '{}', 'x')$q$) = '42501'
   and (select count(*) from claim_review_intervals) = 9);
 reset role;
 set session authorization supabase_admin;
-select crt.ok('V14 the approval snapshot ignores the registry columns: recomputed, it still matches the approval',
+select crt.ok('V13 the approval snapshot ignores the registry columns: recomputed, it still matches the approval',
   (select approved_hash = social_post_hash(social_post_snapshot(social_posts)) from social_posts where id = crt.id('P3')));
 
 -- ── A. Who may call it, and who may set the columns ─────────────────────────
@@ -303,7 +347,7 @@ select crt.ok('V14 the approval snapshot ignores the registry columns: recompute
 set session authorization authenticator;
 set local role service_role;
 select set_config('request.jwt.claims', '{"role": "service_role"}', true);
-select crt.ok('A1 an Edge Function cannot classify, verify or supersede a claim',
+select crt.ok('A1 an Edge Function cannot classify, verify, date or supersede a claim',
   crt.err(format('update claims set kind = %L where id = %L', 'offering', crt.id('L8'))) = '42501'
   and crt.err(format('update claims set review_by = current_date where id = %L', crt.id('L8'))) = '42501'
   and crt.err(format($q$insert into claims (client_id, claim, status, source, kind) values (%L, 'x', 'sourced', 'y', 'offering')$q$, crt.id('L'))) = '42501');
@@ -375,7 +419,7 @@ set session authorization authenticator;
 set local role authenticated;
 select set_config('request.jwt.claims', '{"role": "authenticated", "sub": "c4700000-0000-4000-a000-000000000001"}', true);
 select crt.ok('B3 up again: the registry answers and the columns start empty',
-  (crt.reg('L')->'totals'->>'total')::int = 11 and (crt.reg('L')->'totals'->>'verified')::int = 0
+  (crt.reg('L')->'totals'->>'total')::int = 12 and (crt.reg('L')->'totals'->>'verified')::int = 0
   and crt.claim(crt.reg('L'), 'L2')->>'bucket' = 'unverified');
 reset role;
 set session authorization supabase_admin;

@@ -72,9 +72,15 @@ each claim on the Intelligence tab.
   - Nothing is verified until PR2 classifies and verifies it by a method
     authoritative for its kind (`claim_review_intervals`, ChatGPT D1 / D2).
   - A URL alone never verifies a claim.
-- **Who may set the new columns:** only a signed-in teammate
-  (`claims_registry_guard`), and `verified_by` is stamped from the session.
-  Edge Functions and the worker get 42501.
+- **The new columns are locked until PR2** (`claims_registry_guard`,
+  ChatGPT review `42aca6fb`). No signed-in teammate, Edge Function, worker or
+  PostgREST caller may set them (42501); only a superuser session can.
+  Citable under current rules (`legacy_usable`) is reported apart from
+  independently verified (`verification_state`).
+- **Indicators only:** an 8-character id in another claim's note is a
+  tentative `supersession_mentioned`. A phone matching an approved
+  `citation_locations` number is that location's; any other number is only a
+  potential mismatch.
 - **BHG:** one program per brand workspace (`claim_ids`). Shared and
   unassigned claims are labelled. A draft workspace's counts are null, never
   0.

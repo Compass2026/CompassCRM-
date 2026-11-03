@@ -2,6 +2,9 @@
 -- OS task 11454716, proposal ae049b45, ChatGPT decision cabb4e9a. See
 -- docs/claim-registry.md.
 --
+-- ChatGPT review 42aca6fb (Nov 3 2026): the new columns are locked to
+-- every application caller until PR2's controlled verification workflow.
+--
 -- Additive and read-only. It changes NO gate: what a post or draft may cite is
 -- still decided by social_post_grounding_problems / content_draft_problems
 -- (confirmed, or sourced with a source; never unverified), exactly as before.
@@ -15,14 +18,17 @@
 --      supersession columns. Nothing is backfilled: every column is NULL until
 --      PR2's owner-approved writers set it, and NULL reads as "not verified",
 --      never as verified.
---   3. claims_registry_guard: only a signed-in teammate (or the database
---      owner) may set those columns, and verified_by is stamped from the
---      session (task_actor()), never taken from the caller.
+--   3. claims_registry_guard: those columns are LOCKED. No signed-in
+--      teammate, Edge Function, worker or PostgREST caller may set them
+--      (42501); only a superuser session (platform administration, and the
+--      sandbox suites seeding fixtures) can. PR2 replaces this with guarded,
+--      audited, owner-approved writers tied to evidence.
 --   4. Claim history in the existing creative_governance_events store
 --      (subject_type 'claim'): append-only, written only by trigger, actor from
 --      the session, team read. A deleted claim keeps its history.
 --   5. claim_registry(client): STABLE, security invoker, team only. Per claim:
---      legacy usability (today's gate rule, unchanged), verification state,
+--      legacy usability (today's gate rule, unchanged) kept apart from
+--      independent verification (never true for a legacy confirmation),
 --      freshness, a bucket, source class, site-program scope from the approved
 --      brand workspaces, affected posts and drafts, and indicators. Per program
 --      and client: counts. Unknown is null, never 0.
@@ -112,42 +118,34 @@ create index claims_superseded_by_idx on claims (superseded_by) where superseded
 comment on column claims.kind is 'Claim kind (claim_review_intervals). NULL = unclassified: reviewed for priority, never verified (20261103220000).';
 comment on column claims.verification_method is 'How the claim was last verified. Authoritative only when listed for its kind in claim_review_intervals.';
 comment on column claims.verified_at is 'When a teammate last verified the claim against its evidence. NULL = never verified under the registry (a legacy confirmation is read from confirmed_on).';
-comment on column claims.verified_by is 'The teammate who verified it, stamped from the session by claims_registry_guard; never supplied by the caller.';
+comment on column claims.verified_by is 'The teammate who verified it. Locked in v1 (claims_registry_guard); PR2''s verification workflow stamps it from the session.';
 comment on column claims.review_by is 'An earlier review date than the kind''s interval (e.g. a credential document''s expiry). The earlier of the two wins.';
 comment on column claims.superseded_by is 'The same client''s claim that replaces this one. Read by the registry only; no gate reads it yet.';
 
--- ── 3. Who may set them ─────────────────────────────────────────────────────
--- A signed-in teammate or the database owner only; never the service role or
--- an Edge Function (classification and verification are owner-approved, PR2).
--- verified_by is the session's teammate whenever verified_at is set or
--- changed, and is cleared with it.
+-- ── 3. Locked until PR2 ─────────────────────────────────────────────────────
+-- A method token or a date is not verification: PR2 must tie each one to
+-- linked authoritative evidence and an authorized reviewer (ChatGPT decision
+-- 42aca6fb A). Until then no application caller may set these columns: not a
+-- signed-in teammate (the CRM's own forms, or a direct PostgREST write), not
+-- an Edge Function (service role), not the worker's SQL. Only a superuser
+-- session can, which the CRM never is. Every other claim edit is unaffected.
 create function claims_registry_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare
-  v_changed boolean;
 begin
   if tg_op = 'INSERT' then
-    v_changed := new.kind is not null or new.verification_method is not null or new.verified_at is not null
-              or new.verified_by is not null or new.review_by is not null or new.superseded_by is not null;
-  else
-    v_changed := (new.kind, new.verification_method, new.verified_at, new.verified_by, new.review_by, new.superseded_by)
-                 is distinct from (old.kind, old.verification_method, old.verified_at, old.verified_by, old.review_by, old.superseded_by);
-  end if;
-  if not v_changed or drafter_caller_is_superuser() then
+    if (new.kind, new.verification_method, new.verified_at, new.verified_by, new.review_by, new.superseded_by)
+       is not distinct from (null::text, null::text, null::timestamptz, null::uuid, null::date, null::uuid) then
+      return new;
+    end if;
+  elsif (new.kind, new.verification_method, new.verified_at, new.verified_by, new.review_by, new.superseded_by)
+        is not distinct from (old.kind, old.verification_method, old.verified_at, old.verified_by, old.review_by, old.superseded_by) then
     return new;
   end if;
-  if not post_caller_is_human() then
-    raise exception 'A claim''s classification, verification and review dates are set only by a signed-in teammate'
-      using errcode = 'insufficient_privilege';
+  if drafter_caller_is_superuser() then
+    return new;
   end if;
-  if new.verified_at is null then
-    new.verified_by := null;
-  elsif tg_op = 'INSERT' or new.verified_at is distinct from old.verified_at
-        or new.verification_method is distinct from old.verification_method
-        or new.verified_by is distinct from old.verified_by then
-    new.verified_by := task_actor();
-  end if;
-  return new;
+  raise exception 'A claim''s classification, verification, review date and successor are locked until the verification workflow is released'
+    using errcode = 'insufficient_privilege';
 end $$;
 revoke all on function claims_registry_guard() from public, anon, authenticated;
 create trigger claims_registry_guard before insert or update on claims
@@ -257,9 +255,18 @@ begin
       union all select ws.website_url from ws) x
      where claim_url_host(u) is not null
   ),
+  -- Client-wide numbers (the client and its brand workspaces) and each
+  -- approved location's own number (citation_locations). A claim's phone is
+  -- compared with both; a number on neither is a POTENTIAL mismatch only,
+  -- since other location-specific numbers are not evaluated yet.
   phones as (
     select claim_phone_digits(p) digits from (select c.phone p union all select ws.phone from ws) x
      where claim_phone_digits(p) is not null
+  ),
+  location_phones as (
+    select claim_phone_digits(l.phone) digits, l.label
+      from citation_locations l
+     where l.client_id = c.id and l.status = 'active' and claim_phone_digits(l.phone) is not null
   ),
   base as (
     select cl.*, iv.review_days, iv.authoritative_methods, coalesce(iv.kind, 'unclassified') eff_kind,
@@ -301,14 +308,15 @@ begin
            array(select ws.slug from ws where b.id = any (ws.claim_ids) order by ws.sort_key) programs,
            -- Another claim's note that says it supersedes this one by id: the
            -- whole id, or its first 8 characters as a word when they name only
-           -- this claim of the client. An indicator; superseded_by is the record.
+           -- this claim of the client. TENTATIVE (ChatGPT 42aca6fb C): never a
+           -- bucket, never a gate; only superseded_by marks a claim superseded.
            (select coalesce(jsonb_agg(o.id order by o.id), '[]') from claims o
              where o.client_id = b.client_id and o.id <> b.id
                and (coalesce(o.claim, '') || ' ' || coalesce(o.source, '')) ~* 'supersed'
                and ((coalesce(o.claim, '') || ' ' || coalesce(o.source, '')) ~* ('\m' || b.id::text || '\M')
                     or ((coalesce(o.claim, '') || ' ' || coalesce(o.source, '')) ~* ('\m' || left(b.id::text, 8) || '\M')
                         and (select count(*) from claims z where z.client_id = b.client_id
-                                and left(z.id::text, 8) = left(b.id::text, 8)) = 1))) named_superseded_by,
+                                and left(z.id::text, 8) = left(b.id::text, 8)) = 1))) supersession_mentioned_by,
            (select coalesce(jsonb_agg(o.id order by o.id), '[]') from claims o where o.superseded_by = b.id) supersedes,
            claim_phone_digits(b.claim) phone
       from base b
@@ -347,12 +355,16 @@ begin
              case when not b.legacy_usable and (jsonb_array_length(b.posts) + jsonb_array_length(b.drafts)) > 0 then 'cited_while_unusable' end,
              case when not b.legacy_usable and b.published_count > 0 then 'published_while_unusable' end,
              case when b.superseded_by is not null and (jsonb_array_length(b.posts) + jsonb_array_length(b.drafts)) > 0 then 'cited_while_superseded' end,
-             case when jsonb_array_length(b.named_superseded_by) > 0 then 'named_as_superseded' end,
+             case when jsonb_array_length(b.supersession_mentioned_by) > 0 then 'supersession_mentioned' end,
              case when (coalesce(b.claim, '') || ' ' || coalesce(b.source, '')) ~* '\m(conflict[a-z]*|contradict[a-z]*|inconsistent)\M' then 'conflict_noted' end,
              case when b.source_class = 'search_summary' then 'summary_source' end,
              case when b.phone is not null and exists (select 1 from phones p where p.digits = b.phone) then 'duplicates_structured_phone' end,
-             case when b.phone is not null and exists (select 1 from phones) and not exists (select 1 from phones p where p.digits = b.phone) then 'phone_differs_from_structured' end,
-             case when b.phone is not null and not exists (select 1 from phones) then 'phone_without_structured_record' end,
+             case when b.phone is not null and not exists (select 1 from phones p where p.digits = b.phone)
+                       and exists (select 1 from location_phones l where l.digits = b.phone) then 'matches_location_phone' end,
+             case when b.phone is not null and (exists (select 1 from phones) or exists (select 1 from location_phones))
+                       and not exists (select 1 from phones p where p.digits = b.phone)
+                       and not exists (select 1 from location_phones l where l.digits = b.phone) then 'phone_potential_mismatch' end,
+             case when b.phone is not null and not exists (select 1 from phones) and not exists (select 1 from location_phones) then 'phone_without_structured_record' end,
              case when v_has_ws and cardinality(b.programs) = 0 then 'unassigned_to_site' end,
              case when cardinality(b.programs) > 1 then 'shared_across_sites' end
            ], null) reasons,
@@ -366,7 +378,13 @@ begin
       from b3 b
   )
   select coalesce(jsonb_agg(jsonb_build_object(
+           -- Two separate questions (ChatGPT 42aca6fb B): may today's rules cite
+           -- it (legacy_usable, unchanged), and has it been independently
+           -- verified with an authoritative method (never true for a legacy
+           -- confirmation or a URL alone).
            'id', b.id, 'claim', b.claim, 'status', b.status, 'legacy_usable', b.legacy_usable,
+           'verification_state', case when b.verified_at is not null and b.authoritative then 'independently_verified'
+                                      else 'not_independently_verified' end,
            'bucket', b.bucket, 'reasons', to_jsonb(b.reasons),
            'kind', b.kind, 'kind_label', (select label from claim_review_intervals where kind = b.eff_kind),
            'recorded_at', b.created_at,
@@ -384,7 +402,8 @@ begin
               'programs', to_jsonb(b.programs),
               'shared', case when v_has_ws then cardinality(b.programs) > 1 end,
               'unassigned', case when v_has_ws then cardinality(b.programs) = 0 end),
-           'superseded_by', b.superseded_by, 'supersedes', b.supersedes, 'named_superseded_by', b.named_superseded_by,
+           'superseded_by', b.superseded_by, 'supersedes', b.supersedes, 'supersession_mentioned_by', b.supersession_mentioned_by,
+           'phone_location', (select l.label from location_phones l where l.digits = b.phone order by l.label limit 1),
            'affected', jsonb_build_object(
               'posts', b.posts, 'drafts', b.drafts, 'published', b.published_count,
               'total', jsonb_array_length(b.posts) + jsonb_array_length(b.drafts)))

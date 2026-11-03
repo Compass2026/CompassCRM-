@@ -3,8 +3,10 @@
 // tests/claim-registry.test.mjs directly, so no "@/" imports.
 //
 // The registry is read-only and changes no gate: what a post or draft may
-// cite is still today's rule (legacy_usable). Unknown figures arrive as null
-// and are shown as "—", never 0.
+// cite is still today's rule (legacy_usable). Whether a claim has been
+// independently verified is a separate answer (verification_state), and no
+// application caller can record a verification yet (PR2). Unknown figures
+// arrive as null and are shown as "—", never 0.
 
 export type ClaimBucket =
   | "superseded"
@@ -62,6 +64,7 @@ export type RegistryClaim = {
   claim: string;
   status: "confirmed" | "sourced" | "unverified";
   legacy_usable: boolean;
+  verification_state: "independently_verified" | "not_independently_verified";
   bucket: ClaimBucket;
   reasons: string[];
   kind: string | null;
@@ -90,7 +93,8 @@ export type RegistryClaim = {
   scope: { programs: string[]; shared: boolean | null; unassigned: boolean | null };
   superseded_by: string | null;
   supersedes: string[];
-  named_superseded_by: string[];
+  supersession_mentioned_by: string[];
+  phone_location: string | null;
   affected: { posts: RegistryPost[]; drafts: RegistryDraft[]; published: number; total: number };
 };
 
@@ -146,7 +150,7 @@ export const BUCKET_HELP: Record<ClaimBucket, string> = {
   missing_source: "Marked sourced with no source recorded, so today's rules refuse it.",
   stale: "Its last verification is past its review date.",
   needs_review:
-    "Usable today, but not yet verified for the registry: never verified, not classified, or verified by a method that does not settle this kind of fact.",
+    "Citable under current rules, but not independently verified: never verified, not classified, or verified by a method that does not settle this kind of fact.",
   due: "Verified; its review date is within 14 days.",
   verified: "Classified, verified by an authoritative method, and current.",
 };
@@ -198,17 +202,20 @@ export const REASON_TEXT: Record<string, string> = {
   due_soon: "Review due within 14 days.",
   never_verified: "Never verified by a teammate; a source URL alone is not verification.",
   unclassified: "Not classified yet, so it is reviewed every 90 days and never counted as verified.",
-  method_unrecorded: "Confirmed before the registry; how it was verified is not recorded.",
+  method_unrecorded: "Confirmed under the current rules; not independently verified (no method or evidence recorded).",
   method_not_authoritative: "Verified by a method that does not settle this kind of fact.",
   changed_since_verified: "Its text or source changed after it was verified.",
   cited_while_unusable: "Cited by content although today's rules would refuse it.",
   published_while_unusable: "Cited by published content although today's rules would refuse it.",
   cited_while_superseded: "Cited by content although it has been replaced.",
-  named_as_superseded: "Another claim's note says it supersedes this one.",
+  supersession_mentioned:
+    "Possibly superseded: another claim's note mentions replacing it. Tentative; not a recorded replacement.",
   conflict_noted: "Its text or source notes a conflict.",
   summary_source: "Its source is a search or listing summary: supporting evidence only.",
   duplicates_structured_phone: "Repeats the phone on the client's record; the record governs.",
-  phone_differs_from_structured: "Names a phone that differs from the client's record.",
+  matches_location_phone: "Matches the approved phone of one location; that location's record governs.",
+  phone_potential_mismatch:
+    "Potential mismatch: the phone is on neither the client-wide nor an approved location record. Other location numbers are not evaluated yet.",
   phone_without_structured_record: "Names a phone, and the client has none on record.",
   unassigned_to_site: "Assigned to no brand site, so no site may use it.",
   shared_across_sites: "Shared by more than one brand site.",
@@ -225,11 +232,28 @@ const SAID_BY_BUCKET: Partial<Record<ClaimBucket, string[]>> = {
 // Said by the verification and review lines (verificationLine, reviewLine).
 const SAID_BY_LINES = ["never_verified", "unclassified", "method_unrecorded"];
 
-export function reasonLines(c: Pick<RegistryClaim, "bucket" | "reasons">): string[] {
+export function reasonLines(c: Pick<RegistryClaim, "bucket" | "reasons"> & { phone_location?: string | null }): string[] {
   const said = [...(SAID_BY_BUCKET[c.bucket] ?? []), ...SAID_BY_LINES];
   // "By published content" says everything "by content" does, and more.
   if (c.reasons.includes("published_while_unusable")) said.push("cited_while_unusable");
-  return c.reasons.filter((r) => !said.includes(r)).map((r) => REASON_TEXT[r] ?? r);
+  return c.reasons
+    .filter((r) => !said.includes(r))
+    .map((r) =>
+      r === "matches_location_phone" && c.phone_location
+        ? `Matches the approved phone of the ${c.phone_location} location; that location's record governs.`
+        : (REASON_TEXT[r] ?? r),
+    );
+}
+
+/** The two separate answers the registry gives: today's citability and independent verification. */
+export function eligibilityLabels(c: Pick<RegistryClaim, "legacy_usable" | "verification_state">): {
+  citable: string;
+  verified: string;
+} {
+  return {
+    citable: c.legacy_usable ? "citable under current rules" : "not citable under current rules",
+    verified: c.verification_state === "independently_verified" ? "independently verified" : "not independently verified",
+  };
 }
 
 /** A count, or "—" when the registry could not know it. Never 0 for unknown. */

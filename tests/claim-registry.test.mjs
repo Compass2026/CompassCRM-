@@ -12,6 +12,7 @@ import {
   REASON_TEXT,
   SOURCE_CLASS_LABEL,
   affectedLinks,
+  eligibilityLabels,
   fig,
   groupByBucket,
   reasonLines,
@@ -28,6 +29,7 @@ function claim(over = {}) {
     claim: "Zqx 3-Year Workmanship Warranty",
     status: "confirmed",
     legacy_usable: true,
+    verification_state: "not_independently_verified",
     bucket: "needs_review",
     reasons: ["unclassified", "method_unrecorded"],
     kind: null,
@@ -50,7 +52,8 @@ function claim(over = {}) {
     scope: { programs: [], shared: null, unassigned: null },
     superseded_by: null,
     supersedes: [],
-    named_superseded_by: [],
+    supersession_mentioned_by: [],
+    phone_location: null,
     affected: { posts: [], drafts: [], published: 0, total: 0 },
     ...over,
   };
@@ -145,6 +148,25 @@ test("affected content: published first, CRM links, live link kept", () => {
       ["Blog draft: Zqx roofing question", "in review", "/clients/client-1/drafts/d1", null],
     ],
   );
+});
+
+test("citable under current rules and independent verification are two separate answers", () => {
+  assert.deepEqual(eligibilityLabels(claim()), { citable: "citable under current rules", verified: "not independently verified" });
+  assert.deepEqual(eligibilityLabels(claim({ legacy_usable: false })), {
+    citable: "not citable under current rules",
+    verified: "not independently verified",
+  });
+  assert.deepEqual(eligibilityLabels(claim({ verification_state: "independently_verified" })).verified, "independently verified");
+});
+
+test("supersession notes are tentative; location phones are not client-wide conflicts", () => {
+  assert.match(REASON_TEXT.supersession_mentioned, /Tentative; not a recorded replacement/);
+  assert.match(REASON_TEXT.phone_potential_mismatch, /^Potential mismatch: .*not evaluated yet/);
+  assert.equal(REASON_TEXT.named_as_superseded, undefined);
+  assert.equal(REASON_TEXT.phone_differs_from_structured, undefined);
+  assert.deepEqual(reasonLines(claim({ reasons: ["matches_location_phone"], phone_location: "North office" })), [
+    "Matches the approved phone of the North office location; that location's record governs.",
+  ]);
 });
 
 test("groups follow the bucket order and skip empty buckets", () => {

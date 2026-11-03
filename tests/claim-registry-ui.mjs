@@ -55,10 +55,14 @@ insert into claims (id, client_id, claim, status, source, confirmed_by, confirme
   ('${id(16)}', '${L}', 'Phone (555) 010-0001', 'sourced', 'https://www.bbb.example.test/profile/roofing', null, null, now() - interval '50 days'),
   ('${id(17)}', '${L}', 'Free roof inspections', 'confirmed', 'Confirmed by the owner on a call', 'owner@roofing.example.test', now() - interval '120 days', now() - interval '130 days'),
   ('${id(18)}', '${L}', 'A federal rule requires fall protection on roofs', 'sourced', 'https://www.osha.gov/fall-protection', null, null, now() - interval '20 days'),
+  ('${id(19)}', '${L}', 'North office line (555) 010-0777', 'sourced', 'https://www.google.com/maps?cid=456', null, null, now() - interval '20 days'),
+  ('${id(20)}', '${L}', 'Storm line (555) 010-0999', 'sourced', 'https://directory.example.test/roofing', null, null, now() - interval '20 days'),
   ('${id(21)}', '${M}', 'Safety audits for companies of all sizes', 'sourced', 'https://safety.training.example.test/audits', null, null, now() - interval '20 days'),
   ('${id(22)}', '${M}', 'Founded in 2014', 'sourced', 'https://safety.training.example.test/about', null, null, now() - interval '20 days'),
   ('${id(23)}', '${M}', '65+ years combined experience', 'sourced', 'https://training.example.test/', null, null, now() - interval '20 days'),
   ('${id(24)}', '${M}', 'Heavy equipment operator classes', 'sourced', 'https://heavy.training.example.test/', null, null, now() - interval '20 days');
+insert into citation_locations (id, client_id, label, business_name, address_line1, city, region, postal_code, phone)
+values ('${id(35)}', '${L}', 'North office', 'Fictional Roofing Co', '1 Example Way', 'Northtown', 'MO', '63000', '555.010.0777');
 insert into client_brand_workspaces (id, client_id, slug, name, website_url, phone, positioning, voice_tone, standing_cta, hard_rules,
                                      service_ids, claim_ids, asset_ids, status, approved_by, approved_at, created_at) values
   ('${id(31)}', '${M}', 'safety', 'Fictional Safety', 'https://safety.training.example.test', '555-010-0002', 'Safety', 'Clear', 'Call', array['Sourced claims only'],
@@ -169,14 +173,16 @@ try {
   );
   const tile = (prog, key) => card.locator(`[data-program="${prog}"] [data-count="${key}"] dd`).textContent();
   assert.equal(await tile("client", "verified"), "0");
-  assert.equal(await tile("client", "needs_review"), "5");
+  assert.equal(await tile("client", "needs_review"), "7");
   assert.equal(await tile("client", "unverified"), "1");
   assert.equal(await tile("client", "missing_source"), "1");
   assert.equal(await tile("client", "stale"), "1");
   ok("Counts per bucket; nothing reads as verified before it is classified and verified");
 
   const lifetime = card.locator(`[data-claim="${id(12)}"]`);
-  assert.match(await lifetime.textContent(), /not citable/);
+  assert.match(await lifetime.textContent(), /not citable under current rules/);
+  assert.equal(await card.locator('[data-verification="independently_verified"]').count(), 0);
+  assert.equal(await card.locator('[data-verification="not_independently_verified"]').count(), 10);
   const affected = await lifetime.locator('[aria-label="Cited by"] li').evaluateAll((els) =>
     els.map((li) => ({ text: li.textContent, href: li.querySelector("a")?.getAttribute("href"), published: li.getAttribute("data-affected") })));
   assert.equal(affected.length, 5);
@@ -184,10 +190,11 @@ try {
   assert.equal(affected[0].href, `/clients/${L}/social/${id(41)}`);
   assert.match(affected[0].text, /Business Profile post \(published .+\) · live/);
   assert.equal(affected.filter((a) => a.href?.includes("/drafts/") && /in review/.test(a.text)).length, 3);
-  assert.match(await lifetime.textContent(), /Another claim's note says it supersedes this one/);
-  assert.equal(await card.locator("[data-claim]", { hasText: "Another claim's note says it supersedes this one" }).count(), 1);
+  assert.match(await lifetime.textContent(), /Possibly superseded: .*Tentative; not a recorded replacement/);
+  assert.equal(await card.locator("[data-claim]", { hasText: "Possibly superseded" }).count(), 1);
+  assert.equal(await tile("client", "superseded"), "0");
   assert.match(await card.locator("[data-registry-cited-unusable]").textContent(), /1 claim is cited .* 1 of them by published content/);
-  ok("The unverified lifetime warranty links to its published post (and the live URL), a rejected post and three drafts in review");
+  ok("The unverified lifetime warranty links to its published post (and the live URL), a rejected post and three drafts in review; its supersession note is tentative");
 
   const three = card.locator(`[data-claim="${id(11)}"]`);
   assert.match(await three.textContent(), /Confirmed by owner@roofing\.example\.test on .+ · method not recorded/);
@@ -195,8 +202,12 @@ try {
   assert.match(await card.locator(`[data-claim="${id(13)}"]`).textContent(), /Never verified · recorded/);
   assert.match(await card.locator(`[data-claim="${id(13)}"] [data-source]`).textContent(), /Client's own website · roofing\.example\.test/);
   assert.match(await card.locator(`[data-claim="${id(16)}"]`).textContent(), /Repeats the phone on the client's record/);
+  assert.match(await card.locator(`[data-claim="${id(19)}"]`).textContent(), /Matches the approved phone of the North office location/);
+  assert.doesNotMatch(await card.locator(`[data-claim="${id(19)}"]`).textContent(), /Potential mismatch/);
+  assert.match(await card.locator(`[data-claim="${id(20)}"]`).textContent(), /Potential mismatch: .*not evaluated yet/);
+  assert.match(await three.textContent(), /citable under current rules.*not independently verified/);
   assert.match(await card.locator(`[data-claim="${id(17)}"]`).textContent(), /was due .+ days ago/);
-  ok("Verification, review rule, source class and the structured-phone indicator are shown per claim");
+  ok("Citable under current rules is kept apart from independent verification; the phone indicators respect location numbers");
   await shot("claim-registry-single-site", card);
 
   // ── Three brand sites ─────────────────────────────────────────────────────
