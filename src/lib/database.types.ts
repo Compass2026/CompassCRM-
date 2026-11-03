@@ -5000,6 +5000,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deliverable: string
+          delivery_override_id: string | null
           hold: string | null
           hold_reason: string | null
           id: string
@@ -5035,6 +5036,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deliverable: string
+          delivery_override_id?: string | null
           hold?: string | null
           hold_reason?: string | null
           id?: string
@@ -5070,6 +5072,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deliverable?: string
+          delivery_override_id?: string | null
           hold?: string | null
           hold_reason?: string | null
           id?: string
@@ -5930,6 +5933,12 @@ export type Database = {
         Row: { client_id: string; effective_month: string; id: string; recorded_at: string; recorded_by: string | null; source_ref: string; standard_id: string }
         Insert: { client_id: string; effective_month: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref: string; standard_id: string }
         Update: { client_id?: string; effective_month?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string }
+        Relationships: []
+      }
+      client_delivery_overrides: {
+        Row: { allocation: string; client_id: string; deliverable: string; effective_week: string; id: string; recorded_at: string; recorded_by: string | null; source_ref: string; weekly_total: number | null }
+        Insert: { allocation: string; client_id: string; deliverable: string; effective_week: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref: string; weekly_total?: number | null }
+        Update: { allocation?: string; client_id?: string; deliverable?: string; effective_week?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; weekly_total?: number | null }
         Relationships: []
       }
       client_weekly_delivery_standards: {
