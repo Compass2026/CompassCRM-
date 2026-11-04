@@ -343,3 +343,9 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_delive
 # per-purpose owner verdicts, places, three brand sites, scoped input, the
 # fingerprint's core section, access, no writes, BHG-shaped timing, rollback.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_core_scope.test.sql" -o /dev/null
+# 20261104160000: a weekly blog slot's presets bind the draft. A preset
+# keyword, intent or service refuses another (slot_keyword_mismatch /
+# slot_plan_mismatch); the slot's topic and notes become the draft's, the
+# standard's placeholders do not; a slot without presets opens exactly as
+# with the previous definition; the rollback (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_blog_slot_presets.test.sql" -o /dev/null

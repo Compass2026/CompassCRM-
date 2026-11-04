@@ -1864,6 +1864,13 @@ the brand voice (`get_brand_profile`), sourced facts only.
    task is bound to that slot: if the open is refused because the slot is
    blocked, delivered or linked, already drafted or gone, do not retry with
    another slot — set the task `blocked` with the refusal as its note.
+   **When the named slot already has a keyword** (and topic, intent,
+   service, notes) set by a teammate, use exactly that keyword, its topic,
+   `search_intent` and `service_id`, and follow the slot's notes as the
+   brief's request. The open refuses a different keyword
+   (`slot_keyword_mismatch`) or intent / service (`slot_plan_mismatch`); if
+   refused, set the task `blocked` with the refusal — never pick another
+   keyword.
 2. **Open the draft** (Tom, Oct 4 2026: the weekly blog goes through review;
    nothing is filed or published by you). Call `content-drafter`
    `{"mode": "open", "task_id": "<blog_post task id>", "topic": "<the
