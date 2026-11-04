@@ -343,3 +343,8 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_delive
 # per-purpose owner verdicts, places, three brand sites, scoped input, the
 # fingerprint's core section, access, no writes, BHG-shaped timing, rollback.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_core_scope.test.sql" -o /dev/null
+# 20261103220000: the claims registry, read-only: buckets, freshness, source
+# classes, contradiction and structured-phone indicators, affected posts and
+# drafts, three brand sites, the column guard (person / function / worker),
+# append-only history, approval hashes unchanged, access, no writes, rollback.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/claim_registry.test.sql" -o /dev/null
