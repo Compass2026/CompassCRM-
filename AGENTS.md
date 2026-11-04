@@ -50,7 +50,50 @@ changes no existing task; open legacy tasks are labelled only by the reviewed
 `supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
 before deploying the code.
 
-## Claims Registry v1 (P1.1a, November 3, 2026; `20261103220000` written, **not applied**)
+## Controlled Claims Verification, PR2a (P1.1b, November 4, 2026; `20261104200000` written, **not applied**; `claim-evidence` not deployed)
+
+See `docs/claim-registry.md` §Verification and
+`docs/proposals/pr2-controlled-claims-verification.md` (ChatGPT architecture
+review, Executive OS 11454716).
+
+- **Only the verification owner decides.** That is Tom, in
+  `claim_verification_authorities`, which only a reviewed migration writes;
+  the migration seeds team member `d73e1bf1` if it exists, is an admin and has a
+  sign-in. Not another admin, Claude, an Edge Function, the worker or an
+  Executive OS instruction. `claim_reviewer_authority()` = a human session
+  (`post_caller_is_human()`) + an active owner row + still an admin.
+- **Writers:** `claim_classify`, `claim_verify` (`verify` | `review`) and
+  `claim_revoke`. Each takes the registry's `fingerprint` and `review_id` back,
+  so a stale screen gets `CV409`. **None writes `claims.status`, `claim` or
+  `source`**, so content eligibility, drafting, approval and publishing are
+  unchanged; the migration hash-pins every other reader of `claims`. Verifying
+  an `unverified` claim is refused; confirming it is PR2b.
+- **The ledger:** `claim_reviews`, append-only, with reviewer, authority, time
+  and txid stamped by trigger, plus a `creative_governance_events` row per
+  decision. The `claims` registry columns plus `review_id` are its projection:
+  `claims_registry_guard` refuses any change that does not match a review
+  written in this transaction by this caller. **A claim with any review history
+  cannot be deleted** (23001); retire / supersede are PR2b.
+- **Evidence:**
+  - Files are private, content-addressed (`<client>/<sha256>.<ext>`) in the
+    `claim-evidence` bucket, which has a team read policy and no write policy.
+  - The `claim-evidence` Edge Function (team JWT) signs a one-time upload,
+    re-hashes the stored bytes and sniffs the type, then calls
+    `claim_evidence_register` (service role only). A mismatch is deleted.
+  - A registered file is never replaced or deleted (a trigger on
+    `storage.objects`).
+  - Pages and listings count only as uploaded captures (URL + capture date,
+    30 days). A Drive link or live URL is never verification.
+  - Phone claims verify against an approved `citation_locations` row on the
+    claim's own brand site, with its identity version pinned by SHA-256.
+- **Integrity:** registry v2 drops a verified claim to *needs review* when its
+  file, location identity, fingerprint or brand-site set changes.
+  Verification columns with no ledger entry read `verification_unrecorded`,
+  never verified.
+- **Rollback** refuses once any review or evidence exists (history is kept).
+  Fix forward.
+
+## Claims Registry v1 (P1.1a, November 3, 2026; `20261103220000` applied November 4, 2026)
 
 See `docs/claim-registry.md`. COMPASS-2027-ROADMAP W1: a read-only view of
 each claim on the Intelligence tab.
@@ -72,9 +115,10 @@ each claim on the Intelligence tab.
   - Nothing is verified until PR2 classifies and verifies it by a method
     authoritative for its kind (`claim_review_intervals`, ChatGPT D1 / D2).
   - A URL alone never verifies a claim.
-- **The new columns are locked until PR2** (`claims_registry_guard`,
-  ChatGPT review `42aca6fb`). No signed-in teammate, Edge Function, worker or
-  PostgREST caller may set them (42501); only a superuser session can.
+- **The new columns were locked until PR2** (`claims_registry_guard`,
+  ChatGPT review `42aca6fb`): no signed-in teammate, Edge Function, worker or
+  PostgREST caller may set them (42501); only a superuser session can. PR2a
+  (`20261104200000`, above) replaces the lock with the owner's writers.
   Citable under current rules (`legacy_usable`) is reported apart from
   independently verified (`verification_state`).
 - **Indicators only:** an 8-character id in another claim's note is a

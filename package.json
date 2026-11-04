@@ -18,6 +18,7 @@
     "test:blog-drafter-ui": "UI_SPEC=tests/blog-drafter-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-use-ui": "UI_SPEC=tests/creative-use-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:claim-registry-ui": "UI_SPEC=tests/claim-registry-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
+    "test:claim-verification-ui": "UI_SPEC=tests/claim-verification-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-preview-ui": "UI_SPEC=tests/creative-preview-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:creative-post-ui": "UI_SPEC=tests/creative-post-ui.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",
     "test:publisher": "UI_SPEC=tests/publisher-integration.mjs UI_FIXTURES=posts_ui_fixtures.sql scripts/test-tasks-ui.sh",

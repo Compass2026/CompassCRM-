@@ -9,7 +9,9 @@ import {
   SOURCE_CLASS_LABEL,
   STATUS_LABEL,
   affectedLinks,
+  decisionLine,
   eligibilityLabels,
+  evidenceLine,
   fig,
   groupByBucket,
   reasonLines,
@@ -20,6 +22,8 @@ import {
   type RegistryProgram,
 } from "@/lib/claim-registry";
 import { cn } from "@/lib/utils";
+import { ClaimReviewControls } from "@/components/claim-review-controls";
+import { ClaimEvidencePanel } from "@/components/claim-evidence-panel";
 
 const toneStyles = {
   ok: "bg-green-100 text-green-800 border-green-200",
@@ -27,8 +31,11 @@ const toneStyles = {
   bad: "bg-red-100 text-red-800 border-red-200",
 } as const;
 
-// The Claims registry section of the Intelligence tab (20261103220000).
-// Read-only: no button here changes a claim, a post or a draft.
+// The Claims registry section of the Intelligence tab (20261103220000; the
+// verification controls since 20261104200000). For the team it is read-only.
+// The verification owner gets Classify / Verify / Re-review / Revoke on each
+// row; none of them changes a claim's status, a post or a draft. Evidence
+// files are a separate card any teammate may upload to.
 export function ClaimRegistrySection({
   clientId,
   registry,
@@ -38,21 +45,24 @@ export function ClaimRegistrySection({
   registry: ClaimRegistry | null;
   error: string | null;
 }) {
+  const canReview = !!registry?.viewer?.can_review;
   return (
+    <>
     <Card data-card="claim-registry">
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle>Claims registry</CardTitle>
-          <Badge variant="outline" className="ml-auto">
-            read-only
+          <Badge variant="outline" className="ml-auto" data-registry-mode={canReview ? "owner" : "read-only"}>
+            {canReview ? "you are the verification owner" : "read-only"}
           </Badge>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
           What every claim stands on: its source, who verified it and when, when it is due for review, which brand
-          site may use it, and which posts and drafts cite it. This view changes nothing. Posts and drafts still
-          follow today&apos;s rule: a confirmed claim, or a sourced one with a source, and never an unverified one.
-          &ldquo;Citable under current rules&rdquo; is that rule; &ldquo;independently verified&rdquo; needs a recorded
-          method and evidence, which the verification workflow will add.
+          site may use it, and which posts and drafts cite it. Posts and drafts still follow today&apos;s rule: a
+          confirmed claim, or a sourced one with a source, and never an unverified one. &ldquo;Citable under current
+          rules&rdquo; is that rule; &ldquo;independently verified&rdquo; is a decision by the verification owner
+          {registry?.verification_owner ? ` (${registry.verification_owner})` : ""}, pinned to uploaded evidence.
+          Verifying never changes what content may cite.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -103,7 +113,13 @@ export function ClaimRegistrySection({
                   </summary>
                   <ul className="divide-y border-t">
                     {g.claims.map((c) => (
-                      <ClaimRow key={c.id} clientId={clientId} claim={c} programs={registry.programs} />
+                      <ClaimRow
+                        key={c.id}
+                        clientId={clientId}
+                        claim={c}
+                        programs={registry.programs}
+                        registry={canReview ? registry : null}
+                      />
                     ))}
                   </ul>
                 </details>
@@ -118,6 +134,22 @@ export function ClaimRegistrySection({
         )}
       </CardContent>
     </Card>
+    {registry && (
+      <Card data-card="claim-evidence">
+        <CardHeader>
+          <CardTitle>Claim evidence files</CardTitle>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            Contracts, manufacturer documents, signed confirmations and captures of pages or listings, kept privately
+            and identified by their SHA-256. Any teammate may upload; only the verification owner cites a file in a
+            decision. A registered file is never replaced or deleted.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <ClaimEvidencePanel clientId={clientId} evidence={registry.evidence ?? []} today={registry.today} />
+        </CardContent>
+      </Card>
+    )}
+    </>
   );
 }
 
@@ -159,12 +191,18 @@ function ClaimRow({
   clientId,
   claim: c,
   programs,
+  registry,
 }: {
   clientId: string;
   claim: RegistryClaim;
   programs: RegistryProgram[];
+  /** Given only to the verification owner: the controls need the options. */
+  registry: ClaimRegistry | null;
 }) {
   const links = affectedLinks(clientId, c);
+  const evidence = evidenceLine(c);
+  const decision = decisionLine(c);
+  const record = c.verification.record;
   const eligibility = eligibilityLabels(c);
   const reasons = reasonLines(c);
   const siteName = (slug: string) => programs.find((p) => p.slug === slug)?.name ?? slug;
@@ -202,6 +240,17 @@ function ClaimRow({
       <p className="text-xs text-muted-foreground">
         {verificationLine(c)} · {reviewLine(c)}
       </p>
+      {evidence && (
+        <p className="text-xs break-all text-navy-900" data-evidence-line>
+          {evidence}
+          {record?.excerpt ? <span className="text-muted-foreground"> · &ldquo;{record.excerpt}&rdquo;</span> : null}
+        </p>
+      )}
+      {decision && (
+        <p className="text-xs text-muted-foreground" data-decision-line>
+          {decision}
+        </p>
+      )}
       {(c.scope.programs.length > 0 || c.scope.unassigned) && (
         <p className="flex flex-wrap gap-1.5 text-xs">
           {c.scope.programs.map((s) => (
@@ -239,6 +288,7 @@ function ClaimRow({
           ))}
         </ul>
       )}
+      {registry && <ClaimReviewControls clientId={clientId} claim={c} registry={registry} />}
     </li>
   );
 }

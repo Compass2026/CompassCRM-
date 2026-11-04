@@ -145,7 +145,7 @@ do $$
 declare r jsonb := crt.reg('L'); c jsonb; t jsonb := r->'totals';
 begin
   perform crt.ok('R1 one program for a single-site client, nothing classified, nothing verified',
-    r->>'version' = 'claim-registry/v1' and not (r->>'multi_site')::boolean
+    r->>'version' = 'claim-registry/v2' and not (r->>'multi_site')::boolean
     and jsonb_array_length(r->'programs') = 1 and r->'programs'->0->>'scope' = 'client'
     and (r->'programs'->0->'counts'->>'total')::int = 14 and (t->>'total')::int = 14
     and (t->>'verified')::int = 0 and t->'unassigned' = 'null'::jsonb and t->'shared' = 'null'::jsonb);
@@ -287,9 +287,12 @@ set local role authenticated;
 do $$
 declare c jsonb := crt.claim(crt.reg('L'), 'L1');
 begin
-  perform crt.ok('V3 classified + authoritative method + current → verified, independently',
-    c->>'bucket' = 'verified' and c->>'verification_state' = 'independently_verified'
-    and (c->'verification'->>'authoritative')::boolean and c->'verification'->>'verified_by_name' = 'Crt Other'
+  -- Since 20261104200000 a verification is independent only with a ledger
+  -- decision (claim_reviews); columns set any other way are flagged.
+  perform crt.ok('V3 classified + authoritative method set outside the ledger → needs review, not independently verified',
+    c->>'bucket' = 'needs_review' and c->>'verification_state' = 'not_independently_verified'
+    and c->'reasons' ? 'verification_unrecorded'
+    and not (c->'verification'->>'authoritative')::boolean and c->'verification'->>'verified_by_name' = 'Crt Other'
     and (c->'freshness'->>'interval_days')::int = 180 and (c->'freshness'->>'days_left')::int between 179 and 180
     and not c->'reasons' ? 'unclassified');
   perform crt.ok('V4 history records the administrative seed as the superuser''s, with the diff',
@@ -303,8 +306,8 @@ set session authorization supabase_admin;
 update claims set review_by = (now() at time zone 'America/Chicago')::date + 5 where id = crt.id('L1');
 set session authorization authenticator;
 set local role authenticated;
-select crt.ok('V5 a document expiry earlier than the interval wins → due',
-  crt.claim(crt.reg('L'), 'L1')->>'bucket' = 'due' and (crt.claim(crt.reg('L'), 'L1')->'freshness'->>'days_left')::int = 5);
+select crt.ok('V5 a document expiry earlier than the interval wins the review date',
+  crt.claim(crt.reg('L'), 'L1')->>'bucket' = 'needs_review' and (crt.claim(crt.reg('L'), 'L1')->'freshness'->>'days_left')::int = 5);
 reset role;
 set session authorization supabase_admin;
 update claims set verification_method = 'third_party', review_by = null where id = crt.id('L1');
@@ -421,6 +424,8 @@ set session authorization supabase_admin;
 
 -- ── B. Down, then up ────────────────────────────────────────────────────────
 select crt.save('events_before_down', (select count(*)::text from creative_governance_events where subject_type = 'claim'));
+-- 20261104200000 sits on top: down it first (nothing is recorded in this suite).
+\ir ../../rollback/20261104200000_claim_verification.down.sql
 \ir ../../rollback/20261103220000_claim_registry.down.sql
 select crt.ok('B1 down: the registry, its columns, triggers and intervals are gone; the history stays',
   to_regprocedure('public.claim_registry(uuid,date)') is null and to_regclass('public.claim_review_intervals') is null
@@ -430,6 +435,7 @@ select crt.ok('B1 down: the registry, its columns, triggers and intervals are go
 select crt.ok('B2 after down, today''s gate rule is untouched (the post standing on L3 is still approved)',
   (select review_status = 'approved' and approved_hash = crt.get('hash_p3') from social_posts where id = crt.id('P3')));
 \ir ../../migrations/20261103220000_claim_registry.sql
+\ir ../../migrations/20261104200000_claim_verification.sql
 set session authorization authenticator;
 set local role authenticated;
 select set_config('request.jwt.claims', '{"role": "authenticated", "sub": "c4700000-0000-4000-a000-000000000001"}', true);

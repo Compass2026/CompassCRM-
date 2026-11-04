@@ -122,11 +122,15 @@ jobs:
           sudo install /tmp/postgrest /usr/local/bin/postgrest
       - name: Read the claims registry on the Intelligence tab with fictional clients
         run: CHROME_PATH=/usr/bin/google-chrome SCREENSHOTS=docs/screenshots/claim-registry npm run test:claim-registry-ui
+      - name: Upload evidence and verify a claim as the verification owner, with fictional clients
+        run: CHROME_PATH=/usr/bin/google-chrome SCREENSHOTS=docs/screenshots/claim-verification npm run test:claim-verification-ui
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: claim-registry-screenshots
-          path: docs/screenshots/claim-registry/
+          path: |
+            docs/screenshots/claim-registry/
+            docs/screenshots/claim-verification/
 
   client-growth-ui:
     runs-on: ubuntu-latest

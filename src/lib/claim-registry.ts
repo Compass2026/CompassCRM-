@@ -1,12 +1,13 @@
-// Claims Registry v1 (20261103220000): the shape claim_registry(client)
-// returns and the words the Intelligence tab uses for it. Pure; imported by
-// tests/claim-registry.test.mjs directly, so no "@/" imports.
+// Claims Registry (20261103220000, v2 since 20261104200000): the shape
+// claim_registry(client) returns and the words the Intelligence tab uses for
+// it. Pure; imported by tests/claim-registry.test.mjs and
+// tests/claim-verification.test.mjs directly, so no "@/" imports.
 //
-// The registry is read-only and changes no gate: what a post or draft may
-// cite is still today's rule (legacy_usable). Whether a claim has been
-// independently verified is a separate answer (verification_state), and no
-// application caller can record a verification yet (PR2). Unknown figures
-// arrive as null and are shown as "—", never 0.
+// The registry changes no gate: what a post or draft may cite is still
+// today's rule (legacy_usable). Whether a claim has been independently
+// verified is a separate answer (verification_state): a decision by the
+// verification owner in the ledger (claim_reviews), pinned to evidence.
+// Unknown figures arrive as null and are shown as "—", never 0.
 
 export type ClaimBucket =
   | "superseded"
@@ -59,6 +60,56 @@ export type RegistryDraft = {
   published_at: string | null;
 };
 
+export type EvidenceType = "document" | "capture";
+
+export type RegistryEvidence = {
+  id: string;
+  type: EvidenceType;
+  label: string;
+  sha256: string;
+  size_bytes: number;
+  mime_type: string;
+  original_name: string | null;
+  source_url: string | null;
+  captured_on: string | null;
+  uploaded_by_name: string | null;
+  created_at: string;
+  intact: boolean;
+};
+
+export type RegistryLocation = {
+  id: string;
+  label: string;
+  phone: string;
+  identity_version: number;
+  workspace_slug: string | null;
+};
+
+export type ReviewAction = "classify" | "verify" | "review" | "revoke";
+
+export type VerificationRecord = {
+  review_id: string;
+  action: "verify" | "review";
+  at: string;
+  excerpt: string;
+  observed_on: string;
+  expires_on: string | null;
+  confirmed_by_contact: string | null;
+  note: string | null;
+  evidence: {
+    id: string;
+    type: EvidenceType;
+    label: string;
+    sha256: string;
+    mime_type: string;
+    size_bytes: number;
+    source_url: string | null;
+    captured_on: string | null;
+    intact: boolean;
+  } | null;
+  location: { id: string; label: string; identity_version: number; intact: boolean } | null;
+};
+
 export type RegistryClaim = {
   id: string;
   claim: string;
@@ -70,6 +121,10 @@ export type RegistryClaim = {
   kind: string | null;
   kind_label: string;
   recorded_at: string;
+  /** Pass both back to a writer: a changed claim refuses a stale screen (CV409). */
+  fingerprint: string;
+  review_id: string | null;
+  review_count: number;
   verification: {
     method: string | null;
     authoritative: boolean | null;
@@ -81,6 +136,8 @@ export type RegistryClaim = {
     confirmed_on: string | null;
     last_verified_at: string | null;
     changed_since_verified: boolean;
+    record: VerificationRecord | null;
+    last_decision: { action: ReviewAction; at: string; by: string | null; reason: string | null; note: string | null } | null;
   };
   freshness: {
     state: "never_verified" | "overdue" | "due" | "current";
@@ -111,12 +168,17 @@ export type RegistryProgram = {
 };
 
 export type ClaimRegistry = {
-  version: "claim-registry/v1";
+  version: "claim-registry/v1" | "claim-registry/v2";
   client_id: string;
   client: string;
   as_of: string;
   today: string;
   multi_site: boolean;
+  /** A display hint: the writers decide for themselves. */
+  viewer: { can_review: boolean };
+  verification_owner: string | null;
+  evidence: RegistryEvidence[];
+  locations: RegistryLocation[];
   intervals: { kind: string; label: string; review_days: number; authoritative_methods: string[] }[];
   totals: RegistryCounts & { published_while_unusable: number; unassigned: number | null };
   programs: RegistryProgram[];
@@ -152,7 +214,7 @@ export const BUCKET_HELP: Record<ClaimBucket, string> = {
   needs_review:
     "Citable under current rules, but not independently verified: never verified, not classified, or verified by a method that does not settle this kind of fact.",
   due: "Verified; its review date is within 14 days.",
-  verified: "Classified, verified by an authoritative method, and current.",
+  verified: "Classified, verified by the verification owner with evidence that settles this kind of fact, and current.",
 };
 
 export const BUCKET_TONE: Record<ClaimBucket, "bad" | "warn" | "ok"> = {
@@ -205,6 +267,11 @@ export const REASON_TEXT: Record<string, string> = {
   method_unrecorded: "Confirmed under the current rules; not independently verified (no method or evidence recorded).",
   method_not_authoritative: "Verified by a method that does not settle this kind of fact.",
   changed_since_verified: "Its text or source changed after it was verified.",
+  verification_unrecorded: "Verification fields were set outside the verification record: not independent verification.",
+  evidence_file_changed: "The evidence file is missing or was replaced after it was verified.",
+  evidence_location_changed: "The location record changed, or was archived, after it was verified.",
+  scope_changed_since_verified: "Its brand sites changed after it was verified.",
+  evidence_expired: "The evidence's own expiry has passed.",
   cited_while_unusable: "Cited by content although today's rules would refuse it.",
   published_while_unusable: "Cited by published content although today's rules would refuse it.",
   cited_while_superseded: "Cited by content although it has been replaced.",
@@ -367,3 +434,120 @@ export const COUNT_TILES: { key: keyof RegistryCounts; label: string; tone: "bad
   { key: "missing_source", label: "Missing source", tone: "bad" },
   { key: "superseded", label: "Superseded", tone: "bad" },
 ];
+
+// ── Verification (20261104200000) ────────────────────────────────────────────
+
+/** What each method needs, as claim_verify enforces it. */
+export const METHOD_EVIDENCE: Record<string, { needs: "document" | "capture" | "location"; help: string }> = {
+  client_contract: { needs: "document", help: "The signed contract or agreement, uploaded." },
+  manufacturer_document: { needs: "document", help: "The manufacturer's warranty or product document, uploaded." },
+  client_confirmation: {
+    needs: "document",
+    help: "A signed form or saved email from the client, uploaded, and the name of the contact who confirmed it.",
+  },
+  client_published: {
+    needs: "capture",
+    help: "A capture (PDF or screenshot) of the client's own page for this claim's site, from the last 30 days.",
+  },
+  platform_record: { needs: "capture", help: "A capture of the listing (for example the Google profile), from the last 30 days." },
+  issuer_record: {
+    needs: "capture",
+    help: "A capture of the issuer's record (licence lookup, certification registry), from the last 30 days.",
+  },
+  structured_record: { needs: "location", help: "An approved location record whose phone the claim states." },
+};
+
+export const EVIDENCE_TYPE_LABEL: Record<EvidenceType, string> = {
+  document: "Document",
+  capture: "Page capture",
+};
+
+export const DECISION_LABEL: Record<ReviewAction, string> = {
+  classify: "Classified",
+  verify: "Verified",
+  review: "Re-reviewed",
+  revoke: "Verification revoked",
+};
+
+/** "a1b2c3d4…9f0e": enough to compare by eye; the full hash goes in a title. */
+export function shortHash(sha: string): string {
+  return sha.length > 12 ? `${sha.slice(0, 8)}…${sha.slice(-4)}` : sha;
+}
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** The evidence a verification stands on, in one line, or null. */
+export function evidenceLine(c: Pick<RegistryClaim, "verification">): string | null {
+  const r = c.verification.record;
+  if (!r) return null;
+  if (r.evidence) {
+    const e = r.evidence;
+    return `Evidence: ${e.label} · ${EVIDENCE_TYPE_LABEL[e.type].toLowerCase()} · SHA-256 ${shortHash(e.sha256)}${e.intact ? "" : " · file changed"}`;
+  }
+  if (r.location) {
+    return `Evidence: ${r.location.label} location record, version ${r.location.identity_version}${r.location.intact ? "" : " · record changed"}`;
+  }
+  return null;
+}
+
+/** The last decision when it is not a verification in force (a classification or a revocation). */
+export function decisionLine(c: Pick<RegistryClaim, "verification">): string | null {
+  const d = c.verification.last_decision;
+  if (!d || d.action === "verify" || d.action === "review") return null;
+  const who = d.by ?? "a former teammate";
+  return `${DECISION_LABEL[d.action]} by ${who} on ${formatDay(d.at)}${d.reason ? `: ${d.reason}` : ""}`;
+}
+
+export type ReviewOptions = {
+  canClassify: boolean;
+  canVerify: boolean;
+  canReview: boolean;
+  canRevoke: boolean;
+  /** Why verifying is not offered, when it is not. */
+  verifyBlocked: string | null;
+  methods: string[];
+};
+
+/** What the verification owner may do with a claim (the writers check again). */
+export function reviewOptions(registry: Pick<ClaimRegistry, "intervals">, c: RegistryClaim): ReviewOptions {
+  const superseded = c.superseded_by !== null;
+  const inForce = c.verification.record !== null;
+  const methods = c.kind ? (registry.intervals.find((i) => i.kind === c.kind)?.authoritative_methods ?? []) : [];
+  let verifyBlocked: string | null = null;
+  if (superseded) verifyBlocked = "A superseded claim is not reviewed.";
+  else if (!c.kind) verifyBlocked = "Classify it before verifying it.";
+  else if (c.status === "unverified")
+    verifyBlocked = "An unverified claim is confirmed in the next release, with a review of the content it affects.";
+  return {
+    canClassify: !superseded,
+    canVerify: verifyBlocked === null && !inForce,
+    canReview: !superseded && inForce,
+    canRevoke: !superseded && inForce,
+    verifyBlocked,
+    methods,
+  };
+}
+
+/** The evidence a method may cite: intact files of the right type, or approved locations on the claim's sites. */
+export function evidenceChoices(
+  registry: Pick<ClaimRegistry, "evidence" | "locations">,
+  c: Pick<RegistryClaim, "scope">,
+  method: string,
+): { id: string; label: string }[] {
+  const needs = METHOD_EVIDENCE[method]?.needs;
+  if (needs === "location") {
+    return registry.locations
+      .filter((l) => l.workspace_slug === null || c.scope.programs.includes(l.workspace_slug))
+      .map((l) => ({ id: l.id, label: `${l.label} · ${l.phone} · version ${l.identity_version}` }));
+  }
+  return registry.evidence
+    .filter((e) => e.type === needs && e.intact)
+    .map((e) => ({
+      id: e.id,
+      label: `${e.label} · ${shortHash(e.sha256)}${e.captured_on ? ` · captured ${formatDay(e.captured_on)}` : ""}`,
+    }));
+}
