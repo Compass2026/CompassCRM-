@@ -1867,7 +1867,8 @@ the brand voice (`get_brand_profile`), sourced facts only.
    **When the named slot already has a keyword** (and topic, intent,
    service, notes) set by a teammate, use exactly that keyword, its topic,
    `search_intent` and `service_id`, and follow the slot's notes as the
-   brief's request. The open refuses a different keyword
+   brief's request (text a teammate added after the standard's "Opened by
+   the … delivery standard" line is the request; the line itself is not). The open refuses a different keyword
    (`slot_keyword_mismatch`) or intent / service (`slot_plan_mismatch`); if
    refused, set the task `blocked` with the refusal — never pick another
    keyword.

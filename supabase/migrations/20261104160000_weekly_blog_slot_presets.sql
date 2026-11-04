@@ -20,9 +20,13 @@
 --            standard's placeholder ('Blog · <site> · week of <Mon D, YYYY>',
 --            or the monthly standard's 'Blog · <site> · <Month YYYY>').
 --   notes    the slot's notes become the draft's request_note (the brief's
---            request) unless empty or the standard's placeholder ('Opened by
---            the weekly / monthly delivery standard (vN). …'); otherwise
---            'The weekly blog post.' as before.
+--            request). The standard's placeholder ('Opened by the weekly /
+--            monthly delivery standard (vN). Set the topic, intent, service
+--            and keyword before drafting.') is not a request: a note that is
+--            only the placeholder, or empty, gives 'The weekly blog post.' as
+--            before; a note that starts with it keeps what a teammate wrote
+--            after it (the placeholder removed, trimmed); any other note is
+--            kept verbatim.
 -- The checks run after the reuse and done checks and before the keyword
 -- gates, so a retry still returns the task's draft and a refusal names the
 -- slot's plan. A slot without presets, and a task that names no slot, open
@@ -64,15 +68,20 @@ $b$],
           nullif(p->>'keyword_id', '')::uuid, p->>'search_intent', nullif(p->>'service_id', '')::uuid, t.id,
           'The weekly blog post.')
 $a$, $b$  -- slot_presets_v1: a named slot's own topic and notes, unless they are the standard's placeholders.
+  -- Notes that begin with the standard's placeholder keep what a teammate wrote after it.
   values (t.client_id, i.id, 'blog',
           left(case when v_slot is not null and nullif(btrim(coalesce(i.topic, '')), '') is not null
                          and i.topic !~ '^Blog · .+ · (week of [A-Z][a-z]{2} [0-9]{1,2}, [0-9]{4}|[A-Z][a-z]+ [0-9]{4})$'
                     then i.topic else p->>'topic' end, 200),
           coalesce(v_kw, nullif(btrim(coalesce(p->>'primary_keyword', '')), '')),
           nullif(p->>'keyword_id', '')::uuid, p->>'search_intent', nullif(p->>'service_id', '')::uuid, t.id,
-          case when v_slot is not null and nullif(btrim(coalesce(i.notes, '')), '') is not null
-                    and i.notes !~ '^Opened by the (weekly|monthly) delivery standard \(v[0-9]+\)\.'
-               then i.notes else 'The weekly blog post.' end)
+          case when v_slot is null then 'The weekly blog post.'
+               when coalesce(i.notes, '') ~ '^\s*Opened by the (weekly|monthly) delivery standard \(v[0-9]+\)\.'
+                 then coalesce(nullif(btrim(regexp_replace(i.notes,
+                        '^\s*Opened by the (weekly|monthly) delivery standard \(v[0-9]+\)\.(\s*Set the topic, intent, service and keyword before drafting\.)?',
+                        ''), E' \t\r\n'), ''), 'The weekly blog post.')
+               when nullif(btrim(coalesce(i.notes, '')), '') is not null then i.notes
+               else 'The weekly blog post.' end)
 $b$]];
   definition text := pg_get_functiondef(target::regprocedure);
   i int;

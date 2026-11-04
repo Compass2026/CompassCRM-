@@ -5,6 +5,10 @@
 --   none   the standard's placeholders, no presets (the control)
 --   inc    planned like full; opened only to replay the incident on the
 --          previous definition
+--   exact / pfx / pfx2 / pfx3 / own   notes only: exactly the standard's
+--          placeholder, the placeholder followed by a teammate's request
+--          (weekly, monthly, first sentence only), and a note of the
+--          teammate's own that merely mentions the placeholder
 -- N1 runs the rollback inside a savepoint, opens the control with the
 -- previous definition, keeps the result in a psql variable, then opens it
 -- again with the new definition and compares.
@@ -41,9 +45,15 @@ insert into services (id, client_id, name, status, page_url) values
 insert into keywords (id, client_id, keyword, service_id, is_active, intent) values
   (sp.id('kDrain'), sp.id('P'), 'slow drain cleaning', sp.id('sDrain'), true, 'informational'),
   (sp.id('kHeater'), sp.id('P'), 'water heater repair', sp.id('sHeater'), true, 'informational'),
-  (sp.id('kSnake'), sp.id('P'), 'drain snake rental', sp.id('sDrain'), true, 'commercial');
+  (sp.id('kSnake'), sp.id('P'), 'drain snake rental', sp.id('sDrain'), true, 'commercial'),
+  (sp.id('kTank'), sp.id('P'), 'tankless water heater', sp.id('sHeater'), true, 'informational'),
+  (sp.id('kAnode'), sp.id('P'), 'water heater anode rod', sp.id('sHeater'), true, 'informational'),
+  (sp.id('kFlush'), sp.id('P'), 'water heater flush', sp.id('sHeater'), true, 'informational'),
+  (sp.id('kClog'), sp.id('P'), 'kitchen sink clog', sp.id('sDrain'), true, 'informational'),
+  (sp.id('kRoot'), sp.id('P'), 'tree roots in sewer line', sp.id('sDrain'), true, 'informational');
 insert into core_keyword_lists (id, client_id, version, status, keyword_ids, source_ref, approved_by, approved_at)
-values (sp.id('list'), sp.id('P'), 1, 'approved', array[sp.id('kDrain'), sp.id('kHeater'), sp.id('kSnake')], 'test fixture',
+values (sp.id('list'), sp.id('P'), 1, 'approved', array[sp.id('kDrain'), sp.id('kHeater'), sp.id('kSnake'), sp.id('kTank'), sp.id('kAnode'),
+                                   sp.id('kFlush'), sp.id('kClog'), sp.id('kRoot')], 'test fixture',
         (select id from team_members limit 1), now());
 insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, planned_date, notes) values
   (sp.id('full'), sp.id('P'), '2026-11-09', 'blog', 'educational', 'How often should a slow drain be cleared?', 'informational',
@@ -55,11 +65,21 @@ insert into content_plan_items (id, client_id, week_start, deliverable, purpose,
    null, null, '2026-11-13',
    'Opened by the monthly delivery standard (v1). Set the topic, intent, service and keyword before drafting.'),
   (sp.id('inc'), sp.id('P'), '2026-11-09', 'blog', 'educational', 'Is a slow drain a sign of a bigger problem?', 'informational',
-   sp.id('kDrain'), sp.id('sDrain'), '2026-11-14', 'Planned by a teammate for the drain cleaning page.');
+   sp.id('kDrain'), sp.id('sDrain'), '2026-11-14', 'Planned by a teammate for the drain cleaning page.'),
+  (sp.id('exact'), sp.id('P'), '2026-11-16', 'blog', 'educational', 'Blog · SP Planned · week of Nov 16, 2026', null, null, null, '2026-11-17',
+   E'Opened by the weekly delivery standard (v2). Set the topic, intent, service and keyword before drafting.  \n'),
+  (sp.id('pfx'), sp.id('P'), '2026-11-16', 'blog', 'educational', 'Blog · SP Planned · week of Nov 16, 2026', null, null, null, '2026-11-18',
+   'Opened by the weekly delivery standard (v2). Set the topic, intent, service and keyword before drafting. Mention the 24-hour line and link the water heater page.'),
+  (sp.id('pfx2'), sp.id('P'), '2026-11-16', 'blog', 'educational', 'Blog · SP Planned · November 2026', null, null, null, '2026-11-19',
+   E'Opened by the monthly delivery standard (v1). Set the topic, intent, service and keyword before drafting.\n\n  Write for landlords, not homeowners.  \n'),
+  (sp.id('pfx3'), sp.id('P'), '2026-11-16', 'blog', 'educational', 'Blog · SP Planned · week of Nov 16, 2026', null, null, null, '2026-11-20',
+   'Opened by the weekly delivery standard (v3). Focus on tankless units.'),
+  (sp.id('own'), sp.id('P'), '2026-11-16', 'blog', 'educational', 'Blog · SP Planned · week of Nov 16, 2026', null, null, null, '2026-11-21',
+   E'  Use the customer story from the October call.\nOpened by the weekly delivery standard (v2). is quoted here, not a prefix.');
 insert into tasks (id, client_id, title, owner, status, key, due_date, notes)
 select sp.id('t.' || s), sp.id('P'), 'Blog slot for the client: core keyword, sourced article, team review', 'CLAUDE', 'open', 'blog_post',
        '2026-11-11', 'plan_item:' || sp.id(s) || ' (weekly delivery standard). Choose a keyword of the client''s approved core list and its service.'
-from unnest(array['full', 'kw', 'none', 'inc']) s;
+from unnest(array['full', 'kw', 'none', 'inc', 'exact', 'pfx', 'pfx2', 'pfx3', 'own']) s;
 set local session_replication_role = origin;
 
 select sp.ok('M0 the migration replaced the 20261027191343 definition and kept its core keyword gate',
@@ -81,6 +101,12 @@ insert into sp.saved values ('P4', sp.open_weekly('full', 'kDrain', 'sDrain', 'i
 insert into sp.saved values ('P5', sp.open_weekly('full', 'kHeater', 'sHeater', 'informational', 'Retry on another keyword'));
 insert into sp.saved values ('K1', to_jsonb(sp.try('kw', 'kDrain', 'sDrain', 'informational', 'Slow drains')));
 insert into sp.saved values ('K2', sp.open_weekly('kw', 'kSnake', 'sDrain', 'commercial', 'Renting a drain snake or calling a plumber?'));
+insert into sp.saved values
+  ('R1', sp.open_weekly('exact', 'kTank', 'sHeater', 'informational', 'Is a tankless water heater worth it?')),
+  ('R2', sp.open_weekly('pfx', 'kAnode', 'sHeater', 'informational', 'When to replace a water heater anode rod')),
+  ('R3', sp.open_weekly('pfx2', 'kFlush', 'sHeater', 'informational', 'How often to flush a water heater')),
+  ('R4', sp.open_weekly('pfx3', 'kClog', 'sDrain', 'informational', 'Clearing a kitchen sink clog')),
+  ('R5', sp.open_weekly('own', 'kRoot', 'sDrain', 'informational', 'Tree roots in a sewer line'));
 reset role;
 reset session authorization;
 
@@ -115,6 +141,22 @@ begin
     and sp.draft('kw')->>'request_note' = 'The weekly blog post.'
     and sp.draft('kw')->>'search_intent' = 'commercial' and sp.draft('kw')->>'keyword_id' = sp.id('kSnake')::text
     and sp.draft('kw')->>'service_id' = sp.id('sDrain')::text);
+  perform sp.ok('R1 a note that is exactly the standard''s placeholder (trailing whitespace too) is no request: the standard request note',
+    sp.draft('exact')->>'request_note' = 'The weekly blog post.'
+    and sp.draft('exact')->>'topic' = 'Is a tankless water heater worth it?' and sp.draft('exact')->>'keyword_id' = sp.id('kTank')::text);
+  perform sp.ok('R2 the placeholder followed by a teammate''s request: the request survives, the placeholder removed',
+    sp.draft('pfx')->>'request_note' = 'Mention the 24-hour line and link the water heater page.'
+    and sp.draft('pfx')->>'topic' = 'When to replace a water heater anode rod');
+  perform sp.ok('R3 the monthly placeholder, then the request after blank lines: the request alone, trimmed',
+    sp.draft('pfx2')->>'request_note' = 'Write for landlords, not homeowners.');
+  perform sp.ok('R4 only the placeholder''s first sentence, then the request: the request alone',
+    sp.draft('pfx3')->>'request_note' = 'Focus on tankless units.');
+  perform sp.ok('R5 a note of the teammate''s own is kept verbatim, even when it quotes the placeholder mid-text',
+    sp.draft('own')->>'request_note' = E'  Use the customer story from the October call.\nOpened by the weekly delivery standard (v2). is quoted here, not a prefix.');
+  perform sp.ok('R6 every note-only open still bound its slot and drafted for the payload''s core keyword',
+    (select bool_and(sp.draft(x)->>'plan_item_id' = sp.id(x)::text and (sp.draft(x)->>'core_link')::boolean
+                     and s->(case x when 'exact' then 'R1' when 'pfx' then 'R2' when 'pfx2' then 'R3' when 'pfx3' then 'R4' else 'R5' end)->>'reused' = 'false')
+       from unnest(array['exact', 'pfx', 'pfx2', 'pfx3', 'own']) x));
 end $$;
 
 -- ── N1: a slot without presets opens exactly as before ─────────────────────

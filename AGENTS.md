@@ -2480,7 +2480,10 @@ go-live: `docs/blog-drafter.md`.
   intent / service differs from the slot's (`slot_plan_mismatch`). The
   draft takes the slot's topic and its notes as `request_note` unless they
   are the standard's placeholders (`Blog · <site> · week of …` /
-  `Opened by the … delivery standard (vN). …`). Slots without presets and
+  `Opened by the … delivery standard (vN). Set the topic, …`); a note that
+  starts with the placeholder keeps the teammate's text after it (prefix
+  removed, trimmed), so instructions appended to the default note reach
+  the brief. Slots without presets and
   tasks naming no slot open as before. md5-guarded edit; rollback in
   `supabase/rollback/`.
 - **Binding claims (20261015175146, applied Oct 15 2026).**
