@@ -348,3 +348,9 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_cor
 # drafts, three brand sites, the column guard (person / function / worker),
 # append-only history, approval hashes unchanged, access, no writes, rollback.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/claim_registry.test.sql" -o /dev/null
+# 20261104160000: a weekly blog slot's presets bind the draft. A preset
+# keyword, intent or service refuses another (slot_keyword_mismatch /
+# slot_plan_mismatch); the slot's topic and notes become the draft's, the
+# standard's placeholders do not; a slot without presets opens exactly as
+# with the previous definition; the rollback (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_blog_slot_presets.test.sql" -o /dev/null

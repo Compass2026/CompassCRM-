@@ -2471,6 +2471,21 @@ go-live: `docs/blog-drafter.md`.
     until approval closes it with the final row.
   - Reopening returns the final row to `draft`: the slot stops counting, and
     Billing's count is unchanged.
+- **Slot presets bind the weekly draft (20261104160000, written, not
+  applied; sandbox suite `weekly_blog_slot_presets.test.sql`).** After the
+  Nov 4 2026 incident (drafts on the worker's own keywords in slots a
+  teammate had planned), when a `blog_post` task names its slot,
+  `content_draft_open_weekly` refuses a payload whose keyword differs from
+  the slot's `keyword_id` (`slot_keyword_mismatch`, naming it) or whose
+  intent / service differs from the slot's (`slot_plan_mismatch`). The
+  draft takes the slot's topic and its notes as `request_note` unless they
+  are the standard's placeholders (`Blog · <site> · week of …` /
+  `Opened by the … delivery standard (vN). Set the topic, …`); a note that
+  starts with the placeholder keeps the teammate's text after it (prefix
+  removed, trimmed), so instructions appended to the default note reach
+  the brief. Slots without presets and
+  tasks naming no slot open as before. md5-guarded edit; rollback in
+  `supabase/rollback/`.
 - **Binding claims (20261015175146, applied Oct 15 2026).**
   After the Logic Solar incident (the Routine overwrote an operator's
   claimed draft), a writer claims a draft with
