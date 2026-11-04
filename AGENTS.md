@@ -50,6 +50,41 @@ changes no existing task; open legacy tasks are labelled only by the reviewed
 `supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
 before deploying the code.
 
+## Claims Registry v1 (P1.1a, November 3, 2026; `20261103220000` written, **not applied**)
+
+See `docs/claim-registry.md`. COMPASS-2027-ROADMAP W1: a read-only view of
+each claim on the Intelligence tab.
+
+- **What it shows:** source class and link, who verified it and when, its
+  review interval and due date, the brand site that may use it, the posts and
+  drafts that cite it, and contradiction indicators.
+- **Reuses existing pieces.** `claims` gains nullable `kind`,
+  `verification_method`, `verified_at`, `verified_by`, `review_by` and
+  `superseded_by`, all empty (no backfill). History goes to the existing
+  `creative_governance_events` with `subject_type = 'claim'`.
+- **Changes no gate.** Citable is still "confirmed, or sourced with a
+  source". The registry reports this rule as `legacy_usable`. The migration
+  hashes every reader of `claims` before and after and refuses to commit if
+  any changed.
+- **`claim_registry(client)`:** STABLE, security invoker, team only. Each
+  claim falls in one bucket (superseded / unverified / missing_source /
+  stale / needs_review / due / verified).
+  - Nothing is verified until PR2 classifies and verifies it by a method
+    authoritative for its kind (`claim_review_intervals`, ChatGPT D1 / D2).
+  - A URL alone never verifies a claim.
+- **The new columns are locked until PR2** (`claims_registry_guard`,
+  ChatGPT review `42aca6fb`). No signed-in teammate, Edge Function, worker or
+  PostgREST caller may set them (42501); only a superuser session can.
+  Citable under current rules (`legacy_usable`) is reported apart from
+  independently verified (`verification_state`).
+- **Indicators only:** an 8-character id in another claim's note is a
+  tentative `supersession_mentioned`. A phone matching an approved
+  `citation_locations` number (active, `approved_at` and `approved_by` set) is
+  that location's; any other number is only a potential mismatch.
+- **BHG:** one program per brand workspace (`claim_ids`). Shared and
+  unassigned claims are labelled. A draft workspace's counts are null, never
+  0.
+
 ## Core 50-aware Authority input (P1.3, October 30, 2026; `20261030190000` written, **not applied**; engine `authority-v1.5` not deployed)
 
 See `docs/authority-core-scope.md`. Authority discovery reads only each site
