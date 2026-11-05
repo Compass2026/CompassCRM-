@@ -136,6 +136,8 @@ export type RegistryClaim = {
     confirmed_on: string | null;
     last_verified_at: string | null;
     changed_since_verified: boolean;
+    /** Its status changed after the verification in force (registry v2, 20261104200000). */
+    status_changed_since_verified?: boolean;
     record: VerificationRecord | null;
     last_decision: { action: ReviewAction; at: string; by: string | null; reason: string | null; note: string | null } | null;
   };
@@ -271,6 +273,8 @@ export const REASON_TEXT: Record<string, string> = {
   evidence_file_changed: "The evidence file is missing or was replaced after it was verified.",
   evidence_location_changed: "The location record changed, or was archived, after it was verified.",
   scope_changed_since_verified: "Its brand sites changed after it was verified.",
+  status_changed_since_verified:
+    "Its status changed after it was verified: the verification needs a fresh review, even if the status was put back.",
   evidence_expired: "The evidence's own expiry has passed.",
   cited_while_unusable: "Cited by content although today's rules would refuse it.",
   published_while_unusable: "Cited by published content although today's rules would refuse it.",
@@ -525,7 +529,8 @@ export function reviewOptions(registry: Pick<ClaimRegistry, "intervals">, c: Reg
   return {
     canClassify: !superseded,
     canVerify: verifyBlocked === null && !inForce,
-    canReview: !superseded && inForce,
+    // The database refuses to re-review an unverified claim (D4).
+    canReview: !superseded && inForce && c.status !== "unverified",
     canRevoke: !superseded && inForce,
     verifyBlocked,
     methods,

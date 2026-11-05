@@ -313,12 +313,27 @@ create trigger claim_evidence_guard before insert or update or delete on claim_e
 create trigger claim_evidence_no_truncate before truncate on claim_evidence
   for each statement execute function claim_evidence_guard();
 
--- A registered evidence file is never renamed, re-versioned (overwritten) or
--- deleted. An unregistered upload may be deleted (the function removes a file
--- whose bytes do not match its address).
+-- A registered evidence file is never renamed, re-versioned (overwritten),
+-- archived, marked deleted, given a second copy at its name, or deleted. An
+-- unregistered upload may be deleted (the function removes a file whose bytes
+-- do not match its address). Hosted Storage can version objects
+-- (is_versioned, is_delete_marker, archived_at: an overwrite or delete in a
+-- versioned bucket archives the old row and inserts a new one), so those are
+-- read through to_jsonb and refused too; buckets without those columns behave
+-- exactly as before. Other buckets are untouched.
 create function claim_evidence_objects_immutable() returns trigger
 language plpgsql security definer set search_path = public, pg_catalog as $$
+declare
+  o jsonb := case when tg_op <> 'INSERT' then to_jsonb(old) end;
+  n jsonb := case when tg_op <> 'DELETE' then to_jsonb(new) end;
 begin
+  if tg_op = 'INSERT' then
+    if new.bucket_id = 'claim-evidence' and exists (select 1 from public.claim_evidence e where e.storage_path = new.name) then
+      raise exception 'A registered claim evidence file is never replaced; new bytes have a new content address'
+        using errcode = 'insufficient_privilege';
+    end if;
+    return new;
+  end if;
   if tg_op = 'DELETE' then
     if old.bucket_id = 'claim-evidence' and exists (select 1 from public.claim_evidence e where e.storage_path = old.name) then
       raise exception 'Registered claim evidence is never deleted' using errcode = 'insufficient_privilege';
@@ -327,16 +342,73 @@ begin
   end if;
   if (old.bucket_id = 'claim-evidence' or new.bucket_id = 'claim-evidence')
      and (new.bucket_id is distinct from old.bucket_id or new.name is distinct from old.name
-          or ((to_jsonb(old)->>'version') is not null
-              and (to_jsonb(new)->>'version') is distinct from (to_jsonb(old)->>'version'))) then
+          or ((o->>'version') is not null and (n->>'version') is distinct from (o->>'version'))) then
     raise exception 'Claim evidence files are immutable; new bytes have a new content address'
+      using errcode = 'insufficient_privilege';
+  end if;
+  if old.bucket_id = 'claim-evidence'
+     and exists (select 1 from public.claim_evidence e where e.storage_path = old.name or e.object_id = old.id)
+     and ((n->'archived_at') is distinct from (o->'archived_at')
+          or (n->'is_delete_marker') is distinct from (o->'is_delete_marker')
+          or (n->'is_versioned') is distinct from (o->'is_versioned')
+          or (n->'metadata'->'size') is distinct from (o->'metadata'->'size')
+          or (n->'metadata'->'mimetype') is distinct from (o->'metadata'->'mimetype')
+          or (n->'metadata'->'eTag') is distinct from (o->'metadata'->'eTag')) then
+    raise exception 'Registered claim evidence is never archived, marked deleted or changed'
       using errcode = 'insufficient_privilege';
   end if;
   return new;
 end $$;
 revoke all on function claim_evidence_objects_immutable() from public, anon, authenticated, service_role;
-create trigger claim_evidence_objects_immutable before update or delete on storage.objects
+create trigger claim_evidence_objects_immutable before insert or update or delete on storage.objects
   for each row execute function claim_evidence_objects_immutable();
+
+-- The claim-evidence bucket's settings are fixed: private, its size and type
+-- limits, and (on hosted Storage) unversioned with no lifecycle rule, so no
+-- Storage API call (service role or otherwise) can turn on versioning,
+-- archival or expiry for registered evidence. Enabling versioning is
+-- irreversible on Supabase. Storage's own maintenance role and platform
+-- administration may still migrate the row. Other buckets are untouched.
+create function claim_evidence_bucket_guard() returns trigger
+language plpgsql security definer set search_path = public, pg_catalog as $$
+declare
+  k text;
+begin
+  if coalesce(old.id, '') <> 'claim-evidence' and coalesce(new.id, '') <> 'claim-evidence' then
+    return coalesce(new, old);
+  end if;
+  if current_user = 'supabase_storage_admin' or drafter_caller_is_superuser() then
+    return coalesce(new, old);
+  end if;
+  if tg_op = 'DELETE' then
+    raise exception 'The claim-evidence bucket is kept' using errcode = 'insufficient_privilege';
+  end if;
+  foreach k in array array['id', 'name', 'public', 'file_size_limit', 'allowed_mime_types', 'type',
+                           'versioning_status', 'lifecycle_configuration', 'lifecycle_configuration_generation'] loop
+    if (to_jsonb(new)->k) is distinct from (to_jsonb(old)->k) then
+      raise exception 'The claim-evidence bucket''s settings are fixed (%): evidence stays private, unversioned and unexpired', k
+        using errcode = 'insufficient_privilege';
+    end if;
+  end loop;
+  return new;
+end $$;
+revoke all on function claim_evidence_bucket_guard() from public, anon, authenticated, service_role;
+create trigger claim_evidence_bucket_guard before update or delete on storage.buckets
+  for each row execute function claim_evidence_bucket_guard();
+
+-- The bucket as registration requires it: private, and on hosted Storage
+-- unversioned with no lifecycle rule. Any other state fails closed: nothing
+-- new registers. Files already registered stay protected by the objects
+-- trigger whatever the bucket's settings. Internal (the register and the
+-- migration's verify block).
+create function claim_evidence_bucket_sound() returns boolean
+language sql stable security definer set search_path = public, pg_catalog as $$
+  select exists (select 1 from storage.buckets b
+                  where b.id = 'claim-evidence' and not coalesce(b.public, false)
+                    and coalesce(to_jsonb(b)->>'versioning_status', 'DISABLED') = 'DISABLED'
+                    and coalesce(to_jsonb(b)->'lifecycle_configuration', 'null'::jsonb) = 'null'::jsonb)
+$$;
+revoke all on function claim_evidence_bucket_sound() from public, anon, authenticated, service_role;
 
 alter table claim_evidence enable row level security;
 create policy "team reads claim evidence" on claim_evidence for select to authenticated using ((select is_team()));
@@ -391,10 +463,21 @@ begin
   if p_evidence_type = 'capture' and (p_source_url is null or p_captured_on is null or p_captured_on > v_today) then
     raise exception 'A capture needs the page''s URL and the day it was captured (not in the future)' using errcode = 'invalid_parameter_value';
   end if;
+  if not claim_evidence_bucket_sound() then
+    raise exception 'The claim-evidence bucket is not private and unversioned; nothing is registered'
+      using errcode = 'insufficient_privilege';
+  end if;
   select ob.id, to_jsonb(ob)->>'version' as version, ob.metadata into o
-    from storage.objects ob where ob.bucket_id = 'claim-evidence' and ob.name = p_storage_path;
+    from storage.objects ob
+   where ob.bucket_id = 'claim-evidence' and ob.name = p_storage_path
+     and (to_jsonb(ob)->>'archived_at') is null and not coalesce((to_jsonb(ob)->>'is_delete_marker')::boolean, false)
+     and not coalesce((to_jsonb(ob)->>'is_versioned')::boolean, false);
   if o.id is null then
     raise exception 'No evidence file is stored at %', p_storage_path using errcode = 'no_data_found';
+  end if;
+  if (select count(*) from storage.objects ob where ob.bucket_id = 'claim-evidence' and ob.name = p_storage_path) <> 1 then
+    raise exception 'More than one stored object is named %; nothing is registered', p_storage_path
+      using errcode = 'invalid_parameter_value';
   end if;
   if (o.metadata->>'size') is distinct from p_size::text then
     raise exception 'The stored file is % bytes, not %', coalesce(o.metadata->>'size', 'of unknown size'), p_size
@@ -418,13 +501,20 @@ revoke all on function claim_evidence_register(uuid, text, text, bigint, text, t
 grant execute on function claim_evidence_register(uuid, text, text, bigint, text, text, text, text, text, date) to service_role;
 
 -- Is a registered file still exactly what was registered: the same storage
--- row at its content address, the same version and size.
+-- row at its content address, the same version, size and eTag, still the
+-- current object (not archived, not a delete marker, the only row at that
+-- name).
 create function claim_evidence_intact(e claim_evidence) returns boolean
 language sql stable set search_path = public, pg_temp as $$
   select exists (select 1 from storage.objects o
                   where o.id = e.object_id and o.bucket_id = 'claim-evidence' and o.name = e.storage_path
                     and (to_jsonb(o)->>'version') is not distinct from e.object_version
-                    and (o.metadata->>'size') is not distinct from e.size_bytes::text)
+                    and (o.metadata->>'size') is not distinct from e.size_bytes::text
+                    and (o.metadata->>'eTag') is not distinct from e.object_etag
+                    and (to_jsonb(o)->>'archived_at') is null
+                    and not coalesce((to_jsonb(o)->>'is_delete_marker')::boolean, false))
+     and not exists (select 1 from storage.objects x
+                      where x.bucket_id = 'claim-evidence' and x.name = e.storage_path and x.id <> e.object_id)
 $$;
 revoke all on function claim_evidence_intact(claim_evidence) from public, anon;
 grant execute on function claim_evidence_intact(claim_evidence) to authenticated, service_role;
@@ -984,6 +1074,18 @@ begin
                      and (e.changes ? 'claim' or e.changes ? 'source')
                      and not (e.changes ? 'verified_at' or e.changes ? 'confirmed_on')
                      and e.created_at > b.last_verified_at))) changed_since_verified,
+           -- ChatGPT's second review: any change to the claim's status after
+           -- the verification in force needs a fresh review by the owner,
+           -- even if the status is later put back. Read from the append-only
+           -- claim history, ordered by event id (exact inside a transaction):
+           -- a status change logged after that verification's own event.
+           (b.ver_id is not null and exists (
+              select 1 from creative_governance_events e
+               where e.subject_type = 'claim' and e.subject_id = b.id and e.action = 'updated' and e.changes ? 'status'
+                 and e.id > coalesce((select max(v.id) from creative_governance_events v
+                                       where v.subject_type = 'claim' and v.subject_id = b.id
+                                         and v.action in ('verified', 'reviewed')
+                                         and v.changes->>'review_id' = b.ver_id::text), 0))) status_changed_since_verified,
            case when b.ver_evidence_id is not null then
              (select claim_evidence_intact(e) from claim_evidence e where e.id = b.ver_evidence_id) end evidence_intact,
            case when b.ver_location_id is not null then exists (
@@ -1031,7 +1133,8 @@ begin
                 else 'text_note' end source_class,
            (select count(*) from jsonb_array_elements(b.posts) p where p->>'publish_status' = 'published')
              + (select count(*) from jsonb_array_elements(b.drafts) d where d->>'published_url' is not null) published_count,
-           (b.evidence_intact is false or b.location_intact is false or b.scope_changed) integrity_broken
+           (b.evidence_intact is false or b.location_intact is false or b.scope_changed
+            or b.status_changed_since_verified) integrity_broken
       from b2 b
   ),
   b4 as (
@@ -1051,6 +1154,7 @@ begin
              case when b.evidence_intact is false then 'evidence_file_changed' end,
              case when b.location_intact is false then 'evidence_location_changed' end,
              case when b.scope_changed then 'scope_changed_since_verified' end,
+             case when b.status_changed_since_verified then 'status_changed_since_verified' end,
              case when b.ver_expires_on is not null and b.ver_expires_on < v_today then 'evidence_expired' end,
              case when not b.legacy_usable and (jsonb_array_length(b.posts) + jsonb_array_length(b.drafts)) > 0 then 'cited_while_unusable' end,
              case when not b.legacy_usable and b.published_count > 0 then 'published_while_unusable' end,
@@ -1080,7 +1184,10 @@ begin
   )
   select coalesce(jsonb_agg(jsonb_build_object(
            'id', b.id, 'claim', b.claim, 'status', b.status, 'legacy_usable', b.legacy_usable,
-           'verification_state', case when b.authoritative and not b.changed_since_verified and not b.integrity_broken
+           -- Never "independently verified" while today's rules would refuse
+           -- the claim (unverified, or sourced with no source).
+           'verification_state', case when b.authoritative and b.legacy_usable and not b.changed_since_verified
+                                           and not b.integrity_broken
                                       then 'independently_verified' else 'not_independently_verified' end,
            'bucket', b.bucket, 'reasons', to_jsonb(b.reasons),
            'kind', b.kind, 'kind_label', (select label from claim_review_intervals where kind = b.eff_kind),
@@ -1093,6 +1200,7 @@ begin
               'verified_at', b.verified_at, 'verified_by', b.verified_by, 'verified_by_name', b.verified_by_name,
               'confirmed_by', b.confirmed_by, 'confirmed_on', b.confirmed_on,
               'last_verified_at', b.last_verified_at, 'changed_since_verified', b.changed_since_verified,
+              'status_changed_since_verified', b.status_changed_since_verified,
               'record', case when b.ver_id is not null then jsonb_build_object(
                  'review_id', b.ver_id, 'action', b.ver_action, 'at', b.ver_at, 'excerpt', b.ver_excerpt,
                  'observed_on', b.ver_observed_on, 'expires_on', b.ver_expires_on, 'confirmed_by_contact', b.ver_contact,
@@ -1261,7 +1369,8 @@ begin
   end loop;
   foreach f in array array['public.claim_reviewer_authority()', 'public.claim_review_open(uuid,text,uuid)',
                            'public.claim_reviews_guard()', 'public.claim_reviews_audit()', 'public.claim_evidence_guard()',
-                           'public.claim_evidence_uploads_guard()',
+                           'public.claim_evidence_uploads_guard()', 'public.claim_evidence_bucket_guard()',
+                           'public.claim_evidence_bucket_sound()',
                            'public.claim_verification_authorities_guard()', 'public.claims_keep_reviewed()',
                            'public.claim_evidence_objects_immutable()', 'public.claim_workspace_ids(uuid,uuid)',
                            'public.claim_own_hosts(uuid,uuid)', 'public.claim_location_identity_sha256(uuid)'] loop
@@ -1294,5 +1403,8 @@ begin
      or exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
                    and (qual like '%claim-evidence%' or with_check like '%claim-evidence%') and cmd <> 'SELECT') then
     raise exception 'claim-evidence storage: team read is the only policy';
+  end if;
+  if not claim_evidence_bucket_sound() then
+    raise exception 'claim-evidence bucket must be private, unversioned and without a lifecycle rule';
   end if;
 end $verify$;

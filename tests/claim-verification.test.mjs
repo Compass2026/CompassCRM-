@@ -50,7 +50,7 @@ function claim(over = {}) {
 test("every reason registry v2 can emit has words", () => {
   const block = fn.slice(fn.indexOf("array_remove(array["), fn.indexOf("], null) reasons"));
   const reasons = [...block.matchAll(/then '([a-z_]+)' end/g)].map((m) => m[1]);
-  for (const r of ["verification_unrecorded", "evidence_file_changed", "evidence_location_changed", "scope_changed_since_verified", "evidence_expired"])
+  for (const r of ["verification_unrecorded", "evidence_file_changed", "evidence_location_changed", "scope_changed_since_verified", "status_changed_since_verified", "evidence_expired"])
     assert.ok(reasons.includes(r), `${r} is emitted`);
   for (const r of reasons) assert.ok(REASON_TEXT[r], `no words for ${r}`);
 });
@@ -79,6 +79,8 @@ test("options: classify first; an unverified claim is never verified here; re-re
   assert.deepEqual(fresh.methods, ["client_contract", "manufacturer_document"]);
   const inForce = reviewOptions(registry, claim({ verification: { record: { review_id: "r1" }, last_decision: null } }));
   assert.deepEqual([inForce.canVerify, inForce.canReview, inForce.canRevoke], [false, true, true]);
+  const withdrawn = reviewOptions(registry, claim({ status: "unverified", verification: { record: { review_id: "r1" }, last_decision: null } }));
+  assert.deepEqual([withdrawn.canVerify, withdrawn.canReview, withdrawn.canRevoke], [false, false, true]);
   const superseded = reviewOptions(registry, claim({ superseded_by: "c2" }));
   assert.deepEqual([superseded.canClassify, superseded.canVerify, superseded.canReview], [false, false, false]);
 });

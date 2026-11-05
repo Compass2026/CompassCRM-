@@ -196,6 +196,34 @@ try {
   assert.equal(chk2.body.status, "intact");
   ok(`overwrite (upsert: ${upsert.error.message}; update: ${update.error.message}), move (${move.error.message}) and delete (teammate: ${removeTeam.error?.message ?? `${removeTeam.data?.length ?? 0} removed`}; service role: ${removeService.error?.message ?? `${removeService.data?.length ?? 0} removed`}) are all refused; the row, version and bytes are unchanged and still hash intact`);
 
+  // ── 7b. The bucket's settings are fixed; other buckets behave as before ────
+  const bucketBefore = (await q("select to_jsonb(b) - 'updated_at' as b from storage.buckets b where id = $1", [BUCKET]))[0].b;
+  const changes = [
+    ["public", { public: true }],
+    ["size limit", { public: false, fileSizeLimit: 104857600 }],
+    ["types", { public: false, allowedMimeTypes: ["text/html"] }],
+  ];
+  const refusals = [];
+  for (const [what, opts] of changes) {
+    const { error } = await service.storage.updateBucket(BUCKET, opts);
+    assert.ok(error, `the service role changed the bucket's ${what}`);
+    refusals.push(`${what}: ${error.message}`);
+  }
+  const del = await service.storage.deleteBucket(BUCKET);
+  assert.ok(del.error, "the service role deleted the claim-evidence bucket");
+  const emptied = await service.storage.emptyBucket(BUCKET);
+  const bucketAfter = (await q("select to_jsonb(b) - 'updated_at' as b from storage.buckets b where id = $1", [BUCKET]))[0].b;
+  assert.deepEqual(bucketAfter, bucketBefore, "the bucket row changed");
+  assert.equal(sha(await download(service, path(PDF))), sha(PDF), "emptying the bucket removed a registered file");
+  const other = `pr2a-other-${run}`;
+  assert.equal((await service.storage.createBucket(other, { public: false })).error, null);
+  assert.equal((await service.storage.updateBucket(other, { public: true })).error, null, "an unrelated bucket could not be updated");
+  assert.equal((await service.storage.deleteBucket(other)).error, null, "an unrelated bucket could not be deleted");
+  const [{ sound }] = await q("select claim_evidence_bucket_sound() as sound");
+  assert.equal(sound, true);
+  assert.ok((await service.rpc("claim_evidence_bucket_sound")).error, "the bucket check is internal");
+  ok(`the claim-evidence bucket's settings cannot be changed through the Storage API (${refusals.join("; ")}), nor the bucket deleted (${del.error.message}) or emptied of registered files (${emptied.error?.message ?? "registered file kept"}); an unrelated bucket is created, updated and deleted as usual`);
+
   // ── 8. Who can read the file ───────────────────────────────────────────────
   assert.equal(sha(await download(people.vera.client, path(PDF))), sha(PDF));
   assert.equal(await download(anon, path(PDF)), null);

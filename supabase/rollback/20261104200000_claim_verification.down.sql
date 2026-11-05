@@ -35,6 +35,9 @@ drop function if exists claim_evidence_register(uuid, text, text, bigint, text, 
 drop function if exists claim_evidence_request_upload(uuid, text, bigint, text);
 drop trigger if exists claim_evidence_objects_immutable on storage.objects;
 drop function if exists claim_evidence_objects_immutable();
+drop trigger if exists claim_evidence_bucket_guard on storage.buckets;
+drop function if exists claim_evidence_bucket_guard();
+drop function if exists claim_evidence_bucket_sound();
 drop policy if exists "team read claim evidence" on storage.objects;
 drop table if exists claim_evidence;
 drop function if exists claim_evidence_guard();

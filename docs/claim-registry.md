@@ -137,6 +137,7 @@ These hold for every method:
 
 - `verification_unrecorded`: verification columns set outside the ledger (needs review, never verified);
 - `evidence_file_changed`, `evidence_location_changed`, `scope_changed_since_verified`: needs review;
+- `status_changed_since_verified`: the claim's status changed after the verification in force (read from claim history, by event order). Needs the owner's fresh review even if the status was put back. `verification_state` is never `independently_verified` while the claim is not citable today;
 - `evidence_expired`: stale;
 - `changed_since_verified`: now also read from the fingerprint.
 

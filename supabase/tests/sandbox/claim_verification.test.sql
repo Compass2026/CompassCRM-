@@ -62,8 +62,17 @@ create function cvt.get(p_k text) returns text language plpgsql volatile as $$ b
 create function cvt.reviews(k text) returns bigint language plpgsql volatile as $$ begin return (select count(*) from claim_reviews where claim_id = cvt.id(k)); end $$;
 grant execute on all functions in schema cvt to anon, authenticated, service_role, authenticator, postgres;
 
--- Supabase's storage.objects carries a version (a new one on overwrite).
+-- Supabase's storage.objects carries a version (a new one on overwrite), and
+-- hosted Storage (read Nov 5 2026) can version objects and expire them: the
+-- columns it has, so the hardening is tested against them.
 alter table storage.objects add column if not exists version text;
+alter table storage.objects add column if not exists is_versioned boolean not null default false;
+alter table storage.objects add column if not exists is_delete_marker boolean not null default false;
+alter table storage.objects add column if not exists archived_at timestamptz;
+alter table storage.buckets add column if not exists type text not null default 'STANDARD';
+alter table storage.buckets add column if not exists versioning_status text not null default 'DISABLED';
+alter table storage.buckets add column if not exists lifecycle_configuration jsonb;
+alter table storage.buckets add column if not exists lifecycle_configuration_generation uuid;
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 insert into auth.users (id, email) values
@@ -275,6 +284,84 @@ select cvt.ok('E7f storage refuses overwriting, renaming or deleting a registere
   and cvt.err(format($q$delete from claim_evidence where id = %L$q$, cvt.id('doc-contract'))) = '42501'
   and cvt.err(format($q$update claim_evidence_uploads set requested_by = %L where id = %L$q$, cvt.id('owner'), cvt.id('upload-doc-contract'))) = '42501'
   and cvt.err(format($q$delete from claim_evidence_uploads where id = %L$q$, cvt.id('upload-unregistered'))) = '42501');
+
+-- ── H. Hosted Storage versioning, archival and lifecycle (ChatGPT's 2nd review)
+-- Another bucket, to prove ordinary Storage behaviour is untouched.
+insert into storage.buckets (id, name) values ('cvt-other', 'cvt-other');
+insert into storage.objects (id, bucket_id, name, metadata, version)
+values (cvt.id('obj-other'), 'cvt-other', 'x/other.pdf', '{"size": 10, "mimetype": "application/pdf", "eTag": "\"o\""}', 'v-o');
+select cvt.ok('H1 a registered file is never archived, marked deleted, re-flagged, given new metadata or a second row at its name; other buckets are untouched',
+  cvt.err(format($q$update storage.objects set archived_at = now() where id = %L$q$, cvt.id('obj-doc-contract'))) = '42501'
+  and cvt.err(format($q$update storage.objects set is_delete_marker = true where id = %L$q$, cvt.id('obj-doc-contract'))) = '42501'
+  and cvt.err(format($q$update storage.objects set is_versioned = true where id = %L$q$, cvt.id('obj-doc-contract'))) = '42501'
+  and cvt.err(format($q$update storage.objects set metadata = metadata || '{"size": 4096}' where id = %L$q$, cvt.id('obj-doc-contract'))) = '42501'
+  and cvt.err(format($q$update storage.objects set metadata = metadata || '{"eTag": "\"forged\""}' where id = %L$q$, cvt.id('obj-doc-contract'))) = '42501'
+  and cvt.err(format($q$insert into storage.objects (bucket_id, name, metadata, version, is_versioned)
+                        values ('claim-evidence', %L, '{"size": 2048, "mimetype": "application/pdf"}', 'v-second', true)$q$,
+                     cvt.id('L')::text || '/' || cvt.sha('doc-contract') || '.pdf')) = '42501'
+  and cvt.err(format($q$update storage.objects set archived_at = now(), is_delete_marker = true, version = 'v-o2' where id = %L$q$, cvt.id('obj-other'))) = ''
+  and cvt.err($q$insert into storage.objects (bucket_id, name, metadata) values ('cvt-other', 'x/other.pdf', '{}')$q$) = ''
+  and cvt.err(format($q$update storage.objects set owner = null where id = %L$q$, cvt.id('obj-doc-contract'))) = ''
+  and (select claim_evidence_intact(e) from claim_evidence e where id = cvt.id('doc-contract')));
+set session authorization authenticator;
+set local role service_role;
+select set_config('request.jwt.claims', '{"role": "service_role"}', true);
+select cvt.ok('H2 the service role (every Storage API call with the key) cannot change the claim-evidence bucket''s settings; another bucket''s it can',
+  cvt.err($q$update storage.buckets set versioning_status = 'ENABLED' where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err($q$update storage.buckets set lifecycle_configuration = '{"rules": []}', lifecycle_configuration_generation = gen_random_uuid() where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err($q$update storage.buckets set public = true where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err($q$update storage.buckets set allowed_mime_types = null where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err($q$update storage.buckets set file_size_limit = 104857600 where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err($q$delete from storage.buckets where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err($q$update storage.buckets set versioning_status = 'ENABLED' where id = 'cvt-other'$q$) = ''
+  and (select versioning_status = 'DISABLED' and lifecycle_configuration is null and not public from storage.buckets where id = 'claim-evidence'));
+reset role;
+set session authorization supabase_admin;
+-- pglite:skip-begin (PGlite's postgres is a superuser, the database owner's bypass)
+set session authorization postgres;
+select cvt.ok('H3 the worker''s own SQL cannot change the bucket''s settings or archive a registered file either',
+  cvt.err($q$update storage.buckets set versioning_status = 'ENABLED' where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err($q$update storage.buckets set public = true where id = 'claim-evidence'$q$) = '42501'
+  and cvt.err(format($q$update storage.objects set archived_at = now() where id = %L$q$, cvt.id('obj-doc-contract'))) = '42501');
+set session authorization supabase_admin;
+-- pglite:skip-end
+-- Fail closed: if the bucket were ever versioned (platform administration can
+-- still change the row), nothing new registers and registered files stay
+-- protected. Restored straight after.
+insert into claim_evidence_uploads (id, client_id, sha256, size_bytes, mime_type, requested_by, expires_at)
+values (cvt.id('upload-h4'), cvt.id('L'), cvt.sha('h4'), 2048, 'application/pdf', cvt.id('member'), now() + interval '1 hour'),
+       (cvt.id('upload-h5'), cvt.id('L'), cvt.sha('h5'), 2048, 'application/pdf', cvt.id('member'), now() + interval '1 hour');
+insert into storage.objects (id, bucket_id, name, metadata, version) values
+  (cvt.id('obj-h4'), 'claim-evidence', cvt.id('L')::text || '/' || cvt.sha('h4') || '.pdf', '{"size": 2048, "mimetype": "application/pdf"}', 'v-h4'),
+  (cvt.id('obj-h5a'), 'claim-evidence', cvt.id('L')::text || '/' || cvt.sha('h5') || '.pdf', '{"size": 2048, "mimetype": "application/pdf"}', 'v-h5a'),
+  (cvt.id('obj-h5b'), 'claim-evidence', cvt.id('L')::text || '/' || cvt.sha('h5') || '.pdf', '{"size": 2048, "mimetype": "application/pdf"}', 'v-h5b');
+update storage.buckets set versioning_status = 'ENABLED' where id = 'claim-evidence';
+select cvt.save('h4_archive', cvt.err(format($q$update storage.objects set archived_at = now() where id = %L$q$, cvt.id('obj-doc-contract'))));
+select cvt.save('h4_intact', (select claim_evidence_intact(e) from claim_evidence e where id = cvt.id('doc-contract'))::text);
+set session authorization authenticator;
+set local role service_role;
+select set_config('request.jwt.claims', '{"role": "service_role"}', true);
+select cvt.save('h4_register', cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x')$q$,
+  cvt.id('upload-h4'), cvt.id('L')::text || '/' || cvt.sha('h4') || '.pdf', cvt.sha('h4'))));
+reset role;
+set session authorization supabase_admin;
+update storage.buckets set versioning_status = 'DISABLED' where id = 'claim-evidence';
+set session authorization authenticator;
+set local role service_role;
+select set_config('request.jwt.claims', '{"role": "service_role"}', true);
+select cvt.ok('H4 a versioned bucket fails closed: nothing new registers, and a registered file still cannot be archived; it stays intact',
+  cvt.get('h4_register') = '42501' and cvt.get('h4_archive') = '42501' and cvt.get('h4_intact') = 'true'
+  and (select claim_evidence_intact(e) from claim_evidence e where id = cvt.id('doc-contract'))
+  and not exists (select 1 from claim_evidence where sha256 = cvt.sha('h4')));
+select cvt.ok('H5 two stored objects at one name: nothing registers',
+  cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x')$q$,
+    cvt.id('upload-h5'), cvt.id('L')::text || '/' || cvt.sha('h5') || '.pdf', cvt.sha('h5'))) = '22023');
+reset role;
+set session authorization supabase_admin;
+-- The fixtures H4 and H5 used are not evidence; remove them (unregistered).
+delete from storage.objects where id in (cvt.id('obj-h4'), cvt.id('obj-h5a'), cvt.id('obj-h5b'), cvt.id('obj-other'));
+delete from storage.objects where bucket_id = 'cvt-other';
+delete from storage.buckets where id = 'cvt-other';
 
 -- ── E7g. Upload requests: only from the teammate's own signed-in session ────
 -- A fictional file for client X, stored as the storage service records it.
@@ -649,6 +736,62 @@ select cvt.ok('T3 a status-only change (sourced to confirmed) leaves the decisio
   cvt.get('t3') is not null
   and (select status::text = 'confirmed' and confirmed_by = 'x2@example.test' and review_id = cvt.get('t3')::uuid and verified_by = cvt.id('owner')
          from claims where id = cvt.id('X1')));
+
+-- ── W. Status changes after a verification (ChatGPT's second review) ──────
+-- X1 is verified (T3, status confirmed). Any status change after that
+-- verification needs the owner's fresh review, even when the status is put
+-- back. Nothing changes the status, the evidence or the verification itself.
+select cvt.save('x1_ver', cvt.get('t3'));
+select cvt.jwt('member');
+update claims set status = 'unverified' where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.ok('W1 verified → unverified: not independently verified, in the Unverified bucket, the reason says why; status, verification and evidence untouched',
+  cvt.c('X', 'X1')->>'verification_state' = 'not_independently_verified'
+  and cvt.c('X', 'X1')->>'bucket' = 'unverified'
+  and cvt.c('X', 'X1')->'reasons' ? 'status_changed_since_verified'
+  and (cvt.c('X', 'X1')->'verification'->>'status_changed_since_verified')::boolean
+  and (select status::text = 'unverified' and review_id = cvt.get('x1_ver')::uuid and verified_by = cvt.id('owner')
+         from claims where id = cvt.id('X1'))
+  and (select claim_evidence_intact(e) from claim_evidence e where id = cvt.id('doc-x')));
+select cvt.ok('W1b the owner cannot re-review while it is unverified, and the registry offers no re-review',
+  cvt.err(format($q$select claim_verify(%L, 'review', 'client_contract', 'The contract says so.', %L, %L, %L, %L)$q$,
+                 cvt.id('X1'), cvt.today(), cvt.fp('X1'), cvt.rid('X1'), cvt.id('doc-x'))) = '22023');
+select cvt.jwt('member');
+update claims set status = 'sourced' where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.ok('W2 verified → unverified → sourced: still needs review; putting the status back does not restore the verification',
+  cvt.c('X', 'X1')->>'verification_state' = 'not_independently_verified'
+  and cvt.c('X', 'X1')->>'bucket' = 'needs_review'
+  and cvt.c('X', 'X1')->'reasons' ? 'status_changed_since_verified'
+  and (cvt.c('X', 'X1')->>'legacy_usable')::boolean);
+select cvt.jwt('member');
+update claims set status = 'unverified' where id = cvt.id('X1');
+update claims set status = 'confirmed', confirmed_by = 'x3@example.test', confirmed_on = now() where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.ok('W3 verified → unverified → confirmed: still needs review',
+  cvt.c('X', 'X1')->>'verification_state' = 'not_independently_verified'
+  and cvt.c('X', 'X1')->>'bucket' = 'needs_review'
+  and cvt.c('X', 'X1')->'reasons' ? 'status_changed_since_verified');
+select cvt.save('w4', (claim_verify(cvt.id('X1'), 'review', 'client_contract', 'The contract still says so.', cvt.today(),
+                                    cvt.fp('X1'), cvt.rid('X1'), cvt.id('doc-x'))->>'review_id'));
+select cvt.ok('W4 the owner''s fresh review restores the verified state; the status he found is untouched',
+  cvt.get('w4') is not null
+  and cvt.c('X', 'X1')->>'verification_state' = 'independently_verified'
+  and not (cvt.c('X', 'X1')->'reasons' ? 'status_changed_since_verified')
+  and cvt.c('X', 'X1')->>'bucket' in ('verified', 'due')
+  and (select status::text = 'confirmed' and review_id = cvt.get('w4')::uuid from claims where id = cvt.id('X1')));
+select cvt.jwt('member');
+update claims set status = 'sourced' where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.ok('W5 any later status change (confirmed → sourced) needs review again',
+  cvt.c('X', 'X1')->>'verification_state' = 'not_independently_verified'
+  and cvt.c('X', 'X1')->'reasons' ? 'status_changed_since_verified');
+select cvt.jwt('member');
+update claims set source = '' where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.ok('W6 never "independently verified" while today''s rules refuse the claim (here: sourced with its source removed)',
+  cvt.c('X', 'X1')->>'verification_state' = 'not_independently_verified'
+  and not (cvt.c('X', 'X1')->>'legacy_usable')::boolean);
 reset role;
 set session authorization supabase_admin;
 

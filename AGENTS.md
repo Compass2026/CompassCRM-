@@ -94,7 +94,13 @@ review, Executive OS 11454716).
   - Phone claims verify against an approved `citation_locations` row on the
     claim's own brand site, with its identity version pinned by SHA-256.
 - **Integrity:** registry v2 drops a verified claim to *needs review* when its
-  file, location identity, fingerprint or brand-site set changes.
+  file, location identity, fingerprint or brand-site set changes, or when its
+  status changes after the verification. A status change needs Tom's fresh
+  review, even if the status is put back.
+- **Hosted Storage:** `claim-evidence` bucket settings (public, limits,
+  versioning, lifecycle) are fixed by a trigger. A registered file can't be
+  archived, marked deleted, re-flagged or duplicated at its name. Registration
+  needs an unversioned private bucket.
   Verification columns with no ledger entry read `verification_unrecorded`,
   never verified.
 - **Rollback** refuses once any review or evidence exists (history is kept).

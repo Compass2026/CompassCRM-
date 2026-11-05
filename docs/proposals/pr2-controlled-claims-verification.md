@@ -8,6 +8,7 @@ COMPASS-2027-ROADMAP W1, P1.1b. Follows Claims Registry v1 (PR #218, merged as
 | 1 | Nov 4 2026 | Proposal, Executive OS P0.3 result `12222fff` |
 | 2 | Nov 4 2026 | ChatGPT architecture review: approved with three required refinements (owner authority, SHA-256 evidence with a working upload, history kept). This revision records them and scopes PR2a as built. |
 | 3 | Nov 5 2026 | ChatGPT's second review (three pre-release checks). Owner decisions recorded (O1 closed as Tom only; O2 closed: teammates upload with recorded provenance). The register's trust boundary corrected and provenance bound to the teammate's own session (§4, §7, §12a); the status race assessed (§12b); real Supabase Storage verified on a nonproduction local stack (§12c). |
+| 4 | Nov 5 2026 | Final hardening (Tom chose option A). Hosted Storage versioning, archival and lifecycle cannot replace or invalidate registered evidence (§12d). A status change after verification needs the owner's fresh review, even if the status is put back (§12e; supersedes the D4 note in §12b). |
 
 Status: **PR2a is implemented as a draft PR. Nothing is merged, no migration is
 applied, nothing is deployed, and no production data has changed.**
@@ -382,15 +383,8 @@ Assessed: **not an approval-integrity problem, so no behaviour change.**
 - A status-only change (for example sourced to confirmed) leaves the evidence
   decision valid. It records, and the status it found is untouched.
 
-Regression tests T1 to T3 hold all three. Two related points, neither of them
-a form problem, stay as designed in D4:
-
-- A verification in force stays in force if a teammate later marks the claim
-  unverified. The claim leaves the citable set at once (status rules). The
-  registry lists it under *Unverified* while showing that the owner's
-  verification is still recorded, and the owner can revoke it.
-- The ledger does not copy the claim's status at decision time; claim history
-  (`creative_governance_events`) records every status change with its time.
+Regression tests T1 to T3 hold all three. A status change *after* a
+verification is handled in §12e (revision 4).
 
 ### 12c. Real Supabase Storage (second review, check 1)
 
@@ -432,4 +426,82 @@ fresh local stack no longer grants new `public` tables to the API roles, so
 default privileges were read on Nov 5), so the replay sets the same defaults.
 A future project created with Supabase's newer defaults would need those
 grants before any Compass function works.
+
+### 12d. Hosted Storage versioning, archival and lifecycle (revision 4)
+
+Hosted Storage (read Nov 5) can version objects. An overwrite or delete in a
+versioned bucket archives the old row (`archived_at`) and inserts a new current
+row, and buckets can carry lifecycle (expiry) rules. Enabling versioning is
+irreversible. Revision 4 closes it in the still-unapplied migration:
+
+- **`claim_evidence_bucket_guard`** (on `storage.buckets`, `claim-evidence`
+  only) refuses changes to `id`, `name`, `public`, `file_size_limit`,
+  `allowed_mime_types`, `type`, `versioning_status` and the lifecycle columns,
+  and refuses deleting the bucket. It applies to every Storage API caller, the
+  service role included, and to the worker's SQL. Storage's own maintenance
+  role (`supabase_storage_admin`, for platform migrations) and a superuser are
+  exempt. Other buckets are untouched.
+- **`claim_evidence_objects_immutable`** now also refuses, for a registered
+  file:
+  - archiving it, marking it deleted, or changing `is_versioned`;
+  - changing its `size`, `mimetype` or `eTag`;
+  - inserting a second row at its name.
+
+  There is no exemption, whatever the bucket's settings. Unregistered files and
+  other buckets behave exactly as before.
+- **Registration** requires the bucket to be private, unversioned and without
+  a lifecycle rule, through the internal `claim_evidence_bucket_sound()`. It
+  registers only the one current, unversioned object at the address.
+- **`claim_evidence_intact`** also requires the same eTag, the object not
+  archived and not a delete marker, and no other row at that name.
+- The verify block refuses the migration unless the bucket is private and
+  unversioned.
+
+The new columns are read through `to_jsonb`, so the same code runs where they
+don't exist (local Storage v1.58). Tests:
+
+- H1–H5 in the database suite: the sandbox carries hosted's columns;
+- the Storage integration (13/13): bucket settings are refused through the real
+  Storage API, the bucket can't be deleted or emptied of registered files, and
+  an unrelated bucket is created, updated and deleted as usual.
+
+Hosted versioning itself can't run locally. The release's rolled-back probe
+(S7) re-checks it on production.
+
+### 12e. A status change after verification (revision 4)
+
+The rule: a claim is never shown as independently verified while today's rules
+refuse it (unverified, or sourced with no source). Any change to its status
+after the verification in force needs the owner's fresh review, even if the
+status is later put back.
+
+How it is detected:
+
+- Registry v2 reads the append-only claim history (`creative_governance_events`).
+- A `claims` `updated` event touching `status` counts if it has a higher event
+  id than the `verified` / `reviewed` event of the verification in force.
+  Event-id order is exact even inside one transaction.
+- Such a change sets `status_changed_since_verified` (a new reason, worded on
+  the Intelligence tab) and makes the verification not intact, so the claim
+  shows as *needs review*, or *Unverified* while it is unverified.
+- `verification_state` also requires the claim to be citable under today's
+  rules.
+
+Only the owner's re-review clears it, which records a new verification event.
+The database refuses that re-review while the claim is unverified, and the
+controls no longer offer it.
+
+What it does not do: it never changes `claims.status`, never revokes the
+verification or its evidence, and never touches publishing or citing rules.
+Tests W1–W6:
+
+| Test | Sequence | Result |
+| --- | --- | --- |
+| W1 | verified → unverified | not independently verified, listed as Unverified; status, review in force and evidence untouched |
+| W1b | re-review while unverified | refused |
+| W2 | verified → unverified → sourced | needs review |
+| W3 | verified → unverified → confirmed | needs review |
+| W4 | Tom re-reviews | independently verified again |
+| W5 | a later confirmed → sourced change | needs review again |
+| W6 | an ineligible claim | never shown as verified |
 
