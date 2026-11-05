@@ -77,9 +77,16 @@ review, Executive OS 11454716).
 - **Evidence:**
   - Files are private, content-addressed (`<client>/<sha256>.<ext>`) in the
     `claim-evidence` bucket, which has a team read policy and no write policy.
-  - The `claim-evidence` Edge Function (team JWT) signs a one-time upload,
+  - The `claim-evidence` Edge Function (team JWT) records the upload request
+    from the caller's own session (`claim_evidence_request_upload`, JWT
+    forwarded; the database stamps the requester), signs a one-time upload,
     re-hashes the stored bytes and sniffs the type, then calls
-    `claim_evidence_register` (service role only). A mismatch is deleted.
+    `claim_evidence_register` with the request. A mismatch is deleted. The
+    register is executable by the **service role**, which every Edge
+    Function holds: byte integrity trusts that key (Re-check hash detects a
+    lie); the uploader never comes from it.
+  - Real Storage: `tests/claim-evidence-storage-integration.mjs` against a
+    nonproduction stack (local Supabase, Nov 5: 12/12).
   - A registered file is never replaced or deleted (a trigger on
     `storage.objects`).
   - Pages and listings count only as uploaded captures (URL + capture date,

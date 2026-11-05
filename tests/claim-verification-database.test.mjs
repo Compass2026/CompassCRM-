@@ -16,7 +16,7 @@ import { uuid_ossp } from "@electric-sql/pglite/contrib/uuid_ossp";
 
 const SUITE = "supabase/tests/sandbox/claim_verification.test.sql";
 const DOWN = "supabase/rollback/20261104200000_claim_verification.down.sql";
-const NATIVE_ONLY = ["S12"];
+const NATIVE_ONLY = ["E7j", "S12"];
 
 test("claim verification: authority, evidence, ledger, projection, registry, audit, rollback", async () => {
   const db = new PGlite({ extensions: { pgcrypto, uuid_ossp } });

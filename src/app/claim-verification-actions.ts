@@ -134,6 +134,7 @@ export async function prepareClaimEvidenceAction(
 export async function finalizeClaimEvidenceAction(
   clientId: string,
   input: {
+    uploadId: string;
     path: string;
     evidenceType: "document" | "capture";
     label: string;
@@ -145,6 +146,7 @@ export async function finalizeClaimEvidenceAction(
   const r = await callEvidence({
     mode: "finalize",
     client_id: clientId,
+    upload_id: input.uploadId,
     path: input.path,
     evidence_type: input.evidenceType,
     label: input.label,

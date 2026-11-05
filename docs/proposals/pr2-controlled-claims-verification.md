@@ -7,6 +7,7 @@ COMPASS-2027-ROADMAP W1, P1.1b. Follows Claims Registry v1 (PR #218, merged as
 | --- | --- | --- |
 | 1 | Nov 4 2026 | Proposal, Executive OS P0.3 result `12222fff` |
 | 2 | Nov 4 2026 | ChatGPT architecture review: approved with three required refinements (owner authority, SHA-256 evidence with a working upload, history kept). This revision records them and scopes PR2a as built. |
+| 3 | Nov 5 2026 | ChatGPT's second review (three pre-release checks). Owner decisions recorded (O1 closed as Tom only; O2 closed: teammates upload with recorded provenance). The register's trust boundary corrected and provenance bound to the teammate's own session (§4, §7, §12a); the status race assessed (§12b); real Supabase Storage verified on a nonproduction local stack (§12c). |
 
 Status: **PR2a is implemented as a draft PR. Nothing is merged, no migration is
 applied, nothing is deployed, and no production data has changed.**
@@ -54,7 +55,13 @@ hashes don't change. PR2a never writes `claims.status`.
 | D8 | Claude | **It may propose a classification, never finalize a decision.** PR2a has no Claude path at all; proposals are PR2c. |
 | D9 | Fingerprint | **SHA-256 over a canonical JSON** of `client_id`, `claim`, `source`, `kind`. |
 
-### Open for ChatGPT on this revision
+### Owner decisions (ChatGPT's second review, Nov 5 2026)
+
+- **Tom remains the only final claim-verification authority.**
+- **Signed-in teammates may upload evidence with recorded provenance; uploading
+  does not authorize verification.** O2 below is closed on that basis.
+
+### Open for ChatGPT on revision 2 (kept for the record)
 
 - **O1. How Tom's authority is recorded.** PR2a seeds it in the migration, by
   team-member id (`d73e1bf1-…`), and the insert only matches if that member
@@ -99,9 +106,21 @@ Otherwise it returns null.
 | `storage_path` | `<client_id>/<sha256>.<ext>` in the new private `claim-evidence` bucket: the content address |
 | `object_id`, `object_version`, `object_etag` | The `storage.objects` row pinned at registration |
 | `sha256`, `size_bytes`, `mime_type` | Computed by the `claim-evidence` function from the stored bytes, never taken from the browser |
-| `uploaded_by` | `team_members.id` from the caller's JWT |
+| `uploaded_by` | The requester of the upload request it answers (below), never an argument |
+| `upload_id` | The `claim_evidence_uploads` row it answers; unique, so a request is used once |
 
-- Writes go only through `claim_evidence_register(...)`, which only the service role can execute and which only accepts the function's own session. It checks that the storage object exists at the content address, with the same size and MIME type.
+- Writes go only through `claim_evidence_register(...)`, which **the service role** can execute (a PostgREST service-role session). That is every holder of the service-role key, i.e. every deployed Edge Function, not only `claim-evidence`; the database cannot tell them apart. It checks that the storage object exists at the content address, with the same size and MIME type, and that it answers a live upload request for exactly that client, hash, size and type.
+
+### `claim_evidence_uploads` (who asked to upload what)
+
+| Column | Meaning |
+| --- | --- |
+| `client_id`, `sha256`, `size_bytes`, `mime_type` | The file the teammate asked to upload |
+| `requested_by` | Stamped from the caller's own JWT (`task_actor()`) by the guard |
+| `created_at`, `expires_at` | Valid for one hour |
+
+- Written only through `claim_evidence_request_upload(client, sha256, size, mime)`, executable by `authenticated` and refused unless the session is a signed-in teammate's own (`post_caller_is_human()`). The service role, the worker's SQL, a portal contact, a stranger and anon are all refused; direct inserts are refused for everyone but a superuser (fixtures). Never changed; only a client deletion removes rows.
+- The `claim-evidence` function calls it at `prepare`, **forwarding the caller's JWT** (a caller-scoped client), so the database records the requester itself.
 - Append-only. Only a client deletion cascades.
 - The bucket has no insert, update or delete policy, so the browser can't write it. A trigger on `storage.objects` refuses renaming, re-versioning (overwrite) or deleting a registered evidence file.
 
@@ -198,9 +217,9 @@ available from the registry row.
 
 The function accepts a team JWT only (403 for anyone else), with no cron path. It has three modes:
 
-1. **`prepare`** `{client_id, sha256, size, mime_type}`. The browser hashes the file first, to name the path. The function validates the request: team, client, MIME type (PDF / PNG / JPEG / WebP), 10 MB maximum. It then returns either the already-registered evidence (the same bytes for the same client) or a **signed one-time upload URL** for exactly `<client>/<sha256>.<ext>`.
+1. **`prepare`** `{client_id, sha256, size, mime_type}`. The browser hashes the file first, to name the path. The function validates the request: team, client, MIME type (PDF / PNG / JPEG / WebP), 10 MB maximum. It then returns either the already-registered evidence (the same bytes for the same client), or records the **upload request from the caller's own session** and returns its `upload_id` with a **signed one-time upload URL** for exactly `<client>/<sha256>.<ext>`.
 2. The browser uploads straight to Storage, so there is no server-action or Vercel body limit.
-3. **`finalize`** `{client_id, path, evidence_type, label, source_url?, captured_on?, original_name?}`. The function downloads the stored bytes, recomputes SHA-256 and sniffs the type from magic bytes. If either disagrees with the path, it deletes the unregistered object and refuses. Otherwise it calls `claim_evidence_register`.
+3. **`finalize`** `{client_id, upload_id, path, evidence_type, label, source_url?, captured_on?, original_name?}`. The request must be this caller's, for this file (403 / 404 otherwise). The function downloads the stored bytes, recomputes SHA-256 and sniffs the type from magic bytes. If either disagrees with the path, it deletes the unregistered object and refuses. Otherwise it calls `claim_evidence_register` with the request, which supplies the client, hash, size, type and uploader.
 4. **`check`** `{evidence_id}`. Re-hashes a registered file.
 
 ## 8. Isolation and BHG
@@ -308,11 +327,109 @@ without changing a rule or the audit trail.
 - **Browser-side hash.** It only names the path. The function recomputes it
   from the stored bytes before anything is registered, and a mismatch is
   deleted.
-- **Storage semantics.** Supabase's `storage.objects` has `version` and
-  `metadata` (`size`, `mimetype`, `eTag`). The sandbox emulates them. The
-  first real upload must be checked on a Supabase branch before release.
-- **The storage delete guard.** It reads `claim_evidence`. If Supabase's storage
-  admin role changes how deletes are issued, the guard must be re-verified on
-  the branch.
+- **Storage semantics.** Verified on real Supabase Storage (§12c); the
+  sandbox's emulation matched. What remains is the hosted service's version.
+- **The storage delete guard.** It reads `claim_evidence`. Verified against
+  Storage's own delete path (§12c). If Supabase changes how Storage issues
+  deletes, re-run `tests/claim-evidence-storage-integration.mjs`.
 - **Two-person team.** Separation of duties comes from the owner rule: Jennifer
   can prepare evidence, and only Tom decides.
+
+### 12a. The register's trust boundary (second review, check 2)
+
+Revision 2 said the register "only accepts the function's own session". That
+was wrong: `drafter_caller_is_service()` is true for **any** PostgREST
+service-role session, and every deployed Edge Function holds the service-role
+key. The register also took `p_uploaded_by` as an argument, so any
+service-role holder could register a file in any linked teammate's name.
+
+Fixed in this revision, minimally:
+
+- The uploader is no longer an argument. A teammate's own signed-in session
+  writes an upload request (`claim_evidence_uploads`); the register answers
+  one request, once, within an hour, and takes the client, SHA-256, size,
+  type and uploader from it. Nothing holding only the service-role key can
+  write a request.
+- The comments, error messages and docs now say "the service role (the
+  claim-evidence function)" instead of claiming one function.
+
+What the boundary still is, stated plainly:
+
+- **Byte integrity rests on the service role.** Postgres cannot read object
+  storage, and the service role can also write the bucket directly (it
+  bypasses Storage policies). A malicious service-role holder could therefore
+  register bytes under a teammate's live request for a hash those bytes do
+  not have. It cannot invent the request, change its client, or name the
+  uploader. Anyone can detect it: **Re-check hash** re-downloads and
+  re-hashes the file. Tom decides only on files he can open.
+- **Provenance rests on the teammate's JWT,** the same boundary as every
+  Compass human-only writer (`post_caller_is_human()`). Every JWT-authorized
+  Edge Function receives callers' JWTs; that is unchanged platform trust.
+- **Postgres DDL**, as before (§12).
+
+### 12b. A status change while a decision form is open (second review, check 3)
+
+Assessed: **not an approval-integrity problem, so no behaviour change.**
+
+- The fingerprint pins what a decision is about: client, text, source and kind.
+  A text or source edit after the form loaded refuses the old screen (CV409).
+- `status` is today's separate citing rule, which a decision neither reads to
+  decide nor writes. The one rule that reads it (an unverified claim is not
+  verified in this release) is checked against the claim row **locked
+  `for update` at submit**. A form loaded before a status change can never
+  record what the rules would refuse, and a concurrent status edit waits for
+  the decision's commit.
+- A status-only change (for example sourced to confirmed) leaves the evidence
+  decision valid. It records, and the status it found is untouched.
+
+Regression tests T1 to T3 hold all three. Two related points, neither of them
+a form problem, stay as designed in D4:
+
+- A verification in force stays in force if a teammate later marks the claim
+  unverified. The claim leaves the citable set at once (status rules). The
+  registry lists it under *Unverified* while showing that the owner's
+  verification is still recorded, and the owner can revoke it.
+- The ledger does not copy the claim's status at decision time; claim history
+  (`creative_governance_events`) records every status change with its time.
+
+### 12c. Real Supabase Storage (second review, check 1)
+
+There is no Supabase branch on the project, and creating one is billed. So the
+check ran on a **free, nonproduction local Supabase stack** (CLI 2.109,
+`storage-api` v1.58.17, `postgres` 17.6.1, `gotrue` v2.189, `edge-runtime`
+1.74). Every migration was replayed as `postgres`, with production's default
+privileges (read from the project on Nov 5). The real `claim-evidence` function
+was served on the Edge runtime. Fictional data only, all removed at the end.
+`tests/claim-evidence-storage-integration.mjs` is the script (12 checks; it
+refuses the production project):
+
+1. The function: no sign-in 401; stranger and portal contact 403.
+2. `prepare` writes the upload request with the requester from the caller's
+   JWT and signs a one-time upload for the content address.
+3. Upload requests are refused for a portal contact, a stranger, the service
+   role and anon. A teammate cannot call the register.
+4. A teammate and a portal contact cannot write the bucket directly.
+5. The signed upload stores the bytes. Storage records `version`, `size`,
+   `mimetype` and `eTag`. The same token cannot write a second time.
+6. `finalize` (by the requester only; another teammate 403) re-hashes the
+   stored bytes and pins the SHA-256, object id, version and eTag. `check`
+   re-hashes intact.
+7. Overwrite (`upsert`, `update`), `move` and delete (teammate, and the service
+   role through Storage's own API) are all refused. The storage row, version
+   and bytes are unchanged and still hash intact.
+8. A teammate reads the file. Anon, a stranger and a portal contact cannot
+   download, list or see the rows, and there is no public URL.
+9. Bytes uploaded under another file's hash are refused (422), deleted from
+   Storage, and never registered.
+10. An HTML file sent as a PDF is refused from its bytes (422) and deleted.
+11. The same bytes again return the registered row.
+12. Cleanup: deleting the client cascades through uploads and evidence, after
+    which Storage deletes the files. Nothing is left.
+
+One finding from setting up the stack, which is not a defect in this PR: a
+fresh local stack no longer grants new `public` tables to the API roles, so
+`service_role` could not read `team_members`. Production does grant them (its
+default privileges were read on Nov 5), so the replay sets the same defaults.
+A future project created with Supabase's newer defaults would need those
+grants before any Compass function works.
+

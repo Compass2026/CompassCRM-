@@ -10,6 +10,7 @@
 do $refuse$
 begin
   if exists (select 1 from claim_reviews) or exists (select 1 from claim_evidence)
+     or exists (select 1 from claim_evidence_uploads)
      or exists (select 1 from storage.objects where bucket_id = 'claim-evidence') then
     raise exception 'claim verification has recorded history or evidence: it is kept, so this rollback refuses (fix forward)';
   end if;
@@ -30,12 +31,15 @@ drop function if exists claim_workspace_ids(uuid, uuid);
 drop function if exists claim_location_identity_sha256(uuid);
 drop function if exists claim_fingerprint(uuid, text, text, text);
 drop function if exists claim_evidence_intact(claim_evidence);
-drop function if exists claim_evidence_register(uuid, text, text, bigint, text, text, text, uuid, text, text, date);
+drop function if exists claim_evidence_register(uuid, text, text, bigint, text, text, text, text, text, date);
+drop function if exists claim_evidence_request_upload(uuid, text, bigint, text);
 drop trigger if exists claim_evidence_objects_immutable on storage.objects;
 drop function if exists claim_evidence_objects_immutable();
 drop policy if exists "team read claim evidence" on storage.objects;
 drop table if exists claim_evidence;
 drop function if exists claim_evidence_guard();
+drop table if exists claim_evidence_uploads;
+drop function if exists claim_evidence_uploads_guard();
 drop function if exists claim_evidence_ext(text);
 drop table if exists claim_verification_authorities;
 drop function if exists claim_verification_authorities_guard();

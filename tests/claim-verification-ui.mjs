@@ -164,6 +164,12 @@ await new Promise((r) => gateway.listen(0, "127.0.0.1", r));
 const gatewayUrl = `http://127.0.0.1:${gateway.address().port}`;
 fnHandler = createClaimEvidenceHandler({
   supabase: createClient(gatewayUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } }),
+  // As index.ts wires it: the caller's JWT, for the upload request.
+  userClient: (jwt) =>
+    createClient(gatewayUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    }),
 });
 
 const port = Number(process.env.CLAIM_VERIFICATION_UI_PORT ?? 3442);

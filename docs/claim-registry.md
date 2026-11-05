@@ -109,7 +109,7 @@ upload, and review history is never deleted.
 | Piece | What |
 | --- | --- |
 | `claim_verification_authorities` | Who decides: the owner (Tom) only. Written only by a reviewed migration (this one seeds team member `d73e1bf1`). One active owner. Delegation (`delegate`) is designed for, not built. |
-| `claim_evidence` + `claim-evidence` bucket | Uploaded files at `<client>/<sha256>.<ext>`, private, team read, no write policy. Registered only by the `claim-evidence` Edge Function after it re-hashes the stored bytes; never replaced or deleted once registered. `document` or `capture` (a page or listing, with URL and capture date). |
+| `claim_evidence` + `claim-evidence` bucket | Uploaded files at `<client>/<sha256>.<ext>`, private, team read, no write policy. Registered only through the service role (the `claim-evidence` Edge Function, after it re-hashes the stored bytes), answering a teammate's own upload request, which supplies the uploader; never replaced or deleted once registered. `document` or `capture` (a page or listing, with URL and capture date). |
 | `claim_reviews` | The append-only decision ledger: classify / verify / review / revoke. Reviewer, authority, time and txid stamped by trigger. Each decision is also a `creative_governance_events` row. |
 | `claims.review_id` + the projection guard | The registry columns change only to match a review written in the same transaction by the same owner. A claim with review history cannot be deleted. |
 | `claim_classify` / `claim_verify` / `claim_revoke` | Security definer, for a signed-in owner only. The registry's `fingerprint` and `review_id` are passed back (a stale screen gets `CV409`). **None changes `claims.status`, text or source.** |

@@ -10,6 +10,13 @@
 // match its address is deleted. A registered file cannot be replaced or
 // deleted (a trigger on storage.objects).
 //
+// Provenance: prepare records the upload request from the caller's OWN
+// session (claim_evidence_request_upload, called with their JWT, so the
+// database stamps the requester itself), and finalize registers the file
+// against that request with the service role. claim_evidence_register is
+// executable by the service role, which every Edge Function holds; it takes
+// the uploader from the request, never from an argument.
+//
 // Auth: a team JWT only (401 without a session, 403 for anyone not on
 // team_members). There is no cron path: no automation uploads evidence.
 // Uploading decides nothing; only the verification owner, signed in, can cite
@@ -18,9 +25,9 @@
 // Body (POST, JSON):
 //   { mode: "prepare",  client_id, sha256, size, mime_type }
 //       → { status: "exists", evidence }      the same bytes are already registered for this client
-//       → { status: "upload", path, token }   upload the file to `path` with `token` (storage-js uploadToSignedUrl)
-//       → { status: "uploaded", path }        a file is already stored there unregistered: finalize it
-//   { mode: "finalize", client_id, path, evidence_type, label, original_name?, source_url?, captured_on? }
+//       → { status: "upload", path, token, upload_id }   upload the file to `path` with `token` (storage-js uploadToSignedUrl)
+//       → { status: "uploaded", path, upload_id }        a file is already stored there unregistered: finalize it
+//   { mode: "finalize", client_id, upload_id, path, evidence_type, label, original_name?, source_url?, captured_on? }
 //       → { status: "registered", evidence }  (422 with the reason when the bytes or the record are refused)
 //   { mode: "check", evidence_id }
 //       → { status: "intact" | "mismatch" | "missing", sha256, actual_sha256?, checked_at }
@@ -34,6 +41,8 @@ export type SupabaseLike = any;
 export interface ClaimEvidenceDeps {
   /** A service-role client. */
   supabase: SupabaseLike;
+  /** A client that acts as the caller: their JWT on every request (role authenticated). */
+  userClient: (jwt: string) => SupabaseLike;
   now?: () => Date;
   maxBytes?: number;
 }
@@ -138,14 +147,26 @@ export function createClaimEvidenceHandler(deps: ClaimEvidenceDeps) {
         .eq("sha256", sha)
         .maybeSingle();
       if (existing) return json({ status: "exists", evidence: existing });
+      // The request is written from the caller's own session: the database
+      // records who asked, from their JWT, not from anything sent here.
+      const { data: uploadId, error: reqError } = await deps.userClient(jwt).rpc("claim_evidence_request_upload", {
+        p_client_id: clientId,
+        p_sha256: sha,
+        p_size: size,
+        p_mime: mime,
+      });
+      if (reqError || !uploadId) {
+        const status = reqError?.code === "42501" ? 403 : 422;
+        return json({ error: reqError?.message ?? "The upload request was refused" }, status);
+      }
       const path = evidencePath(clientId, sha, mime);
       const { data: signed, error } = await storage.createSignedUploadUrl(path);
       if (error || !signed?.token) {
         // An earlier attempt stored the file and stopped before finalize.
-        if (/exist|duplicate/i.test(error?.message ?? "")) return json({ status: "uploaded", path });
+        if (/exist|duplicate/i.test(error?.message ?? "")) return json({ status: "uploaded", path, upload_id: uploadId });
         return json({ error: `Could not prepare the upload: ${error?.message ?? "no token"}` }, 502);
       }
-      return json({ status: "upload", path, token: signed.token });
+      return json({ status: "upload", path, token: signed.token, upload_id: uploadId });
     }
 
     // ── finalize: re-hash what was stored, then register it ─────────────────
@@ -153,6 +174,17 @@ export function createClaimEvidenceHandler(deps: ClaimEvidenceDeps) {
       const path = String(body.path ?? "");
       const parsed = parsePath(path);
       if (!parsed || parsed.clientId !== clientId) return json({ error: "path must be <client_id>/<sha256>.<ext>" }, 400);
+      const uploadId = String(body.upload_id ?? "");
+      if (!UUID.test(uploadId)) return json({ error: "upload_id is required" }, 400);
+      const { data: request } = await supabase
+        .from("claim_evidence_uploads")
+        .select("id, client_id, sha256, mime_type, requested_by")
+        .eq("id", uploadId)
+        .maybeSingle();
+      if (!request || request.client_id !== clientId || request.sha256 !== parsed.sha256 || MIME_EXT[request.mime_type] !== parsed.ext) {
+        return json({ error: "No upload request for that file" }, 404);
+      }
+      if (request.requested_by !== member.id) return json({ error: "Another teammate asked to upload that file" }, 403);
       const type = body.evidence_type;
       if (type !== "document" && type !== "capture") return json({ error: "evidence_type is document or capture" }, 400);
       const label = String(body.label ?? "").trim();
@@ -187,14 +219,13 @@ export function createClaimEvidenceHandler(deps: ClaimEvidenceDeps) {
       }
 
       const { data: evidence, error: regError } = await supabase.rpc("claim_evidence_register", {
-        p_client_id: clientId,
+        p_upload_id: uploadId,
         p_storage_path: path,
         p_sha256: actual,
         p_size: bytes.length,
         p_mime: mime,
         p_evidence_type: type,
         p_label: label,
-        p_uploaded_by: member.id,
         p_original_name: originalName,
         p_source_url: sourceUrl,
         p_captured_on: capturedOn,

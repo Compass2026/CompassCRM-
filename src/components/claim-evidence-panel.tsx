@@ -86,6 +86,7 @@ export function ClaimEvidencePanel({
       }
       setStep("Checking the stored file…");
       const fin = await finalizeClaimEvidenceAction(clientId, {
+        uploadId: String(prep.body.upload_id),
         path,
         evidenceType: type,
         label,

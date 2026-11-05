@@ -12,7 +12,8 @@
 --   owner    authenticator, role authenticated, the verification owner's JWT
 --   admin2   the same, a second admin with no authority
 --   member   the same, a member
---   function authenticator, role service_role (the claim-evidence function)
+--   function authenticator, role service_role (any service-role holder; the
+--            claim-evidence function is the one that registers evidence)
 --   worker   postgres (the worker's own SQL)
 --   stranger a sign-in on no team row; anon
 begin;
@@ -143,7 +144,7 @@ set session authorization postgres;
 \ir ../../rollback/20261104200000_claim_verification.down.sql
 select cvt.ok('B1 down with nothing recorded: back to v1 (the lock, no ledger, no review_id)',
   to_regclass('public.claim_reviews') is null and to_regclass('public.claim_evidence') is null
-  and to_regclass('public.claim_verification_authorities') is null
+  and to_regclass('public.claim_evidence_uploads') is null and to_regclass('public.claim_verification_authorities') is null
   and not exists (select 1 from information_schema.columns where table_name = 'claims' and column_name = 'review_id')
   and strpos(pg_get_functiondef('public.claims_registry_guard()'::regprocedure), 'locked until the verification workflow') > 0
   and strpos(pg_get_functiondef('public.claim_registry(uuid,date)'::regprocedure), 'claim-registry/v1') > 0);
@@ -166,8 +167,11 @@ values (cvt.id('forged'), cvt.id('L'), cvt.id('L7'), 'classify', 'offering', rep
         cvt.id('auth-owner'), now() - interval '1 day', 1);
 set local session_replication_role = origin;
 
--- Evidence files as the storage service records them.
+-- Evidence files as the storage service records them, each with the member's
+-- upload request (a fixture: only a superuser writes one for someone else).
 create function cvt.put(client_k text, k text, mime text default 'application/pdf') returns text language sql as $$
+  insert into claim_evidence_uploads (id, client_id, sha256, size_bytes, mime_type, requested_by, expires_at)
+  values (cvt.id('upload-' || k), cvt.id(client_k), cvt.sha(k), 2048, mime, cvt.id('member'), now() + interval '1 hour');
   insert into storage.objects (id, bucket_id, name, metadata, version)
   values (cvt.id('obj-' || k), 'claim-evidence', cvt.id(client_k)::text || '/' || cvt.sha(k) || '.' || claim_evidence_ext(mime),
           jsonb_build_object('size', 2048, 'mimetype', mime, 'eTag', '"' || k || '"'), 'v-' || k)
@@ -176,23 +180,28 @@ select cvt.put('L', 'doc-contract'), cvt.put('L', 'doc-confirm'), cvt.put('L', '
        cvt.put('L', 'cap-google', 'image/png'), cvt.put('L', 'cap-old', 'image/png'), cvt.put('L', 'cap-issuer'),
        cvt.put('L', 'cap-own-issuer'), cvt.put('L', 'doc-gone'), cvt.put('X', 'doc-x'), cvt.put('M', 'cap-s', 'image/webp'),
        cvt.put('M', 'cap-f', 'image/webp'), cvt.put('L', 'unregistered'), cvt.put('Z', 'doc-z');
+-- Requests the register must refuse: expired, or for a size the storage did not record.
+insert into claim_evidence_uploads (id, client_id, sha256, size_bytes, mime_type, requested_by, created_at, expires_at) values
+  (cvt.id('upload-expired'), cvt.id('L'), cvt.sha('unregistered'), 2048, 'application/pdf', cvt.id('member'), now() - interval '2 hours', now() - interval '1 hour'),
+  (cvt.id('upload-4096'), cvt.id('L'), cvt.sha('unregistered'), 4096, 'application/pdf', cvt.id('member'), now(), now() + interval '1 hour');
 
 
--- ── E7. Registering evidence (the claim-evidence function's door) ──────────
+-- ── E7. Registering evidence (the service role's door, answering a request) ─
 create function cvt.register(client_k text, k text, p_type text, p_mime text default 'application/pdf',
                              p_url text default null, p_captured date default null) returns uuid language sql as $$
-  select (claim_evidence_register(cvt.id(client_k), cvt.id(client_k)::text || '/' || cvt.sha(k) || '.' || claim_evidence_ext(p_mime),
-                                  cvt.sha(k), 2048, p_mime, p_type, 'Cvt ' || k, cvt.id('member'), k || '.file', p_url, p_captured)).id $$;
+  select (claim_evidence_register(cvt.id('upload-' || k), cvt.id(client_k)::text || '/' || cvt.sha(k) || '.' || claim_evidence_ext(p_mime),
+                                  cvt.sha(k), 2048, p_mime, p_type, 'Cvt ' || k, k || '.file', p_url, p_captured)).id $$;
 grant execute on function cvt.register(text, text, text, text, text, date) to service_role, authenticated;
 set session authorization authenticator;
 set local role service_role;
 select set_config('request.jwt.claims', '{"role": "service_role"}', true);
 select cvt.save('e7a', (cvt.register('L', 'doc-contract', 'document') is not null
   and cvt.register('L', 'cap-site', 'capture', 'image/png', 'https://www.cvt-l.example.test/services', cvt.today() - 2) is not null)::text);
-select cvt.ok('E7a the function registers a document and a capture at their content addresses',
+select cvt.ok('E7a the service role registers a document and a capture at their content addresses, the uploader taken from the request',
   cvt.get('e7a') = 'true'
   and (select sha256 = cvt.sha('doc-contract') and size_bytes = 2048 and object_version = 'v-doc-contract'
               and object_etag = '"doc-contract"' and uploaded_by = cvt.id('member') and evidence_type = 'document'
+              and upload_id = cvt.id('upload-doc-contract')
          from claim_evidence where sha256 = cvt.sha('doc-contract')));
 -- Give the remaining files deterministic ids for the suite (registered the same way).
 select cvt.register('L', 'doc-confirm', 'document'), cvt.register('L', 'doc-gone', 'document'),
@@ -221,17 +230,28 @@ select set_config('request.jwt.claims', '{"role": "service_role"}', true);
 select cvt.ok('E7b the same bytes for the same client return the existing row',
   cvt.register('L', 'doc-contract', 'document') = cvt.id('doc-contract')
   and (select count(*) from claim_evidence where sha256 = cvt.sha('doc-contract')) = 1);
-select cvt.ok('E7c refused: a path that is not the content address, a size or type the storage did not record, no stored file, a capture with no URL',
-  cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x', %L)$q$,
-    cvt.id('L'), cvt.id('L')::text || '/other.pdf', cvt.sha('unregistered'), cvt.id('member'))) = '22023'
-  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 999, 'application/pdf', 'document', 'x', %L)$q$,
-    cvt.id('L'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'), cvt.id('member'))) = '22023'
-  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'image/png', 'document', 'x', %L)$q$,
-    cvt.id('L'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.png', cvt.sha('unregistered'), cvt.id('member'))) = 'P0002'
-  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'capture', 'x', %L)$q$,
-    cvt.id('L'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'), cvt.id('member'))) = '22023'
-  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x', %L)$q$,
-    cvt.id('L'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'), cvt.id('stranger'))) = '42501');
+select cvt.ok('E7c refused: no such request, an expired one, a file other than the request named, a path that is not the content address, a size the storage did not record, a capture with no URL',
+  cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x')$q$,
+    cvt.id('upload-none'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'))) = 'P0002'
+  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x')$q$,
+    cvt.id('upload-expired'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 999, 'application/pdf', 'document', 'x')$q$,
+    cvt.id('upload-unregistered'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'image/png', 'document', 'x')$q$,
+    cvt.id('upload-unregistered'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.png', cvt.sha('unregistered'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x')$q$,
+    cvt.id('upload-unregistered'), cvt.id('L')::text || '/' || cvt.sha('doc-contract') || '.pdf', cvt.sha('doc-contract'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'document', 'x')$q$,
+    cvt.id('upload-unregistered'), cvt.id('L')::text || '/other.pdf', cvt.sha('unregistered'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 4096, 'application/pdf', 'document', 'x')$q$,
+    cvt.id('upload-4096'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_register(%L, %L, %L, 2048, 'application/pdf', 'capture', 'x')$q$,
+    cvt.id('upload-unregistered'), cvt.id('L')::text || '/' || cvt.sha('unregistered') || '.pdf', cvt.sha('unregistered'))) = '22023'
+  and not exists (select 1 from claim_evidence where sha256 = cvt.sha('unregistered')));
+select cvt.ok('E7k the service role cannot write an upload request: neither directly nor through the teammate''s function',
+  cvt.err(format($q$insert into claim_evidence_uploads (client_id, sha256, size_bytes, mime_type, requested_by, expires_at)
+                    values (%L, %L, 1, 'application/pdf', %L, now() + interval '1 day')$q$, cvt.id('L'), cvt.sha('forge'), cvt.id('owner'))) = '42501'
+  and cvt.err(format($q$select claim_evidence_request_upload(%L, %L, 1, 'application/pdf')$q$, cvt.id('L'), cvt.sha('forge'))) = '42501');
 select cvt.ok('E7d the function cannot write the tables directly',
   cvt.err(format($q$insert into claim_evidence (client_id, evidence_type, label, storage_path, object_id, sha256, size_bytes, mime_type, uploaded_by)
                     values (%L, 'document', 'x', 'p', %L, %L, 1, 'application/pdf', %L)$q$,
@@ -252,7 +272,56 @@ select cvt.ok('E7f storage refuses overwriting, renaming or deleting a registere
   and cvt.err(format($q$delete from storage.objects where id = %L$q$, cvt.id('obj-doc-contract'))) = '42501'
   and cvt.err(format($q$delete from storage.objects where id = %L$q$, cvt.id('obj-unregistered'))) = ''
   and cvt.err(format($q$update claim_evidence set label = 'y' where id = %L$q$, cvt.id('doc-contract'))) = '42501'
-  and cvt.err(format($q$delete from claim_evidence where id = %L$q$, cvt.id('doc-contract'))) = '42501');
+  and cvt.err(format($q$delete from claim_evidence where id = %L$q$, cvt.id('doc-contract'))) = '42501'
+  and cvt.err(format($q$update claim_evidence_uploads set requested_by = %L where id = %L$q$, cvt.id('owner'), cvt.id('upload-doc-contract'))) = '42501'
+  and cvt.err(format($q$delete from claim_evidence_uploads where id = %L$q$, cvt.id('upload-unregistered'))) = '42501');
+
+-- ── E7g. Upload requests: only from the teammate's own signed-in session ────
+-- A fictional file for client X, stored as the storage service records it.
+insert into storage.objects (id, bucket_id, name, metadata, version)
+values (cvt.id('obj-req-new'), 'claim-evidence', cvt.id('X')::text || '/' || cvt.sha('req-new') || '.png',
+        jsonb_build_object('size', 4096, 'mimetype', 'image/png', 'eTag', '"req-new"'), 'v-req-new');
+set session authorization authenticator;
+set local role authenticated;
+select cvt.jwt('member');
+select cvt.save('up-member', claim_evidence_request_upload(cvt.id('X'), cvt.sha('req-new'), 4096, 'image/png')::text);
+select cvt.ok('E7g a teammate''s own session records an upload request: the requester is the caller, valid for an hour; nothing else writes or changes one',
+  (select requested_by = cvt.id('member') and client_id = cvt.id('X') and size_bytes = 4096 and mime_type = 'image/png'
+          and expires_at between now() + interval '59 minutes' and now() + interval '61 minutes'
+     from claim_evidence_uploads where id = cvt.get('up-member')::uuid)
+  and cvt.err(format($q$insert into claim_evidence_uploads (client_id, sha256, size_bytes, mime_type, requested_by, expires_at)
+                    values (%L, %L, 1, 'application/pdf', %L, now() + interval '1 day')$q$, cvt.id('X'), cvt.sha('forge'), cvt.id('owner'))) = '42501'
+  and cvt.err(format($q$update claim_evidence_uploads set requested_by = %L where id = %L$q$, cvt.id('owner'), cvt.get('up-member'))) = '42501'
+  and cvt.err(format($q$select claim_evidence_request_upload(%L, 'abc', 1, 'application/pdf')$q$, cvt.id('X'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_request_upload(%L, %L, 1, 'text/html')$q$, cvt.id('X'), cvt.sha('x'))) = '22023'
+  and cvt.err(format($q$select claim_evidence_request_upload(%L, %L, 1, 'application/pdf')$q$, cvt.id('upload-none'), cvt.sha('x'))) = 'P0002');
+select cvt.jwt('stranger');
+select cvt.ok('E7h a sign-in on no team row cannot ask to upload',
+  cvt.err(format($q$select claim_evidence_request_upload(%L, %L, 1, 'application/pdf')$q$, cvt.id('X'), cvt.sha('forge'))) = '42501');
+set local role anon;
+select set_config('request.jwt.claims', '{"role": "anon"}', true);
+select cvt.ok('E7l anon cannot ask to upload or read the requests',
+  cvt.err(format($q$select claim_evidence_request_upload(%L, %L, 1, 'application/pdf')$q$, cvt.id('X'), cvt.sha('forge'))) = '42501'
+  and cvt.err('select * from claim_evidence_uploads') = '42501');
+set local role service_role;
+select set_config('request.jwt.claims', '{"role": "service_role"}', true);
+select cvt.save('ev-req-new', (claim_evidence_register(cvt.get('up-member')::uuid, cvt.id('X')::text || '/' || cvt.sha('req-new') || '.png',
+  cvt.sha('req-new'), 4096, 'image/png', 'capture', 'Cvt listing capture', 'listing.png', 'https://listing.example.test/x', cvt.today())).id::text);
+select cvt.ok('E7i the service role registers against the member''s request: the uploader is the member, and a retry returns the same row',
+  (select uploaded_by = cvt.id('member') and upload_id = cvt.get('up-member')::uuid and client_id = cvt.id('X')
+     from claim_evidence where id = cvt.get('ev-req-new')::uuid)
+  and (claim_evidence_register(cvt.get('up-member')::uuid, cvt.id('X')::text || '/' || cvt.sha('req-new') || '.png',
+         cvt.sha('req-new'), 4096, 'image/png', 'capture', 'Again', null, 'https://listing.example.test/x', cvt.today())).id::text = cvt.get('ev-req-new'));
+reset role;
+set session authorization supabase_admin;
+-- pglite:skip-begin (PGlite's postgres is a superuser, the database owner's bypass)
+set session authorization postgres;
+select cvt.ok('E7j the worker''s own SQL cannot write an upload request, directly or through the function',
+  cvt.err(format($q$insert into claim_evidence_uploads (client_id, sha256, size_bytes, mime_type, requested_by, expires_at)
+                    values (%L, %L, 1, 'application/pdf', %L, now() + interval '1 day')$q$, cvt.id('X'), cvt.sha('forge'), cvt.id('owner'))) = '42501'
+  and cvt.err(format($q$select claim_evidence_request_upload(%L, %L, 1, 'application/pdf')$q$, cvt.id('X'), cvt.sha('forge'))) = '42501');
+set session authorization supabase_admin;
+-- pglite:skip-end
 
 -- ── S. Who may decide ───────────────────────────────────────────────────────
 set session authorization authenticator;
@@ -526,15 +595,62 @@ select cvt.ok('A4 not even a superuser changes or deletes a review',
   and cvt.err(format($q$delete from claim_reviews where claim_id = %L$q$, cvt.id('L1'))) = '42501');
 select cvt.ok('A6 recomputed now, the post''s approval snapshot still hashes to its approval',
   (select approved_hash = social_post_hash(social_post_snapshot(sp)) from social_posts sp where id = cvt.id('P1')));
-select cvt.ok('A5 grants: writers for authenticated only; the register for the function only; tables read-only',
+select cvt.ok('A5 grants: writers and upload requests for authenticated only; the register for the service role only; tables read-only',
   has_function_privilege('authenticated', 'public.claim_verify(uuid,text,text,text,date,text,uuid,uuid,uuid,date,text,text)', 'execute')
   and not has_function_privilege('anon', 'public.claim_classify(uuid,text,text,uuid,text)', 'execute')
   and not has_function_privilege('service_role', 'public.claim_revoke(uuid,text,text,uuid)', 'execute')
-  and not has_function_privilege('authenticated', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,uuid,text,text,date)', 'execute')
+  and not has_function_privilege('authenticated', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,text,text,date)', 'execute')
+  and has_function_privilege('service_role', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,text,text,date)', 'execute')
+  and has_function_privilege('authenticated', 'public.claim_evidence_request_upload(uuid,text,bigint,text)', 'execute')
+  and not has_function_privilege('service_role', 'public.claim_evidence_request_upload(uuid,text,bigint,text)', 'execute')
+  and not has_function_privilege('anon', 'public.claim_evidence_request_upload(uuid,text,bigint,text)', 'execute')
+  and not has_table_privilege('authenticated', 'public.claim_evidence_uploads', 'insert')
+  and not has_table_privilege('service_role', 'public.claim_evidence_uploads', 'insert')
   and not has_function_privilege('authenticated', 'public.claim_reviewer_authority()', 'execute')
   and not has_table_privilege('authenticated', 'public.claim_reviews', 'insert')
   and not has_table_privilege('service_role', 'public.claim_evidence', 'insert')
   and (select provolatile = 's' and not prosecdef from pg_proc where oid = 'public.claim_registry(uuid,date)'::regprocedure));
+
+-- ── T. A claim's status changing while a decision form is open ─────────────
+-- (ChatGPT's second review.) The fingerprint pins what a decision is about
+-- (client, text, source, kind); status is the separate, unchanged citing
+-- rule. The one rule that reads status (an unverified claim is not verified
+-- here) is checked against the claim row locked at submit, so a form loaded
+-- before a status change can never record what the rules would refuse.
+set session authorization authenticator;
+set local role authenticated;
+select cvt.jwt('owner');
+select cvt.classify('X1', 'warranty_guarantee');
+select cvt.save('x1_fp', cvt.fp('X1'));
+select cvt.save('x1_rid', cvt.rid('X1')::text);
+select cvt.jwt('member');
+update claims set status = 'unverified' where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.save('x1_reviews', cvt.reviews('X1')::text);
+select cvt.ok('T1 status set to unverified after the form loaded: verify is refused at submit and records nothing',
+  cvt.msg(format($q$select claim_verify(%L, 'verify', 'client_contract', 'The contract says so.', %L, %L, %L, %L)$q$,
+                 cvt.id('X1'), cvt.today(), cvt.get('x1_fp'), cvt.get('x1_rid'), cvt.id('doc-x'))) like 'An unverified claim cannot be verified%'
+  and cvt.reviews('X1')::text = cvt.get('x1_reviews')
+  and (select verified_at is null and status::text = 'unverified' from claims where id = cvt.id('X1')));
+select cvt.jwt('member');
+update claims set status = 'sourced', source = 'Signed agreement (fictional)' where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.ok('T2 a source edit after the form loaded is a different claim: the old screen is refused (CV409)',
+  cvt.err(format($q$select claim_verify(%L, 'verify', 'client_contract', 'The contract says so.', %L, %L, %L, %L)$q$,
+                 cvt.id('X1'), cvt.today(), cvt.get('x1_fp'), cvt.get('x1_rid'), cvt.id('doc-x'))) = 'CV409'
+  and cvt.reviews('X1')::text = cvt.get('x1_reviews'));
+select cvt.save('x1_fp', cvt.fp('X1'));
+select cvt.jwt('member');
+update claims set status = 'confirmed', confirmed_by = 'x2@example.test', confirmed_on = now() where id = cvt.id('X1');
+select cvt.jwt('owner');
+select cvt.save('t3', (claim_verify(cvt.id('X1'), 'verify', 'client_contract', 'The contract says so.', cvt.today(),
+                                    cvt.get('x1_fp'), cvt.get('x1_rid')::uuid, cvt.id('doc-x'))->>'review_id'));
+select cvt.ok('T3 a status-only change (sourced to confirmed) leaves the decision valid: it records, and the status it found is untouched',
+  cvt.get('t3') is not null
+  and (select status::text = 'confirmed' and confirmed_by = 'x2@example.test' and review_id = cvt.get('t3')::uuid and verified_by = cvt.id('owner')
+         from claims where id = cvt.id('X1')));
+reset role;
+set session authorization supabase_admin;
 
 -- ── D. Deleting a client still works ────────────────────────────────────────
 set session authorization authenticator;
@@ -549,6 +665,7 @@ delete from clients where id = cvt.id('Z');
 select cvt.ok('D1 a client delete cascades through its claims, reviews, evidence rows and history',
   not exists (select 1 from claims where client_id = cvt.id('Z')) and not exists (select 1 from claim_reviews where client_id = cvt.id('Z'))
   and not exists (select 1 from claim_evidence where client_id = cvt.id('Z'))
+  and not exists (select 1 from claim_evidence_uploads where client_id = cvt.id('Z'))
   and not exists (select 1 from creative_governance_events where client_id = cvt.id('Z')));
 set session authorization supabase_admin;
 

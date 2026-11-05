@@ -139,6 +139,22 @@ revoke all on function claim_reviewer_authority() from public, anon, authenticat
 -- API (the claim-evidence function signs a one-time upload for exactly
 -- <client>/<sha256>.<ext>, then re-hashes the stored bytes before it
 -- registers anything), and a registered file is never replaced or deleted.
+--
+-- Trust boundary (ChatGPT's second review). Registration is two halves, each
+-- written by a different party:
+--   * the upload request (claim_evidence_uploads) is written only from a
+--     teammate's own signed-in session (PostgREST, role authenticated, their
+--     JWT): it records who asked to upload which bytes (client, SHA-256,
+--     size, type). Neither the service role nor the worker can write one, so
+--     an uploader cannot be named by anyone but that person's own session;
+--   * the evidence row is written only through claim_evidence_register,
+--     executable by the service role. The database cannot read the bytes in
+--     object storage, so it trusts the service-role caller to have re-hashed
+--     them. The service role is held by every deployed Edge Function, not
+--     only claim-evidence: the boundary is that key, not one function. What a
+--     service-role caller cannot do is register a file nobody asked for, for
+--     another client, under other bytes' hash, or in someone else's name.
+--     Anyone can re-hash a registered file from its bytes ("Re-check hash").
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('claim-evidence', 'claim-evidence', false, 10485760, array['application/pdf', 'image/png', 'image/jpeg', 'image/webp'])
 on conflict (id) do nothing;
@@ -152,6 +168,80 @@ language sql immutable set search_path = pg_catalog as $$
 $$;
 revoke all on function claim_evidence_ext(text) from public, anon;
 grant execute on function claim_evidence_ext(text) to authenticated, service_role;
+
+-- A teammate's request to upload one file: written only from their own
+-- signed-in session through claim_evidence_request_upload, valid for an hour,
+-- used at most once (claim_evidence.upload_id is unique). Never changed.
+create table claim_evidence_uploads (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references clients (id) on delete cascade,
+  sha256 text not null check (sha256 ~ '^[0-9a-f]{64}$'),
+  size_bytes bigint not null check (size_bytes between 1 and 10485760),
+  mime_type text not null check (mime_type in ('application/pdf', 'image/png', 'image/jpeg', 'image/webp')),
+  requested_by uuid not null references team_members (id),
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  unique (id, client_id, sha256)
+);
+comment on table claim_evidence_uploads is
+  'Upload requests for claim evidence (20261104200000): who asked to upload which bytes, written only from that teammate''s own signed-in session. The provenance claim_evidence.uploaded_by is taken from.';
+
+create function claim_evidence_uploads_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if post_caller_is_human() then
+      new.requested_by := task_actor();
+      new.created_at := now();
+      new.expires_at := now() + interval '1 hour';
+      return new;
+    end if;
+    if drafter_caller_is_superuser() then
+      return new;
+    end if;
+    raise exception 'Only a signed-in teammate asks to upload claim evidence' using errcode = 'insufficient_privilege';
+  end if;
+  if tg_op = 'DELETE' and not exists (select 1 from clients where id = old.client_id) then
+    return old;
+  end if;
+  raise exception 'Claim evidence upload requests are never changed' using errcode = 'insufficient_privilege';
+end $$;
+revoke all on function claim_evidence_uploads_guard() from public, anon, authenticated, service_role;
+create trigger claim_evidence_uploads_guard before insert or update or delete on claim_evidence_uploads
+  for each row execute function claim_evidence_uploads_guard();
+create trigger claim_evidence_uploads_no_truncate before truncate on claim_evidence_uploads
+  for each statement execute function claim_evidence_uploads_guard();
+alter table claim_evidence_uploads enable row level security;
+create policy "team reads claim evidence uploads" on claim_evidence_uploads for select to authenticated
+  using ((select is_team()));
+revoke all on claim_evidence_uploads from public, anon, authenticated, service_role;
+grant select on claim_evidence_uploads to authenticated, service_role;
+
+-- The teammate's half, called from their own session (the claim-evidence
+-- function forwards the caller's JWT for it). The requester is always the
+-- caller; nothing in the arguments names a person.
+create function claim_evidence_request_upload(p_client_id uuid, p_sha256 text, p_size bigint, p_mime text) returns uuid
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_id uuid;
+begin
+  if not post_caller_is_human() then
+    raise exception 'Only a signed-in teammate uploads claim evidence' using errcode = 'insufficient_privilege';
+  end if;
+  if not exists (select 1 from clients where id = p_client_id) then
+    raise exception 'Client % not found', p_client_id using errcode = 'no_data_found';
+  end if;
+  if coalesce(p_sha256, '') !~ '^[0-9a-f]{64}$' or claim_evidence_ext(p_mime) is null
+     or p_size is null or p_size not between 1 and 10485760 then
+    raise exception 'Evidence is a PDF, PNG, JPEG or WebP file of up to 10 MB, named by its SHA-256' using errcode = 'invalid_parameter_value';
+  end if;
+  insert into claim_evidence_uploads (client_id, sha256, size_bytes, mime_type, requested_by, expires_at)
+  values (p_client_id, p_sha256, p_size, p_mime, task_actor(), now() + interval '1 hour')
+  returning id into v_id;
+  return v_id;
+end $$;
+revoke all on function claim_evidence_request_upload(uuid, text, bigint, text) from public, anon, authenticated, service_role;
+grant execute on function claim_evidence_request_upload(uuid, text, bigint, text) to authenticated;
 
 create table claim_evidence (
   id uuid primary key default gen_random_uuid(),
@@ -173,7 +263,10 @@ create table claim_evidence (
   source_url text check (source_url is null or (length(source_url) <= 2000 and source_url ~ '^https?://[^/[:space:]?#]+')),
   captured_on date,
   uploaded_by uuid not null references team_members (id),
+  -- The teammate's upload request this file answers; uploaded_by is its requester.
+  upload_id uuid not null unique,
   created_at timestamptz not null default now(),
+  foreign key (upload_id, client_id, sha256) references claim_evidence_uploads (id, client_id, sha256),
   unique (id, client_id),
   unique (id, client_id, sha256),
   unique (client_id, sha256),
@@ -184,17 +277,23 @@ create table claim_evidence (
 );
 create index claim_evidence_client_idx on claim_evidence (client_id, created_at);
 comment on table claim_evidence is
-  'Uploaded claim evidence (20261104200000): content-addressed private files, SHA-256 computed by the claim-evidence function from the stored bytes. Registered only by that function; append-only.';
+  'Uploaded claim evidence (20261104200000): content-addressed private files, SHA-256 computed from the stored bytes by the service-role caller (the claim-evidence function), each answering one teammate''s upload request. Append-only.';
 
--- Registered only through claim_evidence_register (the function's session),
--- never changed; only a client deletion removes rows.
+-- Registered only through claim_evidence_register (a service-role session),
+-- for the upload request it answers; never changed; only a client deletion
+-- removes rows.
 create function claim_evidence_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' then
     if not drafter_caller_is_service() then
-      raise exception 'Evidence files are registered only by the claim-evidence function'
+      raise exception 'Evidence files are registered only through the service role (the claim-evidence function)'
         using errcode = 'insufficient_privilege';
+    end if;
+    if not exists (select 1 from claim_evidence_uploads u
+                    where u.id = new.upload_id and u.client_id = new.client_id and u.sha256 = new.sha256
+                      and u.size_bytes = new.size_bytes and u.mime_type = new.mime_type and u.requested_by = new.uploaded_by) then
+      raise exception 'Evidence must answer its uploader''s own upload request' using errcode = 'insufficient_privilege';
     end if;
     if not exists (select 1 from storage.objects o
                     where o.id = new.object_id and o.bucket_id = 'claim-evidence' and o.name = new.storage_path) then
@@ -244,34 +343,48 @@ create policy "team reads claim evidence" on claim_evidence for select to authen
 revoke all on claim_evidence from public, anon, authenticated, service_role;
 grant select on claim_evidence to authenticated, service_role;
 
--- The claim-evidence function's only door (service role). It has already
--- re-hashed the stored bytes; this checks the object is where the hash says,
--- with the size and type the storage service recorded. The same bytes for the
--- same client return the existing row.
+-- The service-role half (the claim-evidence function, after re-hashing the
+-- stored bytes). It answers one upload request: the client, hash, size and
+-- type are the request's, and so is the uploader. It checks the object is
+-- where the hash says, with the size and type the storage service recorded.
+-- A retry of the same request, or the same bytes already registered for the
+-- client, returns the existing row.
 create function claim_evidence_register(
-  p_client_id uuid, p_storage_path text, p_sha256 text, p_size bigint, p_mime text, p_evidence_type text,
-  p_label text, p_uploaded_by uuid, p_original_name text default null, p_source_url text default null,
+  p_upload_id uuid, p_storage_path text, p_sha256 text, p_size bigint, p_mime text, p_evidence_type text,
+  p_label text, p_original_name text default null, p_source_url text default null,
   p_captured_on date default null) returns claim_evidence
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   e claim_evidence;
+  u claim_evidence_uploads;
   o record;
   v_today date := (now() at time zone 'America/Chicago')::date;
 begin
   if not drafter_caller_is_service() then
-    raise exception 'Evidence files are registered only by the claim-evidence function' using errcode = 'insufficient_privilege';
+    raise exception 'Evidence files are registered only through the service role (the claim-evidence function)'
+      using errcode = 'insufficient_privilege';
   end if;
-  if not exists (select 1 from team_members where id = p_uploaded_by and auth_user_id is not null) then
-    raise exception 'The uploader is not a signed-in teammate' using errcode = 'insufficient_privilege';
+  select * into u from claim_evidence_uploads where id = p_upload_id;
+  if u.id is null then
+    raise exception 'No upload request %', p_upload_id using errcode = 'no_data_found';
   end if;
-  if not exists (select 1 from clients where id = p_client_id) then
-    raise exception 'Client % not found', p_client_id using errcode = 'no_data_found';
+  select * into e from claim_evidence where upload_id = u.id;
+  if e.id is not null then
+    return e;
   end if;
-  if p_sha256 !~ '^[0-9a-f]{64}$' or claim_evidence_ext(p_mime) is null
-     or p_storage_path is distinct from p_client_id::text || '/' || p_sha256 || '.' || claim_evidence_ext(p_mime) then
+  if u.expires_at < now() then
+    raise exception 'The upload request has expired; upload the file again' using errcode = 'invalid_parameter_value';
+  end if;
+  if not exists (select 1 from team_members where id = u.requested_by and auth_user_id is not null) then
+    raise exception 'The uploader is no longer a signed-in teammate' using errcode = 'insufficient_privilege';
+  end if;
+  if (p_sha256, p_size, p_mime) is distinct from (u.sha256, u.size_bytes, u.mime_type) then
+    raise exception 'The file is not the one its upload request named' using errcode = 'invalid_parameter_value';
+  end if;
+  if p_storage_path is distinct from u.client_id::text || '/' || u.sha256 || '.' || claim_evidence_ext(u.mime_type) then
     raise exception 'The evidence path must be <client>/<sha256>.<ext> for a PDF, PNG, JPEG or WebP file' using errcode = 'invalid_parameter_value';
   end if;
-  select * into e from claim_evidence where client_id = p_client_id and sha256 = p_sha256;
+  select * into e from claim_evidence where client_id = u.client_id and sha256 = u.sha256;
   if e.id is not null then
     return e;
   end if;
@@ -292,16 +405,17 @@ begin
       using errcode = 'invalid_parameter_value';
   end if;
   insert into claim_evidence (client_id, evidence_type, label, storage_path, object_id, object_version, object_etag,
-                              sha256, size_bytes, mime_type, original_name, source_url, captured_on, uploaded_by)
-  values (p_client_id, p_evidence_type, btrim(p_label), p_storage_path, o.id, o.version, o.metadata->>'eTag',
-          p_sha256, p_size, p_mime, nullif(btrim(coalesce(p_original_name, '')), ''), case when p_evidence_type = 'capture' then p_source_url end,
-          case when p_evidence_type = 'capture' then p_captured_on end, p_uploaded_by)
+                              sha256, size_bytes, mime_type, original_name, source_url, captured_on, uploaded_by, upload_id)
+  values (u.client_id, p_evidence_type, btrim(p_label), p_storage_path, o.id, o.version, o.metadata->>'eTag',
+          u.sha256, u.size_bytes, u.mime_type, nullif(btrim(coalesce(p_original_name, '')), ''),
+          case when p_evidence_type = 'capture' then p_source_url end,
+          case when p_evidence_type = 'capture' then p_captured_on end, u.requested_by, u.id)
   returning * into e;
   return e;
 end $$;
-revoke all on function claim_evidence_register(uuid, text, text, bigint, text, text, text, uuid, text, text, date)
+revoke all on function claim_evidence_register(uuid, text, text, bigint, text, text, text, text, text, date)
   from public, anon, authenticated, service_role;
-grant execute on function claim_evidence_register(uuid, text, text, bigint, text, text, text, uuid, text, text, date) to service_role;
+grant execute on function claim_evidence_register(uuid, text, text, bigint, text, text, text, text, text, date) to service_role;
 
 -- Is a registered file still exactly what was registered: the same storage
 -- row at its content address, the same version and size.
@@ -1125,7 +1239,7 @@ begin
     raise exception '20261104200000 changed a claim row';
   end if;
   if exists (select 1 from claims where review_id is not null) or exists (select 1 from claim_reviews)
-     or exists (select 1 from claim_evidence) then
+     or exists (select 1 from claim_evidence) or exists (select 1 from claim_evidence_uploads) then
     raise exception '20261104200000: the ledger and evidence must start empty (no backfill)';
   end if;
   if (select count(*) from claim_verification_authorities) > 1 then
@@ -1138,7 +1252,8 @@ begin
   -- Writers: a signed-in caller only. Internals: nobody but their owner.
   foreach f in array array['public.claim_classify(uuid,text,text,uuid,text)',
                            'public.claim_verify(uuid,text,text,text,date,text,uuid,uuid,uuid,date,text,text)',
-                           'public.claim_revoke(uuid,text,text,uuid)'] loop
+                           'public.claim_revoke(uuid,text,text,uuid)',
+                           'public.claim_evidence_request_upload(uuid,text,bigint,text)'] loop
     if has_function_privilege('anon', f, 'execute') or has_function_privilege('service_role', f, 'execute')
        or not has_function_privilege('authenticated', f, 'execute') then
       raise exception 'writer grants: %', f;
@@ -1146,6 +1261,7 @@ begin
   end loop;
   foreach f in array array['public.claim_reviewer_authority()', 'public.claim_review_open(uuid,text,uuid)',
                            'public.claim_reviews_guard()', 'public.claim_reviews_audit()', 'public.claim_evidence_guard()',
+                           'public.claim_evidence_uploads_guard()',
                            'public.claim_verification_authorities_guard()', 'public.claims_keep_reviewed()',
                            'public.claim_evidence_objects_immutable()', 'public.claim_workspace_ids(uuid,uuid)',
                            'public.claim_own_hosts(uuid,uuid)', 'public.claim_location_identity_sha256(uuid)'] loop
@@ -1154,15 +1270,18 @@ begin
       raise exception 'internal function grants: %', f;
     end if;
   end loop;
-  if has_function_privilege('authenticated', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,uuid,text,text,date)', 'execute')
-     or has_function_privilege('anon', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,uuid,text,text,date)', 'execute')
-     or not has_function_privilege('service_role', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,uuid,text,text,date)', 'execute') then
+  if has_function_privilege('authenticated', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,text,text,date)', 'execute')
+     or has_function_privilege('anon', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,text,text,date)', 'execute')
+     or not has_function_privilege('service_role', 'public.claim_evidence_register(uuid,text,text,bigint,text,text,text,text,text,date)', 'execute') then
     raise exception 'claim_evidence_register grants';
   end if;
   if has_table_privilege('authenticated', 'public.claim_reviews', 'insert, update, delete, truncate')
      or has_table_privilege('service_role', 'public.claim_reviews', 'insert, update, delete, truncate')
      or has_table_privilege('authenticated', 'public.claim_evidence', 'insert, update, delete, truncate')
      or has_table_privilege('service_role', 'public.claim_evidence', 'insert, update, delete, truncate')
+     or has_table_privilege('authenticated', 'public.claim_evidence_uploads', 'insert, update, delete, truncate')
+     or has_table_privilege('service_role', 'public.claim_evidence_uploads', 'insert, update, delete, truncate')
+     or has_table_privilege('anon', 'public.claim_evidence_uploads', 'select')
      or has_table_privilege('authenticated', 'public.claim_verification_authorities', 'insert, update, delete, truncate')
      or has_table_privilege('service_role', 'public.claim_verification_authorities', 'insert, update, delete, truncate')
      or has_table_privilege('anon', 'public.claim_reviews', 'select')
