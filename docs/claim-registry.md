@@ -101,6 +101,8 @@ as "—", never 0. A client without workspaces is one program.
 
 ## Verification (PR2a, `20261104200000`)
 
+In production since Nov 6 2026: `docs/claims-verification-rollout.md`.
+
 ChatGPT's PR2 architecture review (Executive OS 11454716) approved the design in
 `docs/proposals/pr2-controlled-claims-verification.md` with three refinements:
 Tom is the only verification authority, evidence is a private SHA-256-pinned
