@@ -1,5 +1,55 @@
 # Delivery standard
 
+## Current standard (Tom, Nov 6 2026; Executive OS task 3ab519f3)
+
+This is the standard in force. Everything below it is the record of how it
+came to be; where it disagrees, this section wins.
+
+| Unit | Weekly | Monthly |
+| --- | --- | --- |
+| Each eligible website (each brand site of a multi-brand client) | 5 Facebook, 5 Business Profile, 3 blogs | 1 webpage refresh |
+| BHG's shared Business Profile (three programs, one location) | 7 Business Profile posts **in total**, rotating among Safety, Heavy Equipment and Forklift | — |
+
+- **In scope:** Lucas Construction, Logic Solar, Ginger Huff Interiors,
+  MADHAIRLAB, Silverback Plumbing, Pensacola Equipment Rentals, Show Me
+  Design, Show Me Electrical, Ready To Go and BHG (three programs).
+- **Deferred:** Medic Wisdom, Resilient and Shewmaker Brothers Masonry. Plan
+  nothing for them until Tom lifts the deferral.
+- **Superseded:** the monthly v1 standard (8 / 8 / 8 a month, below) and the
+  open BHG question in the weekly rules ("7 of 15 fit a week ... an open
+  decision for Tom"); the 7-a-week rotation answers it. Both are kept as
+  history. Adoption stays data: a client works to the weekly standard from
+  its `client_weekly_delivery_standards` row (Lucas and Logic from Nov 2
+  2026); clients without one still carry v1 slots until Tom gives a start
+  date.
+
+### Operating rules
+
+1. **Read the current CRM state before acting.** Brand board, Brand tab,
+   core keyword list, claims, bindings and existing slots, posts and drafts.
+   Never act from a packet, a task note or memory alone.
+2. **Foundation corrections come before drafting.** A draft's brief freezes
+   the brand, claims and campaign it was written against, and the blog
+   publisher refuses an article whose frozen brief no longer matches
+   ("Keyword, brand or campaign foundation changed since review"). Fix the
+   board, the Brand tab and the claims first, get the board re-approved,
+   then draft or regenerate. After any brand or claim change, check which
+   in-review drafts it invalidates before more work.
+3. **Preserve existing work.** No duplicate slots, tasks, drafts, assets or
+   approval requests; reconcile what exists first. Regenerate in place
+   (version history is kept) and keep reviewed copy, heroes and alt text
+   wherever they still pass.
+4. **Ready for review is not published.** Report each item as *in review*,
+   *approved*, *scheduled*, *published (with the live URL and receipt)* or
+   *blocked (with the exact reason and owner)*. Only Tom approves content,
+   and only his explicit words publish it.
+5. **Do not hold healthy channels behind missing integrations.** A client's
+   bound, healthy Facebook and Business Profile channels proceed once its
+   brand board and core keyword list are approved, even when its blog has
+   no website adapter yet.
+
+## History
+
 What Compass delivers per website, kept apart from what the agreement sold
 (billing entitlements, 0062). Two versions live side by side in
 `delivery_standards`; a client works to one of them by data, never by a
@@ -7,14 +57,14 @@ migration.
 
 | Version | Cadence | Per website | Migration |
 | --- | --- | --- | --- |
-| 1 | monthly (America/Chicago calendar month) | 8 Facebook, 8 Business Profile, 8 blogs, 1 page refresh | `20261015150000_monthly_delivery_standard.sql` |
+| 1 (**superseded** Nov 6 2026) | monthly (America/Chicago calendar month) | 8 Facebook, 8 Business Profile, 8 blogs, 1 page refresh | `20261015150000_monthly_delivery_standard.sql` |
 | 2 | weekly (Monday–Sunday, America/Chicago) | 5 Facebook, 5 Business Profile, 3 blogs a week; 1 page refresh a month | `20261030180000_weekly_delivery_standard.sql` |
 
 The unit is the same in both: each brand site of a multi-brand client
 (`client_brand_workspaces`), otherwise the client. Business Profile
 locations are destinations, never units.
 
-## Monthly standard (v1)
+## Monthly standard (v1, superseded by the current standard above)
 
 `client_delivery_standards` adopts a client from a month on.
 `plan_delivery_month()` opens the month's missing slots

@@ -1063,8 +1063,8 @@ and the per-site survey in `docs/website-updates.md`.
 ## Weekly Facebook and Business Profile drafts (Oct 27 2026)
 
 Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
-`weekly_social_slots.test.sql`). The monthly delivery standard plans
-8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
+`weekly_social_slots.test.sql`). The monthly delivery standard (since superseded by the weekly
+standard; see `docs/delivery-standard.md`) planned 8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
 
 - **Wednesday beat** (`create_weekly_blog_tasks`, unchanged cron): besides
   the blog slots, `queue_standard_social_tasks()` opens one CLAUDE task
@@ -1156,7 +1156,17 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   are queued, and a task whose location has other open slots that day
   tells the worker to choose a different service and topic.
 
-## Weekly delivery standard (Oct 30 2026; `20261030180000` written, **not applied**)
+## Weekly delivery standard (Oct 30 2026; `20261030180000` applied)
+
+**Current standard (Tom, Nov 6 2026):** per eligible website 5 Facebook,
+5 GBP and 3 blogs a week plus one webpage refresh a month; BHG's shared GBP
+gets 7 posts a week in total, rotating among its three programs; Medic
+Wisdom, Resilient and Shewmaker are deferred. The operating rules (read the
+CRM first, foundation corrections before drafting, preserve existing work,
+in review is not published) are in `docs/delivery-standard.md` § Current
+standard. The monthly 8 / 8 / 8 standard and the open BHG question below are
+**superseded** and kept as history. Lucas and Logic are adopted from Nov 2.
+
 
 Tom (Executive OS decision `0b407d66-de7d-4086-b6de-013f793bcbd4`): per
 website per week 5 Facebook, 5 GBP, 3 blogs; 1 page refresh a month.
