@@ -13455,8 +13455,44 @@ export type Database = {
           unit: string
         }[]
       }
+      claim_classify: {
+        Args: {
+          p_claim_id: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_kind: string
+          p_note?: string
+        }
+        Returns: Json
+      }
       claim_registry: {
         Args: { p_client_id: string; p_today?: string }
+        Returns: Json
+      }
+      claim_revoke: {
+        Args: {
+          p_claim_id: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      claim_verify: {
+        Args: {
+          p_action: string
+          p_claim_id: string
+          p_confirmed_by_contact?: string
+          p_evidence_id?: string
+          p_excerpt: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_expires_on?: string
+          p_location_id?: string
+          p_method: string
+          p_note?: string
+          p_observed_on: string
+        }
         Returns: Json
       }
       client_intelligence_input: {

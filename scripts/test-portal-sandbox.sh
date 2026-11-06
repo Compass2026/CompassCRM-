@@ -348,3 +348,9 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_cor
 # drafts, three brand sites, the column guard (person / function / worker),
 # append-only history, approval hashes unchanged, access, no writes, rollback.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/claim_registry.test.sql" -o /dev/null
+# 20261104200000: controlled claims verification (PR2a): owner authority,
+# SHA-256 evidence registration and storage immutability, the decision ledger
+# and projection guard (owner / second admin / member / function / worker /
+# anon), evidence rules, BHG scope, registry integrity, audit, kept history,
+# approval hashes unchanged, client delete, down then up.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/claim_verification.test.sql" -o /dev/null
