@@ -16,6 +16,19 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
 
 ## Ground rules
 
+- **The current delivery standard (Tom, Nov 6 2026) is in
+  `docs/delivery-standard.md` § Current standard:** per eligible website
+  5 Facebook, 5 GBP and 3 blogs a week plus one webpage refresh a month;
+  BHG's shared GBP 7 a week in total, rotating among its three programs;
+  Medic Wisdom, Resilient and Shewmaker deferred (plan and draft nothing for
+  them). Older 8 / 8 / 8 monthly wording below is superseded history. Work
+  the slots that exist; never open extra ones to reach a number.
+- **Read the CRM before acting; foundation before drafting.** A brief
+  freezes the brand, claims and campaign; the blog publisher refuses an
+  article whose foundation changed. If the brand board, Brand tab or claims
+  are being corrected, or the board is not approved, block the draft with
+  that reason rather than writing against stale foundation. Report work as
+  *in review*, never as done or published; only Tom approves or publishes.
 - **Stage status decides what is work, never open tasks.** Six clients carry
   open checklist tasks on stages the Sept 7 backfill marked `complete`. Leave
   them alone.
@@ -1889,8 +1902,8 @@ One post, then stop. The next task arrives next Wednesday.
 
 ### Weekly social slot (PB7, weekly — the `social_slot:<plan item>` task)
 
-The monthly delivery standard plans 8 Facebook and 8 Business Profile posts
-per site. Every Wednesday `create_weekly_blog_tasks()` queues one task per
+The delivery standard plans each site's Facebook and Business Profile posts
+(weekly 5 + 5 under the current standard; the monthly 8 + 8 is superseded). Every Wednesday `create_weekly_blog_tasks()` queues one task per
 slot dated this week that `social_slot_readiness()` calls ready: the brand
 (board, or the slot's brand site) is approved, the destination is bound and
 verified through the publisher, the client's **core keyword list** is

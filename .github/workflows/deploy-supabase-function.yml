@@ -29,6 +29,7 @@ on:
           - brand-scan
           - client-provision
           - portal-invite
+          - claim-evidence
           - stripe-billing
           - stripe-reconcile
           - stripe-webhook

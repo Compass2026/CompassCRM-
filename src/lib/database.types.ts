@@ -2429,6 +2429,30 @@ export type Database = {
           },
         ]
       }
+      claim_review_intervals: {
+        Row: {
+          authoritative_methods: string[]
+          basis: string
+          kind: string
+          label: string
+          review_days: number
+        }
+        Insert: {
+          authoritative_methods: string[]
+          basis: string
+          kind: string
+          label: string
+          review_days: number
+        }
+        Update: {
+          authoritative_methods?: string[]
+          basis?: string
+          kind?: string
+          label?: string
+          review_days?: number
+        }
+        Relationships: []
+      }
       claims: {
         Row: {
           claim: string
@@ -2437,8 +2461,14 @@ export type Database = {
           confirmed_on: string | null
           created_at: string
           id: string
+          kind: string | null
+          review_by: string | null
           source: string | null
           status: Database["public"]["Enums"]["claim_status"]
+          superseded_by: string | null
+          verification_method: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           claim: string
@@ -2447,8 +2477,14 @@ export type Database = {
           confirmed_on?: string | null
           created_at?: string
           id?: string
+          kind?: string | null
+          review_by?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["claim_status"]
+          superseded_by?: string | null
+          verification_method?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           claim?: string
@@ -2457,8 +2493,14 @@ export type Database = {
           confirmed_on?: string | null
           created_at?: string
           id?: string
+          kind?: string | null
+          review_by?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["claim_status"]
+          superseded_by?: string | null
+          verification_method?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {
@@ -13421,6 +13463,46 @@ export type Database = {
           source: string
           unit: string
         }[]
+      }
+      claim_classify: {
+        Args: {
+          p_claim_id: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_kind: string
+          p_note?: string
+        }
+        Returns: Json
+      }
+      claim_registry: {
+        Args: { p_client_id: string; p_today?: string }
+        Returns: Json
+      }
+      claim_revoke: {
+        Args: {
+          p_claim_id: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      claim_verify: {
+        Args: {
+          p_action: string
+          p_claim_id: string
+          p_confirmed_by_contact?: string
+          p_evidence_id?: string
+          p_excerpt: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_expires_on?: string
+          p_location_id?: string
+          p_method: string
+          p_note?: string
+          p_observed_on: string
+        }
+        Returns: Json
       }
       client_intelligence_input: {
         Args: { p_client_id: string }

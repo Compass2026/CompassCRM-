@@ -50,6 +50,98 @@ changes no existing task; open legacy tasks are labelled only by the reviewed
 `supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
 before deploying the code.
 
+## Controlled Claims Verification, PR2a (P1.1b, November 4, 2026; `20261104200000` written, **not applied**; `claim-evidence` not deployed)
+
+See `docs/claim-registry.md` §Verification and
+`docs/proposals/pr2-controlled-claims-verification.md` (ChatGPT architecture
+review, Executive OS 11454716).
+
+- **Only the verification owner decides.** That is Tom, in
+  `claim_verification_authorities`, which only a reviewed migration writes;
+  the migration seeds team member `d73e1bf1` if it exists, is an admin and has a
+  sign-in. Not another admin, Claude, an Edge Function, the worker or an
+  Executive OS instruction. `claim_reviewer_authority()` = a human session
+  (`post_caller_is_human()`) + an active owner row + still an admin.
+- **Writers:** `claim_classify`, `claim_verify` (`verify` | `review`) and
+  `claim_revoke`. Each takes the registry's `fingerprint` and `review_id` back,
+  so a stale screen gets `CV409`. **None writes `claims.status`, `claim` or
+  `source`**, so content eligibility, drafting, approval and publishing are
+  unchanged; the migration hash-pins every other reader of `claims`. Verifying
+  an `unverified` claim is refused; confirming it is PR2b.
+- **The ledger:** `claim_reviews`, append-only, with reviewer, authority, time
+  and txid stamped by trigger, plus a `creative_governance_events` row per
+  decision. The `claims` registry columns plus `review_id` are its projection:
+  `claims_registry_guard` refuses any change that does not match a review
+  written in this transaction by this caller. **A claim with any review history
+  cannot be deleted** (23001); retire / supersede are PR2b.
+- **Evidence:**
+  - Files are private, content-addressed (`<client>/<sha256>.<ext>`) in the
+    `claim-evidence` bucket, which has a team read policy and no write policy.
+  - The `claim-evidence` Edge Function (team JWT) records the upload request
+    from the caller's own session (`claim_evidence_request_upload`, JWT
+    forwarded; the database stamps the requester), signs a one-time upload,
+    re-hashes the stored bytes and sniffs the type, then calls
+    `claim_evidence_register` with the request. A mismatch is deleted. The
+    register is executable by the **service role**, which every Edge
+    Function holds: byte integrity trusts that key (Re-check hash detects a
+    lie); the uploader never comes from it.
+  - Real Storage: `tests/claim-evidence-storage-integration.mjs` against a
+    nonproduction stack (local Supabase, Nov 5: 12/12).
+  - A registered file is never replaced or deleted (a trigger on
+    `storage.objects`).
+  - Pages and listings count only as uploaded captures (URL + capture date,
+    30 days). A Drive link or live URL is never verification.
+  - Phone claims verify against an approved `citation_locations` row on the
+    claim's own brand site, with its identity version pinned by SHA-256.
+- **Integrity:** registry v2 drops a verified claim to *needs review* when its
+  file, location identity, fingerprint or brand-site set changes, or when its
+  status changes after the verification. A status change needs Tom's fresh
+  review, even if the status is put back.
+- **Hosted Storage:** `claim-evidence` bucket settings (public, limits,
+  versioning, lifecycle) are fixed by a trigger. A registered file can't be
+  archived, marked deleted, re-flagged or duplicated at its name. Registration
+  needs an unversioned private bucket.
+  Verification columns with no ledger entry read `verification_unrecorded`,
+  never verified.
+- **Rollback** refuses once any review or evidence exists (history is kept).
+  Fix forward.
+
+## Claims Registry v1 (P1.1a, November 3, 2026; `20261103220000` applied November 4, 2026)
+
+See `docs/claim-registry.md`. COMPASS-2027-ROADMAP W1: a read-only view of
+each claim on the Intelligence tab.
+
+- **What it shows:** source class and link, who verified it and when, its
+  review interval and due date, the brand site that may use it, the posts and
+  drafts that cite it, and contradiction indicators.
+- **Reuses existing pieces.** `claims` gains nullable `kind`,
+  `verification_method`, `verified_at`, `verified_by`, `review_by` and
+  `superseded_by`, all empty (no backfill). History goes to the existing
+  `creative_governance_events` with `subject_type = 'claim'`.
+- **Changes no gate.** Citable is still "confirmed, or sourced with a
+  source". The registry reports this rule as `legacy_usable`. The migration
+  hashes every reader of `claims` before and after and refuses to commit if
+  any changed.
+- **`claim_registry(client)`:** STABLE, security invoker, team only. Each
+  claim falls in one bucket (superseded / unverified / missing_source /
+  stale / needs_review / due / verified).
+  - Nothing is verified until PR2 classifies and verifies it by a method
+    authoritative for its kind (`claim_review_intervals`, ChatGPT D1 / D2).
+  - A URL alone never verifies a claim.
+- **The new columns were locked until PR2** (`claims_registry_guard`,
+  ChatGPT review `42aca6fb`): no signed-in teammate, Edge Function, worker or
+  PostgREST caller may set them (42501); only a superuser session can. PR2a
+  (`20261104200000`, above) replaces the lock with the owner's writers.
+  Citable under current rules (`legacy_usable`) is reported apart from
+  independently verified (`verification_state`).
+- **Indicators only:** an 8-character id in another claim's note is a
+  tentative `supersession_mentioned`. A phone matching an approved
+  `citation_locations` number (active, `approved_at` and `approved_by` set) is
+  that location's; any other number is only a potential mismatch.
+- **BHG:** one program per brand workspace (`claim_ids`). Shared and
+  unassigned claims are labelled. A draft workspace's counts are null, never
+  0.
+
 ## Core 50-aware Authority input (P1.3, October 30, 2026; `20261030190000` written, **not applied**; engine `authority-v1.5` not deployed)
 
 See `docs/authority-core-scope.md`. Authority discovery reads only each site
@@ -1028,8 +1120,8 @@ and the per-site survey in `docs/website-updates.md`.
 ## Weekly Facebook and Business Profile drafts (Oct 27 2026)
 
 Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
-`weekly_social_slots.test.sql`). The monthly delivery standard plans
-8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
+`weekly_social_slots.test.sql`). The monthly delivery standard (since superseded by the weekly
+standard; see `docs/delivery-standard.md`) planned 8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
 
 - **Wednesday beat** (`create_weekly_blog_tasks`, unchanged cron): besides
   the blog slots, `queue_standard_social_tasks()` opens one CLAUDE task
@@ -1121,7 +1213,17 @@ Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
   are queued, and a task whose location has other open slots that day
   tells the worker to choose a different service and topic.
 
-## Weekly delivery standard (Oct 30 2026; `20261030180000` applied Oct 31 2026; two clients adopted from Nov 2, BHG not yet)
+## Weekly delivery standard (Oct 30 2026; `20261030180000` applied Oct 31 2026; Lucas and Logic adopted from Nov 2, Ginger, MADHAIRLAB, Silverback, Pensacola and Show Me Electrical from Nov 9, BHG not yet)
+
+**Current standard (Tom, Nov 6 2026):** per eligible website 5 Facebook,
+5 GBP and 3 blogs a week plus one webpage refresh a month; BHG's shared GBP
+gets 7 posts a week in total, rotating among its three programs; Medic
+Wisdom, Resilient and Shewmaker are deferred. The operating rules (read the
+CRM first, foundation corrections before drafting, preserve existing work,
+in review is not published) are in `docs/delivery-standard.md` § Current
+standard. The monthly 8 / 8 / 8 standard and the open BHG question below are
+**superseded** and kept as history.
+
 
 Tom (Executive OS decision `0b407d66-de7d-4086-b6de-013f793bcbd4`): per
 website per week 5 Facebook, 5 GBP, 3 blogs; 1 page refresh a month.
