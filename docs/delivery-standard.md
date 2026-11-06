@@ -138,10 +138,64 @@ five weeks of work.
   is still opened (the target stays visible) on its site's least-used day,
   and `social_slot_readiness()` reports `Over capacity: <location> already has
   1 Business Profile post(s) planned on <day> …`, so it is never queued,
-  claimed or linked. A three-site client on one location: 15 wanted, 7 placed,
-  8 over capacity every week until Tom decides (see below).
+  claimed or linked. A three-site client on one location under the plain
+  standard: 15 wanted, 7 placed, 8 over capacity every week; that client now
+  has a cadence override (below).
   `gbp_slot_capacity_problem()` is the rule; only weeks a weekly adoption
   governs are judged, so monthly clients are unaffected.
+
+### Cadence overrides (Tom, Nov 3 2026; Executive OS task `3ab519f3`, decision `367b12c0`)
+
+Tom's call for the three-site client on one shared location: **7 Business
+Profile posts a week in total, at most one a day, alternating between the
+businesses.** Facebook (5 a site), blogs (3 a site) and the monthly refresh
+are unchanged. Migration `20261103180000_gbp_cadence_override.sql`, sandbox
+suite `gbp_cadence_override.test.sql`.
+
+- **Data, not code.** `client_delivery_overrides (client_id, deliverable
+  'gbp_posts', allocation 'round_robin', weekly_total 1–7, effective_week,
+  source_ref, recorded_by, recorded_at)`. `effective_week` is a Monday, today
+  or later (no retroactive weeks). Append-only: a later row replaces an
+  earlier one from its week, and `allocation = 'standard'` (no total) ends
+  the override. It applies only in weeks the weekly standard governs for the
+  client; recording it before the client adopts the standard is fine.
+- **Rotation.** The week's `weekly_total` positions sit on the first
+  `weekly_total` standard days in date order (7 → Mon–Sun, one a day).
+  Position *i* of week *w* goes to site `((w − effective_week) / 7 ×
+  weekly_total + i) mod sites`, sites ordered by slug. It is one continuous
+  round robin, day after day across week boundaries: with three sites (a, b,
+  c by slug) the weeks run `abcabca`, `bcabcab`, `cabcabc`, then `abcabca`
+  again, so each week is 3 / 2 / 2 and the extra post rotates. It is computed
+  from the calendar, not from what happens to be planned, so reruns and
+  late runs agree.
+- **Planner.** `plan_delivery_week` opens each position's slot on its own day
+  (`delivery_override_id` set) unless the day has passed or already carries
+  a Business Profile item. A site never gets more than its share less the
+  work already dated in the week, and the week never more than
+  `weekly_total`. Reruns open nothing, and a missed day stays missed.
+- **A week the standard already planned.** The first time the override
+  plans a week, the standard's GBP slots for that week with nothing attached
+  are retired (blocked, `Retired: superseded by the Business Profile cadence
+  override …`, previous hold kept, never deleted). A slot with work attached
+  (post, article, draft, delivered mark, open task) stays, holds its day
+  and counts toward its site's share.
+- **Reporting.** `delivery_week_report`'s GBP target is the site's share of
+  the week (7 in total, not 15), so the removed 8 are neither remaining nor
+  over capacity; retired slots show in `v1_retired`. `delivery_targets`
+  adds `delivery_override_month_delta()` per site and month: the override's
+  days less the standard's days, which is 0 for every other client and
+  month, so their rows are unchanged. One post a day means a fully covered
+  month has as many GBP posts as days. The days of a transition month
+  before the first weekly week keep v1's pro-rated count, as before.
+- **Recording one (data, after review):**
+
+  ```sql
+  insert into client_delivery_overrides (client_id, deliverable, allocation, weekly_total, effective_week, source_ref)
+  values ('<client id>', 'gbp_posts', 'round_robin', 7, date '<first Monday it applies>', '<where Tom decided it>');
+  ```
+
+  Then `select * from delivery_week_report('<client id>', '<that Monday>', '<+ 3 weeks>')`
+  shows 7 GBP posts a week and no over capacity.
 
 ### Reconciliation of the v1 slots
 
@@ -231,17 +285,23 @@ planned, all inside one transaction that raised at the end. 12 clients,
 ### Open decisions for Tom
 
 1. **Start date** (the only input the adoption needs), and which clients.
-2. **The three-site, one-location collision (unresolved).** Tom asked for
-   15 GBP posts a week across the three-site client's websites; one post per location
-   per day fits only 7 on its one shared profile, so the 7-post limit does
-   **not** fulfil the request. The planner opens all 15 and flags the other
-   8 "Over capacity" (never drafted) until Tom chooses: connect more
-   locations, record a standard with a higher daily cap, or accept a lower
-   count.
+2. ~~The three-site, one-location collision.~~ **Decided Nov 3 2026**
+   (Executive OS decision `367b12c0`): 7 GBP posts a week across the three
+   sites, one a day, alternating between the businesses. Recorded per client
+   as a cadence override (above), not as a new standard.
 3. Whether a shortfall week should ever be made up later (today: no).
 4. The weekday pattern (Mon–Fri for posts, Mon / Wed / Fri for blogs).
 
 ### Rollback
+
+Roll back `20261103180000` first:
+`supabase/rollback/20261103180000_gbp_cadence_override.down.sql` restores
+`plan_delivery_week`, `delivery_week_report` and `delivery_targets` byte for
+byte (md5-checked) and removes the override's table, column and functions.
+Once an override is recorded it stops unless
+`compass.delivery_override_rollback = 'confirmed'`; then the rows are kept as
+`client_delivery_overrides_rolled_back`, slots the override opened stay as
+ordinary weekly slots, and slots it retired stay retired. Nothing is deleted.
 
 `supabase/rollback/20261030180000_weekly_delivery_standard.down.sql`
 restores `social_slot_readiness`, `plan_delivery_month`, `delivery_targets`
