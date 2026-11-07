@@ -204,3 +204,117 @@ test("Logic-shaped: the content-approvals copy check enforces the same rule on a
   const phone = await check("client", "post", `${WICHITA_COPY} Call ${KC_PHONE}.`, [OC, WARRANTY]);
   assert.ok(phone.problems.some((p) => p.code === "wrong_phone"));
 });
+
+// ── A phone recorded for one location (gbp_location_phones, Nov 3 2026) ──────
+// The scoped profile carries its own recorded number in the copy, never a
+// Call button (the publisher cannot send one); the client-wide number is
+// "not this location's number" there.
+// Without a recorded phone the profile stays phone-free (tests above).
+// Synthetic 555-01xx number; the store attaches it (last test).
+import { createStore } from "../supabase/functions/post-drafter/store.ts";
+
+const LOCATION_PHONE = "(316) 555-0142";
+const wichitaWithPhone = { ...wichitaOffice, phone: LOCATION_PHONE };
+const PHONE_ACCOUNTS = [wichitaWithPhone, facebook];
+
+test("location phone: the scoped profile's brief carries its recorded phone, and the client-wide number is excluded as not this location's", () => {
+  const r = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: PHONE_ACCOUNTS });
+  assert.equal(r.ok, true, JSON.stringify(r.refusals));
+  assert.equal(r.brief.client.phone, LOCATION_PHONE);
+  assert.equal(r.brief.allowed_facts.crm.phone, LOCATION_PHONE);
+  assert.deepEqual(placesOf(r), ["Wichita"]);
+  const clientWide = r.brief.excluded.facts.find((f) => f.fact.startsWith("The client-wide phone number"));
+  assert.ok(clientWide && clientWide.fact.includes(KC_PHONE), "the client-wide number is named as an excluded fact");
+  assert.match(clientWide.reason, /Not this location's number/);
+  assert.ok(!r.brief.excluded.facts.some((f) => f.fact === "The client's phone number"), "no phone-free exclusion when a phone is recorded");
+  assert.ok(r.brief.excluded.facts.some((f) => f.fact === "A staffed office at this location"), "a recorded phone is not a staffed office");
+});
+
+test("location phone: copy with the location's number passes; the client-wide 816 number is refused as wrong_phone", () => {
+  const r = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: PHONE_ACCOUNTS });
+  const lint = (copy) => lintDraft(r.brief, { copy, claim_ids: [OC, WARRANTY] }, { gazetteer: KS });
+  for (const written of [LOCATION_PHONE, "316-555-0142", "316.555.0142"]) {
+    const ok = lint(`${WICHITA_COPY} Call ${written}.`);
+    assert.deepEqual(ok.problems.filter((p) => p.code === "wrong_phone"), [], written);
+  }
+  const wrong = lint(`${WICHITA_COPY} Call ${KC_PHONE}.`);
+  assert.ok(wrong.problems.some((p) => p.code === "wrong_phone" && p.message === `The only phone number is ${LOCATION_PHONE}.`));
+});
+
+test("location phone: a Call button is refused even with a recorded phone (the publisher cannot send it); Learn More is the button", () => {
+  const withPhone = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", socialAccountId: WICHITA }, { socialAccounts: PHONE_ACCOUNTS });
+  assert.equal(withPhone.ok, false);
+  const refusal = withPhone.refusals.find((x) => x.code === "cta_invalid");
+  assert.ok(refusal && refusal.message.includes(LOCATION_PHONE) && /Learn More/.test(refusal.message), JSON.stringify(withPhone.refusals));
+  const learnMore = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: PHONE_ACCOUNTS });
+  assert.equal(learnMore.ok, true, JSON.stringify(learnMore.refusals));
+  assert.equal(learnMore.brief.target.cta.type, "LEARN_MORE");
+  const without = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", socialAccountId: WICHITA }, { socialAccounts: ACCOUNTS });
+  assert.ok(codes(without).includes("cta_invalid"));
+  // A phone recorded for another location does not lend this one a Call button.
+  const elsewhere = buildBrief(logicShaped(), { ...TARGET, ctaType: "CALL", socialAccountId: WICHITA },
+    { socialAccounts: [wichitaOffice, { ...overland, phone: "(913) 555-0107", markets: [{ market: "Overland Park", kind: "office" }] }, facebook] });
+  assert.ok(codes(elsewhere).includes("cta_invalid"));
+});
+
+test("location phone: a scoped location without a recorded phone is unchanged (phone-free, Learn More)", () => {
+  const before = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: ACCOUNTS });
+  const nulled = buildBrief(logicShaped(), { ...TARGET, socialAccountId: WICHITA }, { socialAccounts: [{ ...wichitaOffice, phone: null }, facebook] });
+  assert.equal(nulled.ok, true, JSON.stringify(nulled.refusals));
+  assert.deepEqual(nulled.brief, before.brief);
+  assert.equal(nulled.brief.client.phone, "");
+  assert.ok(!JSON.stringify(nulled.brief).includes(KC_PHONE));
+});
+
+test("location phone: Facebook, blog, unscoped and 'all' profiles keep the client's phone", () => {
+  const fb = buildBrief(logicShaped(), { ...TARGET, channel: "facebook", ctaType: null, socialAccountId: PAGE }, { socialAccounts: PHONE_ACCOUNTS });
+  assert.equal(fb.ok, true, JSON.stringify(fb.refusals));
+  assert.equal(fb.brief.client.phone, KC_PHONE);
+  assert.ok(!JSON.stringify(fb.brief).includes(LOCATION_PHONE));
+  const blog = buildBrief(logicShaped(), TARGET, { socialAccounts: PHONE_ACCOUNTS, purpose: "blog" });
+  assert.equal(blog.brief.client.phone, KC_PHONE);
+  // A single-location client with nothing recorded, and a shared 'all' profile: the client's phone, the location's ignored.
+  const single = buildBrief(lucas(), TARGET, { socialAccounts: [{ ...wichita, phone: LOCATION_PHONE }] });
+  assert.equal(single.brief.client.phone, lucas().client.phone);
+  const all = buildBrief(lucas(), TARGET, { socialAccounts: [{ ...wichita, phone: LOCATION_PHONE, markets: [{ market: "All service markets", kind: "all" }] }] });
+  assert.equal(all.brief.client.phone, lucas().client.phone);
+});
+
+test("location phone: the content-approvals copy check inherits it", async () => {
+  const post = { platform: "google_business", post_type: "standard", search_intent: "commercial", service_id: TARGET.serviceId,
+    keyword_id: KW, offer_id: null, cta_type: "LEARN_MORE", cta_url: null, social_account_id: WICHITA, asset_ids: [], campaign_mode: "keyword" };
+  const deps = (accounts) => ({ postTarget: async () => post, input: async () => logicShaped(), socialAccounts: async () => accounts, gazetteer: realGazetteer });
+  const check = createCopyCheck(deps(PHONE_ACCOUNTS));
+  const ok = await check("client", "post", `${WICHITA_COPY} Call ${LOCATION_PHONE}.`, [OC, WARRANTY]);
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  const wrong = await check("client", "post", `${WICHITA_COPY} Call ${KC_PHONE}.`, [OC, WARRANTY]);
+  assert.equal(wrong.ok, false);
+  assert.ok(wrong.problems.some((p) => p.code === "wrong_phone"));
+  // A Call-button post is refused at the brief, with or without a recorded phone.
+  const callPost = { ...post, cta_type: "CALL" };
+  for (const accounts of [PHONE_ACCOUNTS, ACCOUNTS]) {
+    const call = await createCopyCheck({ ...deps(accounts), postTarget: async () => callPost })("client", "post", WICHITA_COPY, [OC, WARRANTY]);
+    assert.equal(call.ok, false);
+    assert.equal(call.code, "brief_refused");
+    assert.ok(call.problems.some((p) => p.code === "cta_invalid"));
+  }
+});
+
+test("location phone: the store attaches each Business Profile location's recorded phone, and a missing table reads as none", async () => {
+  const rows = { social_accounts: [{ ...wichita }, { ...overland }, { ...facebook }],
+    gbp_location_markets: [{ social_account_id: WICHITA, market: "Wichita", kind: "office" }],
+    gbp_location_phones: [{ social_account_id: WICHITA, phone: LOCATION_PHONE }] };
+  const fake = (missing) => ({ from(table) {
+    const q = { select: () => q, eq: () => q, in: () => q,
+      then: (resolve) => resolve(missing && table === "gbp_location_phones"
+        ? { data: null, error: { code: "PGRST205", message: "Could not find the table" } }
+        : { data: rows[table].map((r) => ({ ...r })), error: null }) };
+    return q;
+  } });
+  const accounts = await createStore(fake(false)).socialAccounts("client");
+  assert.equal(accounts.find((a) => a.id === WICHITA).phone, LOCATION_PHONE);
+  assert.equal(accounts.find((a) => a.id === OVERLAND).phone, null);
+  assert.equal(accounts.find((a) => a.id === PAGE).phone, undefined, "a Facebook Page carries no location phone");
+  const missing = await createStore(fake(true)).socialAccounts("client");
+  assert.equal(missing.find((a) => a.id === WICHITA).phone, null);
+});

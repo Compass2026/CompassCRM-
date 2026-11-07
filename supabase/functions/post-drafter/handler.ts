@@ -39,6 +39,12 @@ import { workspaceAccounts } from "./workspace.ts";
 // the same rule under its lock (CD409). An unclaimed request, and every draft
 // without an opportunity, works exactly as before.
 //
+// v10, location phones (20261103170000): a Business Profile brief scoped to
+// a location's recorded markets carries the location's own recorded phone
+// (gbp_location_phones) and may take a Call button; the client-wide phone is
+// an excluded fact there and the linter refuses it. With no phone recorded
+// the location's brief stays phone-free with Learn More, as in v9.
+//
 // Callers: the worker (x-cron-secret) or a signed-in team member (JWT on
 // team_members). Nothing else.
 import {
@@ -59,9 +65,9 @@ import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 9;
+export const HANDLER_VERSION = 10;
 export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims", "gbp_location_markets"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims", "gbp_location_markets", "gbp_location_phone"] as const;
 
 export type Deps = {
   store: Store;

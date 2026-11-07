@@ -272,6 +272,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.te
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_gbp_destination.test.sql"
 # Several Business Profile locations per client; slots and posts never redirected.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/gbp_location_per_post.test.sql"
+# 20261103170000: a phone recorded for one Business Profile location (team-only, guarded) and its rollback.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/gbp_location_phones.test.sql"
 
 # Agency review ledger: human actor, versions, stage gates and portal isolation.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollout.test.sql"

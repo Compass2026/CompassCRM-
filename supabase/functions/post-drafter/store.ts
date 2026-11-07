@@ -90,9 +90,16 @@ export function createStore(supabase: Client) {
       const { data: markets, error: mError } = await supabase.from("gbp_location_markets")
         .select("social_account_id, market, kind").eq("client_id", clientId);
       if (mError) throw new Error(mError.message);
+      // ...and its own phone, when the team recorded one (gbp_location_phones,
+      // 20261103170000). A table not yet created (or rolled back) reads as no
+      // phone recorded: the location's posts stay phone-free, never wrong.
+      const { data: phones, error: pError } = await supabase.from("gbp_location_phones")
+        .select("social_account_id, phone").eq("client_id", clientId);
+      if (pError && !["PGRST205", "42P01"].includes(pError.code ?? "")) throw new Error(pError.message);
       for (const r of rows) {
         if (r.platform !== "google_business") continue;
         r.markets = (markets ?? []).filter((m) => m.social_account_id === r.id).map((m) => ({ market: m.market, kind: m.kind }));
+        r.phone = (pError ? null : (phones ?? []).find((p) => p.social_account_id === r.id)?.phone) ?? null;
       }
       return rows;
     },
