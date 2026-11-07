@@ -50,9 +50,10 @@ changes no existing task; open legacy tasks are labelled only by the reviewed
 `supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
 before deploying the code.
 
-## Controlled Claims Verification, PR2a (P1.1b, November 4, 2026; `20261104200000` written, **not applied**; `claim-evidence` not deployed)
+## Controlled Claims Verification, PR2a (P1.1b, November 4, 2026; `20261104200000` applied November 6, 2026; `claim-evidence` deployed November 6, 2026)
 
-See `docs/claim-registry.md` §Verification and
+Released Nov 6 2026 (PR #220, merge `8724e6b`): `docs/claims-verification-rollout.md`
+has the pins, every step and the smoke-test results. See `docs/claim-registry.md` §Verification and
 `docs/proposals/pr2-controlled-claims-verification.md` (ChatGPT architecture
 review, Executive OS 11454716).
 

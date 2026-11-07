@@ -10,8 +10,9 @@ COMPASS-2027-ROADMAP W1, P1.1b. Follows Claims Registry v1 (PR #218, merged as
 | 3 | Nov 5 2026 | ChatGPT's second review (three pre-release checks). Owner decisions recorded (O1 closed as Tom only; O2 closed: teammates upload with recorded provenance). The register's trust boundary corrected and provenance bound to the teammate's own session (§4, §7, §12a); the status race assessed (§12b); real Supabase Storage verified on a nonproduction local stack (§12c). |
 | 4 | Nov 5 2026 | Final hardening (Tom chose option A). Hosted Storage versioning, archival and lifecycle cannot replace or invalidate registered evidence (§12d). A status change after verification needs the owner's fresh review, even if the status is put back (§12e; supersedes the D4 note in §12b). |
 
-Status: **PR2a is implemented as a draft PR. Nothing is merged, no migration is
-applied, nothing is deployed, and no production data has changed.**
+Status: **PR2a is released (Nov 6 2026).** PR #220 is merged as `8724e6b`, migration
+`20261104200000` is applied and `claim-evidence` is deployed. The release record is
+`docs/claims-verification-rollout.md`.
 
 ## 1. Recommendation in one paragraph
 
