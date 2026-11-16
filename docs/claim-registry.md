@@ -160,13 +160,22 @@ change no gate, approval, status or function that reads `claims`:
   form's placeholder, and is not the same text as the note. Recorded history
   is left as it is. The form applies the same rule before sending
   (`excerptProblem`, held to the migration by `tests/claim-verification.test.mjs`).
-- **H2, a read-back.** "Review before recording" shows the method, the evidence
-  with its hash, the quote and the note. Only "Record verification" or
+- **H2, a read-back.** "Review before recording" shows the method, the exact
+  chosen file (label, original name, type, size, upload day, full SHA-256) or
+  location, the quote and the note. Only "Record verification" or
   "Record re-review" in that read-back sends the decision. The note has its own
   labelled field.
+- **Evidence is always chosen by the owner.** The evidence list starts on
+  "Choose the evidence", never on the first file. A kept choice that is no
+  longer offered (changed, removed, another method) is left empty with a
+  warning and refused until the owner picks again.
 - **H3, kept values.** The verify form's unsent values are kept in this browser
-  for 24 hours, per claim, and come back after a reload. They are cleared once
-  the decision is recorded. A stale screen is still refused (`CV409`).
+  tab's session storage (gone when the tab closes) for up to 24 hours, per
+  claim, and come back after a reload. Each kept draft carries the claim's
+  fingerprint and review id: if the claim changed since (text, source, kind or
+  last decision), the values are not filled in. The owner must choose "Show the
+  earlier values" or "Discard them" before the form will go on. They are cleared
+  once the decision is recorded. A stale screen is still refused (`CV409`).
 - **H4, View.** Each evidence file has **View**: a 60-second link signed with
   the teammate's own session (the bucket's team-read policy decides, and
   Storage's request log records who looked). No function or bucket change.

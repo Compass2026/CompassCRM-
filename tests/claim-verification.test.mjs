@@ -16,6 +16,7 @@ import {
   evidenceLine,
   excerptProblem,
   formatBytes,
+  keptDraftState,
   pickedWarning,
   reviewOptions,
   shortHash,
@@ -134,4 +135,17 @@ test("upload: a picked file whose name and reported type disagree is called out 
   assert.equal(pickedWarning({ name: "warranty.jpeg", type: "image/jpeg" }), null);
   assert.equal(pickedWarning({ name: "agreement.PDF", type: "application/pdf" }), null);
   assert.equal(pickedWarning({ name: "scan", type: "image/png" }), null);
+});
+
+test("kept draft: reused only for the same claim fingerprint and decision, within the TTL", () => {
+  const now = Date.parse("2026-11-16T18:00:00Z");
+  const cur = { fingerprint: "f".repeat(64), reviewId: "r1" };
+  assert.equal(keptDraftState(null, cur, now), "none");
+  assert.equal(keptDraftState({ at: now - 60_000, ...cur }, cur, now), "matches");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: "e".repeat(64), reviewId: "r1" }, cur, now), "changed");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: cur.fingerprint, reviewId: "r0" }, cur, now), "changed");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: cur.fingerprint, reviewId: null }, cur, now), "changed");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: cur.fingerprint, reviewId: null }, { ...cur, reviewId: null }, now), "matches");
+  assert.equal(keptDraftState({ at: now - 25 * 3600_000, ...cur }, cur, now), "expired");
+  assert.equal(keptDraftState({ at: now + 60_000, ...cur }, cur, now), "expired");
 });

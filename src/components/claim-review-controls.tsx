@@ -18,15 +18,18 @@ import {
   METHOD_LABEL,
   evidenceChoices,
   excerptProblem,
+  formatBytes,
   formatDay,
+  keptDraftState,
   reviewOptions,
   type ClaimRegistry,
+  type KeptDraft,
   type RegistryClaim,
 } from "@/lib/claim-registry";
 
 type Panel = null | "classify" | "verify" | "revoke";
 
-/** The verify form's values. Kept in this browser until recorded (PR2a.1, H3). */
+/** The verify form's values. Kept in this tab until recorded (PR2a.1, H3). */
 type Draft = {
   method: string;
   evidence: string;
@@ -37,35 +40,29 @@ type Draft = {
   note: string;
 };
 
-const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
-// Keyed by claim only: a draft started before the claim changed (or before a
-// reload) comes back, and the writers' stale check still refuses an old screen.
+// Session storage: the draft lives only in this browser tab (a reload keeps
+// it, closing the tab drops it). It carries the claim's fingerprint and review
+// id, so a draft written before the claim changed is never reused silently.
 const draftKey = (claimId: string) => `compass:claim-verify:${claimId}`;
 
-function loadDraft(key: string): Partial<Draft> | null {
+function loadDraft(key: string): KeptDraft<Partial<Draft>> | null {
   try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const { at, draft } = JSON.parse(raw) as { at: number; draft: Partial<Draft> };
-    if (Date.now() - at > DRAFT_TTL_MS) {
-      window.localStorage.removeItem(key);
-      return null;
-    }
-    return draft;
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as KeptDraft<Partial<Draft>>) : null;
   } catch {
     return null;
   }
 }
-function saveDraft(key: string, draft: Draft) {
+function saveDraft(key: string, kept: KeptDraft<Draft>) {
   try {
-    window.localStorage.setItem(key, JSON.stringify({ at: Date.now(), draft }));
+    window.sessionStorage.setItem(key, JSON.stringify(kept));
   } catch {
     /* storage unavailable: the form still works, it just isn't kept */
   }
 }
 function dropDraft(key: string) {
   try {
-    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
   } catch {
     /* nothing to drop */
   }
@@ -102,15 +99,24 @@ export function ClaimReviewControls({
   });
   const [draft, setDraft] = useState<Draft>(blank);
   const [readBack, setReadBack] = useState(false);
+  // A draft written before the claim changed, held back until the owner chooses.
+  const [held, setHeld] = useState<Partial<Draft> | null>(null);
   const method = draft.method;
   const choices = method ? evidenceChoices(registry, claim, method) : [];
-  // The evidence select shows the first choice until one is picked.
-  const evidenceId = choices.some((c) => c.id === draft.evidence) ? draft.evidence : (choices[0]?.id ?? "");
+  // Never a default: the owner picks the evidence, and a pick that is no
+  // longer offered (changed, removed, another method) is not replaced.
+  const evidenceId = choices.some((c) => c.id === draft.evidence) ? draft.evidence : "";
+  const evidenceGone = draft.evidence !== "" && evidenceId === "";
+  const needs = METHOD_EVIDENCE[method]?.needs;
+  const chosenFile = needs !== "location" ? registry.evidence.find((e) => e.id === evidenceId) : undefined;
+  const chosenLocation = needs === "location" ? registry.locations.find((l) => l.id === evidenceId) : undefined;
 
-  // Unsent values survive a reload or a re-render (A7 lost a prefilled form).
+  // Unsent values survive a reload (A7 lost a prefilled form), stamped with
+  // the claim as it is now. Not while an older draft is waiting for a choice.
   useEffect(() => {
-    if (panel === "verify") saveDraft(key, draft);
-  }, [panel, key, draft]);
+    if (panel === "verify" && !held)
+      saveDraft(key, { at: Date.now(), fingerprint: claim.fingerprint, reviewId: claim.review_id, draft });
+  }, [panel, held, key, draft, claim.fingerprint, claim.review_id]);
 
   const set = (patch: Partial<Draft>) => {
     setReadBack(false);
@@ -122,11 +128,28 @@ export function ClaimReviewControls({
     setPanel((cur) => (cur === p ? null : p));
     if (p === "verify") {
       const kept = loadDraft(key);
-      const next = { ...blank(), ...(kept ?? {}) };
-      if (!opts.methods.includes(next.method)) next.method = opts.methods[0] ?? "";
-      setDraft(next);
+      const state = keptDraftState(kept, stale, Date.now());
+      setHeld(state === "changed" ? (kept?.draft ?? null) : null);
+      if (state === "expired") dropDraft(key);
+      fill(state === "matches" ? (kept?.draft ?? null) : null);
     }
   };
+  function fill(values: Partial<Draft> | null) {
+    const next = { ...blank(), ...(values ?? {}) };
+    if (!opts.methods.includes(next.method)) next.method = opts.methods[0] ?? "";
+    setDraft(next);
+  }
+  // The owner chose to look at the older values: they fill the form, and the
+  // read-back still has to be confirmed before anything is recorded.
+  function restoreHeld() {
+    fill(held);
+    setHeld(null);
+  }
+  function discardHeld() {
+    dropDraft(key);
+    setHeld(null);
+    fill(null);
+  }
   const run = (fn: () => Promise<ActionResult>, after?: () => void) =>
     start(async () => {
       setError(null);
@@ -151,6 +174,8 @@ export function ClaimReviewControls({
   // Step one: check the quote and show what will be recorded (H1, H2).
   function verify(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (held) return setError("Use or discard the values kept from before this claim changed first.");
+    if (!evidenceId) return setError(evidenceGone ? "The evidence chosen earlier is no longer offered; choose it again." : "Choose the evidence this decision rests on.");
     const problem = excerptProblem(draft.excerpt, draft.note);
     if (problem) return setError(problem);
     setError(null);
@@ -158,7 +183,7 @@ export function ClaimReviewControls({
   }
   // Step two: record exactly what the read-back showed.
   function record() {
-    const needs = METHOD_EVIDENCE[method]?.needs;
+    if (!evidenceId || held) return setReadBack(false);
     run(
       () =>
         verifyClaimAction(clientId, {
@@ -239,6 +264,22 @@ export function ClaimReviewControls({
           <p className="text-xs text-muted-foreground">
             Records your decision and pins the evidence. It does not change what posts and drafts may cite.
           </p>
+          {held && (
+            <div className="space-y-1.5 rounded-md bg-amber-50 p-2.5 text-xs text-amber-900 ring-1 ring-amber-200" data-held-draft role="status">
+              <p>
+                Values you typed earlier were kept, but this claim has changed since (its text, source, kind or last
+                decision). They were not filled in. Look at them again before using them.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="xs" variant="outline" onClick={restoreHeld} data-action="restore-draft">
+                  Show the earlier values
+                </Button>
+                <Button type="button" size="xs" variant="ghost" onClick={discardHeld} data-action="discard-draft">
+                  Discard them
+                </Button>
+              </div>
+            </div>
+          )}
           <Label htmlFor={`method-${claim.id}`}>Method</Label>
           <select
             id={`method-${claim.id}`}
@@ -266,16 +307,25 @@ export function ClaimReviewControls({
               id={`evidence-${claim.id}`}
               name="evidence"
               className="field w-full"
-              required
+              aria-required="true"
               value={evidenceId}
               onChange={(e) => set({ evidence: e.target.value })}
             >
+              <option value="" disabled>
+                Choose the evidence
+              </option>
               {choices.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
               ))}
             </select>
+          )}
+          {evidenceGone && (
+            <p className="text-xs text-amber-900" data-evidence-gone>
+              The evidence chosen earlier is no longer offered (changed, removed, or not valid for this method). Choose it
+              again.
+            </p>
           )}
           <Label htmlFor={`excerpt-${claim.id}`}>What the evidence says</Label>
           <p className="text-xs text-muted-foreground">The evidence&apos;s own words, quoted. Your comments go in the note below.</p>
@@ -343,7 +393,18 @@ export function ClaimReviewControls({
                 <dt className="text-muted-foreground">Method</dt>
                 <dd data-readback-method>{METHOD_LABEL[method] ?? method}</dd>
                 <dt className="text-muted-foreground">Evidence</dt>
-                <dd data-readback-evidence>{choices.find((c) => c.id === evidenceId)?.label ?? "—"}</dd>
+                <dd className="break-all" data-readback-evidence={evidenceId}>
+                  {chosenFile && (
+                    <>
+                      {chosenFile.label}
+                      {chosenFile.original_name ? ` (${chosenFile.original_name})` : ""} · {chosenFile.mime_type} ·{" "}
+                      {formatBytes(chosenFile.size_bytes)} · uploaded {formatDay(chosenFile.created_at)}
+                      <br />
+                      SHA-256 <span data-readback-sha256>{chosenFile.sha256}</span>
+                    </>
+                  )}
+                  {chosenLocation && <>{choices.find((c) => c.id === evidenceId)?.label}</>}
+                </dd>
                 <dt className="text-muted-foreground">Quote</dt>
                 <dd className="whitespace-pre-wrap" data-readback-excerpt>“{draft.excerpt.trim()}”</dd>
                 <dt className="text-muted-foreground">Note</dt>

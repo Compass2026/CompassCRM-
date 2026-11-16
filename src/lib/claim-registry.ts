@@ -497,6 +497,27 @@ export function decisionErrorText(err: { code?: string; message: string }): stri
   return err.message;
 }
 
+/** An unfinished verify form kept in this tab (PR2a.1, H3), tied to the claim as it was. */
+export type KeptDraft<T> = { at: number; fingerprint: string; reviewId: string | null; draft: T };
+export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a kept draft may fill the form: "matches" only when it was written
+ * against the same fingerprint and review id and is under the TTL. "changed"
+ * means the claim (text, source, kind or last decision) moved since: the form
+ * must not reuse it without the owner choosing to.
+ */
+export function keptDraftState(
+  kept: Pick<KeptDraft<unknown>, "at" | "fingerprint" | "reviewId"> | null,
+  current: { fingerprint: string; reviewId: string | null },
+  now: number,
+  ttl = DRAFT_TTL_MS,
+): "none" | "expired" | "matches" | "changed" {
+  if (!kept || typeof kept.at !== "number") return "none";
+  if (now - kept.at > ttl || now < kept.at) return "expired";
+  return kept.fingerprint === current.fingerprint && (kept.reviewId ?? null) === (current.reviewId ?? null) ? "matches" : "changed";
+}
+
 // The upload form's warning when a picked file's name and reported type disagree (PR2a.1, H5).
 const EXT_TYPE: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
 /** A warning when the file's name and the type the browser reports disagree, or null. */

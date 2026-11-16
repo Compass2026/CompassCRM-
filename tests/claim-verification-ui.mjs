@@ -297,8 +297,20 @@ try {
 
   await row(W).locator('[data-action="verify"]').click();
   const vf = row(W).locator('[data-form="verify"]');
+  const draftKey = `compass:claim-verify:${W}`;
+  const EV = sql(`select id from claim_evidence where client_id = '${L}'`);
+  const claimNow = () => sql(`select claim_fingerprint(client_id, claim, source, kind) || '|' || review_id from claims where id = '${W}'`).split("|");
   assert.deepEqual(await vf.locator('select[name="method"] option').evaluateAll((o) => o.map((x) => x.value)), ["client_contract", "manufacturer_document"]);
-  assert.equal(await vf.locator('select[name="evidence"] option').count(), 1);
+  // ChatGPT's review of PR #226, correction 2: the evidence is never chosen for the owner.
+  assert.deepEqual(await vf.locator('select[name="evidence"] option').evaluateAll((o) => o.map((x) => x.value)), ["", EV]);
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), "");
+  await vf.locator('textarea[name="excerpt"]').fill("Workmanship is warranted for three (3) years.");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "Choose the evidence this decision rests on" }).waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback]").count(), 0);
+  ok("No evidence is pre-chosen: nothing goes to the read-back until the owner picks the file");
+  await vf.locator('select[name="evidence"]').selectOption(EV);
+
   // PR2a.1 H1: the placeholder, a few characters, or the note's own text is refused before anything is sent.
   await vf.locator('textarea[name="excerpt"]').fill("Quote the words that support the claim");
   await vf.locator('button[type="submit"]').click();
@@ -310,25 +322,63 @@ try {
   assert.equal(sql(`select count(*) from claim_reviews where claim_id = '${W}'`), "1");
   ok("The quote must be the evidence's words: the placeholder and a few characters are refused in place, nothing written");
 
-  // H3: unsent values survive a reload.
+  // H3: unsent values survive a reload, in this tab only, stamped with the claim as it was.
   await vf.locator('textarea[name="excerpt"]').fill("Workmanship is warranted for three (3) years.");
   await vf.locator('input[name="note"]').fill("Section 7 of the fictional agreement.");
   await page.reload({ waitUntil: "networkidle" });
   await row(W).locator('[data-action="verify"]').click();
   assert.equal(await vf.locator('textarea[name="excerpt"]').inputValue(), "Workmanship is warranted for three (3) years.");
   assert.equal(await vf.locator('input[name="note"]').inputValue(), "Section 7 of the fictional agreement.");
-  ok("Kept: the quote and note typed before a reload come back when the form reopens");
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), EV);
+  const kept = JSON.parse(await page.evaluate((k) => sessionStorage.getItem(k), draftKey));
+  const [fpNow, reviewNow] = claimNow();
+  assert.deepEqual([kept.fingerprint, kept.reviewId], [fpNow, reviewNow]);
+  assert.equal(await page.evaluate(() => localStorage.length), 0);
+  ok("Kept: the quote, note and evidence typed before a reload come back, from this tab's session storage, tied to the claim's fingerprint and decision");
+
+  // Correction 1: a draft written before the claim changed is held back, never filled in silently.
+  await page.evaluate(([k, v]) => sessionStorage.setItem(k, v), [draftKey, JSON.stringify({ ...kept, fingerprint: "0".repeat(64) })]);
+  await page.reload({ waitUntil: "networkidle" });
+  await row(W).locator('[data-action="verify"]').click();
+  await vf.locator("[data-held-draft]").waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator('textarea[name="excerpt"]').inputValue(), "");
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), "");
+  await vf.locator('select[name="evidence"]').selectOption(EV);
+  await vf.locator('textarea[name="excerpt"]').fill("Workmanship is warranted for three (3) years.");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "Use or discard the values kept" }).waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback]").count(), 0);
+  await vf.locator('[data-action="restore-draft"]').click();
+  assert.equal(await vf.locator("[data-held-draft]").count(), 0);
+  assert.equal(await vf.locator('input[name="note"]').inputValue(), "Section 7 of the fictional agreement.");
+  ok("A draft from before the claim changed is not filled in: the owner must choose to look at it or discard it before anything is reviewed");
+
+  // Correction 2: a kept pick that is no longer offered is not replaced by another file.
+  await page.evaluate(([k, v]) => sessionStorage.setItem(k, v), [draftKey, JSON.stringify({ ...kept, at: Date.now(), draft: { ...kept.draft, evidence: "00000000-0000-4000-8000-00000000dead" } })]);
+  await page.reload({ waitUntil: "networkidle" });
+  await row(W).locator('[data-action="verify"]').click();
+  await vf.locator("[data-evidence-gone]").waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), "");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "no longer offered" }).waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback]").count(), 0);
+  await vf.locator('select[name="evidence"]').selectOption(EV);
+  assert.equal(await vf.locator("[data-evidence-gone]").count(), 0);
+  ok("A kept evidence pick that is no longer offered is refused and left empty, never swapped for the first file");
 
   await vf.locator('input[name="expires_on"]').fill(today);
   await vf.locator('button[type="submit"]').click();
-  // H2: nothing is sent until the read-back is confirmed.
+  // H2: nothing is sent until the read-back is confirmed; it names the exact file.
   await vf.locator("[data-readback]").waitFor({ timeout: 30000 });
   assert.equal(await vf.locator("[data-readback-method]").textContent(), "Client contract");
-  assert.match(await vf.locator("[data-readback-evidence]").textContent(), new RegExp(`Signed project agreement, section 7 \\(fictional\\) · ${PDF_SHA.slice(0, 8)}`));
+  assert.equal(await vf.locator("[data-readback-evidence]").getAttribute("data-readback-evidence"), EV);
+  assert.match(await vf.locator("[data-readback-evidence]").textContent(),
+    /^Signed project agreement, section 7 \(fictional\) \(agreement\.pdf\) · application\/pdf · \d+ B · uploaded /);
+  assert.equal(await vf.locator("[data-readback-sha256]").textContent(), PDF_SHA);
   assert.equal(await vf.locator("[data-readback-excerpt]").textContent(), "“Workmanship is warranted for three (3) years.”");
   assert.equal(await vf.locator("[data-readback-note]").textContent(), "Section 7 of the fictional agreement.");
   assert.equal(sql(`select count(*) from claim_reviews where claim_id = '${W}'`), "1");
-  ok("Read-back: method, evidence with its hash, the quote and the note are shown before anything is recorded");
+  ok("Read-back: method, the exact chosen file (name, type, size, full SHA-256), the quote and the note are shown before anything is recorded");
   await vf.locator('[data-readback] [data-action="record"]').click();
   await row(W).locator("[data-review-error]", { hasText: "expiry" }).waitFor({ timeout: 30000 });
   assert.match(await row(W).locator("[data-review-error]").textContent(), /An expiry must be after the day examined and after today/);
@@ -358,7 +408,7 @@ try {
   assert.equal(sql(`select evidence_sha256 from claim_reviews where claim_id = '${W}' and action = 'verify'`), PDF_SHA);
   assert.equal(sql(`select excerpt || '|' || note from claim_reviews where claim_id = '${W}' and action = 'verify'`),
     "Workmanship is warranted for three (3) years.|Section 7 of the fictional agreement.");
-  assert.equal(await page.evaluate((k) => localStorage.getItem(k), `compass:claim-verify:${W}`), null);
+  assert.equal(await page.evaluate((k) => sessionStorage.getItem(k), draftKey), null);
   assert.equal(digest(), governedBefore);
   assert.equal(sql(`select status from claims where id = '${W}'`), "confirmed");
   ok("The ledger holds both decisions by the owner, pinned to the file's SHA-256; no claim's status, text or source moved");
