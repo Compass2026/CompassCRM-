@@ -589,7 +589,7 @@ export default async function PostPage({ params }: { params: Promise<{ clientId:
           )}
         </div>
         {actions.includes("approve") && post.submitted_at && (
-          <ReviewForms clientId={clientId} postId={postId} submittedAt={post.submitted_at} ready={problems.length === 0} hasCreative={!!creative} />
+          <ReviewForms clientId={clientId} postId={postId} submittedAt={post.submitted_at} ready={problems.length === 0} hasCreative={!!creative || brandLinks.length > 0} />
         )}
         {actions.includes("schedule") && (
           <ScheduleForm clientId={clientId} postId={postId} fromPublish={post.publish_status} />

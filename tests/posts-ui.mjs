@@ -274,10 +274,10 @@ try {
 
   // Schedule; the approval is untouched.
   const before = sql(`select reviewed_by || '|' || reviewed_at || '|' || approved_hash from social_posts where id = '${POST_A}'`);
-  await page.getByLabel("Publish at (Central)").fill("2026-10-06T09:30");
+  await page.getByLabel("Publish at (Central)").fill("2030-10-07T09:30");
   await page.getByRole("button", { name: "Schedule" }).click();
   await page.getByText(/Scheduled for/).waitFor();
-  assert.equal(sql(`select publish_status || '|' || to_char(scheduled_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') from social_posts where id = '${POST_A}'`), "scheduled|2026-10-06 09:30");
+  assert.equal(sql(`select publish_status || '|' || to_char(scheduled_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') from social_posts where id = '${POST_A}'`), "scheduled|2030-10-07 09:30");
   assert.equal(sql(`select reviewed_by || '|' || reviewed_at || '|' || approved_hash from social_posts where id = '${POST_A}'`), before);
   ok("Scheduling (Central time) leaves the approval exactly as it was");
   assert.equal(await page.getByRole("button", { name: "Mark published" }).count(), 0, "no manual publish for a Business Profile post");

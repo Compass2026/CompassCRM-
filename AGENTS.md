@@ -2612,6 +2612,43 @@ approved, scheduled and published posts. Full design: `docs/delegated-post-edits
   `content_delegation_configure_edits`) plus the existing exclusions; the post's
   channel / service must be inside the authority Executive OS sends.
 
+## Review to delivery (Nov 16 2026; `20261116150000_review_to_delivery.sql` written, not applied)
+
+One review queue and one decision path for Facebook and Business Profile
+posts, on top of 0045's review gate, 0054's creative guard and the delegated
+approval path. Tests: `supabase/tests/sandbox/review_to_delivery.test.sql`
+(sandbox), `tests/review-queue.test.mjs`.
+
+- **`/review`** (`src/app/(app)/review/page.tsx`, `review_queue()`): every
+  client's posts in review, approved, scheduled, publishing, failed and
+  recently published, each with the final copy, the attached images (signed
+  from the private bucket), the destination, the slot date and a proposed
+  publish time (`src/lib/review-queue.ts` `proposeTimes`: the slot if it is
+  still ahead, otherwise the next weekday, one per destination per day).
+  Stages: ready / needs preparation (not grounded, or no image and no
+  `no_image_reason`) / revising / blocked (held client, no account) /
+  approved / scheduled / publishing / failed / published with URL and
+  provider id.
+- **Approve & schedule** (`social_post_approve_and_schedule`) approves and
+  schedules in one transaction. An approval and a schedule made together, or
+  a schedule made under the owner's delegated decision
+  (`compass.delegation_write`), set `approved_publish_at`: moving or
+  unscheduling that post (or a person re-queuing it after a failure) is
+  refused until it is reopened for a fresh review. **Approve only** never
+  schedules; a later separate schedule is a separate decision.
+- Every approval records `approved_destination`; scheduling or the publisher's
+  claim is refused when the account's Page / location binding changed since.
+  Scheduling a past time, and scheduling or claiming a post of a paused /
+  offboarded client, are refused (promotion holds were already enforced).
+- **Reject → revise → fresh review:** a rejection may name the copy, the image
+  (any attached photo, not only a Creative Engine graphic) or both, and
+  records `rejected_copy_hash` / `rejected_media_hash`; resubmitting the same
+  copy or image is refused with the feedback. `social_post_history` keeps
+  every copy change (before/after), rejection, resubmission and a full
+  record of a discarded (deleted) draft, surviving the delete.
+- Existing approvals were kept: approved posts got their current destination
+  as `approved_destination` and no time binding.
+
 ## Known state / open items (as of Sept 13 2026)
 
 - **Stripe secrets are not in Vault yet.** Billing code is deployed but inert

@@ -21,6 +21,7 @@ function revalidatePost(clientId: string, postId?: string) {
   revalidatePath(`/clients/${clientId}/reports`);
   revalidatePath(`/clients/${clientId}/tasks`);
   revalidatePath("/tasks");
+  revalidatePath("/review");
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
