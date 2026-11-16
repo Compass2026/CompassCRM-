@@ -17,11 +17,13 @@ import {
   centralToIso,
   decisionsFor,
   groupByStage,
+  pendingChangeLine,
   proposeTimes,
   stageLabels,
 } from "../src/lib/review-queue.ts";
 
-const SQL = readFileSync("supabase/migrations/20261116150000_review_to_delivery.sql", "utf8");
+// The latest definition of review_queue (20261117010000 redefines it with pending changes).
+const SQL = readFileSync("supabase/migrations/20261117010000_review_pending_changes.sql", "utf8");
 
 function item(over = {}) {
   return {
@@ -37,7 +39,9 @@ function item(over = {}) {
 }
 
 test("every stage the SQL can emit has a label, and the labels cover only those stages", () => {
-  const fn = SQL.slice(SQL.indexOf("create function review_queue("), SQL.indexOf("revoke all on function review_queue("));
+  const fn = SQL.slice(SQL.indexOf("create or replace function review_queue("), SQL.indexOf("revoke all on function review_queue("));
+  assert.ok(fn.includes("content_edit_holds h where h.post_id = p.id and h.closed_at is null) then 'ready'"),
+    "Ready requires no open pending change");
   const emitted = new Set([...fn.matchAll(/then '([a-z_]+)'\n/g)].map((m) => m[1]));
   for (const s of emitted) if (s !== "draft") assert.ok(stageLabels[s], `no label for ${s}`);
   for (const s of REVIEW_STAGES) assert.ok(emitted.has(s), `${s} is never emitted`);
@@ -98,4 +102,14 @@ test("Central time: 10:00 on both sides of the DST change, and datetime-local ro
   assert.equal(centralToIso("2026-11-16T10:00"), "2026-11-16T16:00:00.000Z");
   assert.equal(centralToIso("2026-07-01T10:30"), "2026-07-01T15:30:00.000Z");
   assert.equal(centralToIso("tomorrow"), null);
+});
+
+test("a pending change is named for the reviewer, and a stale one says it will be refiled or withdrawn", () => {
+  const c = { ref: "0e1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", kind: "replace_copy", summary: "Revise one Facebook post", requested_by: "Claude via Executive OS",
+    opened_at: "2026-11-17T10:00:00Z", stale: false };
+  assert.equal(pendingChangeLine(c), "A copy change requested by Claude via Executive OS is waiting for approval in Executive OS.");
+  assert.match(pendingChangeLine({ ...c, kind: "replace_media", stale: true }), /^A new image .* \(the post changed since it was requested; it will be refiled or withdrawn\)\.$/);
+  // A needs-preparation item with a pending change offers only Reject.
+  const d = decisionsFor(item({ stage: "needs_preparation", pending_changes: [c] }));
+  assert.deepEqual([d.approveAndSchedule, d.approveOnly, d.reject], [false, false, true]);
 });

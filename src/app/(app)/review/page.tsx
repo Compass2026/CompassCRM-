@@ -27,14 +27,17 @@ export const dynamic = "force-dynamic";
 export default async function ReviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string; stage?: string }>;
+  searchParams: Promise<{ client?: string; stage?: string }>; // client: one id, or several comma-separated
 }) {
   const sp = await searchParams;
-  const clientFilter = isUuid(sp.client) ? sp.client : null;
+  // One client, or a named batch of clients (comma-separated ids).
+  const clientIds = [...new Set((sp.client ?? "").split(",").map((c) => c.trim()).filter(isUuid))];
+  const clientFilter = clientIds.length === 1 ? clientIds[0] : null;
+  const batchFilter = clientIds.length > 1 ? new Set(clientIds) : null;
   const stageFilter: ReviewStage | null = isReviewStage(sp.stage) ? sp.stage : null;
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("review_queue", clientFilter ? { p_client: clientFilter } : {});
-  const all = ((data ?? []) as unknown as QueueItem[]);
+  const all = ((data ?? []) as unknown as QueueItem[]).filter((i) => !batchFilter || batchFilter.has(i.client_id));
   const today = centralDay(new Date().toISOString());
   const proposed = proposeTimes(all, today);
   const groups = groupByStage(all);
@@ -53,9 +56,10 @@ export default async function ReviewPage({
 
   const clients = [...new Map(all.map((i) => [i.client_id, i.client_name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const visible = (stageFilter ? [stageFilter] : REVIEW_STAGES).filter((s) => (groups.get(s) ?? []).length > 0);
+  const batchParam = batchFilter ? clientIds.join(",") : null;
   const href = (q: { client?: string | null; stage?: string | null }) => {
     const p = new URLSearchParams();
-    if (q.client) p.set("client", q.client);
+    if (q.client ?? batchParam) p.set("client", (q.client ?? batchParam)!);
     if (q.stage) p.set("stage", q.stage);
     const s = p.toString();
     return s ? `/review?${s}` : "/review";
@@ -91,7 +95,7 @@ export default async function ReviewPage({
       </nav>
       {clients.length > 1 && (
         <nav aria-label="Clients" className="flex flex-wrap gap-2 text-xs">
-          <Link href={href({ stage: stageFilter })} className={cn("rounded-full border px-2 py-0.5", !clientFilter && "bg-muted font-medium")}>Every client</Link>
+          <Link href={href({ client: "", stage: stageFilter })} className={cn("rounded-full border px-2 py-0.5", !clientFilter && !batchFilter && "bg-muted font-medium")}>Every client</Link>
           {clients.map(([id, name]) => (
             <Link key={id} href={href({ client: id, stage: stageFilter })} className={cn("rounded-full border px-2 py-0.5", clientFilter === id && "bg-muted font-medium")}>
               {name}

@@ -2612,7 +2612,7 @@ approved, scheduled and published posts. Full design: `docs/delegated-post-edits
   `content_delegation_configure_edits`) plus the existing exclusions; the post's
   channel / service must be inside the authority Executive OS sends.
 
-## Review to delivery (Nov 16 2026; `20261116150000_review_to_delivery.sql` written, not applied)
+## Review to delivery (Nov 16 2026; `20261116150000_review_to_delivery.sql`, applied Nov 16)
 
 One review queue and one decision path for Facebook and Business Profile
 posts, on top of 0045's review gate, 0054's creative guard and the delegated
@@ -2648,6 +2648,41 @@ approval path. Tests: `supabase/tests/sandbox/review_to_delivery.test.sql`
   record of a discarded (deleted) draft, surviving the delete.
 - Existing approvals were kept: approved posts got their current destination
   as `approved_destination` and no time binding.
+
+### Pending changes (Nov 17 2026; `20261117010000_review_pending_changes.sql`, content-approvals v5)
+
+Tom: "Show 'Ready for final review' only when the displayed copy and image
+are the actual final version." A copy or image change that Executive OS has
+asked Tom to approve is a **hold** (`content_edit_holds`, keyed by the
+Executive OS approval id). Executive OS opens it (content-approvals mode
+`hold`) when it files the request and releases it (`release`: rejected,
+withdrawn or superseded) when Tom rejects it or the operator withdraws or
+supersedes it. Compass closes a hold itself when the approved revision
+executes or is refused, and `stage_media` with `approval_id` closes an
+approved stage's hold.
+
+- While a hold is open the post is under **Needs preparation** with the
+  pending change listed (`review_queue().pending_changes`, the card's amber
+  list), and approving it is refused by `social_posts_ab_pending_change`
+  (every door: Review page, post page, delegated approval).
+- Holds are records: written only by the content-approvals functions, closed
+  once, never deleted (a deleted post takes its holds with it).
+- **A rejected post is revised through the delegated door** too
+  (`content_edit_execute` admits `rejected`): withdraw → change → resubmit for
+  a fresh review; the rejection guards still refuse the same copy or image.
+  `content_review_batch` lists rejected posts with `feedback`,
+  `rejection_category` and `pending_changes`.
+- Tests: `supabase/tests/sandbox/review_pending_changes.test.sql` (RP1–RP10,
+  incl. the rollback), `tests/review-workflow-integration.mjs`
+  (`npm run test:review-workflow`, in CI: a pending change, reject → revise →
+  fresh review, Approve & schedule → the publisher at the approved time →
+  published with the provider's id and URL; only Zernio is fake),
+  `tests/content-edits.test.mjs` (the modes). Rollback:
+  `supabase/rollback/20261117010000_review_pending_changes.down.sql`, then
+  content-approvals v4.
+- Executive OS's side (the hooks that open and release holds, withdrawing /
+  superseding a request, copy edits under a scoped standing policy) is
+  Compass2026/ExecutiveOS `claude/review-workflow-finish`.
 
 ## Known state / open items (as of Sept 13 2026)
 

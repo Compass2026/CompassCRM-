@@ -41,6 +41,10 @@ export function createStore(supabase: Client): Store {
     async editExecute(id, measured) { return wrap<Json>(await supabase.rpc("content_edit_execute", { p_id: id, p_measured: measured })); },
     async editRefuse(id, code, message) { return wrap<Json>(await supabase.rpc("content_edit_refuse", { p_id: id, p_code: code, p_message: message })); },
     async editStatus(operationId) { return wrap<Json>(await supabase.rpc("content_edit_status", { p_operation_id: operationId })); },
+    async holdOpen(p) { return wrap<Json>(await supabase.rpc("content_edit_hold_open", { p })); },
+    async holdClose(ref, reason, note, supersededBy) {
+      return wrap<Json>(await supabase.rpc("content_edit_hold_close", { p_ref: ref, p_reason: reason, p_note: note, p_superseded_by: supersededBy }));
+    },
 
     async uploadSlot(storagePath) {
       const dir = storagePath.slice(0, storagePath.lastIndexOf("/"));

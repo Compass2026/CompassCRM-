@@ -227,3 +227,25 @@ Restore these from their previous migrations:
 | `content_review_batch` | `20261019202359` |
 
 Restore content-approvals handler v2.
+
+## Pending changes (`20261117010000`, content-approvals v5)
+
+A change Executive OS has asked Tom to approve keeps its post out of "Ready
+for final review" until it is applied, rejected, withdrawn or superseded.
+
+| Mode | What it does |
+| --- | --- |
+| `hold` | `{ref, client_id, post {channel, id}, kind, review_hash, summary, requested_by}`: opens a hold keyed by the Executive OS approval id (idempotent; the same ref for another post or change is `operation_reused`). Refused for a post that is approved, scheduled or published (`not_holdable`), another client's post or the wrong channel. |
+| `release` | `{ref, reason: rejected \| withdrawn \| superseded, note?, superseded_by_ref?}`: closes it (idempotent; an unknown ref releases nothing). |
+
+An approved `revise` (authority `owner_approval`) closes the hold whose ref is
+its approval id when it executes or is refused; `stage_media` with
+`approval_id` closes an approved stage's hold the same way. While a hold is
+open the post shows under Needs preparation with the pending change and
+approving it is refused.
+
+`revise` also accepts a **rejected** post (unapproved, unscheduled): withdraw →
+change → resubmit for a fresh review, so feedback comes back through the same
+door. The rejection guards refuse the same copy or image coming back.
+`batch` lists rejected posts with `feedback`, `rejection_category` and
+`pending_changes`.
