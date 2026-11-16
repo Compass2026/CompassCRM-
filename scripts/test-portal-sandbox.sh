@@ -112,6 +112,10 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/reporting_con
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_post_review.test.sql"
 # 0046: Business Profile publisher schema (runs, outcomes, reminder cycles).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/publisher_runs.test.sql"
+# 20261116150000: review to delivery (the review queue, Approve & schedule with
+# a bound time and destination, past / held / blocked refusals, reject →
+# revise → fresh review with unchanged content refused, kept history).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/review_to_delivery.test.sql"
 # 0047: AI Drafter write boundary and the Client Intelligence loader. Switches
 # between the worker (postgres), the post-drafter function (authenticator +
 # service_role) and a person (authenticator + authenticated).

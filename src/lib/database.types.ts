@@ -10396,6 +10396,11 @@ export type Database = {
           publish_status: string
           published_at: string | null
           published_url: string | null
+          approved_destination: string | null
+          approved_publish_at: string | null
+          no_image_reason: string | null
+          rejected_copy_hash: string | null
+          rejected_media_hash: string | null
           rejection_category: string | null
           review_note: string | null
           review_status: string
@@ -10439,6 +10444,11 @@ export type Database = {
           publish_status?: string
           published_at?: string | null
           published_url?: string | null
+          approved_destination?: string | null
+          approved_publish_at?: string | null
+          no_image_reason?: string | null
+          rejected_copy_hash?: string | null
+          rejected_media_hash?: string | null
           rejection_category?: string | null
           review_note?: string | null
           review_status?: string
@@ -10482,6 +10492,11 @@ export type Database = {
           publish_status?: string
           published_at?: string | null
           published_url?: string | null
+          approved_destination?: string | null
+          approved_publish_at?: string | null
+          no_image_reason?: string | null
+          rejected_copy_hash?: string | null
+          rejected_media_hash?: string | null
           rejection_category?: string | null
           review_note?: string | null
           review_status?: string
@@ -13894,6 +13909,7 @@ export type Database = {
         Returns: Json
       }
       retry_failed_fires: { Args: never; Returns: number }
+      review_queue: { Args: { p_client?: string }; Returns: Json }
       secret_present: { Args: { secret_name: string }; Returns: boolean }
       set_secret: {
         Args: { secret_name: string; secret_value: string }
@@ -13983,6 +13999,11 @@ export type Database = {
         Returns: string
       }
       social_post_readiness: { Args: { p_post_id: string }; Returns: string[] }
+      social_post_approve_and_schedule: {
+        Args: { p_note?: string; p_post: string; p_publish_at: string; p_submitted_at: string }
+        Returns: Json
+      }
+      social_post_set_no_image_reason: { Args: { p_post: string; p_reason: string }; Returns: undefined }
       social_post_snapshot: {
         Args: { p: Database["public"]["Tables"]["social_posts"]["Row"] }
         Returns: Json
