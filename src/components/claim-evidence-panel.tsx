@@ -11,11 +11,13 @@ import {
   checkClaimEvidenceAction,
   finalizeClaimEvidenceAction,
   prepareClaimEvidenceAction,
+  viewClaimEvidenceAction,
 } from "@/app/claim-verification-actions";
 import {
   EVIDENCE_TYPE_LABEL,
   formatBytes,
   formatDay,
+  pickedWarning,
   shortHash,
   type EvidenceType,
   type RegistryEvidence,
@@ -29,6 +31,10 @@ async function sha256(file: File): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+/** What the browser is about to upload, shown before anything leaves it (PR2a.1, H5). */
+type Picked = { name: string; type: string; size: number; sha256: string | null };
+
 
 // Evidence files for this client's claims (20261104200000). Any teammate may
 // upload; only the verification owner cites a file in a decision. The file
@@ -52,6 +58,34 @@ export function ClaimEvidencePanel({
   const [done, setDone] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [checks, setChecks] = useState<Record<string, string>>({});
+  const [picked, setPicked] = useState<Picked | null>(null);
+
+  async function pick(file: File | undefined) {
+    setError(null);
+    setDone(null);
+    if (!file) return setPicked(null);
+    const base = { name: file.name, type: file.type, size: file.size };
+    setPicked({ ...base, sha256: null });
+    const hash = await sha256(file);
+    setPicked((cur) => (cur && cur.name === base.name && cur.size === base.size ? { ...base, sha256: hash } : cur));
+  }
+
+  function view(id: string) {
+    // Open the tab now (a click), point it at the signed link once it exists.
+    const tab = window.open("", "_blank");
+    start(async () => {
+      const r = await viewClaimEvidenceAction(id);
+      if (!r.ok) {
+        tab?.close();
+        setChecks((c) => ({ ...c, [id]: r.error }));
+        return;
+      }
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = r.url;
+      } else window.location.assign(r.url);
+    });
+  }
 
   function upload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -63,9 +97,16 @@ export function ClaimEvidencePanel({
     if (!(file instanceof File) || file.size === 0) return setError("Choose a file.");
     if (!TYPES.includes(file.type)) return setError("Evidence must be a PDF, PNG, JPEG or WebP file.");
     if (file.size > MAX) return setError("Evidence files are up to 10 MB.");
+    const expected = String(form.get("expected_sha256") ?? "").trim().toLowerCase();
+    if (expected && !/^[0-9a-f]{64}$/.test(expected)) return setError("The expected SHA-256 is 64 hexadecimal characters.");
     start(async () => {
       setStep("Hashing the file…");
       const hash = await sha256(file);
+      // The original's hash, when known, is checked before anything uploads (A7: a picker re-encoded a PNG).
+      if (expected && expected !== hash) {
+        setStep(null);
+        return setError(`This file is not the one expected: its SHA-256 is ${hash}, not ${expected}. Nothing was uploaded.`);
+      }
       setStep("Preparing a private upload…");
       const prep = await prepareClaimEvidenceAction(clientId, { sha256: hash, size: file.size, mimeType: file.type });
       if (!prep.ok) return (setStep(null), setError(prep.error));
@@ -99,6 +140,7 @@ export function ClaimEvidencePanel({
       const ev = fin.body.evidence as { sha256: string };
       setDone(`Registered · SHA-256 ${ev.sha256}`);
       formRef.current?.reset();
+      setPicked(null);
       setType("document");
       router.refresh();
     });
@@ -140,7 +182,10 @@ export function ClaimEvidencePanel({
                 >
                   {e.intact ? "stored file intact" : "stored file changed"}
                 </Badge>
-                <Button type="button" size="xs" variant="ghost" className="ml-auto" onClick={() => check(e.id)} data-action="check">
+                <Button type="button" size="xs" variant="ghost" className="ml-auto" onClick={() => view(e.id)} data-action="view">
+                  View
+                </Button>
+                <Button type="button" size="xs" variant="ghost" onClick={() => check(e.id)} data-action="check">
                   Re-check hash
                 </Button>
               </div>
@@ -174,7 +219,14 @@ export function ClaimEvidencePanel({
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="evidence-file">File (PDF, PNG, JPEG or WebP, up to 10 MB)</Label>
-            <Input id="evidence-file" name="file" type="file" accept={TYPES.join(",")} required />
+            <Input
+              id="evidence-file"
+              name="file"
+              type="file"
+              accept={TYPES.join(",")}
+              required
+              onChange={(e) => void pick(e.target.files?.[0])}
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="evidence-type">What it is</Label>
@@ -193,6 +245,33 @@ export function ClaimEvidencePanel({
         <div className="space-y-1">
           <Label htmlFor="evidence-label">Label</Label>
           <Input id="evidence-label" name="label" required maxLength={200} placeholder="e.g. Signed project agreement, section 7" />
+        </div>
+        {picked && (
+          <div className="space-y-0.5 rounded-md bg-background p-2.5 text-xs ring-1 ring-border" data-picked>
+            <p className="font-medium text-navy-900">About to upload</p>
+            <p className="break-all">
+              <span data-picked-name>{picked.name}</span> · {picked.type || "unknown type"} · {formatBytes(picked.size)}
+            </p>
+            <p className="break-all text-muted-foreground">
+              SHA-256 <span data-picked-sha>{picked.sha256 ?? "hashing…"}</span>
+            </p>
+            {pickedWarning(picked) && (
+              <p className="text-amber-900" data-picked-warning>
+                {pickedWarning(picked)}
+              </p>
+            )}
+          </div>
+        )}
+        <div className="space-y-1">
+          <Label htmlFor="evidence-expected">Expected SHA-256 (optional)</Label>
+          <Input
+            id="evidence-expected"
+            name="expected_sha256"
+            maxLength={64}
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="Paste the original's SHA-256 to refuse any other file"
+          />
         </div>
         {type === "capture" && (
           <div className="grid gap-2 sm:grid-cols-2">

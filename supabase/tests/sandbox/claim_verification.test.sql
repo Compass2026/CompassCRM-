@@ -163,6 +163,11 @@ select cvt.ok('B2 up again: the migration re-applies (its verify block passes), 
   and (select md5(string_agg((to_jsonb(c) - 'review_id')::text, '|' order by c.id)) from claims c) = cvt.get('claims_before')
   and not exists (select 1 from claim_verification_authorities)
   and strpos(pg_get_functiondef('public.claim_registry(uuid,date)'::regprocedure), 'claim-registry/v2') > 0);
+-- Production applied the PR2a.1 hardening after 20261104200000; re-apply it
+-- here so the rest of the suite runs against the same schema.
+\ir ../../migrations/20261116170000_claim_verification_hardening.sql
+select cvt.ok('B4 the PR2a.1 hardening re-applies on top: the excerpt rule is in place',
+  exists (select 1 from pg_constraint where conname = 'claim_reviews_excerpt_quotes' and conrelid = 'public.claim_reviews'::regclass));
 set session authorization supabase_admin;
 insert into claim_verification_authorities (id, team_member_id, authority, basis)
 values (cvt.id('auth-owner'), cvt.id('owner'), 'owner', 'Fixture: the verification owner');
@@ -559,6 +564,14 @@ select cvt.ok('E5 an excerpt, a day examined (not future), an expiry after today
   and (cvt.classify('L7', 'offering')->>'action') = 'classify'
   and cvt.err($$select cvt.verify('L7', 'client_confirmation', 'doc-confirm')$$) = '22023'
   and cvt.err($$select cvt.verify('L1', 'client_contract', 'doc-contract', p_contact => 'Pat')$$) = '22023');
+select cvt.ok('E5b the excerpt must quote the evidence (PR2a.1): not the form''s placeholder, not under 12 characters, not the note',
+  cvt.err($$select cvt.verify('L1', 'client_contract', 'doc-contract', p_excerpt => 'Quote the words that support the claim')$$) = '23514'
+  and cvt.err($$select cvt.verify('L1', 'client_contract', 'doc-contract', p_excerpt => '  quote THE words   that support the claim ')$$) = '23514'
+  and cvt.err($$select cvt.verify('L1', 'client_contract', 'doc-contract', p_excerpt => '3 years')$$) = '23514'
+  and cvt.err($$select claim_verify(cvt.id('L1'), 'verify', 'client_contract', 'Workmanship is warranted for three (3) years',
+                                    cvt.today(), cvt.fp('L1'), cvt.rid('L1'), cvt.id('doc-contract'),
+                                    p_note => ' Workmanship is warranted for three (3) years ')$$) = '23514'
+  and not exists (select 1 from claim_reviews where claim_id = cvt.id('L1') and action = 'verify'));
 select cvt.ok('E6 an unverified claim may be classified but never verified (D4)',
   (cvt.classify('L2', 'warranty_guarantee')->>'action') = 'classify'
   and cvt.err($$select cvt.verify('L2', 'client_contract', 'doc-contract')$$) = '22023'

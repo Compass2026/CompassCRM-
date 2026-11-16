@@ -10,6 +10,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { decisionErrorText } from "@/lib/claim-registry";
 
 export type ActionResult<T = Record<string, unknown>> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -71,7 +72,7 @@ export async function verifyClaimAction(
     p_confirmed_by_contact: opt(input.confirmedByContact),
     p_note: opt(input.note),
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: decisionErrorText(error) };
   revalidate(clientId);
   return { ok: true };
 }
@@ -156,6 +157,28 @@ export async function finalizeClaimEvidenceAction(
   });
   if (r.ok) revalidate(clientId);
   return r;
+}
+
+/**
+ * A 60-second link to look at a registered evidence file (PR2a.1, H4). It is
+ * signed with the teammate's own session, so the bucket's team-read policy
+ * decides, and Storage's request log records who looked. The bucket stays
+ * private and nothing is written.
+ */
+export async function viewClaimEvidenceAction(evidenceId: string): Promise<ActionResult<{ url: string }>> {
+  const supabase = await createClient();
+  // claim_evidence is not in the generated types yet; team-read RLS applies.
+  const { data, error } = await supabase
+    .from("claim_evidence" as never)
+    .select("storage_path")
+    .eq("id" as never, evidenceId as never)
+    .maybeSingle();
+  const ev = data as { storage_path: string } | null;
+  if (error) return { ok: false, error: error.message };
+  if (!ev) return { ok: false, error: "That evidence file was not found." };
+  const { data: signed, error: signError } = await supabase.storage.from("claim-evidence").createSignedUrl(ev.storage_path, 60);
+  if (signError || !signed?.signedUrl) return { ok: false, error: signError?.message ?? "The file could not be opened." };
+  return { ok: true, url: signed.signedUrl };
 }
 
 export async function checkClaimEvidenceAction(

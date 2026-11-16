@@ -473,6 +473,41 @@ export const DECISION_LABEL: Record<ReviewAction, string> = {
   revoke: "Verification revoked",
 };
 
+/** The decision form's excerpt placeholder. claim_reviews_excerpt_quotes refuses it as an excerpt (20261116170000). */
+export const EXCERPT_PLACEHOLDER = "Quote the words that support the claim";
+export const EXCERPT_MIN = 12;
+
+/**
+ * Why an excerpt cannot be recorded, or null: the same rule as the database's
+ * claim_reviews_excerpt_quotes (PR2a.1, after A7 recorded the placeholder).
+ */
+export function excerptProblem(excerpt: string, note: string | null | undefined): string | null {
+  const e = excerpt.trim();
+  if (e.toLowerCase().replace(/\s+/g, " ") === EXCERPT_PLACEHOLDER.toLowerCase())
+    return "Quote the evidence itself: the box still holds its placeholder text.";
+  if (e.length < EXCERPT_MIN) return `Quote the words in the evidence that support the claim (at least ${EXCERPT_MIN} characters).`;
+  if (note && e === note.trim()) return "The quote and the note are the same text: the quote is the evidence's own words, the note is yours.";
+  return null;
+}
+
+/** Plain words for the database's refusals that carry only a code or a constraint name. */
+export function decisionErrorText(err: { code?: string; message: string }): string {
+  if (err.code === "23514" && err.message.includes("claim_reviews_excerpt_quotes"))
+    return `Quote the words in the evidence that support the claim (at least ${EXCERPT_MIN} characters, not the placeholder and not the note).`;
+  return err.message;
+}
+
+// The upload form's warning when a picked file's name and reported type disagree (PR2a.1, H5).
+const EXT_TYPE: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+/** A warning when the file's name and the type the browser reports disagree, or null. */
+export function pickedWarning(p: { name: string; type: string }): string | null {
+  const ext = p.name.split(".").pop()?.toLowerCase() ?? "";
+  const named = EXT_TYPE[ext];
+  if (named && p.type && named !== p.type)
+    return `The name says ${ext.toUpperCase()} but the browser reports ${p.type}: the file may have been converted when it was picked.`;
+  return null;
+}
+
 /** "a1b2c3d4…9f0e": enough to compare by eye; the full hash goes in a title. */
 export function shortHash(sha: string): string {
   return sha.length > 12 ? `${sha.slice(0, 8)}…${sha.slice(-4)}` : sha;
