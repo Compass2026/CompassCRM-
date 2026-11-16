@@ -297,6 +297,11 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edits.test.
 # 20261029180000: delegated copy edits (withdraw → set copy and claims →
 # resubmit under a receipt; the copy checked clean; never approves).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edit_copy.test.sql"
+# 20261117010000: pending changes (an Executive OS request keeps its post out
+# of Ready and unapprovable until applied, rejected, withdrawn or superseded;
+# an approved revision closes its own hold) and revising a rejected post
+# through the delegated door for a fresh review.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/review_pending_changes.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).

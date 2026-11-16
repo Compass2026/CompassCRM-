@@ -55,7 +55,7 @@ const clean = async () => ({ ok: true, brief_hash: BRIEF, warnings: [] });
 
 test("version says which edit kinds this deployment can do", async () => {
   const withCheck = await (await createContentApprovals({ store: fakeStore(), copyCheck: clean }).handle(post({ mode: "version" }))).json();
-  assert.equal(withCheck.version, 4);
+  assert.equal(withCheck.version, 5);
   assert.deepEqual(withCheck.edit_kinds, ["replace_media", "replace_copy"]);
   const without = await (await createContentApprovals({ store: fakeStore() }).handle(post({ mode: "version" }))).json();
   assert.deepEqual(without.edit_kinds, ["replace_media"]);

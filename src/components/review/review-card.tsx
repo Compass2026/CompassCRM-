@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { centralLocalInput, decisionsFor, formatCentral, stageLabels, type QueueItem } from "@/lib/review-queue";
+import { centralLocalInput, decisionsFor, formatCentral, pendingChangeLine, stageLabels, type QueueItem } from "@/lib/review-queue";
 import { cn } from "@/lib/utils";
 
 const channel: Record<string, string> = { facebook: "Facebook", google_business: "Business Profile" };
@@ -36,6 +36,7 @@ export function ReviewCard({ item, proposedAt, images }: { item: QueueItem; prop
   const [reasonState, setReason, savingReason] = useActionState(setNoImageReasonAction.bind(null, item.client_id, item.id), {});
   const when = item.scheduled_at ?? proposedAt;
   const problems = [...(item.grounding_problems ?? []), ...(item.client_hold ? [item.client_hold] : [])];
+  const pending = item.pending_changes ?? [];
 
   return (
     <article className="surface space-y-3 p-4" data-review-card={item.id} data-card-stage={item.stage}>
@@ -100,6 +101,15 @@ export function ReviewCard({ item, proposedAt, images }: { item: QueueItem; prop
         {item.error && (<><dt className="text-muted-foreground">Error</dt><dd className="text-red-700">{item.error} (attempt {item.publish_attempts})</dd></>)}
       </dl>
 
+      {pending.length > 0 && (
+        <ul className="list-disc space-y-0.5 rounded-md bg-amber-50 p-2 pl-6 text-xs text-amber-900" data-pending-changes>
+          {pending.map((c) => (
+            <li key={c.ref} data-pending-ref={c.ref}>
+              {pendingChangeLine(c)} <span className="text-amber-700">Request {c.ref.slice(0, 8)}: “{c.summary}”</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {problems.length > 0 && (
         <ul className="list-disc space-y-0.5 pl-5 text-xs text-amber-900" data-review-problems>
           {problems.map((p) => <li key={p}>{p}</li>)}

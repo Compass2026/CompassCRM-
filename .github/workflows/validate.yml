@@ -67,6 +67,8 @@ jobs:
         run: npm run test:blog-drafter-ui
       - name: Delegated copy edit through PostgREST on the replayed schema
         run: npm run test:content-edit-copy
+      - name: Review workflow (pending change, reject → revise → fresh review, approve & schedule → published) through PostgREST
+        run: npm run test:review-workflow
 
   citations-ui:
     runs-on: ubuntu-latest

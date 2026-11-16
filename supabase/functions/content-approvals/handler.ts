@@ -36,6 +36,17 @@
 //                   exactly those claims and resubmits it.
 //   revise_status → the receipt and the post now.
 //
+// Pending changes (20261117010000, v5): a change Executive OS has asked Tom
+// to approve keeps the post out of "Ready for final review" until it is
+// applied, rejected, withdrawn or superseded.
+//   hold          → open a hold for one post, keyed by the Executive OS
+//                   approval id (idempotent). The post shows under Needs
+//                   preparation with the pending change; approving it is refused.
+//   release       → close it: rejected, withdrawn or superseded (idempotent; an
+//                   unknown ref releases nothing). An approved revise closes its
+//                   own hold when it executes or is refused, and stage_media
+//                   with approval_id closes the stage's hold.
+//
 // Auth: the x-compass-delegation-key header must equal the Vault secret
 // EXECUTIVE_OS_DELEGATION_SECRET (constant-time). Nothing else is accepted —
 // not a team JWT, not the cron secret. Executive OS never touches the database.
@@ -48,8 +59,9 @@
 import { measure, sha256Hex } from "../_shared/image-meta.ts";
 import type { CopyCheckResult } from "./copy-check.ts";
 
-export const HANDLER_VERSION = 4;
-export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status"] as const;
+export const HANDLER_VERSION = 5;
+export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status", "hold", "release"] as const;
+export const RELEASE_REASONS = ["rejected", "withdrawn", "superseded"] as const;
 const ACTIONS = ["approve", "publish", "approve_and_publish"] as const;
 const CHANNELS = ["chatgpt", "claude"] as const;
 export const CONTENT_CHANNELS = ["blog", "facebook", "google_business"] as const;
@@ -89,6 +101,9 @@ export type Store = {
   editExecute(id: string, measured: Json): Promise<DbResult<Json>>;
   editRefuse(id: string, code: string, message: string): Promise<DbResult<Json>>;
   editStatus(operationId: string): Promise<DbResult<Json>>;
+  // Pending changes.
+  holdOpen(p: Json): Promise<DbResult<Json>>;
+  holdClose(ref: string, reason: string, note: string | null, supersededBy: string | null): Promise<DbResult<Json>>;
 };
 
 const reply = (status: number, body: Json) => Response.json(body, { status });
@@ -233,6 +248,38 @@ export function parseRevise(b: Json): Json | string {
   };
 }
 
+/** Validates a hold request. Returns the RPC payload or an error message. */
+export function parseHold(b: Json): Json | string {
+  const post = (b.post ?? {}) as Json;
+  if (!isStr(b.ref) || !UUID.test(b.ref)) return "ref is the Executive OS approval id (uuid)";
+  if (!isStr(b.client_id) || !UUID.test(b.client_id)) return "client_id must be a uuid";
+  if (!POST_CHANNELS.includes(post.channel as typeof POST_CHANNELS[number])) return "post.channel is facebook or google_business";
+  if (!isStr(post.id) || !UUID.test(post.id)) return "post.id must be a uuid";
+  if (!EDIT_KINDS.includes(b.kind as typeof EDIT_KINDS[number])) return `kind is one of ${EDIT_KINDS.join(", ")}`;
+  if (b.review_hash != null && (!isStr(b.review_hash) || !HASH.test(b.review_hash))) return "review_hash is the review_hash from batch, or null";
+  if (!str(b.summary, 300)) return "summary says what is pending (1–300 characters)";
+  if (!str(b.requested_by, 160)) return "requested_by names the assistant";
+  return {
+    ref: (b.ref as string).toLowerCase(), client_id: (b.client_id as string).toLowerCase(),
+    post: { channel: post.channel, id: (post.id as string).toLowerCase() }, kind: b.kind,
+    review_hash: b.review_hash ?? null, summary: (b.summary as string).trim(), requested_by: (b.requested_by as string).trim(),
+  };
+}
+
+/** Validates a release request. Returns the arguments or an error message. */
+export function parseRelease(b: Json): { ref: string; reason: string; note: string | null; supersededBy: string | null } | string {
+  if (!isStr(b.ref) || !UUID.test(b.ref)) return "ref is the Executive OS approval id (uuid)";
+  if (!RELEASE_REASONS.includes(b.reason as typeof RELEASE_REASONS[number])) return `reason is one of ${RELEASE_REASONS.join(", ")}`;
+  if (b.note != null && (!isStr(b.note) || b.note.length > 1000)) return "note is up to 1000 characters";
+  if (b.superseded_by_ref != null && (!isStr(b.superseded_by_ref) || !UUID.test(b.superseded_by_ref))) return "superseded_by_ref is a uuid";
+  if (b.superseded_by_ref != null && b.reason !== "superseded") return "superseded_by_ref goes with reason superseded";
+  return {
+    ref: (b.ref as string).toLowerCase(), reason: b.reason as string,
+    note: isStr(b.note) && b.note.trim() ? b.note.trim() : null,
+    supersededBy: isStr(b.superseded_by_ref) ? b.superseded_by_ref.toLowerCase() : null,
+  };
+}
+
 export type ContentApprovalsDeps = {
   store: Store;
   // The post-drafter's brief and linter for a proposed copy edit (copy-check.ts).
@@ -317,6 +364,31 @@ export function createContentApprovals(deps: ContentApprovalsDeps) {
     }
 
     if (mode === "stage_media") return stageMedia(body);
+    if (mode === "hold") {
+      const p = parseHold(body);
+      if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
+      const r = await store.holdOpen(p).catch(unconfirmed);
+      if (r.error) {
+        if (r.error.code && REFUSAL.test(r.error.code)) return refusedAtDb(r.error);
+        return reply(503, { error: "outcome_unknown", message: "The hold did not confirm; retry with the same ref." });
+      }
+      const h = r.data as Json;
+      return reply(h.replayed ? 200 : 201, { hold: { id: h.id, ref: h.ref, status: h.closed_at ? "closed" : "open", post_id: h.post_id,
+        opened_at: h.opened_at, close_reason: h.close_reason ?? null, replayed: !!h.replayed } });
+    }
+    if (mode === "release") {
+      const p = parseRelease(body);
+      if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
+      const r = await store.holdClose(p.ref, p.reason, p.note, p.supersededBy).catch(unconfirmed);
+      if (r.error) {
+        if (r.error.code && REFUSAL.test(r.error.code)) return refusedAtDb(r.error);
+        return reply(503, { error: "outcome_unknown", message: "The release did not confirm; retry with the same ref." });
+      }
+      const out = r.data as Json;
+      const h = out.hold as Json | null;
+      return reply(200, { released: !!out.released, hold: h ? { id: h.id, ref: h.ref, status: h.closed_at ? "closed" : "open", post_id: h.post_id,
+        opened_at: h.opened_at, closed_at: h.closed_at ?? null, close_reason: h.close_reason ?? null, superseded_by_ref: h.superseded_by_ref ?? null } : null });
+    }
     if (mode === "revise") return revise(body);
     if (mode === "revise_status") {
       if (!isStr(body.operation_id) || !OPERATION.test(body.operation_id)) return reply(400, { error: "operation_id is required" });
@@ -340,10 +412,20 @@ export function createContentApprovals(deps: ContentApprovalsDeps) {
     if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
     const st = await store.editStage(p).catch(unconfirmed);
     if (st.error) {
-      if (st.error.code && REFUSAL.test(st.error.code)) return refusedAtDb(st.error);
+      if (st.error.code && REFUSAL.test(st.error.code)) {
+        // An approved stage that is refused will never run: its hold closes with the reason.
+        if (isStr(body.approval_id) && UUID.test(body.approval_id)) {
+          await store.holdClose(body.approval_id.toLowerCase(), "refused", st.error.message, null).catch(unconfirmed);
+        }
+        return refusedAtDb(st.error);
+      }
       return reply(503, { error: "outcome_unknown", message: "Staging did not confirm; retry with the same operation_id." });
     }
     const stage = st.data as Json;
+    // A stage Tom approved in Executive OS was the pending change: it has run.
+    if (isStr(body.approval_id) && UUID.test(body.approval_id)) {
+      await store.holdClose(body.approval_id.toLowerCase(), "executed", `Staged by content-approvals (stage ${stage.id})`, null).catch(unconfirmed);
+    }
     let slot: Awaited<ReturnType<Store["uploadSlot"]>>;
     try {
       slot = await store.uploadSlot(String(stage.storage_path));

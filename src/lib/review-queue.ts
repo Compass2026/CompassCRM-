@@ -24,7 +24,7 @@ export const stageLabels: Record<ReviewStage, { label: string; help: string; cla
   },
   needs_preparation: {
     label: "Needs preparation",
-    help: "Not ready for a decision yet: a claim or service gap, or no image and no reason for going without one.",
+    help: "Not ready for a decision yet: a copy or image change still waiting for approval, a claim or service gap, or no image and no reason for going without one.",
     className: "bg-amber-100 text-amber-900",
   },
   revising: {
@@ -80,6 +80,17 @@ export type QueueMedia = {
   height: number | null;
 };
 
+// A change Executive OS asked Tom to approve for this post (20261117010000):
+// until it is applied, rejected or withdrawn the shown copy / image is not final.
+export type PendingChange = {
+  ref: string;
+  kind: "replace_copy" | "replace_media";
+  summary: string;
+  requested_by: string;
+  opened_at: string;
+  stale: boolean;
+};
+
 export type QueueItem = {
   id: string;
   client_id: string;
@@ -114,6 +125,7 @@ export type QueueItem = {
   grounding_problems: string[] | null;
   publish_problems: string[] | null;
   client_hold: string | null;
+  pending_changes?: PendingChange[] | null;
   stage: ReviewStage;
   last_feedback: string | null;
   rejections: number;
@@ -203,6 +215,12 @@ export function formatCentral(iso: string | null): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   }).format(new Date(iso)) + " CT";
+}
+
+export function pendingChangeLine(c: PendingChange): string {
+  const what = c.kind === "replace_copy" ? "A copy change" : "A new image";
+  return `${what} requested by ${c.requested_by} is waiting for approval in Executive OS` +
+    (c.stale ? " (the post changed since it was requested; it will be refiled or withdrawn)" : "") + ".";
 }
 
 // What a reviewer can decide on a queue item, and why not.
