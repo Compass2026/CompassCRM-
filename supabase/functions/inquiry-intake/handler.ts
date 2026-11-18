@@ -6,7 +6,19 @@
 //   X-Compass-Source: <inquiry_sources.source_key>
 //   Authorization: Bearer <the source's token, Vault inquiry_sources.secret_name>
 //   { submission_id, name, email, phone, location, service_type, budget,
-//     message, page_url, submitted_at, email_status, email_provider_id }
+//     message, page_url, submitted_at, email_status, email_provider_id,
+//     sms_consent? }
+//
+// sms_consent is the website's SMS checkbox as data, never words in the
+// message (Compass does not parse message text for consent):
+//   { granted: true | false,          // the visitor ticked the box
+//     consented_at, disclosure_version, disclosure_text,   // required when granted
+//     phone?, source_url? }           // phone, if sent, must be the inquiry's
+// Absent or null means the form had no checkbox: no consent. Unchecked
+// (granted: false) records nothing and revokes nothing. A malformed object
+// is a 400, so the website keeps the inquiry and its developer sees why.
+// What is recorded, and what refuses it (an opt-out, a later revocation, a
+// different phone), is crm_apply_web_consent (20261118210000).
 //
 // The client is the source's client (inquiry_sources.client_id). Nothing in
 // the body chooses it: a client_id there is ignored. An unknown source, a
@@ -21,7 +33,7 @@
 // Logs carry the source key, outcome codes and ids only — never a visitor's
 // name, email, phone or message, and never the token.
 
-export const HANDLER_VERSION = 1;
+export const HANDLER_VERSION = 2;
 export const MAX_BODY_BYTES = 32_000;
 
 export type Source = { id: string; client_id: string; enabled: boolean; secret_name: string; client_enabled: boolean };
@@ -66,6 +78,29 @@ export async function tokensMatch(given: string, expected: string): Promise<bool
   return diff === 0 && expected.length > 0;
 }
 
+const DISCLOSURE_VERSION = /^[A-Za-z0-9._:-]{1,100}$/;
+
+// The website's SMS checkbox, validated; null when the form sent none.
+export function cleanConsent(v: unknown): { ok: true; value: Json | null } | { ok: false } {
+  if (v == null) return { ok: true, value: null };
+  if (typeof v !== "object" || Array.isArray(v)) return { ok: false };
+  const c = v as Json;
+  if (typeof c.granted !== "boolean") return { ok: false };
+  const version = typeof c.disclosure_version === "string" ? c.disclosure_version.trim() : "";
+  if (!c.granted) return { ok: true, value: { granted: false, disclosure_version: DISCLOSURE_VERSION.test(version) ? version : null } };
+  if (!DISCLOSURE_VERSION.test(version)) return { ok: false };
+  const text = typeof c.disclosure_text === "string" ? c.disclosure_text.trim() : "";
+  if (!text || text.length > 2_000) return { ok: false };
+  const at = typeof c.consented_at === "string" || typeof c.consented_at === "number" ? new Date(c.consented_at) : null;
+  if (!at || Number.isNaN(at.getTime())) return { ok: false };
+  if (c.phone != null && (typeof c.phone !== "string" || c.phone.length > 60)) return { ok: false };
+  if (c.source_url != null && typeof c.source_url !== "string") return { ok: false };
+  const url = typeof c.source_url === "string" && /^https:\/\//.test(c.source_url.trim()) && c.source_url.length <= 2_000
+    ? c.source_url.trim() : null;
+  return { ok: true, value: { granted: true, consented_at: at.toISOString(), disclosure_version: version, disclosure_text: text,
+    phone: typeof c.phone === "string" ? c.phone.trim() || null : null, source_url: url } };
+}
+
 // The fields Compass stores, validated and trimmed; or the first problem.
 export function cleanInquiry(body: unknown): { ok: true; value: Json } | { ok: false; problem: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, problem: "body" };
@@ -93,14 +128,20 @@ export function cleanInquiry(body: unknown): { ok: true; value: Json } | { ok: f
     if (!t || Number.isNaN(t.getTime())) return { ok: false, problem: "submitted_at" };
     out.submitted_at = t.toISOString();
   } else out.submitted_at = null;
+  const consent = cleanConsent(b.sms_consent);
+  if (!consent.ok) return { ok: false, problem: "sms_consent" };
+  if (consent.value) out.sms_consent = consent.value;
   return { ok: true, value: out };
 }
 
 // What the visitor submitted, hashed the same way on every retry (the
-// website's email outcome and the request time are not part of it).
+// website's email outcome and the request time are not part of it). The
+// consent joins the hash only when sent, so earlier submissions hash as before.
 export async function payloadHash(v: Json): Promise<string> {
   const keys = ["submission_id", "name", "email", "phone", "location", "service_type", "budget", "message", "page_url"];
-  return sha256Hex(JSON.stringify(keys.map((k) => v[k] ?? null)));
+  const parts: unknown[] = keys.map((k) => v[k] ?? null);
+  if (v.sms_consent) parts.push(v.sms_consent);
+  return sha256Hex(JSON.stringify(parts));
 }
 
 export function createInquiryIntake(deps: { store: Store; kick?: () => Promise<void>; waitUntil?: (p: Promise<unknown>) => void; log?: Log }) {
@@ -156,12 +197,14 @@ export function createInquiryIntake(deps: { store: Store; kick?: () => Promise<v
     const jobs = Array.isArray(result.jobs) ? (result.jobs as Json[]) : [];
     const queued = jobs.filter((j) => j.status === "queued").length;
     log("saved", { source: key, submission: clean.value.submission_id, inquiry: result.inquiry_id, duplicate: result.duplicate === true,
+      contact: result.contact_matched_by ?? null, sms_consent: result.sms_consent ?? null,
       alerts_queued: queued, alerts_blocked: jobs.length - queued });
     if (queued > 0 && deps.kick) {
       const p = deps.kick().catch(() => log("kick_failed", { inquiry: result.inquiry_id }));
       if (deps.waitUntil) deps.waitUntil(p); else await p;
     }
-    return reply(200, { ok: true, inquiry_id: result.inquiry_id, duplicate: result.duplicate === true });
+    return reply(200, { ok: true, inquiry_id: result.inquiry_id, duplicate: result.duplicate === true,
+      ...(result.duplicate === true ? {} : { sms_consent: result.sms_consent ?? "not_sent" }) });
   }
 
   return { handle, version: HANDLER_VERSION };

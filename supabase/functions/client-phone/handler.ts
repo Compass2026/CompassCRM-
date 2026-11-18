@@ -7,6 +7,18 @@ import { voiceAdmin } from "./voice-admin.ts";
 import { voiceProvider, sid } from "./voice-provider.ts";
 const reply = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+const E164 = /^\+[1-9][0-9]{7,14}$/;
+// Refusals client_phone_begin_sms raises ("code: detail" or a bare code),
+// passed to the page by code so it can say what to do.
+export const SMS_REFUSALS = [
+  "verification_required", "save_draft_first", "send_uncertain_refresh_first", "no_consent", "opted_out",
+  "outbound_disabled", "not_enabled", "no_phone", "lead_contact_mismatch", "no_number", "no_messaging_service",
+  "empty", "too_long",
+] as const;
+export function smsRefusal(message: string | null | undefined): string {
+  const code = (/^([a-z_]+)(?::|$)/.exec(message ?? "") ?? [])[1];
+  return code && (SMS_REFUSALS as readonly string[]).includes(code) ? code : "send_not_ready";
+}
 export function createClientPhone(
   db: DB,
   base: string,
@@ -55,6 +67,11 @@ export function createClientPhone(
       throw Error("forbidden");
   }
   async function snapshot(cid: string, i: DB, uid: string) {
+    // The lead's thread is the one with the contact holding the lead's own
+    // number (unique per client), the number texts go to; never the thread
+    // of whatever contact the inquiry happens to link.
+    const recipient = i.phone_e164 && E164.test(i.phone_e164) ? i.phone_e164 : null;
+    const holder = recipient ? await one("contacts", { client_id: cid, phone_e164: recipient }, "id") : null;
     const [draft, settings, profile, number, consent, convs, voice, calls] =
       await Promise.all([
         one(
@@ -80,22 +97,22 @@ export function createClientPhone(
           { client_id: cid, is_primary: true, status: "active" },
           "phone_number_e164",
         ),
-        i.phone_e164
+        recipient
           ? check(
               db
                 .from("communication_consents")
                 .select("status,consent_type")
                 .eq("client_id", cid)
-                .eq("phone_e164", i.phone_e164),
+                .eq("phone_e164", recipient),
             )
           : [],
-        i.contact_id
+        holder
           ? check(
               db
                 .from("communication_conversations")
                 .select("id")
                 .eq("client_id", cid)
-                .eq("contact_id", i.contact_id),
+                .eq("contact_id", holder.id),
             )
           : [],
         one(
@@ -133,8 +150,10 @@ export function createClientPhone(
         ? "Texting is awaiting carrier verification."
         : !settings?.enabled || !settings.outbound_enabled
           ? "Text sending has not been enabled."
-          : !i.phone_e164
-            ? "This lead has no valid phone number."
+          : !recipient
+            ? "This lead didn't give a valid mobile number, so they can't be texted. Call or email instead."
+            : !holder
+              ? "This lead's number isn't linked to a contact yet. Ask your Compass team to repair the lead before texting."
             : consent.some((v: DB) => v.status === "opted_out")
               ? "This lead opted out of texts."
               : !consent.some(
@@ -152,6 +171,7 @@ export function createClientPhone(
       messages: messages.reverse(),
       calls: calls.map((c: DB)=>({...c,recordings:recordings.filter((r: DB)=>r.call_id===c.id)})),
       number: number?.phone_number_e164 || null,
+      recipient,
       can_send: !reason,
       reason,
       voice_ready: !!(voice?.enabled && voice.application_sid && number),
@@ -271,12 +291,10 @@ export function createClientPhone(
           is_primary: true,
           status: "active",
         });
-        if (
-          !voice?.application_sid ||
-          !number?.voice_enabled ||
-          !/^\+[1-9][0-9]{7,14}$/.test(i.phone_e164 || "")
-        )
+        if (!voice?.application_sid || !number?.voice_enabled)
           throw Error("voice_not_ready");
+        // The lead, not the setup: say so (it used to read "Calling setup is not complete").
+        if (!E164.test(i.phone_e164 || "")) throw Error("no_lead_phone");
         const recent = await check(
           db
             .from("client_voice_calls")
@@ -312,17 +330,7 @@ export function createClientPhone(
             request_id: input.revision,
           },
         });
-        if (begun.error)
-          throw Error(
-            [
-              "verification_required",
-              "save_draft_first",
-              "send_uncertain_refresh_first",
-              "no_consent",
-              "opted_out",
-              "outbound_disabled",
-            ].find((v) => begun.error.message.includes(v)) || "send_not_ready",
-          );
+        if (begun.error) throw Error(smsRefusal(begun.error.message));
         const b = begun.data;
         if (!b.duplicate) {
           const secrets = await db.rpc("communication_subaccount_secrets", {
@@ -406,6 +414,8 @@ export function createClientPhone(
         "opted_out",
         "outbound_disabled",
         "rate_limited",
+        "no_lead_phone",
+        ...SMS_REFUSALS,
       ];
       const code =
         e instanceof Error && safe.includes(e.message)

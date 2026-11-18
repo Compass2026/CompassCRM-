@@ -195,7 +195,7 @@ try {
 
   await team.goto(`${root}/${first.inquiry_id}`, { waitUntil: "networkidle" });
   assert.equal(await team.locator("[data-inquiry-message]").innerText(), "We are remodeling our kitchen.\nCould you call after 5pm?");
-  assert.equal(await team.getByRole("link", { name: "Call" }).getAttribute("href"), "tel:+16185550142");
+  assert.equal(await team.getByRole("link", { name: "Call from my phone", exact: true }).getAttribute("href"), "tel:+16185550142");
   assert.match(await team.getByRole("link", { name: "Email" }).getAttribute("href"), /^mailto:jordan@example\.test\?subject=/);
   await team.getByRole("button", { name: "Mark contacted" }).click();
   await team.locator("[data-inquiry-status=contacted]").first().waitFor();
@@ -263,6 +263,13 @@ try {
   assert.ok(await portal.getByRole("button", { name: "Sign out", exact: true }).isVisible());
   await portal.goto(`${base}/portal/inquiries/${first.inquiry_id}`, { waitUntil: "networkidle" });
   assert.match(portal.url(), new RegExp(`lead=${first.inquiry_id}`));
+  // Device calling and browser calling are told apart (BHG, Nov 18 2026).
+  const device = portal.getByRole("link", { name: "Call from my phone", exact: true });
+  assert.equal(await device.getAttribute("href"), "tel:+16185550142");
+  assert.match(await device.getAttribute("title"), /your own number, not the business line/);
+  assert.ok(await portal.getByRole("region", { name: "Browser calling on the business line", exact: true }).isVisible());
+  assert.equal(await portal.getByRole("link", { name: "Call lead", exact: true }).count(), 0);
+  ok("Lead calling: device call link and browser calling are labelled apart");
   await portal.getByText("Follow-up and internal notes", { exact: true }).click();
   await portal.getByLabel("Add a follow-up note").fill("Leads-only access still works.");
   await portal.getByRole("button", { name: "Add note", exact: true }).click();

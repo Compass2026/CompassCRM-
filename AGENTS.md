@@ -2204,6 +2204,14 @@ that times out never reached Postgres; stage it and apply as
 - **Do not** send texts, record Ginger's consent from assumptions, approve the
   sender before Twilio does, or invite / reset portal users as part of
   CRM Lite work.
+- **Website SMS consent and the lead's contact (Nov 18 2026;
+  `20261118210000` + `20261118210100`).** Websites send the consent checkbox
+  as `sms_consent` data to `inquiry-intake`; only an explicit grant records
+  consent, never over an opt-out, a later revocation or an existing grant, and
+  only for a new submission (retries add nothing). Message text is never
+  parsed for consent. The inquiry's phone decides its contact (no edits, no
+  merges), and lead texts go to `inquiries.phone_e164`. See `docs/crm-lite.md`
+  › "SMS consent and the lead's contact".
 
 ## Authority runs (D2; 0048 applied Sept 25 2026; `authority-run` deployed, engine `authority-v1.3` in production since Sept 27 2026)
 
