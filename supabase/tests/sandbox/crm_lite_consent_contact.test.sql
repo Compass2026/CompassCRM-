@@ -1,5 +1,5 @@
--- Tests for 20261118210000_crm_lite_web_consent_contact.sql and
--- 20261118210100_client_phone_sms_recipient.sql, run by
+-- Tests for 20261119002142_crm_lite_web_consent_contact.sql and
+-- 20261119002233_client_phone_sms_recipient.sql, run by
 -- scripts/test-portal-sandbox.sh on the same replay, after crm_lite.test.sql.
 -- Own harness schema (lcc; cc belongs to content_draft_claims), fictional clients, people and 555 numbers; nothing
 -- is sent anywhere. Callers as they reach production: inquiry-intake and

@@ -95,8 +95,8 @@ closed until their existing prerequisites are met.
 
 ## SMS consent and the lead's contact (Nov 18 2026)
 
-Migrations `20261118210000_crm_lite_web_consent_contact.sql` and
-`20261118210100_client_phone_sms_recipient.sql`; `inquiry-intake` v2;
+Migrations `20261119002142_crm_lite_web_consent_contact.sql` and
+`20261119002233_client_phone_sms_recipient.sql`; `inquiry-intake` v2;
 `client-phone` (refusal codes, lead thread by phone). Found on BHG Safety
 Partners: the website's consent reached Compass only as words in the message,
 and an inquiry linked by email to an older contact with no phone could be
@@ -133,8 +133,8 @@ called but not texted (`no_phone`).
   relinks the one production inquiry whose phone differed from its contact's
   (BHG, Nov 18 2026, the only one across all clients), after the migration,
   with Tom's go-ahead.
-- **Rollback:** `supabase/rollback/20261118210100_*.down.sql` then
-  `20261118210000_*.down.sql` restore the previous functions; consent,
+- **Rollback:** `supabase/rollback/20261119002233_*.down.sql` then
+  `20261119002142_*.down.sql` restore the previous functions; consent,
   contact and event rows written meanwhile are kept.
 
 ## The workspace

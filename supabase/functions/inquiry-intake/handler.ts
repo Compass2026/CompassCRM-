@@ -18,7 +18,7 @@
 // (granted: false) records nothing and revokes nothing. A malformed object
 // is a 400, so the website keeps the inquiry and its developer sees why.
 // What is recorded, and what refuses it (an opt-out, a later revocation, a
-// different phone), is crm_apply_web_consent (20261118210000).
+// different phone), is crm_apply_web_consent (20261119002142).
 //
 // The client is the source's client (inquiry_sources.client_id). Nothing in
 // the body chooses it: a client_id there is ignored. An unknown source, a

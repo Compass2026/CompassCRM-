@@ -2204,8 +2204,8 @@ that times out never reached Postgres; stage it and apply as
 - **Do not** send texts, record Ginger's consent from assumptions, approve the
   sender before Twilio does, or invite / reset portal users as part of
   CRM Lite work.
-- **Website SMS consent and the lead's contact (Nov 18 2026;
-  `20261118210000` + `20261118210100`).** Websites send the consent checkbox
+- **Website SMS consent and the lead's contact (`20261119002142` +
+  `20261119002233`, applied Nov 19 2026 under those versions).** Websites send the consent checkbox
   as `sms_consent` data to `inquiry-intake`; only an explicit grant records
   consent, never over an opt-out, a later revocation or an existing grant, and
   only for a new submission (retries add nothing). Message text is never

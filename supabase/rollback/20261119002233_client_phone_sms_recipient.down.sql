@@ -1,4 +1,4 @@
--- Rollback of 20261118210100_client_phone_sms_recipient.sql: the
+-- Rollback of 20261119002233_client_phone_sms_recipient.sql: the
 -- 20261031161048 client_phone_begin_sms (recipient = the inquiry's linked
 -- contact's phone). No data changes.
 

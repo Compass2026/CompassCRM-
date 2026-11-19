@@ -1,5 +1,5 @@
 -- DEFERRED data repair, not a migration. Run only after
--- 20261118210000_crm_lite_web_consent_contact.sql is applied (it adds the
+-- 20261119002142_crm_lite_web_consent_contact.sql is applied (it adds the
 -- 'contact_relinked' event kind) and Tom has agreed to this exact change.
 --
 -- What it fixes (BHG Safety Partners, Nov 18 2026): inquiry 6233265f… gave

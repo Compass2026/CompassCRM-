@@ -1,4 +1,4 @@
--- Rollback of 20261118210000_crm_lite_web_consent_contact.sql.
+-- Rollback of 20261119002142_crm_lite_web_consent_contact.sql.
 --
 -- Restores crm_ingest_inquiry exactly as 20261012002616 defined it (email
 -- first contact matching, no consent work) and drops the two helpers. Kept on

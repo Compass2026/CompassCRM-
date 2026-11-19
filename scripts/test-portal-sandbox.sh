@@ -216,7 +216,7 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/communications_secr
 # delivery test, the admin switch), no old inquiries sent, no blind resend
 # of an unknown outcome, STOP / START / HELP, the worker kept out.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite.test.sql"
-# 20261118210000 / 20261118210100: website SMS consent as data (explicit
+# 20261119002142 / 20261119002233: website SMS consent as data (explicit
 # grant only; STOP, later revocations and existing grants win; retries add
 # nothing), the inquiry's phone decides its contact (no edits, no merges),
 # lead texts go to the lead's own number and replies land in its thread, and
