@@ -235,6 +235,14 @@ export function createClientPhone(
   }
 
   async function sendText(cid: string, i: DB, uid: string, input: DB): Promise<SendResult> {
+    // A page loaded before this change sends {revision} after Save draft: its
+    // saved draft's revision is the request id and its text the body.
+    if (input.request_id == null && uuid(input.revision)) {
+      const d = await one("client_phone_drafts", { client_id: cid, inquiry_id: i.id, actor_id: uid, revision: input.revision }, "body");
+      const sent = !d && await one("communication_messages", { request_id: input.revision }, "id");
+      if (!d && !sent) throw Error("save_draft_first");
+      input = { ...input, request_id: input.revision, body: d ? d.body : "" };
+    }
     if (!uuid(input.request_id)) throw Error("invalid_request");
     const cols = "id,client_id,inquiry_id,client_actor_id,body,to_e164,from_e164,provider_status,provider_message_sid,error_code,created_at";
     // The same press asked again: report or reconcile it, never send again.

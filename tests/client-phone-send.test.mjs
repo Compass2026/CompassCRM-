@@ -250,3 +250,16 @@ test("autosave: keeps the draft quietly and never sends", async () => {
   assert.equal(w.calls.twilioPosts.length, 0);
   assert.equal(w.calls.rpc.includes("client_phone_begin_sms"), false);
 });
+
+test("send: a page from before this change (Save draft, then send its revision) still sends once", async () => {
+  const w = world();
+  await w.call({ mode: "save_draft", body: "Old page text" });
+  const revision = w.t.client_phone_drafts[0].revision;
+  const r = await w.call({ mode: "send", revision });
+  assert.equal(r.body.send.state, "accepted");
+  assert.deepEqual(w.calls.twilioPosts, [{ to: LEAD, body: "Old page text" }]);
+  const again = await w.call({ mode: "send", revision });
+  assert.equal(again.body.send.state, "accepted");
+  assert.equal(w.calls.twilioPosts.length, 1);
+  assert.equal((await w.call({ mode: "send", revision: rid(99) })).body.error, "save_draft_first");
+});
