@@ -43,3 +43,26 @@ test("solar is an industry noun, not Logic Solar's brand",()=>{
   assert.equal(check("logic solar reviews","commercial","Logic Solar").assessed,"navigational");
   assert.equal(check("logic solar battery backup","commercial","Logic Solar").assessed,"navigational");
 });
+test("a city in the business name is not a brand word (Pensacola Equipment Rentals)",()=>{
+  const pensacola=buildPlaceIndex(["Pensacola"],["Pensacola"],[]);
+  const name="Pensacola Equipment Rentals";
+  for(const [query,intent] of [
+    ["chainsaw rental pensacola","transactional"],
+    ["land clearing company pensacola","commercial"],
+    ["skid steer rental pensacola fl","transactional"],
+    ["equipment rental pensacola","transactional"],
+  ]) {
+    const actual=assessIntent(query,intent,{clientName:name,places:pensacola});
+    assert.notEqual(actual.assessed,"navigational",query);
+    assert.equal(actual.conflict,false,query);
+  }
+  // The full business name is still a branded search.
+  assert.equal(assessIntent("pensacola equipment rentals","navigational",{clientName:name,places:pensacola}).assessed,"navigational");
+  assert.equal(assessIntent("pensacola equipment rentals hours","commercial",{clientName:name,places:pensacola}).conflict,true);
+});
+test("trade nouns in a business name are not brand words",()=>{
+  assert.notEqual(check("emergency plumbing wentzville","commercial","Silverback Plumbing & Contracting LLC").assessed,"navigational");
+  assert.equal(check("silverback plumbing","navigational","Silverback Plumbing & Contracting LLC").assessed,"navigational");
+  assert.notEqual(check("boxing classes o'fallon","commercial","Resilient Boxing").assessed,"navigational");
+  assert.equal(check("resilient boxing","navigational","Resilient Boxing").assessed,"navigational");
+});

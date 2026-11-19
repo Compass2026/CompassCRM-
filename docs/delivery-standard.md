@@ -43,7 +43,13 @@ came to be; where it disagrees, this section wins.
    *approved*, *scheduled*, *published (with the live URL and receipt)* or
    *blocked (with the exact reason and owner)*. Only Tom approves content,
    and only his explicit words publish it.
-5. **Do not hold healthy channels behind missing integrations.** A client's
+5. **The review queue never stops the weekly standard** (20261119220000).
+   drafter_write allows one open drafted Business Profile post per
+   **keyword** (and never two with the same copy or image), not one per
+   service and intent: with 8–36 service × intent pairs per core list, the
+   old limit refused every GBP slot once the drafts waiting for review
+   covered them (Logic, MADHAIRLAB, Pensacola, Show Me Design, Nov 4–18).
+6. **Do not hold healthy channels behind missing integrations.** A client's
    bound, healthy Facebook and Business Profile channels proceed once its
    brand board and core keyword list are approved, even when its blog has
    no website adapter yet.

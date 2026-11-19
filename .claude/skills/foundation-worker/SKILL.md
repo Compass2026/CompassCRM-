@@ -1944,9 +1944,15 @@ a slot.
    (`core_keyword_required`) and the link would too. Prefer P1/P2 money
    keywords, then Search Console impressions, then volume. Write at the
    keyword's **recorded** intent; never relabel it, and never edit a core
-   list or a keyword's core parent. Avoid a service and intent that already
-   has an open or approved post on this channel this month (`social_posts`
-   with `review_status in ('in_review','approved')`). When the notes say the
+   list or a keyword's core parent. Never pick a keyword that already has an
+   open drafted post on this channel (`social_posts.keyword_id` with
+   `review_status in ('draft','in_review')`): drafter_write refuses it, and
+   it refuses the same copy or image too. Spread the week across services:
+   prefer a service and intent with no open or approved post on this channel
+   this week, but a service whose earlier drafts still wait for review is not
+   a reason to leave the slot empty — use another of its core keywords
+   (20261119220000; the old one-per-service-and-intent limit stopped the
+   weekly standard whenever the review queue was full). When the notes say the
    Business Profile location has other open slots on the same day (BHG:
    three brand sites, one location), choose a different service and topic
    from those slots' drafts.
@@ -2032,7 +2038,8 @@ draft.
    `201` → done: the post is `in_review` and 0045 opened the
    `CLAUDE_APPROVAL` review task for a person. `422 lint_failed` → revise
    and resubmit; `409 stale_brief` → step 1; `409 refused` (an open drafted
-   post already exists for that service and intent) or any other refusal →
+   post already has that keyword, copy or image) → step 1 with another core
+   keyword (at most twice), then stop and report it; any other refusal →
    stop and report it.
 
 **At most three drafts per brief** (checks included in your count); the

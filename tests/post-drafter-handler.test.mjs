@@ -160,14 +160,14 @@ test("submit: at most three attempts per brief, counted by the server", async ()
 });
 
 test("submit: a database refusal (grounding, duplicate) is recorded and reported", async () => {
-  const { store, calls } = fakeStore({ write: async () => ({ error: { code: "23505", message: "An open drafted post already exists for this service and intent" } }) });
+  const { store, calls } = fakeStore({ write: async () => ({ error: { code: "23505", message: "An open drafted Business Profile post already has this keyword, this copy or this image" } }) });
   const d = drafter(store);
   const hash = await briefHash(d);
   const r = await call(d, { mode: "submit", client_id: CLIENT, target: TARGET, brief_hash: hash, draft, runtime: "w" });
   assert.equal(r.status, 409);
   assert.equal(r.body.error, "refused");
   assert.equal(calls.runs[0].status, "refused");
-  assert.match(calls.runs[0].detail, /^23505 An open drafted post/);
+  assert.match(calls.runs[0].detail, /^23505 An open drafted Business Profile post/);
 });
 
 test("submit validates its inputs before touching anything", async () => {

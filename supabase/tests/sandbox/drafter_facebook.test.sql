@@ -216,7 +216,7 @@ begin
   st := fd.try(format('select drafter_write(%L::jsonb)', fd.req('Another panel upgrades post. Licensed electricians.', null,
     p_channel => 'google_business', p_intent => 'transactional',
     p_cta => '{"type": "LEARN_MORE", "url": "https://b.example.test/panel-upgrades"}')));
-  perform fd.ok('D23 ...and its one-open-per-service-and-intent rule still holds', st like '23505:%service and intent%', st);
+  perform fd.ok('D23 ...and a second open drafted GBP post for the same service and intent without a keyword is refused (20261119220000)', st like '23505:%this keyword, this copy or this image%', st);
 end $$;
 reset role;
 
