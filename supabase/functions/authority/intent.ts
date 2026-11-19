@@ -26,10 +26,14 @@ export function assessIntent(query: string, stored: string | null, ctx: { client
     "safety", "heavy", "operator", "operators", "industrial", "consulting",
     "consultants", "consultant", "compliance", "audits", "audit", "contractors",
     "contractor", "interiors", "design", "build", "electrical", "marketing",
-    "solar",
+    "solar", "rental", "rentals", "plumbing", "contracting", "masonry",
+    "brothers", "boxing", "wear",
   ]);
+  // A place in the business name ("Pensacola Equipment Rentals") is not a
+  // brand identifier either: "land clearing company pensacola" names the
+  // city, not the business. Only the full name or a distinctive word does.
   const brandWords = (ctx.clientName.toLowerCase().match(/[a-z']{4,}/g) ?? [])
-    .filter((w) => !generic.has(w));
+    .filter((w) => !generic.has(w) && placesIn(w, ctx.places).length === 0);
   const initialism = ctx.clientName.match(/^\s*([A-Z]{2,5})\b/)?.[1]?.toLowerCase();
   const brand = q.includes(ctx.clientName.toLowerCase())
     || brandWords.some((w) => new RegExp(`\\b${w}\\b`).test(q))

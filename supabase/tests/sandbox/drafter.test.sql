@@ -49,7 +49,8 @@ create function dr.id(p_k text) returns uuid language sql stable as $$ select id
 -- Profile post with a LEARN_MORE button to the service page.
 create function dr.req(p_intent text, p_claims uuid[], p_copy text,
                        p_allowed uuid[] default null, p_cta_url text default 'https://b.example.test/panel-upgrades',
-                       p_lint_ok boolean default true, p_client uuid default '00000000-0000-4000-b000-00000000000b')
+                       p_lint_ok boolean default true, p_client uuid default '00000000-0000-4000-b000-00000000000b',
+                       p_keyword uuid default '00000000-0000-4000-d000-00000000000b')
 returns jsonb language sql stable as $$
   select jsonb_build_object(
     'client_id', p_client, 'requested_via', 'worker', 'runtime', 'sandbox-model', 'attempt', 1,
@@ -58,7 +59,7 @@ returns jsonb language sql stable as $$
       'client', jsonb_build_object('id', '00000000-0000-4000-b000-00000000000b'),
       'target', jsonb_build_object('channel', 'google_business', 'post_type', 'standard', 'search_intent', p_intent,
         'service', jsonb_build_object('id', '00000000-0000-4000-e000-00000000002b', 'name', 'Panel upgrades'),
-        'keyword', jsonb_build_object('id', '00000000-0000-4000-d000-00000000000b', 'text', 'b electrician'),
+        'keyword', jsonb_build_object('id', p_keyword, 'text', 'b electrician'),
         'cta', jsonb_build_object('type', 'LEARN_MORE', 'url', p_cta_url), 'offer', null),
       'allowed_facts', jsonb_build_object('claims',
         (select coalesce(jsonb_agg(jsonb_build_object('id', c)), '[]') from unnest(coalesce(p_allowed, p_claims)) c))),
@@ -73,6 +74,11 @@ insert into services (id, client_id, name, status, page_url) values
 insert into claims (id, client_id, claim, status, source, confirmed_by, confirmed_on) values
   ('00000000-0000-4000-f000-00000000003b', :'cb', 'Licensed electricians', 'sourced', 'https://b.example.test/about', null, null),
   ('00000000-0000-4000-f000-00000000004b', :'cb', 'Fastest electrician in Columbia', 'unverified', null, null, null);
+-- 20261119220000: two more keywords on client B, so a draft can share a
+-- service and intent with an open one without sharing its keyword.
+insert into keywords (id, client_id, keyword, is_tracked, is_money) values
+  ('00000000-0000-4000-d000-00000000002b', :'cb', 'b panel upgrade', true, true),
+  ('00000000-0000-4000-d000-00000000003b', :'cb', 'b electrical panel', true, false);
 
 -- ── S. Static checks ────────────────────────────────────────────────────────
 do $$
@@ -232,9 +238,18 @@ begin
   r0 := (select count(*) from drafter_runs); n0 := (select count(*) from social_posts);
   st := dr.try(format('select drafter_write(%L::jsonb)',
     dr.req('commercial', array['00000000-0000-4000-f000-00000000000b']::uuid[], 'Another panel upgrades post. Veteran owned')));
-  perform dr.ok('D6 a second open drafted post for the same service and intent is refused', st like '23505:%', st);
+  perform dr.ok('D6 a second open drafted post for the same keyword is refused', st like '23505:%this keyword%', st);
   st := dr.try(format('select drafter_write(%L::jsonb)',
-    dr.req('informational', array['00000000-0000-4000-f000-00000000004b']::uuid[], 'Fastest electrician in Columbia')));
+    dr.req('commercial', array['00000000-0000-4000-f000-00000000000b']::uuid[], v_copy, p_keyword => '00000000-0000-4000-d000-00000000002b')));
+  perform dr.ok('D6b ...and the same copy on another keyword is refused too', coalesce(st, '') like '23505:%this copy%', coalesce(st, 'written'));
+  res := drafter_write(dr.req('commercial', array['00000000-0000-4000-f000-00000000000b']::uuid[],
+    'Thinking about a panel upgrade? Veteran owned and ready to help.', p_keyword => '00000000-0000-4000-d000-00000000002b'));
+  perform dr.ok('D6c a second open GBP draft for the same service and intent on another keyword is written (20261119220000)',
+    (select review_status = 'in_review' and keyword_id = '00000000-0000-4000-d000-00000000002b'
+       from social_posts where id = (res->>'post_id')::uuid));
+  r0 := (select count(*) from drafter_runs); n0 := (select count(*) from social_posts);
+  st := dr.try(format('select drafter_write(%L::jsonb)',
+    dr.req('informational', array['00000000-0000-4000-f000-00000000004b']::uuid[], 'Fastest electrician in Columbia', p_keyword => '00000000-0000-4000-d000-00000000003b')));
   perform dr.ok('D7 an unverified claim (even one a forged brief allows) fails 0045 grounding', st like '23514:%unverified%', st);
   st := dr.try(format('select drafter_write(%L::jsonb)',
     dr.req('informational', array['00000000-0000-4000-f000-00000000003b']::uuid[], 'Licensed electricians',

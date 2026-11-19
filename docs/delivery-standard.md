@@ -43,7 +43,22 @@ came to be; where it disagrees, this section wins.
    *approved*, *scheduled*, *published (with the live URL and receipt)* or
    *blocked (with the exact reason and owner)*. Only Tom approves content,
    and only his explicit words publish it.
-5. **Do not hold healthy channels behind missing integrations.** A client's
+5. **The review queue never stops the weekly standard** (20261119220000).
+   drafter_write allows one open drafted Business Profile post per
+   **keyword** (and never two with the same copy or image), not one per
+   service and intent: with 8–36 service × intent pairs per core list, the
+   old limit refused every GBP slot once the drafts waiting for review
+   covered them (Logic, MADHAIRLAB, Pensacola, Show Me Design, Nov 4–18).
+6. **Refresh slots are worked, not just planned** (20261119230000).
+   `queue_page_refresh_slots()` (the 2nd 09:30 UTC and Mondays 10:15 UTC)
+   opens a CLAUDE `page_refresh` task per open monthly refresh slot whose
+   site is known and whose core list is approved, and fires the worker; a
+   client with this month's Reporting `site_updates` run is covered by that
+   run instead. The worker prepares one existing page as a pull request or a
+   proposed Doc for review (skill: "Webpage refresh slot"); only a merged,
+   live-verified change counts as delivered. Every skip is logged
+   (`delivery_queue_log.deliverable = 'page_refreshes'`).
+7. **Do not hold healthy channels behind missing integrations.** A client's
    bound, healthy Facebook and Business Profile channels proceed once its
    brand board and core keyword list are approved, even when its blog has
    no website adapter yet.

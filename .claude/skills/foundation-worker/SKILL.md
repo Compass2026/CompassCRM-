@@ -1851,6 +1851,48 @@ even if the list is longer. A client on the monthly delivery standard
 in that site's own repo; new pages stay within the agreement as before. What is left waits for next month and goes in
 the notes.
 
+### Webpage refresh slot (PB7, monthly — the `page_refresh` task)
+
+Opened by `queue_page_refresh_slots()` (20261119230000; the 2nd and every
+Monday) for a delivery-standard refresh slot whose client has no monthly
+Reporting run: the task's notes name `plan_item:<id>`, `site:<sites.id>` and
+the month. Tom (Nov 19 2026): "select an eligible existing page, prepare a
+reviewable improvement and apply approved changes through the site's
+supported deployment route ... Do not turn a refresh into an unrequested
+website rebuild." So:
+
+- **One existing page, one core keyword.** Run PB7 steps 0 (agreement:
+  `website_refreshes` remaining; 0 and no delivery standard → note "Not in
+  the agreement", leave open, stop) and 1 (map; `owner-page-check`). Pick the
+  refresh by PB7 step 2's *Refresh* rules only (striking distance, then
+  Search Console, then an owner page with thin copy for a P1/P2 core
+  keyword). Never a new page, a new route, a layout, a component or a
+  redesign. Skip a page changed in the last 60 days.
+- **Reviewable, never a push.** Whatever the adapter allows for data
+  entries, a refresh slot is prepared for review: on a Compass repo, a
+  preview branch `compass/<yyyy-mm>-refresh-<slug>` with `pull_request`
+  (title `<Client>: refresh <path> for "<keyword>"`, body with the evidence,
+  the before/after copy and the preview URL); on `unsupported` / null or a
+  client-run site, a proposed document (PB7's Doc shape, one page) in
+  `04 Website`. Facts only from `sourced` / `confirmed` claims, the brand
+  board and the page's own copy.
+- **Record.** One `change_log` row: `object_type = 'site'`, `object_id` =
+  the task's site, `change_type = 'page_rewrite'`, `status = 'proposed'`,
+  `after` `{url, title, keyword, keyword_id, pull_request_url | doc_url,
+  plan_item_id}`, `reasoning` = the evidence. Set the slot's
+  `content_plan_items.output_url` to the PR or Doc URL. Close the task done,
+  `flagged_for_review = true`, `recommendation` = "Refresh of <path> for
+  "<keyword>" ready for review: <PR or Doc URL>".
+- **After Tom approves** (he merges the PR, or says so for a Doc): the merge
+  deploys through the site's own route (site-push `{deploy: true}` for a
+  Compass repo if the merge did not); verify the live URL (PB7 step 5: 200,
+  one H1, canonical, JSON-LD) and add `verified_at` / `http_status: 200` to
+  the row's `after` and set it `approved`. Only that receipt counts the
+  refresh as delivered.
+- Gates you cannot pass (no approved core list, page unreachable, no
+  eligible page) → leave the task open with the exact reason; never pick a
+  page or keyword to fill the slot anyway.
+
 ### Weekly blog post (PB7, weekly — the `blog_post` task)
 
 One post per client per week, within the agreement's `blog_posts`
@@ -1944,9 +1986,15 @@ a slot.
    (`core_keyword_required`) and the link would too. Prefer P1/P2 money
    keywords, then Search Console impressions, then volume. Write at the
    keyword's **recorded** intent; never relabel it, and never edit a core
-   list or a keyword's core parent. Avoid a service and intent that already
-   has an open or approved post on this channel this month (`social_posts`
-   with `review_status in ('in_review','approved')`). When the notes say the
+   list or a keyword's core parent. Never pick a keyword that already has an
+   open drafted post on this channel (`social_posts.keyword_id` with
+   `review_status in ('draft','in_review')`): drafter_write refuses it, and
+   it refuses the same copy or image too. Spread the week across services:
+   prefer a service and intent with no open or approved post on this channel
+   this week, but a service whose earlier drafts still wait for review is not
+   a reason to leave the slot empty — use another of its core keywords
+   (20261119220000; the old one-per-service-and-intent limit stopped the
+   weekly standard whenever the review queue was full). When the notes say the
    Business Profile location has other open slots on the same day (BHG:
    three brand sites, one location), choose a different service and topic
    from those slots' drafts.
@@ -2032,7 +2080,8 @@ draft.
    `201` → done: the post is `in_review` and 0045 opened the
    `CLAUDE_APPROVAL` review task for a person. `422 lint_failed` → revise
    and resubmit; `409 stale_brief` → step 1; `409 refused` (an open drafted
-   post already exists for that service and intent) or any other refusal →
+   post already has that keyword, copy or image) → step 1 with another core
+   keyword (at most twice), then stop and report it; any other refusal →
    stop and report it.
 
 **At most three drafts per brief** (checks included in your count); the
