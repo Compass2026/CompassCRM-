@@ -129,6 +129,25 @@ called but not texted (`no_phone`).
   own number, not logged); "Browser calling" is the Twilio business line. A
   lead without a valid phone says so (`no_lead_phone`) instead of "Calling
   setup is not complete"; every SMS refusal has its own message.
+- **Texting composer (Nov 19 2026; `client-phone`, no migration).** Type
+  and press **Send** (Enter; Shift+Enter is a new line; nothing sends while
+  an input method is composing). There is no Save draft step: the `send` mode
+  carries the text and a request id chosen by the composer, saves the text
+  as the draft for that id and reserves the text with
+  `client_phone_begin_sms`, which sends exactly that saved text. The request
+  id is the dedupe key, so a double press or a retried request never sends
+  twice. Answers: `accepted` (Twilio has it; the composer clears),
+  `failed` (refused, or known not sent; the text stays, a new press gets a
+  new id) or `uncertain` (the text and the id stay; the button reads
+  **Check status** and asking again never sends). An unconfirmed send is
+  checked with Twilio only once it is 90 s old (a send in flight is never
+  judged): found → its MessageSid is adopted; a complete listing without it
+  → marked `not_sent` (safe to send again); otherwise still uncertain, and
+  a new text for that lead waits. Unsent text is saved quietly in the
+  background (`autosave`, never sends). Delivery status shows on each sent
+  message. Rules: `src/lib/client-phone-composer.ts`; tests:
+  `tests/client-phone-composer.test.mjs`, `tests/client-phone-send.test.mjs`,
+  `npm run test:crm-lite-ui`.
 - **Repair.** `supabase/deferred/20261118_bhg_inquiry_contact_relink.sql`
   relinks the one production inquiry whose phone differed from its contact's
   (BHG, Nov 18 2026, the only one across all clients), after the migration,

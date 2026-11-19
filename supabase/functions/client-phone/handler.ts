@@ -5,9 +5,16 @@ import { createTwilioProvider } from "../_shared/communications/twilio.ts";
 import { ProviderError } from "../_shared/communications/provider.ts";
 import { voiceAdmin } from "./voice-admin.ts";
 import { voiceProvider, sid } from "./voice-provider.ts";
+import { findSent, listingCovers } from "../crm-lite/handler.ts";
 const reply = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const E164 = /^\+[1-9][0-9]{7,14}$/;
+// An unconfirmed send is checked with Twilio only after this long (a send in
+// flight takes at most the provider's 20 s timeout plus the function's work),
+// over this many of the latest messages, allowing this much clock skew.
+export const RECONCILE_AFTER_MS = 90_000;
+const RECONCILE_PAGE = 50;
+const CLOCK_SKEW_MS = 120_000;
 // Refusals client_phone_begin_sms raises ("code: detail" or a bare code),
 // passed to the page by code so it can say what to do.
 export const SMS_REFUSALS = [
@@ -177,6 +184,128 @@ export function createClientPhone(
       voice_ready: !!(voice?.enabled && voice.application_sid && number),
     };
   }
+  // ── Sending ──────────────────────────────────────────────────────────────
+  // One press of Send = one request id, chosen by the composer and reused
+  // only to ask about the same press again. The id is the database's dedupe
+  // key (communication_messages.request_id), so a second request with it
+  // never reserves or sends a second text. Outcomes:
+  //   accepted   Twilio took it (it has a MessageSid); delivery follows
+  //   failed     Twilio refused it, or Compass knows it was never sent
+  //   uncertain  Compass cannot tell yet; ask again with the same id later
+  type SendResult = { state: "accepted" | "failed" | "uncertain"; message_id?: string; code?: string };
+  const twilioCredential = async (accountSid: string) => {
+    const r = await db.rpc("communication_subaccount_secrets", { p_account_sid: accountSid });
+    if (r.error || !r.data?.api_key || !r.data.api_secret) return null;
+    return { scope: "subaccount" as const, accountSid, keySid: r.data.api_key as string, keySecret: r.data.api_secret as string };
+  };
+  const outcome = (m: DB): SendResult =>
+    m.provider_message_sid
+      ? { state: "accepted", message_id: m.id }
+      : m.provider_status === "pending"
+        ? { state: "uncertain", message_id: m.id, code: "send_uncertain" }
+        : { state: "failed", message_id: m.id, code: m.error_code === "not_sent" ? "not_sent" : "provider_refused" };
+
+  // A reservation with no MessageSid is either still in flight or its
+  // answer was lost. Only once it is older than any send can take
+  // (RECONCILE_AFTER_MS) is Twilio asked; the same check crm-lite uses for
+  // its alerts (exact text, same numbers, created at or after the attempt).
+  async function reconcile(cid: string, m: DB): Promise<SendResult> {
+    if (Date.now() - Date.parse(m.created_at) < RECONCILE_AFTER_MS) return outcome(m);
+    const account = await one("communication_accounts", { client_id: cid, provider: "twilio", status: "active" }, "provider_account_sid");
+    const cred = account && await twilioCredential(account.provider_account_sid);
+    if (!cred) return outcome(m);
+    let listed;
+    try {
+      listed = await createTwilioProvider(request).listMessages(cred, { to: m.to_e164, from: m.from_e164, pageSize: RECONCILE_PAGE });
+    } catch {
+      return outcome(m);
+    }
+    const since = new Date(Date.parse(m.created_at) - CLOCK_SKEW_MS).toISOString();
+    const hit = findSent(listed.messages, m.body, since);
+    if (hit) {
+      await check(db.rpc("communication_mark_sent", { p: { message_id: m.id, provider_message_sid: hit.sid, provider_status: hit.status } }));
+      return { state: "accepted", message_id: m.id };
+    }
+    if (listingCovers(listed.messages, listed.complete, since)) {
+      await check(db.rpc("communication_mark_sent", { p: { message_id: m.id, error_code: "not_sent",
+        error_message: "Twilio has no record of this text; it was not sent" } }));
+      return { state: "failed", message_id: m.id, code: "not_sent" };
+    }
+    return outcome(m);
+  }
+
+  async function sendText(cid: string, i: DB, uid: string, input: DB): Promise<SendResult> {
+    // A page loaded before this change sends {revision} after Save draft: its
+    // saved draft's revision is the request id and its text the body.
+    if (input.request_id == null && uuid(input.revision)) {
+      const d = await one("client_phone_drafts", { client_id: cid, inquiry_id: i.id, actor_id: uid, revision: input.revision }, "body");
+      const sent = !d && await one("communication_messages", { request_id: input.revision }, "id");
+      if (!d && !sent) throw Error("save_draft_first");
+      input = { ...input, request_id: input.revision, body: d ? d.body : "" };
+    }
+    if (!uuid(input.request_id)) throw Error("invalid_request");
+    const cols = "id,client_id,inquiry_id,client_actor_id,body,to_e164,from_e164,provider_status,provider_message_sid,error_code,created_at";
+    // The same press asked again: report or reconcile it, never send again.
+    const same = await one("communication_messages", { request_id: input.request_id }, cols);
+    if (same) {
+      if (same.client_id !== cid || same.inquiry_id !== i.id || same.client_actor_id !== uid) throw Error("invalid_request");
+      const r = same.provider_message_sid || same.provider_status !== "pending" ? outcome(same) : await reconcile(cid, same);
+      if (r.state === "accepted") await clearDraft(cid, i.id, uid, input.request_id);
+      return r;
+    }
+    if (typeof input.body !== "string" || !input.body.trim()) throw Error("empty");
+    if (input.body.length > 1600) throw Error("too_long");
+    // An earlier press on this lead whose result is unknown blocks a new
+    // text until Twilio says what happened to it.
+    const open = await check(db.from("communication_messages").select(cols)
+      .eq("client_id", cid).eq("inquiry_id", i.id).eq("provider_status", "pending").is("provider_message_sid", null));
+    for (const m of open) {
+      const r = await reconcile(cid, m);
+      if (r.state === "uncertain") throw Error("send_uncertain_refresh_first");
+    }
+    // Saved as part of the send: the database sends exactly this saved text
+    // for this request id (client_phone_begin_sms reads the draft).
+    await check(db.from("client_phone_drafts").upsert(
+      { client_id: cid, inquiry_id: i.id, actor_id: uid, body: input.body, revision: input.request_id, updated_at: new Date().toISOString() },
+      { onConflict: "client_id,inquiry_id,actor_id" },
+    ));
+    const begun = await db.rpc("client_phone_begin_sms", {
+      p: { client_id: cid, inquiry_id: i.id, actor_id: uid, request_id: input.request_id },
+    });
+    if (begun.error) throw Error(smsRefusal(begun.error.message));
+    const b = begun.data;
+    if (b.duplicate) {
+      // Another request with this id got there first (a double press).
+      const m = await one("communication_messages", { id: b.message_id }, cols);
+      return m ? outcome(m) : { state: "uncertain", message_id: b.message_id, code: "send_uncertain" };
+    }
+    const cred = await twilioCredential(b.account_sid);
+    if (!cred) return { state: "uncertain", message_id: b.message_id, code: "send_uncertain" };
+    try {
+      const s = await createTwilioProvider(request).sendMessage(cred, {
+        messagingServiceSid: b.messaging_service_sid, to: b.to, body: b.body,
+        statusCallbackUrl: base + "/functions/v1/twilio-webhook/messages/status?m=" + b.message_id,
+      });
+      await check(db.rpc("communication_mark_sent", { p: { message_id: b.message_id, provider_message_sid: s.sid,
+        provider_status: s.status, error_code: s.errorCode, error_message: s.errorMessage } }));
+    } catch (e) {
+      if (e instanceof ProviderError && e.status >= 400 && e.status < 500 && e.status !== 429) {
+        await check(db.rpc("communication_mark_sent", { p: { message_id: b.message_id,
+          error_code: e.code || String(e.status), error_message: e.message } }));
+        // The draft stays: the composer keeps the text for another try.
+        return { state: "failed", message_id: b.message_id, code: "provider_refused" };
+      }
+      // A 5xx, a 429, a timeout or no answer: Twilio may have it. Ask again later.
+      return { state: "uncertain", message_id: b.message_id, code: "send_uncertain" };
+    }
+    await clearDraft(cid, i.id, uid, input.request_id);
+    return { state: "accepted", message_id: b.message_id };
+  }
+  async function clearDraft(cid: string, iid: string, uid: string, revision: string) {
+    await check(db.from("client_phone_drafts").delete()
+      .eq("client_id", cid).eq("inquiry_id", iid).eq("actor_id", uid).eq("revision", revision));
+  }
+
   return async (req: Request) => {
     if (req.method !== "POST")
       return reply(405, { error: "method_not_allowed" });
@@ -320,82 +449,29 @@ export function createClientPhone(
         );
         return reply(200, { intent: id });
       }
+      if (input.mode === "autosave") {
+        // Background draft persistence: never sends, never returns the
+        // thread (the composer asks for nothing back).
+        if (typeof input.body !== "string" || input.body.length > 1600)
+          throw Error("invalid_draft");
+        await check(
+          db.from("client_phone_drafts").upsert(
+            {
+              client_id: cid,
+              inquiry_id: i.id,
+              actor_id: uid,
+              body: input.body,
+              revision: crypto.randomUUID(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "client_id,inquiry_id,actor_id" },
+          ),
+        );
+        return reply(200, { saved: true });
+      }
       if (input.mode === "send") {
-        if (!uuid(input.revision)) throw Error("save_draft_first");
-        const begun = await db.rpc("client_phone_begin_sms", {
-          p: {
-            client_id: cid,
-            inquiry_id: i.id,
-            actor_id: uid,
-            request_id: input.revision,
-          },
-        });
-        if (begun.error) throw Error(smsRefusal(begun.error.message));
-        const b = begun.data;
-        if (!b.duplicate) {
-          const secrets = await db.rpc("communication_subaccount_secrets", {
-            p_account_sid: b.account_sid,
-          });
-          if (
-            secrets.error ||
-            !secrets.data?.api_key ||
-            !secrets.data.api_secret
-          )
-            throw Error("send_uncertain_refresh_first");
-          const provider = createTwilioProvider(request);
-          try {
-            const s = await provider.sendMessage(
-              {
-                scope: "subaccount",
-                accountSid: b.account_sid,
-                keySid: secrets.data.api_key,
-                keySecret: secrets.data.api_secret,
-              },
-              {
-                messagingServiceSid: b.messaging_service_sid,
-                to: b.to,
-                body: b.body,
-                statusCallbackUrl:
-                  base +
-                  "/functions/v1/twilio-webhook/messages/status?m=" +
-                  b.message_id,
-              },
-            );
-            await check(
-              db.rpc("communication_mark_sent", {
-                p: {
-                  message_id: b.message_id,
-                  provider_message_sid: s.sid,
-                  provider_status: s.status,
-                  error_code: s.errorCode,
-                  error_message: s.errorMessage,
-                },
-              }),
-            );
-            await check(
-              db
-                .from("client_phone_drafts")
-                .delete()
-                .eq("client_id", cid)
-                .eq("inquiry_id", i.id)
-                .eq("actor_id", uid)
-                .eq("revision", input.revision),
-            );
-          } catch (e) {
-            if (e instanceof ProviderError && e.status >= 400 && e.status < 500)
-              await check(
-                db.rpc("communication_mark_sent", {
-                  p: {
-                    message_id: b.message_id,
-                    error_code: e.code || String(e.status),
-                    error_message: e.message,
-                  },
-                }),
-              );
-            else throw Error("send_uncertain_refresh_first");
-          }
-        }
-        return reply(200, await snapshot(cid, i, uid));
+        const result = await sendText(cid, i, uid, input);
+        return reply(200, { ...(await snapshot(cid, i, uid)), send: result });
       }
       return reply(400, { error: "unknown_mode" });
     } catch (e) {
@@ -415,6 +491,7 @@ export function createClientPhone(
         "outbound_disabled",
         "rate_limited",
         "no_lead_phone",
+        "invalid_request",
         ...SMS_REFUSALS,
       ];
       const code =
