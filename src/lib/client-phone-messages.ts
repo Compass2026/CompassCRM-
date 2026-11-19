@@ -10,7 +10,15 @@ export const phoneReasons: Record<string, string> = {
   verification_required: "Texting is awaiting carrier verification.",
   save_draft_first: "Save this draft before sending.",
   send_uncertain_refresh_first:
-    "The send result is uncertain. Refresh before sending again.",
+    "An earlier text to this lead isn't confirmed yet. Try again in a minute; Compass checks it first and never sends it twice.",
+  send_uncertain:
+    "Compass couldn't confirm this text yet. Press Check status in a minute; it won't be sent twice.",
+  send_network:
+    "Compass didn't answer. Press Check status to find out whether the text went; it won't be sent twice.",
+  not_sent: "This text was not sent. Press Send to try again.",
+  provider_refused:
+    "The carrier refused this text. Check the number with the lead, or call or email instead.",
+  invalid_request: "Refresh the lead and try again.",
   no_consent:
     "This lead hasn't given permission to be texted. Ask them by phone or email, and have your Compass team record it.",
   opted_out:

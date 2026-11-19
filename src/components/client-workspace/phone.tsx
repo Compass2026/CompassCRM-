@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Device, Call } from "@twilio/voice-sdk";
 import { phoneReasons as reasons } from "@/lib/client-phone-messages";
+import { afterSend, canPress, classifySend, newComposer, sendsOnKey, type Composer } from "@/lib/client-phone-composer";
+import { messageStatusLabel } from "@/lib/communications";
 async function phoneRequest(
   clientId: string,
   mode: string,
@@ -43,6 +45,11 @@ type PhoneSnapshot = {
   reason: string | null;
   voice_ready: boolean;
 };
+// The lead's text thread and composer, like any messaging app: type, press
+// Send (or Enter; Shift+Enter is a new line). The press saves the text and
+// sends it in one request; the composer clears only once Twilio has taken it.
+// Unsent text is kept as a private draft in the background. Rules:
+// src/lib/client-phone-composer.ts.
 export function LeadText({
   clientId,
   inquiryId,
@@ -51,43 +58,94 @@ export function LeadText({
   inquiryId: string;
 }) {
   const [data, setData] = useState<PhoneSnapshot | null>(null),
-    [body, setBody] = useState(""),
-    [busy, setBusy] = useState(""),
-    [error, setError] = useState("");
+    [composer, setComposer] = useState<Composer>(() => newComposer("", crypto.randomUUID())),
+    [sending, setSending] = useState(false),
+    [loadError, setLoadError] = useState("");
+  const latest = useRef(composer);
+  useEffect(() => {
+    latest.current = composer;
+  }, [composer]);
+  const inFlight = useRef(false);
+  const saved = useRef("");
+  const autosave = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
+
+  async function load() {
+    try {
+      const d = await phoneRequest(clientId, "load", { inquiry_id: inquiryId });
+      setData(d);
+      setLoadError("");
+      return d as PhoneSnapshot;
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "The conversation could not be loaded.");
+      return null;
+    }
+  }
   useEffect(() => {
     let live = true;
     phoneRequest(clientId, "load", { inquiry_id: inquiryId })
-      .then((d) => {
-        if (live) {
-          setData(d);
-          setBody(d.draft?.body || "");
-        }
+      .then((d: PhoneSnapshot) => {
+        if (!live) return;
+        setData(d);
+        saved.current = d.draft?.body || "";
+        setComposer((c) => (c.body ? c : { ...c, body: saved.current }));
       })
       .catch((e) => {
-        if (live) setError(e.message);
+        if (live) setLoadError(e.message);
       });
     return () => {
       live = false;
+      if (autosave.current) clearTimeout(autosave.current);
     };
   }, [clientId, inquiryId]);
-  const dirty = body !== (data?.draft?.body || "");
-  async function act(mode: string) {
-    setBusy(mode);
-    setError("");
-    try {
-      const d = await phoneRequest(clientId, mode, {
-        inquiry_id: inquiryId,
-        body,
-        revision: data?.draft?.revision,
-      });
-      setData(d);
-      if (mode !== "load" || !dirty) setBody(d.draft?.body || "");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Request failed.");
-    } finally {
-      setBusy("");
-    }
+
+  // Background draft: a quiet save a moment after typing stops. Never sends.
+  function edit(body: string) {
+    latest.current = { ...latest.current, body, error: "" };
+    setComposer(latest.current);
+    if (autosave.current) clearTimeout(autosave.current);
+    autosave.current = setTimeout(() => {
+      autosave.current = null;
+      if (inFlight.current || body === saved.current) return;
+      saving.current = saving.current
+        .then(() => phoneRequest(clientId, "autosave", { inquiry_id: inquiryId, body }))
+        .then(() => { saved.current = body; })
+        .catch(() => {});
+    }, 1200);
   }
+
+  async function send() {
+    const c = latest.current;
+    if (inFlight.current || !canPress(c, { canSend: !!data?.can_send, sending })) return;
+    inFlight.current = true;
+    setSending(true);
+    if (autosave.current) { clearTimeout(autosave.current); autosave.current = null; }
+    const sentBody = c.sentBody ?? c.body;
+    let status: number | null = null, reply: unknown = null;
+    try {
+      await saving.current; // a background save never lands after the send
+      const r = await fetch("/api/client-phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, mode: "send", inquiry_id: inquiryId, body: sentBody, request_id: c.requestId }),
+      });
+      status = r.status;
+      reply = await r.json().catch(() => null);
+    } catch {
+      status = null;
+    }
+    const outcome = classifySend(status, reply);
+    const d = reply as (PhoneSnapshot & { send?: unknown }) | null;
+    if (status === 200 && d?.messages) setData(d);
+    const next = afterSend({ ...latest.current, sentBody }, outcome, crypto.randomUUID());
+    if (outcome.kind === "accepted") saved.current = next.body;
+    setComposer(next);
+    if (outcome.kind !== "accepted" && status !== 200) void load();
+    inFlight.current = false;
+    setSending(false);
+  }
+
+  const ready = canPress(composer, { canSend: !!data?.can_send, sending });
   return (
     <section className="p-3" aria-label="Lead text conversation">
       <div className="mb-3 flex justify-between gap-3 text-xs">
@@ -97,8 +155,8 @@ export function LeadText({
         </span>
         <button
           type="button"
-          onClick={() => act("load")}
-          disabled={!!busy}
+          onClick={() => void load()}
+          disabled={sending}
           className="font-semibold text-blue-700"
         >
           Refresh
@@ -109,66 +167,68 @@ export function LeadText({
           {data.reason}
         </p>
       )}
-      <div className="max-h-80 space-y-3 overflow-y-auto">
+      <div className="max-h-80 space-y-3 overflow-y-auto" data-sms-thread>
         {data?.messages.map((m) => (
-          <article key={m.id} className="rounded-lg bg-slate-50 p-3">
-            <p className="text-[11px] text-slate-500">
-              {m.direction === "inbound" ? "Received" : m.provider_status} ·{" "}
+          <article
+            key={m.id}
+            data-sms-message={m.direction}
+            className={
+              m.direction === "inbound"
+                ? "mr-8 rounded-lg bg-slate-50 p-3"
+                : "ml-8 rounded-lg bg-blue-50 p-3"
+            }
+          >
+            <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+            <p className="mt-1 text-[11px] text-slate-500" data-sms-status>
+              {messageStatusLabel(m.provider_status, m.direction === "inbound" ? "inbound" : "outbound")} ·{" "}
               {new Date(m.created_at).toLocaleString()}
-            </p>
-            <p className="mt-2 whitespace-pre-wrap break-words text-sm">
-              {m.body}
             </p>
           </article>
         ))}
       </div>
-      <label
-        className="mt-3 block text-xs font-medium"
-        htmlFor={`sms-${inquiryId}`}
+      <form
+        className="mt-3 flex items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send();
+        }}
       >
-        Text draft
-      </label>
-      <textarea
-        id={`sms-${inquiryId}`}
-        rows={4}
-        maxLength={1600}
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        disabled={!data || !!busy}
-        className="mt-2 w-full rounded-lg border p-3 text-sm"
-      />
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[10px] text-slate-500">
-          {dirty
-            ? "Unsaved changes"
-            : data?.draft
-              ? "Draft saved to your account"
-              : "Drafts are private to your account"}
-        </span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => act("save_draft")}
-            disabled={!data || !dirty || !!busy}
-            className="rounded-lg border px-3 py-2 text-xs disabled:opacity-40"
-          >
-            Save draft
-          </button>
-          <button
-            type="button"
-            onClick={() => act("send")}
-            disabled={
-              !data?.can_send || !data.draft || dirty || !body.trim() || !!busy
+        <label className="sr-only" htmlFor={`sms-${inquiryId}`}>
+          Text message
+        </label>
+        <textarea
+          id={`sms-${inquiryId}`}
+          rows={2}
+          maxLength={1600}
+          placeholder="Text message"
+          value={composer.body}
+          onChange={(e) => edit(e.target.value)}
+          onKeyDown={(e) => {
+            if (sendsOnKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.keyCode })) {
+              e.preventDefault();
+              void send();
             }
-            className="rounded-lg bg-navy-900 px-3 py-2 text-xs text-white disabled:opacity-40"
-          >
-            {busy === "send" ? "Sending…" : "Send text"}
-          </button>
-        </div>
-      </div>
-      {error && (
-        <p role="alert" className="mt-3 text-xs text-red-700">
-          {error}
+          }}
+          disabled={!data}
+          className="min-h-11 w-full resize-y rounded-lg border p-3 text-sm"
+        />
+        <button
+          type="submit"
+          disabled={!ready}
+          className="min-h-11 shrink-0 rounded-lg bg-navy-900 px-4 text-sm font-medium text-white disabled:opacity-40"
+        >
+          {sending ? "Sending…" : composer.checking ? "Check status" : "Send"}
+        </button>
+      </form>
+      <p className="mt-1 text-[10px] text-slate-500">Enter to send · Shift+Enter for a new line</p>
+      {composer.notice && (
+        <p role="status" className="mt-2 text-xs text-amber-800">
+          {composer.notice}
+        </p>
+      )}
+      {(composer.error || loadError) && (
+        <p role="alert" className="mt-2 text-xs text-red-700">
+          {composer.error || loadError}
         </p>
       )}
     </section>

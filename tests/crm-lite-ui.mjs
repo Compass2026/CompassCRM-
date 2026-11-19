@@ -61,6 +61,10 @@ const twilioFetch = async (url, init = {}) => {
 };
 
 const unexpected = [];
+// The lead composer check scripts client-phone's send answers here (armed only
+// inside that check); every other time a mutation is unexpected. Nothing here
+// reaches Twilio: the composer's own requests are recorded and answered.
+const phone = { armed: false, replies: [], sends: [], autosaves: 0, messages: [] };
 let intake, crm;
 const gateway = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
@@ -74,6 +78,23 @@ const gateway = http.createServer(async (req, res) => {
     return res.end(JSON.stringify(u ? { ...u, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-09-01T00:00:00Z" } : { message: "invalid JWT" }));
   }
   // Communication UI status only. Mutations are never simulated as successful.
+  if (url.pathname === "/functions/v1/client-phone" && phone.armed) {
+    const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+    const snapshot = () => ({ draft: null, messages: phone.messages, calls: [], number: "+18885550123", recipient: "+16185550142",
+      can_send: true, reason: null, voice_ready: false });
+    if (body.mode === "autosave") { phone.autosaves++; res.writeHead(200, { "content-type": "application/json" }); return res.end('{"saved":true}'); }
+    if (body.mode === "send") {
+      phone.sends.push({ body: body.body, request_id: body.request_id });
+      const r = phone.replies.shift() ?? { state: "uncertain", code: "send_uncertain" };
+      if (r.delay) await new Promise((ok) => setTimeout(ok, r.delay));
+      if (r.state === "accepted") phone.messages = [...phone.messages, { id: body.request_id, direction: "outbound", body: body.body,
+        provider_status: "queued", created_at: new Date().toISOString() }];
+      res.writeHead(r.http ?? 200, { "content-type": "application/json" });
+      return res.end(JSON.stringify(r.http ? { error: r.error } : { ...snapshot(), send: { state: r.state, code: r.code } }));
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(body.mode === "voice_status" ? { enabled: false, number: null } : snapshot()));
+  }
   if (["/functions/v1/client-mailbox", "/functions/v1/client-phone"].includes(url.pathname)) {
     const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
     if (!["status", "load"].includes(body.mode)) unexpected.push(`communication mutation: ${body.mode}`);
@@ -159,7 +180,10 @@ app.stderr.on("data", (c) => { logs = (logs + c).slice(-8000); });
 async function contextFor(browser, user, viewport = { width: 1280, height: 900 }) {
   const context = await browser.newContext({ viewport });
   const session = { access_token: tokenFor(user), refresh_token: "local", expires_at: exp(), expires_in: 3600, token_type: "bearer", user: { ...user, aud: "authenticated" } };
-  await context.addCookies([{ name: "sb-127-auth-token", value: `base64-${b64(session)}`, domain: "127.0.0.1", path: "/" }]);
+  // The same session on both names of this machine: next dev reports its own
+  // origin as localhost, and /api/client-phone refuses a browser write whose
+  // Origin differs, so the composer check runs on localhost.
+  await context.addCookies(["127.0.0.1", "localhost"].map((domain) => ({ name: "sb-127-auth-token", value: `base64-${b64(session)}`, domain, path: "/" })));
   return context;
 }
 const shots = process.env.SCREENSHOTS;
@@ -270,6 +294,68 @@ try {
   assert.ok(await portal.getByRole("region", { name: "Browser calling on the business line", exact: true }).isVisible());
   assert.equal(await portal.getByRole("link", { name: "Call lead", exact: true }).count(), 0);
   ok("Lead calling: device call link and browser calling are labelled apart");
+
+  // The text composer works like a messaging app (Nov 19 2026).
+  phone.armed = true;
+  const lead = await (await contextFor(browser, PORTAL_A, { width: 390, height: 844 })).newPage();
+  await lead.goto(`http://localhost:${port}/portal/inquiries/${first.inquiry_id}`, { waitUntil: "networkidle" });
+  await lead.getByRole("button", { name: "Text message", exact: true }).click();
+  const thread = lead.getByRole("region", { name: "Lead text conversation", exact: true });
+  const box = thread.getByLabel("Text message", { exact: true });
+  const sendButton = thread.locator('button[type="submit"]');
+  await box.waitFor();
+  assert.equal(await thread.getByRole("button", { name: "Save draft" }).count(), 0, "no Save draft button");
+  await thread.getByText(/From \+18885550123 · to \+16185550142/).waitFor();
+  assert.ok(await sendButton.isDisabled(), "Send is off while empty");
+  // Enter sends; Shift+Enter is a new line; no save step first.
+  await box.click();
+  await box.pressSequentially("On our way");
+  await box.press("Shift+Enter");
+  await box.pressSequentially("ETA 9am");
+  assert.equal(await box.inputValue(), "On our way\nETA 9am");
+  phone.replies.push({ state: "accepted" });
+  await box.press("Enter");
+  await lead.waitForFunction((el) => el.value === "", await box.elementHandle());
+  assert.equal(phone.sends.length, 1);
+  assert.equal(phone.sends[0].body, "On our way\nETA 9am");
+  await thread.getByText("ETA 9am").waitFor();
+  assert.match(await thread.locator("[data-sms-status]").last().innerText(), /^Queued/);
+  // A double click is one request.
+  await box.fill("Second text");
+  phone.replies.push({ state: "accepted", delay: 700 });
+  await sendButton.dblclick();
+  await thread.getByRole("button", { name: "Sending…" }).waitFor();
+  await lead.waitForFunction((el) => el.value === "", await box.elementHandle());
+  assert.equal(phone.sends.length, 2, "one request for the double click");
+  assert.notEqual(phone.sends[1].request_id, phone.sends[0].request_id);
+  // A failure keeps the text and says why; the next press is a new request.
+  await box.fill("Third text");
+  phone.replies.push({ state: "failed", code: "provider_refused" });
+  await sendButton.click();
+  await thread.getByRole("alert").filter({ hasText: "carrier refused" }).waitFor();
+  assert.equal(await box.inputValue(), "Third text");
+  // A refusal (no consent) keeps the text too.
+  phone.replies.push({ http: 409, error: "no_consent" });
+  await sendButton.click();
+  await thread.getByRole("alert").filter({ hasText: "permission to be texted" }).waitFor();
+  assert.equal(await box.inputValue(), "Third text");
+  assert.notEqual(phone.sends[3].request_id, phone.sends[2].request_id, "a failed press is not reused");
+  // Uncertain: the text and the request id stay; the next press only checks it.
+  phone.replies.push({ state: "uncertain", code: "send_uncertain" });
+  await sendButton.click();
+  await thread.getByRole("button", { name: "Check status", exact: true }).waitFor();
+  assert.equal(await box.inputValue(), "Third text");
+  assert.match(await thread.getByRole("status").innerText(), /won't be sent twice/);
+  phone.replies.push({ state: "accepted" });
+  await thread.getByRole("button", { name: "Check status", exact: true }).click();
+  await lead.waitForFunction((el) => el.value === "", await box.elementHandle());
+  assert.equal(phone.sends[5].request_id, phone.sends[4].request_id, "Check status asks about the same press");
+  assert.equal(phone.sends.length, 6);
+  assert.ok(await sendButton.isDisabled(), "Send is off again once empty");
+  await shot(lead, "lead-composer-mobile");
+  await lead.context().close();
+  phone.armed = false;
+  ok("Lead texting: type and Send (Enter / Shift+Enter), no save step, one request per press, failures keep the text, uncertain sends are checked not resent");
   await portal.getByText("Follow-up and internal notes", { exact: true }).click();
   await portal.getByLabel("Add a follow-up note").fill("Leads-only access still works.");
   await portal.getByRole("button", { name: "Add note", exact: true }).click();
