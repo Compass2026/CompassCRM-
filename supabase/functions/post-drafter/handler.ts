@@ -119,7 +119,12 @@ function parseDraft(d: unknown): ModelDraft | string {
   if (o.asset_ids != null && (!Array.isArray(o.asset_ids) || o.asset_ids.some((a) => typeof a !== "string" || !UUID.test(a)))) {
     return "draft.asset_ids must be uuids";
   }
-  return { copy: o.copy, claim_ids: o.claim_ids as string[], ...(o.asset_ids ? { asset_ids: o.asset_ids as string[] } : {}) };
+  // 20261120000000: a draft without an image says why (one line, for the reviewer).
+  if (o.no_image_reason != null && (typeof o.no_image_reason !== "string" || !o.no_image_reason.trim() || o.no_image_reason.length > 300)) {
+    return "draft.no_image_reason must be a non-empty string of at most 300 characters";
+  }
+  return { copy: o.copy, claim_ids: o.claim_ids as string[], ...(o.asset_ids ? { asset_ids: o.asset_ids as string[] } : {}),
+    ...(typeof o.no_image_reason === "string" ? { no_image_reason: o.no_image_reason.trim() } : {}) };
 }
 
 export function createPostDrafter(deps: Deps) {
@@ -290,6 +295,7 @@ export function createPostDrafter(deps: Deps) {
       client_id: clientId, requested_via: who.via, requested_by: who.memberId, runtime, claimant, attempt,
       brief_version: brief.version, brief_hash: hash, brief, lint: result,
       copy: draft.copy, claim_ids: draft.claim_ids, asset_ids: draft.asset_ids ?? brief.target.assets.map((a) => a.id),
+      ...(draft.no_image_reason ? { no_image_reason: draft.no_image_reason } : {}),
       ...(authority ? { authority_opportunity_id: authority.id, authority_run_id: (brief as AuthorityBrief).authority.run_id } : {}),
     });
     if ("error" in written) {

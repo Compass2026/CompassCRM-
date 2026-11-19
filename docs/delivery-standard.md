@@ -58,7 +58,12 @@ came to be; where it disagrees, this section wins.
    proposed Doc for review (skill: "Webpage refresh slot"); only a merged,
    live-verified change counts as delivered. Every skip is logged
    (`delivery_queue_log.deliverable = 'page_refreshes'`).
-7. **Do not hold healthy channels behind missing integrations.** A client's
+7. **Weekly drafts arrive complete** (20261120000000). The worker picks an
+   approved creative-use image (a photo of the client's own work) before the
+   brief, or submits `no_image_reason`; drafter_write refuses an unattended
+   draft with neither, or with an unapproved file. The reason shows in the
+   review queue like any no-image reason.
+8. **Do not hold healthy channels behind missing integrations.** A client's
    bound, healthy Facebook and Business Profile channels proceed once its
    brand board and core keyword list are approved, even when its blog has
    no website adapter yet.

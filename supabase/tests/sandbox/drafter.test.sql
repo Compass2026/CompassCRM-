@@ -279,6 +279,14 @@ begin
   perform dr.ok('D16 runs are not deleted', st like '42501:%', st);
   st := dr.try(format($q$update social_posts set drafter_run_id = null where id = %L$q$, dr.id('post')));
   perform dr.ok('D17 provenance is fixed (drafter_run_id cannot be cleared)', st like '23514:%fixed%', st);
+
+  -- 20261120000000: a draft with no image keeps its no-image reason; an image wins over a reason.
+  res := drafter_write(dr.req('commercial', array['00000000-0000-4000-f000-00000000000b']::uuid[],
+    'Planning a panel upgrade this winter? Veteran owned, with straight answers.', p_keyword => '00000000-0000-4000-d000-00000000003b')
+    || jsonb_build_object('no_image_reason', '  No approved photo of panel work yet.  '));
+  perform dr.ok('D18 a draft written without an image stores its no-image reason (trimmed) for the reviewer',
+    (select no_image_reason = 'No approved photo of panel work yet.' and review_status = 'in_review'
+       from social_posts where id = (res->>'post_id')::uuid));
 end $$;
 reset role;
 

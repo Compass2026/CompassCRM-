@@ -188,7 +188,7 @@ export type Brief = {
 export type BriefResult = { ok: true; brief: Brief } | { ok: false; refusals: Refusal[] };
 
 // What a model adapter must hand back. Nothing else from the model is used.
-export type ModelDraft = { copy: string; claim_ids: string[]; asset_ids?: string[] };
+export type ModelDraft = { copy: string; claim_ids: string[]; asset_ids?: string[]; no_image_reason?: string };
 
 export type LintProblem = { code: string; message: string; match?: string };
 export type LintResult = { ok: boolean; problems: LintProblem[]; warnings: LintProblem[] };

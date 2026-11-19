@@ -534,6 +534,19 @@ begin
     ws_test.msg(format('select drafter_write(%L::jsonb)', jsonb_build_object('client_id', ws_test.id('P'), 'copy', 'x', 'lint', jsonb_build_object('ok', true),
       'claimant', 'claude-operator:op123456', 'brief', jsonb_build_object('client', jsonb_build_object('id', ws_test.id('P')),
       'target', jsonb_build_object('channel', 'google_business', 'keyword', jsonb_build_object('id', ws_test.id('kP'))))))) like '23514: core_keyword_required%');
+
+  -- 20261120000000: an unattended draft carries an approved image or says why not.
+  update keywords set core_parent_keyword_id = ws_test.id('kO1') where id = ws_test.id('kO2');
+  req := jsonb_set(req, '{brief,target,owner_page}', jsonb_build_object('url', 'https://o.example.test/service'));
+  perform ws_test.ok('D4 an unattended run with no image and no reason is refused (image_or_reason_required), nothing written',
+    ws_test.msg(format('select drafter_write(%L::jsonb)', req)) like '23514: image_or_reason_required%'
+    and not exists (select 1 from social_posts where client_id = ws_test.id('O') and copy = 'x'));
+  perform ws_test.ok('D5 ...with a no-image reason it passes the image check (any later refusal is the drafter''s own)',
+    ws_test.msg(format('select drafter_write(%L::jsonb)', req || jsonb_build_object('no_image_reason', 'No approved photo fits this service.'))) not like '%image_%');
+  perform ws_test.ok('D6 ...and a file that is not an approved creative-use brand file of this client is refused (image_not_approved)',
+    ws_test.msg(format('select drafter_write(%L::jsonb)', req || jsonb_build_object('asset_ids', jsonb_build_array(gen_random_uuid())))) like '23514: image_not_approved%');
+  perform ws_test.ok('D7 an operator draft is not held to the image rule',
+    ws_test.msg(format('select drafter_write(%L::jsonb)', req || jsonb_build_object('claimant', 'claude-operator:op123456'))) not like '%image_%');
 end $$;
 reset role;
 reset session authorization;
@@ -867,12 +880,14 @@ begin
         'social_account', jsonb_build_object('id', ws_test.id('fbA'), 'page_id', '11111', 'name', 'A Page')),
       'allowed_facts', jsonb_build_object('claims', jsonb_build_array(jsonb_build_object('id', ws_test.id('claim.A'))))),
     'lint', jsonb_build_object('ok', true, 'problems', '[]'::jsonb, 'warnings', '[]'::jsonb),
-    'copy', 'Service A2 is offered across the A metro. Ask us about it.', 'claim_ids', jsonb_build_array(ws_test.id('claim.A')), 'asset_ids', '[]'::jsonb)));
+    'copy', 'Service A2 is offered across the A metro. Ask us about it.', 'claim_ids', jsonb_build_array(ws_test.id('claim.A')), 'asset_ids', '[]'::jsonb,
+    'no_image_reason', 'No approved creative-use photo for Service A2 yet.')));
   r := nullif(current_setting('ws_test.f_write', true), '')::jsonb;
   perform set_config('ws_test.f_task', t::text, true);
   perform set_config('ws_test.f_post', coalesce(r->>'post_id', ''), true);
   perform ws_test.ok('F1 a worker run claims the slot and writes the post on a core keyword; it enters review through the ordinary checklist',
     st = 'accepted' and (select review_status = 'in_review' and keyword_id = ws_test.id('kA2') and social_account_id = ws_test.id('fbA')
+                                and no_image_reason = 'No approved creative-use photo for Service A2 yet.'
                          from social_posts where id = (r->>'post_id')::uuid));
 end $$;
 do $$

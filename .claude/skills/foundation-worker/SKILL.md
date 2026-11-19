@@ -1998,24 +1998,42 @@ a slot.
    Business Profile location has other open slots on the same day (BHG:
    three brand sites, one location), choose a different service and topic
    from those slots' drafts.
-3. **Draft through `post-drafter`** exactly as the *AI Drafter* playbook
+3. **Pick the image first** (20261120000000; Tom, Nov 19: "complete Facebook
+   and GBP drafts, including suitable images or documented exceptions";
+   "use verified client photos"). Candidates are this client's
+   `brand_assets` with `creative_use = 'approved'`, a stored file, and for a
+   `photo` `depicts_own_work = true` (a brand site's draft: only ids in
+   `client_brand_workspaces.asset_ids`). Prefer one whose `label`,
+   `subjects` or `notes` match the service, then one not attached to another
+   open draft (`post_assets` on `social_posts.review_status in
+   ('draft','in_review')`; drafter_write refuses an image already on an open
+   Facebook or GBP draft). Never a stock, AI or another client's image,
+   never an `unreviewed` or `excluded` file, never a photo that does not
+   show this client's work, and never a photo whose label names another
+   place than the post's market. Put its id in `assetIds` (one image). If
+   nothing fits, send `"assetIds": []` and, at submit, `draft.no_image_reason`
+   — one plain line for the reviewer, e.g. "No approved photo of water
+   heater work; the 3 approved photos are on other open drafts." drafter_write
+   refuses an unattended draft with neither (`image_or_reason_required`) or
+   with an unapproved file (`image_not_approved`).
+4. **Draft through `post-drafter`** exactly as the *AI Drafter* playbook
    below (brief → write → check → submit, at most three submits per brief),
    with `"claimant": "<run token>"` and `"runtime": "claude-worker-skill"`.
    The target:
    - Facebook: `{"channel": "facebook", "postType": "standard", "intent":
      "<keyword intent>", "serviceId", "keywordId", "socialAccountId":
-     "<social_account_id from the claim>", "assetIds": []}`. No button, no
-     URL, no hashtags.
+     "<social_account_id from the claim>", "assetIds": ["<the image from
+     step 3>"] or []}`. No button, no URL, no hashtags.
    - Business Profile: `{"channel": "google_business", "postType":
      "standard", "intent", "serviceId", "keywordId", "ctaType":
      "LEARN_MORE", "ctaUrl": "<the keyword's owner page, from the brief's target.owner_page>",
-     "socialAccountId": "<social_account_id from the claim>", "assetIds": []}`.
-     That is the slot's own location (a multi-location client's slot names
+     "socialAccountId": "<social_account_id from the claim>", "assetIds":
+     ["<the image from step 3>"] or []}`. That is the slot's own location (a multi-location client's slot names
      it; a single-location client has one). Never another location, and
      write for that market: its city, its phone and page from the brief.
    Usable claims only, brand voice from the brief. A Facebook post and a
    Business Profile post for the same week are different copy.
-4. **Link:** `select social_slot_link('<task id>', '<post_id>', '<run token>');`
+5. **Link:** `select social_slot_link('<task id>', '<post_id>', '<run token>');`
    It re-checks eligibility now, checks the post is yours for this slot
    (client, channel, destination, brand, in review, written after the task)
    and that its keyword traces to the **current** approved core list, records
@@ -2024,10 +2042,11 @@ a slot.
    (`not_ready: …`, `core_keyword_required`, `CD409` when your claim lapsed)
    → leave the post in review, set the task `blocked` with the refusal, and
    report both ids.
-5. **Report:** client, slot, channel, destination, keyword, core list
-   version, `post_id`, `run_id`, `review_task_id`. Images are a separate step
-   (Brand › Creative use, or `content_stage_media` / `content_revise` in
-   Executive OS); the post waits in review for a person either way.
+6. **Report:** client, slot, channel, destination, keyword, core list
+   version, image id (or the no-image reason), `post_id`, `run_id`,
+   `review_task_id`. A reviewer can still swap the image (Brand › Creative
+   use, or `content_stage_media` / `content_revise` in Executive OS); the
+   post waits in review for a person either way.
 
 **Never:** approve, schedule or publish; switch a publisher or pilot on;
 clear a hold; draft a slot whose task you did not claim with this run's
