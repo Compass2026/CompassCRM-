@@ -93,6 +93,50 @@ seed, admin-issued intake token, website configuration, and an authorized live
 verification of one inquiry and one email. Keep SMS disabled and portal invitations
 closed until their existing prerequisites are met.
 
+## SMS consent and the lead's contact (Nov 18 2026)
+
+Migrations `20261119002142_crm_lite_web_consent_contact.sql` and
+`20261119002233_client_phone_sms_recipient.sql`; `inquiry-intake` v2;
+`client-phone` (refusal codes, lead thread by phone). Found on BHG Safety
+Partners: the website's consent reached Compass only as words in the message,
+and an inquiry linked by email to an older contact with no phone could be
+called but not texted (`no_phone`).
+
+- **Consent is data.** The website sends `sms_consent: {granted, consented_at,
+  disclosure_version, disclosure_text, phone?, source_url?}` with the inquiry.
+  Only `granted: true` grants; unchecked (`granted: false`) or absent records
+  nothing and revokes nothing; a malformed object is a 400. Message text is
+  never parsed. `crm_apply_web_consent` records `sms_customer_care` consent
+  for the inquiry's own phone (`source = web_form`, the disclosure version,
+  page, wording and its sha256; history `actor_kind = recipient`) unless the
+  phone has any opt-out (only START lifts it), a revocation is dated after the
+  consent, the phone differs, the time is in the future, or a grant already
+  exists (left as is). It runs only for a new submission, so a retry adds no
+  event. Every outcome is an `inquiry_events` row of kind `sms_consent`.
+- **The phone decides the contact.** `crm_resolve_inquiry_contact`: the
+  contact holding the inquiry's phone, else (no valid phone) the oldest with
+  its email, else a new contact with the inquiry's phone and email. An
+  existing contact is never edited, merged or given a number; the decision is
+  an `inquiry_events` row of kind `contact_matched` (naming any other email
+  match). Neither new kind is in the portal view.
+- **Texts go to the lead's own number.** `client_phone_begin_sms` sends to
+  `inquiries.phone_e164` through the contact that holds it, so the lead,
+  recipient, consent and thread name one phone; a lead without a valid phone
+  answers `no_phone`, a number no contact holds `lead_contact_mismatch`. The
+  workspace reads the lead's thread the same way, so inbound and outbound
+  texts appear under the lead.
+- **Calling controls.** "Call from my phone" is the device `tel:` link (your
+  own number, not logged); "Browser calling" is the Twilio business line. A
+  lead without a valid phone says so (`no_lead_phone`) instead of "Calling
+  setup is not complete"; every SMS refusal has its own message.
+- **Repair.** `supabase/deferred/20261118_bhg_inquiry_contact_relink.sql`
+  relinks the one production inquiry whose phone differed from its contact's
+  (BHG, Nov 18 2026, the only one across all clients), after the migration,
+  with Tom's go-ahead.
+- **Rollback:** `supabase/rollback/20261119002233_*.down.sql` then
+  `20261119002142_*.down.sql` restore the previous functions; consent,
+  contact and event rows written meanwhile are kept.
+
 ## The workspace
 
 Statuses: **New → Contacted → Closed**, with Reopen. Status lives on the

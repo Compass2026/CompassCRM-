@@ -225,6 +225,7 @@ export function ClientWorkspace({
             clientId={clientId}
             inquiryId={selected?.id}
             leadName={selected?.name}
+            leadPhone={selected?.phone_e164}
           />
           {error && (
             <p
@@ -550,10 +551,11 @@ export function ClientWorkspace({
                     {phone && (
                       <a
                         href={phone}
+                        title="Opens your device's phone app. The call shows your own number, not the business line, and isn't logged in Compass."
                         className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-xs"
                       >
                         <Phone className="size-3" aria-hidden="true" /> Call
-                        lead
+                        from my phone
                       </a>
                     )}
                     {email && (

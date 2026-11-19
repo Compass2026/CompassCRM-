@@ -1,18 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { Device, Call } from "@twilio/voice-sdk";
-const reasons: Record<string, string> = {
-  forbidden: "Your account cannot access this workspace.",
-  voice_not_ready: "Calling setup is not complete.",
-  verification_required: "Texting is awaiting carrier verification.",
-  save_draft_first: "Save this draft before sending.",
-  send_uncertain_refresh_first:
-    "The send result is uncertain. Refresh before sending again.",
-  no_consent: "This lead needs recorded permission for texts.",
-  opted_out: "This lead opted out of texts.",
-  outbound_disabled: "Text sending has not been enabled.",
-  rate_limited: "Please wait a minute and try again.",
-};
+import { phoneReasons as reasons } from "@/lib/client-phone-messages";
 async function phoneRequest(
   clientId: string,
   mode: string,
@@ -49,6 +38,7 @@ type PhoneSnapshot = {
     recordings?: {id:string;state:string;duration:number;summary:string|null;transcript:string|null;expires_at:string;error_code:string|null}[];
   }[];
   number: string | null;
+  recipient?: string | null;
   can_send: boolean;
   reason: string | null;
   voice_ready: boolean;
@@ -101,7 +91,10 @@ export function LeadText({
   return (
     <section className="p-3" aria-label="Lead text conversation">
       <div className="mb-3 flex justify-between gap-3 text-xs">
-        <span>{data?.number || "Business text messages"}</span>
+        <span>
+          {data?.number ? `From ${data.number}` : "Business text messages"}
+          {data?.recipient ? ` · to ${data.recipient}` : ""}
+        </span>
         <button
           type="button"
           onClick={() => act("load")}
@@ -185,11 +178,14 @@ export function WorkspacePhone({
   clientId,
   inquiryId,
   leadName,
+  leadPhone,
 }: {
   clientId: string;
   inquiryId?: string;
   leadName?: string;
+  leadPhone?: string | null;
 }) {
+  const callable = !!leadPhone && /^\+[1-9][0-9]{7,14}$/.test(leadPhone);
   const device = useRef<Device | null>(null),
     call = useRef<Call | null>(null),
     mounted = useRef(true);
@@ -312,12 +308,12 @@ export function WorkspacePhone({
   }
   return (
     <section
-      aria-label="Business phone"
+      aria-label="Browser calling on the business line"
       className="mb-5 rounded-xl border border-slate-200 bg-white p-4 text-sm"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-semibold">Business phone{readiness?.number ? ` · ${readiness.number}`:""}</p>
+          <p className="font-semibold">Browser calling{readiness?.number ? ` · business line ${readiness.number}`:""}</p>
           <p role="status" className="mt-1 text-xs text-slate-600">
             {status}
           </p>
@@ -330,16 +326,17 @@ export function WorkspacePhone({
               disabled={busy || !readiness?.enabled}
               className="rounded-lg border px-3 py-2 text-xs"
             >
-              {readiness && !readiness.enabled ? "Calling setup pending":"Connect phone"}
+              {readiness && !readiness.enabled ? "Browser calling not set up":"Connect browser phone"}
             </button>
           ) : (
             <button
               type="button"
               onClick={dial}
-              disabled={busy || !inquiryId || hasCall}
+              disabled={busy || !inquiryId || hasCall || !callable}
+              title={inquiryId && !callable ? reasons.no_lead_phone : undefined}
               className="rounded-lg bg-navy-900 px-3 py-2 text-xs text-white disabled:opacity-40"
             >
-              Call {leadName || "selected lead"}
+              Call {leadName || "selected lead"} in browser
             </button>
           )}
           {incoming && (
@@ -372,9 +369,13 @@ export function WorkspacePhone({
         </div>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Keep this page open to receive calls. Your browser will request
-        microphone access when needed.
+        Calls ring through this browser on the business line and are logged
+        on the lead. Keep this page open to receive calls. Your browser will
+        request microphone access when needed.
       </p>
+      {connected && inquiryId && !callable && (
+        <p className="mt-2 text-xs text-amber-800">{reasons.no_lead_phone}</p>
+      )}
       {readiness?.recording_enabled && <p className="mt-2 text-xs text-slate-600">Recording is offered with the caller’s permission.{readiness.summaries_enabled?" A transcript and AI summary will appear in call history when ready.":""}</p>}
       {error && (
         <p role="alert" className="mt-2 text-xs text-red-700">

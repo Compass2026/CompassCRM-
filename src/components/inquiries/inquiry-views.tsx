@@ -134,8 +134,8 @@ export function InquiryDetail({ inquiry, notes, events, basePath, businessName }
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           {tel && (
-            <a href={tel} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-navy-900 px-4 text-sm font-medium text-white hover:bg-navy-800">
-              <Phone className="size-4" aria-hidden="true" /> Call
+            <a href={tel} title="Opens your device's phone app. The call shows your own number, not the business line, and isn't logged in Compass." className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-navy-900 px-4 text-sm font-medium text-white hover:bg-navy-800">
+              <Phone className="size-4" aria-hidden="true" /> Call from my phone
             </a>
           )}
           {mail && (
