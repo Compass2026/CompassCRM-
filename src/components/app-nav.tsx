@@ -9,6 +9,7 @@ import { useActiveInView } from "@/components/use-active-in-view";
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/clients", label: "Clients" },
+  { href: "/review", label: "Review" },
   { href: "/production", label: "Production" },
   { href: "/production/health", label: "Control Center" },
   { href: "/tasks", label: "Tasks" },

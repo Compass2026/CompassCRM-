@@ -8,7 +8,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { uuid_ossp } from "@electric-sql/pglite/contrib/uuid_ossp";
 
-const FOLLOW_UP = "20261021230000_citation_enrichment_and_field_checks.sql";
+const FOLLOW_UP = "20261118230000_citation_enrichment_and_field_checks.sql";
 const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
 
 async function sandbox() {

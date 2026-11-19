@@ -16,6 +16,7 @@ function fakeStore(over = {}) {
     secret: async (n) => (n === "SYNC_CRON_SECRET" ? "cron-secret" : null),
     teamMemberForJwt: async (jwt) => (jwt === "team-jwt" ? MEMBER : null),
     input: async (id) => (id === CLIENT ? lucas() : null),
+    socialAccounts: async () => [],
     attempts: async (_c, hash) => calls.runs.filter((r) => r.brief_hash === hash).length + calls.writes.filter((w) => w.brief_hash === hash).length,
     recordRun: async (r) => { calls.runs.push(r); },
     write: async (p) => { calls.writes.push(p); return { run_id: "run-1", post_id: "post-1", review_task_id: "task-1" }; },
@@ -181,4 +182,59 @@ test("submit validates its inputs before touching anything", async () => {
   assert.equal((await call(d, { ...base, client_id: "x" })).status, 400);
   assert.equal((await call(d, { ...base, target: { ...TARGET, serviceId: "x" } })).status, 400);
   assert.equal(calls.runs.length + calls.writes.length, 0);
+});
+
+// ── Business Profile destinations (20261027190935) ───────────────────────────
+// A Business Profile brief reads the client's verified locations, as a
+// Facebook brief reads its Pages: a draft may name its own location, an
+// unnamed draft takes the client's only one, and with several it must name
+// one. Until Oct 29 2026 the handler loaded accounts for Facebook only, so a
+// named location was always refused as unknown.
+const LOCATION = "543793e4-5d63-4358-8432-4b96f534cd67";
+const SECOND = "c0000000-0000-4000-8000-0000000000c2";
+const verified = (id, page) => ({ id, platform: "google_business", external_account_id: page, display_name: "LUCAS Construction and Roofing",
+  publish_provider: "zernio", publish_page_id: page, publish_verified_at: "2026-10-11T22:00:47Z" });
+const PAGE_ROW = { id: "1ab8af8e-d720-47ed-8818-e0f2fa91a01e", platform: "facebook", external_account_id: "103977857788955", display_name: "LUCAS Construction",
+  publish_provider: "zernio", publish_page_id: "103977857788955", publish_verified_at: "2026-10-11T22:00:47Z" };
+const withAccounts = (rows) => fakeStore({ socialAccounts: async (id) => (id === CLIENT ? rows : []) });
+
+test("Business Profile: a named verified location is accepted, carried in the brief and written to", async () => {
+  const { store, calls } = withAccounts([verified(LOCATION, "locations/3692365240387501506"), PAGE_ROW]);
+  const d = drafter(store);
+  const target = { ...TARGET, socialAccountId: LOCATION };
+  const b = await call(d, { mode: "brief", client_id: CLIENT, target });
+  assert.equal(b.status, 200, JSON.stringify(b.body));
+  assert.deepEqual(b.body.brief.target.social_account,
+    { id: LOCATION, page_id: "locations/3692365240387501506", name: "LUCAS Construction and Roofing" });
+  const r = await call(d, { mode: "submit", client_id: CLIENT, target, brief_hash: b.body.brief_hash, draft, runtime: "claude-worker-skill" });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(calls.writes.length, 1);
+  assert.equal(calls.writes[0].brief.target.social_account.id, LOCATION);
+});
+
+test("Business Profile: never another destination: a Facebook Page, an unverified or another client's location", async () => {
+  const unverified = { ...verified(SECOND, "locations/2"), publish_verified_at: null };
+  const notZernio = { ...verified(SECOND, "locations/2"), publish_provider: null };
+  for (const [rows, id] of [
+    [[verified(LOCATION, "locations/1"), PAGE_ROW], PAGE_ROW.id],
+    [[verified(LOCATION, "locations/1"), unverified], SECOND],
+    [[verified(LOCATION, "locations/1"), notZernio], SECOND],
+    [[verified(LOCATION, "locations/1")], "d0000000-0000-4000-8000-0000000000d4"],
+  ]) {
+    const r = await call(drafter(withAccounts(rows).store), { mode: "brief", client_id: CLIENT, target: { ...TARGET, socialAccountId: id } });
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+    assert.ok(r.body.refusals.some((f) => f.code === "social_account_unknown"), JSON.stringify(r.body.refusals));
+  }
+});
+
+test("Business Profile: unnamed, the only location gives the same brief as before; with several, the draft names one", async () => {
+  const before = await call(drafter(fakeStore().store), { mode: "brief", client_id: CLIENT, target: TARGET });
+  const one = await call(drafter(withAccounts([verified(LOCATION, "locations/1"), PAGE_ROW]).store), { mode: "brief", client_id: CLIENT, target: TARGET });
+  assert.equal(one.status, 200, JSON.stringify(one.body));
+  assert.equal("social_account" in one.body.brief.target, false);
+  assert.equal(one.body.brief_hash, before.body.brief_hash, "an unnamed single-location brief is unchanged, so no brief in review goes stale");
+  const two = await call(drafter(withAccounts([verified(LOCATION, "locations/1"), verified(SECOND, "locations/2")]).store),
+    { mode: "brief", client_id: CLIENT, target: TARGET });
+  assert.equal(two.status, 422);
+  assert.ok(two.body.refusals.some((f) => f.code === "social_account_missing"), JSON.stringify(two.body.refusals));
 });

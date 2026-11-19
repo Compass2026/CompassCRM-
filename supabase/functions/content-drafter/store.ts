@@ -36,8 +36,8 @@ export function createStore(supabase: Client) {
       if (error) throw new Error(error.message);
       return (data as DraftRow | null) ?? null;
     },
-    async input(clientId: string, serviceId: string | null = null): Promise<DrafterInput | null> {
-      const { data, error } = await supabase.rpc("client_intelligence_for_content", { p_client_id: clientId, p_service_id: serviceId });
+    async input(clientId: string, serviceId: string | null = null, keywordId: string | null = null): Promise<DrafterInput | null> {
+      const { data, error } = await supabase.rpc("client_intelligence_for_content", { p_client_id: clientId, p_service_id: serviceId, p_keyword_id: keywordId });
       if (error) throw Object.assign(new Error(error.message), { code: error.code });
       return (data as DrafterInput | null) ?? null;
     },

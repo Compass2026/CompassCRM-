@@ -47,6 +47,9 @@ for f in "$ROOT"/supabase/migrations/*.sql; do
     || { echo "FAILED applying $(basename "$f")"; cat "$WORK/err"; exit 1; }
 done
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /dev/null
+# The UI suites test their own screens with fictional clients that have no core
+# keyword list: they run with the recorded exception, as the legacy SQL suites do.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/core_keyword_legacy_exempt.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/${UI_FIXTURES:-tasks_ui_fixtures.sql}" -o /dev/null
 # PostgREST connects as authenticator and switches to the JWT's role.
 # (the bootstrap creates it, as production has it)

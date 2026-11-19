@@ -70,18 +70,31 @@ export function createStore(supabase: Client) {
     },
 
     // The one read of Client Intelligence (0047).
-    async input(clientId: string, serviceId: string | null = null): Promise<DrafterInput | null> {
-      const { data, error } = await supabase.rpc("client_intelligence_for_content", { p_client_id: clientId, p_service_id: serviceId });
+    // keywordId finds a multi-brand draft's site when it names no service (20261028170000).
+    async input(clientId: string, serviceId: string | null = null, keywordId: string | null = null): Promise<DrafterInput | null> {
+      const { data, error } = await supabase.rpc("client_intelligence_for_content", { p_client_id: clientId, p_service_id: serviceId, p_keyword_id: keywordId });
       if (error) throw Object.assign(new Error(error.message), { code: error.code });
       return (data as DrafterInput | null) ?? null;
     },
 
-    // The client's Facebook Pages (v3, Facebook briefs). Read-only.
+    // The client's Facebook Pages and Business Profile locations (a brief
+    // names its destination; 20261027190935). Read-only.
     async socialAccounts(clientId: string): Promise<SocialAccountRow[]> {
-      const { data, error } = await supabase.from("social_accounts").select("id, platform, external_account_id, display_name")
-        .eq("client_id", clientId).eq("platform", "facebook");
+      const { data, error } = await supabase.from("social_accounts")
+        .select("id, platform, external_account_id, display_name, publish_provider, publish_page_id, publish_verified_at")
+        .eq("client_id", clientId).in("platform", ["facebook", "google_business"]);
       if (error) throw new Error(error.message);
-      return (data ?? []) as SocialAccountRow[];
+      const rows = (data ?? []) as SocialAccountRow[];
+      // Each Business Profile location carries its recorded markets, so its
+      // brief approves only that location's places.
+      const { data: markets, error: mError } = await supabase.from("gbp_location_markets")
+        .select("social_account_id, market, kind").eq("client_id", clientId);
+      if (mError) throw new Error(mError.message);
+      for (const r of rows) {
+        if (r.platform !== "google_business") continue;
+        r.markets = (markets ?? []).filter((m) => m.social_account_id === r.id).map((m) => ({ market: m.market, kind: m.kind }));
+      }
+      return rows;
     },
 
     // Submits already made against this brief (any outcome).

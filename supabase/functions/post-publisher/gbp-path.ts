@@ -154,6 +154,11 @@ export function createGbpPath(ctx: ZernioCtx) {
   // ── Read-only: the Business Profile accounts and locations the publish key
   // sees, beside the clients that could be bound. Evidence only: binding is a
   // separate, explicit call naming one client and one location. ──
+  const boundOf = (l: Binding) => ({
+    social_account_id: l.id, location_id: l.publish_page_id, location_name: l.display_name,
+    zernio_account_id: l.publish_account_id, enabled: l.publish_enabled, verified_at: l.publish_verified_at,
+    health: l.publish_health,
+  });
   async function accountsReport() {
     const z = await path.ensureZernio();
     if (!z) return { key: { ok: false, detail: path.keyBlock() } };
@@ -166,11 +171,9 @@ export function createGbpPath(ctx: ZernioCtx) {
       const site = host(c.website_url);
       return {
         client_id: c.id, name: c.name, website: c.website_url, piloted: ctx.settings.clients.includes(c.id),
-        bound: c.location ? {
-          social_account_id: c.location.id, location_id: c.location.publish_page_id, location_name: c.location.display_name,
-          zernio_account_id: c.location.publish_account_id, enabled: c.location.publish_enabled, verified_at: c.location.publish_verified_at,
-          health: c.location.publish_health,
-        } : null,
+        bound: c.location ? boundOf(c.location) : null,
+        // Every bound location (a client may have several; each post names its own).
+        bound_locations: ((c as { locations?: Binding[] }).locations ?? (c.location ? [c.location] : [])).map(boundOf),
         // Same website host only: a hint for the person binding, never a binding.
         website_matches: zernioAccounts.flatMap((a) => a.locations.filter((l) => !!site && host(l.website) === site)
           .map((l) => ({ zernio_account_id: a.zernio_account_id, location_id: l.location_id, name: l.name }))),

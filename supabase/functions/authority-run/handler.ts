@@ -75,7 +75,10 @@ export function createAuthorityRun(deps: Deps) {
       // afterwards, never as falsely fresh.
       const fingerprint = await store.fingerprint(clientId);
       const input = (await store.input(clientId)) as (AuthorityInput & Json) | null;
-      if (!input?.client || !input.authority) throw new Error("authority_input returned nothing for this client");
+      if (!input?.client || !input.authority) throw new Error("authority_input_scoped returned nothing for this client");
+      // Never a run over the whole keyword inventory: without the Core 50
+      // scope the run fails and no opportunity changes are recorded.
+      if (!input.authority.core) throw new Error("authority_input_scoped returned no Core 50 scope for this client");
       const siteUrl = input.authority.site?.url ?? null;
 
       let inv: Inventory | null = null;

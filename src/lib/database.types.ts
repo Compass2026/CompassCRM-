@@ -2,6 +2,7 @@ import type { GrowthRanking } from "./growth-rankings";
 import type { RolloutReview, RolloutWrite } from "./agency-rollout";
 import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
 import type { GrowthMeasurement, SearchHistory, GrowthWork } from "./client-growth";
+import type { OnboardingGap, OnboardingRow, OnboardingStatus } from "./client-onboarding";
 import type { CitationLocation, CitationLocationIdentity, CitationDirectory, CitationListing, CitationListingOverview, CitationCheck, CitationTask, CitationRequest, CitationCreditEntry, CitationCreditBalance, CitationImport, CitationListingEnrichment } from "./citations";
 
 export type Json =
@@ -20,6 +21,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_onboarding_items: {
+        Row: Omit<OnboardingRow, "section" | "scope" | "title" | "guidance" | "depends_on" | "evidence_source" | "citation_directory_key" | "pipeline_task_key" | "sort_order" | "standard_version" | "item_active" | "scope_label" | "location_hide_address" | "pipeline_task_id" | "pipeline_task_status" | "pipeline_task_title" | "signal" | "location_status" | "client_service_scope"> & { created_at: string; updated_by: string | null }
+        Insert: { client_id: string; item_key: string; site_id?: string | null; location_id?: string | null }
+        Update: { status?: OnboardingStatus; social_account_id?: string | null; evidence_url?: string | null; evidence_note?: string; blocking_reason?: string; next_action?: string; due_on?: string | null; required?: boolean }
+        Relationships: []
+      }
       map_grid_profiles: {
         Row: { id:string; client_id:string; grid_config_id:string; label:string; target_place_id:string; points:Json; keywords:Json; zoom:number; search_this_area:boolean; geometry:Json|null; enabled:boolean; weekly_enabled:boolean; created_at:string }
         Insert: never
@@ -109,7 +116,7 @@ export type Database = {
       citation_listings: {
         Row: CitationListing
         Insert: Pick<CitationListing, "client_id" | "location_id" | "directory_id"> & Partial<Pick<CitationListing, "id" | "listing_url" | "external_id" | "fulfillment_status" | "source_provider" | "source_observed_on" | "notes" | "source_name" | "source_address" | "source_phone" | "source_website">>
-        // URL / external id change only through citation_listing_enrichments (20261021230000).
+        // URL / external id change only through citation_listing_enrichments (20261118230000).
         Update: Partial<Pick<CitationListing, "fulfillment_status" | "notes" | "archived" | "source_name" | "source_address" | "source_phone" | "source_website">>
         Relationships: []
       }
@@ -2431,6 +2438,30 @@ export type Database = {
           },
         ]
       }
+      claim_review_intervals: {
+        Row: {
+          authoritative_methods: string[]
+          basis: string
+          kind: string
+          label: string
+          review_days: number
+        }
+        Insert: {
+          authoritative_methods: string[]
+          basis: string
+          kind: string
+          label: string
+          review_days: number
+        }
+        Update: {
+          authoritative_methods?: string[]
+          basis?: string
+          kind?: string
+          label?: string
+          review_days?: number
+        }
+        Relationships: []
+      }
       claims: {
         Row: {
           claim: string
@@ -2439,8 +2470,14 @@ export type Database = {
           confirmed_on: string | null
           created_at: string
           id: string
+          kind: string | null
+          review_by: string | null
           source: string | null
           status: Database["public"]["Enums"]["claim_status"]
+          superseded_by: string | null
+          verification_method: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           claim: string
@@ -2449,8 +2486,14 @@ export type Database = {
           confirmed_on?: string | null
           created_at?: string
           id?: string
+          kind?: string | null
+          review_by?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["claim_status"]
+          superseded_by?: string | null
+          verification_method?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           claim?: string
@@ -2459,8 +2502,14 @@ export type Database = {
           confirmed_on?: string | null
           created_at?: string
           id?: string
+          kind?: string | null
+          review_by?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["claim_status"]
+          superseded_by?: string | null
+          verification_method?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {
@@ -4995,6 +5044,7 @@ export type Database = {
         Row: {
           authority_opportunity_id: string | null
           brand_workspace_id: string | null
+          gbp_location_id: string | null
           channel: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id: string | null
@@ -5009,12 +5059,17 @@ export type Database = {
           output_url: string | null
           planned_date: string | null
           purpose: string
+          retired_at: string | null
+          retired_hold: string | null
+          retired_hold_reason: string | null
           search_intent: string | null
           service_id: string | null
           social_post_id: string | null
           standard_key: string | null
           standard_month: string | null
           standard_seq: number | null
+          standard_week: string | null
+          standard_week_seq: number | null
           target_url: string | null
           topic: string
           updated_at: string
@@ -5024,6 +5079,7 @@ export type Database = {
         Insert: {
           authority_opportunity_id?: string | null
           brand_workspace_id?: string | null
+          gbp_location_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id: string
           content_post_id?: string | null
@@ -5038,12 +5094,17 @@ export type Database = {
           output_url?: string | null
           planned_date?: string | null
           purpose: string
+          retired_at?: string | null
+          retired_hold?: string | null
+          retired_hold_reason?: string | null
           search_intent?: string | null
           service_id?: string | null
           social_post_id?: string | null
           standard_key?: string | null
           standard_month?: string | null
           standard_seq?: number | null
+          standard_week?: string | null
+          standard_week_seq?: number | null
           target_url?: string | null
           topic: string
           updated_at?: string
@@ -5053,6 +5114,7 @@ export type Database = {
         Update: {
           authority_opportunity_id?: string | null
           brand_workspace_id?: string | null
+          gbp_location_id?: string | null
           channel?: Database["public"]["Enums"]["social_platform"] | null
           client_id?: string
           content_post_id?: string | null
@@ -5067,12 +5129,17 @@ export type Database = {
           output_url?: string | null
           planned_date?: string | null
           purpose?: string
+          retired_at?: string | null
+          retired_hold?: string | null
+          retired_hold_reason?: string | null
           search_intent?: string | null
           service_id?: string | null
           social_post_id?: string | null
           standard_key?: string | null
           standard_month?: string | null
           standard_seq?: number | null
+          standard_week?: string | null
+          standard_week_seq?: number | null
           target_url?: string | null
           topic?: string
           updated_at?: string
@@ -5916,20 +5983,41 @@ export type Database = {
         Update: { client_id?: string; effective_month?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string }
         Relationships: []
       }
+      client_weekly_delivery_standards: {
+        Row: { client_id: string; effective_week: string; id: string; recorded_at: string; recorded_by: string | null; source_ref: string; standard_id: string; start_date: string }
+        Insert: { client_id: string; effective_week?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref: string; standard_id: string; start_date: string }
+        Update: { client_id?: string; effective_week?: string; id?: string; recorded_at?: string; recorded_by?: string | null; source_ref?: string; standard_id?: string; start_date?: string }
+        Relationships: []
+      }
+      core_keyword_lists: {
+        Row: {
+          approved_at: string | null; approved_by: string | null; brand_workspace_id: string | null; client_id: string; id: string; keyword_ids: string[]
+          proposed_at: string; source_ref: string; status: string; version: number
+        }
+        Insert: {
+          approved_at?: string | null; approved_by?: string | null; brand_workspace_id?: string | null; client_id: string; id?: string; keyword_ids: string[]
+          proposed_at?: string; source_ref: string; status?: string; version?: number
+        }
+        Update: {
+          approved_at?: string | null; approved_by?: string | null; brand_workspace_id?: string | null; client_id?: string; id?: string; keyword_ids?: string[]
+          proposed_at?: string; source_ref?: string; status?: string; version?: number
+        }
+        Relationships: []
+      }
       delivery_standards: {
         Row: {
-          blog_posts: number; decided_at: string; decided_by: string; exclusion_reason: string; exclusions: string[]
-          facebook_posts: number; gbp_posts: number; id: string; page_refreshes: number; recorded_at: string
+          blog_posts: number; cadence: string; decided_at: string; decided_by: string; exclusion_reason: string; exclusions: string[]
+          facebook_posts: number; gbp_daily_location_cap: number | null; gbp_posts: number; id: string; page_refreshes: number; recorded_at: string
           recorded_by: string | null; review_trigger: string; source_ref: string; version: number
         }
         Insert: {
-          blog_posts: number; decided_at: string; decided_by: string; exclusion_reason?: string; exclusions?: string[]
-          facebook_posts: number; gbp_posts: number; id?: string; page_refreshes: number; recorded_at?: string
+          blog_posts: number; cadence?: string; decided_at: string; decided_by: string; exclusion_reason?: string; exclusions?: string[]
+          facebook_posts: number; gbp_daily_location_cap?: number | null; gbp_posts: number; id?: string; page_refreshes: number; recorded_at?: string
           recorded_by?: string | null; review_trigger?: string; source_ref: string; version: number
         }
         Update: {
-          blog_posts?: number; decided_at?: string; decided_by?: string; exclusion_reason?: string; exclusions?: string[]
-          facebook_posts?: number; gbp_posts?: number; id?: string; page_refreshes?: number; recorded_at?: string
+          blog_posts?: number; cadence?: string; decided_at?: string; decided_by?: string; exclusion_reason?: string; exclusions?: string[]
+          facebook_posts?: number; gbp_daily_location_cap?: number | null; gbp_posts?: number; id?: string; page_refreshes?: number; recorded_at?: string
           recorded_by?: string | null; review_trigger?: string; source_ref?: string; version?: number
         }
         Relationships: []
@@ -7161,6 +7249,7 @@ export type Database = {
           competition: number | null
           cpc: number | null
           created_at: string
+          core_parent_keyword_id: string | null
           department: Database["public"]["Enums"]["department"]
           id: string
           intent: string | null
@@ -7182,6 +7271,7 @@ export type Database = {
           competition?: number | null
           cpc?: number | null
           created_at?: string
+          core_parent_keyword_id?: string | null
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
@@ -7203,6 +7293,7 @@ export type Database = {
           competition?: number | null
           cpc?: number | null
           created_at?: string
+          core_parent_keyword_id?: string | null
           department?: Database["public"]["Enums"]["department"]
           id?: string
           intent?: string | null
@@ -8687,6 +8778,7 @@ export type Database = {
       }
       portal_users: {
         Row: {
+          access_scope: "full" | "leads_only"
           auth_user_id: string | null
           client_id: string
           created_at: string
@@ -8699,6 +8791,7 @@ export type Database = {
           name: string | null
         }
         Insert: {
+          access_scope?: "full" | "leads_only"
           auth_user_id?: string | null
           client_id: string
           created_at?: string
@@ -8711,6 +8804,7 @@ export type Database = {
           name?: string | null
         }
         Update: {
+          access_scope?: "full" | "leads_only"
           auth_user_id?: string | null
           client_id?: string
           created_at?: string
@@ -9204,6 +9298,7 @@ export type Database = {
           recorded_at: string
           result_type: Database["public"]["Enums"]["rank_result_type"]
           run_id: string | null
+          site_host: string | null
           source: Database["public"]["Enums"]["rank_source"]
           url_ranked: string | null
         }
@@ -9215,6 +9310,7 @@ export type Database = {
           recorded_at?: string
           result_type: Database["public"]["Enums"]["rank_result_type"]
           run_id?: string | null
+          site_host?: string | null
           source?: Database["public"]["Enums"]["rank_source"]
           url_ranked?: string | null
         }
@@ -9226,6 +9322,7 @@ export type Database = {
           recorded_at?: string
           result_type?: Database["public"]["Enums"]["rank_result_type"]
           run_id?: string | null
+          site_host?: string | null
           source?: Database["public"]["Enums"]["rank_source"]
           url_ranked?: string | null
         }
@@ -10308,6 +10405,11 @@ export type Database = {
           publish_status: string
           published_at: string | null
           published_url: string | null
+          approved_destination: string | null
+          approved_publish_at: string | null
+          no_image_reason: string | null
+          rejected_copy_hash: string | null
+          rejected_media_hash: string | null
           rejection_category: string | null
           review_note: string | null
           review_status: string
@@ -10351,6 +10453,11 @@ export type Database = {
           publish_status?: string
           published_at?: string | null
           published_url?: string | null
+          approved_destination?: string | null
+          approved_publish_at?: string | null
+          no_image_reason?: string | null
+          rejected_copy_hash?: string | null
+          rejected_media_hash?: string | null
           rejection_category?: string | null
           review_note?: string | null
           review_status?: string
@@ -10394,6 +10501,11 @@ export type Database = {
           publish_status?: string
           published_at?: string | null
           published_url?: string | null
+          approved_destination?: string | null
+          approved_publish_at?: string | null
+          no_image_reason?: string | null
+          rejected_copy_hash?: string | null
+          rejected_media_hash?: string | null
           rejection_category?: string | null
           review_note?: string | null
           review_status?: string
@@ -11557,6 +11669,8 @@ export type Database = {
       portal_growth_search: { Row: SearchHistory; Relationships: [] }
       portal_backlinks: { Row: PortalBacklink; Relationships: [] }
       citation_listing_overview: { Row: CitationListingOverview; Relationships: [] }
+      client_onboarding_overview: { Row: OnboardingRow; Relationships: [] }
+      client_onboarding_gaps: { Row: OnboardingGap; Relationships: [] }
       citation_credit_balances: { Row: CitationCreditBalance; Relationships: [] }
       authority_latest: {
         Row: {
@@ -13107,6 +13221,11 @@ export type Database = {
       }
     }
     Functions: {
+      portal_has_reporting_access: { Args: Record<PropertyKey, never>; Returns: boolean }
+      enroll_client_onboarding: {
+        Args: { p_client_id: string }
+        Returns: number
+      }
       citation_import: {
         Args: { p_import: Json; p_rows: Json; p_rejected: Json; p_commit: boolean; p_held?: Json }
         Returns: Json
@@ -13138,6 +13257,7 @@ export type Database = {
         Returns: string
       }
       authority_caller_is_service: { Args: never; Returns: boolean }
+      authority_core_scope: { Args: { p_client_id: string }; Returns: Json }
       authority_decide: {
         Args: { p_opportunity_id: string; p_payload?: Json; p_verb: string }
         Returns: Json
@@ -13149,6 +13269,7 @@ export type Database = {
       authority_draft_start: { Args: { p_task_id: string }; Returns: Json }
       authority_fingerprint: { Args: { p_client_id: string }; Returns: Json }
       authority_input: { Args: { p_client_id: string }; Returns: Json }
+      authority_input_scoped: { Args: { p_client_id: string }; Returns: Json }
       authority_link_state: {
         Args: {
           l: Database["public"]["Tables"]["authority_opportunity_links"]["Row"]
@@ -13357,6 +13478,46 @@ export type Database = {
           source: string
           unit: string
         }[]
+      }
+      claim_classify: {
+        Args: {
+          p_claim_id: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_kind: string
+          p_note?: string
+        }
+        Returns: Json
+      }
+      claim_registry: {
+        Args: { p_client_id: string; p_today?: string }
+        Returns: Json
+      }
+      claim_revoke: {
+        Args: {
+          p_claim_id: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      claim_verify: {
+        Args: {
+          p_action: string
+          p_claim_id: string
+          p_confirmed_by_contact?: string
+          p_evidence_id?: string
+          p_excerpt: string
+          p_expected_fingerprint: string
+          p_expected_review_id?: string
+          p_expires_on?: string
+          p_location_id?: string
+          p_method: string
+          p_note?: string
+          p_observed_on: string
+        }
+        Returns: Json
       }
       client_intelligence_input: {
         Args: { p_client_id: string }
@@ -13602,6 +13763,40 @@ export type Database = {
         Args: { p_client_id: string; p_month?: string }
         Returns: number
       }
+      plan_delivery_week: { Args: { p_client_id: string; p_week?: string }; Returns: number }
+      plan_delivery_weeks: { Args: never; Returns: number }
+      queue_delivery_week_drafts: { Args: { p_client_id: string; p_through: string }; Returns: number }
+      delivery_today: { Args: never; Returns: string }
+      delivery_week_start: { Args: { p_date: string }; Returns: string }
+      delivery_next_monday: { Args: { p_date: string }; Returns: string }
+      delivery_daily_target: { Args: { p_date: string; p_weekly: number }; Returns: number }
+      delivery_day_rank: { Args: { p_date: string }; Returns: number }
+      client_weekly_delivery_standard: { Args: { p_client_id: string; p_date: string }; Returns: Database["public"]["Tables"]["delivery_standards"]["Row"] }
+      client_weekly_first_week: { Args: { p_client_id: string }; Returns: string | null }
+      delivery_v1_slot_retirable: { Args: { p_first_week: string; p_plan_item_id: string }; Returns: boolean }
+      delivery_gbp_locations: { Args: { p_client_id: string }; Returns: string[] }
+      gbp_slot_capacity_problem: { Args: { p_account_id: string; p_plan_item_id: string }; Returns: string | null }
+      delivery_weekly_month_target: { Args: { p_client_id: string; p_deliverable: string; p_month: string }; Returns: number | null }
+      delivery_targets_monthly: {
+        Args: { p_client_id?: string; p_month?: string }
+        Returns: Database["public"]["Functions"]["delivery_targets"]["Returns"]
+      }
+      delivery_items: {
+        Args: { p_client_id: string; p_from: string; p_through: string }
+        Returns: {
+          blocked: boolean; brand_workspace_id: string | null; client_id: string; content_post_id: string | null; created_at: string
+          deliverable: string; done: boolean; item_date: string; kind: string; plan_item_id: string | null; retired: boolean
+          social_account_id: string | null; social_post_id: string | null; unit_kind: string; week_start: string
+        }[]
+      }
+      delivery_week_report: {
+        Args: { p_client_id?: string; p_from?: string; p_preview_week?: string; p_through?: string }
+        Returns: {
+          brand_workspace_id: string | null; client_id: string; credited: number; deliverable: string; gbp_overflow: number | null
+          open_slots: number; over_capacity: number; over_target: number; published: number; remaining: number; standard: string
+          target: number; unit_kind: string; unit_name: string; v1_retired: number; v1_retiring: number; week_start: string
+        }[]
+      }
       fire_foundation_worker: {
         Args: { p_client_id: string; p_reason: string }
         Returns: undefined
@@ -13613,6 +13808,10 @@ export type Database = {
       get_secret: { Args: { secret_name: string }; Returns: string }
       is_team: { Args: never; Returns: boolean }
       is_team_admin: { Args: never; Returns: boolean }
+      keyword_owner: {
+        Args: { p_brand_workspace_id: string | null; p_client_id: string; p_keyword_id: string; p_purpose?: string | null }
+        Returns: Json
+      }
       normalize_tracked_keywords: {
         Args: { p_client_id: string; p_target?: number }
         Returns: number
@@ -13719,6 +13918,7 @@ export type Database = {
         Returns: Json
       }
       retry_failed_fires: { Args: never; Returns: number }
+      review_queue: { Args: { p_client?: string }; Returns: Json }
       secret_present: { Args: { secret_name: string }; Returns: boolean }
       set_secret: {
         Args: { secret_name: string; secret_value: string }
@@ -13808,6 +14008,11 @@ export type Database = {
         Returns: string
       }
       social_post_readiness: { Args: { p_post_id: string }; Returns: string[] }
+      social_post_approve_and_schedule: {
+        Args: { p_note?: string; p_post: string; p_publish_at: string; p_submitted_at: string }
+        Returns: Json
+      }
+      social_post_set_no_image_reason: { Args: { p_post: string; p_reason: string }; Returns: undefined }
       social_post_snapshot: {
         Args: { p: Database["public"]["Tables"]["social_posts"]["Row"] }
         Returns: Json
@@ -13856,7 +14061,7 @@ export type Database = {
         | "text"
         | "other"
       brand_font_role: "heading" | "body" | "accent" | "other"
-      business_type: "storefront" | "service_area"
+      business_type: "storefront" | "service_area" | "ecommerce"
       change_status: "proposed" | "approved" | "vetoed"
       city_tier: "1" | "2" | "fold"
       claim_status: "sourced" | "unverified" | "confirmed"
@@ -14092,7 +14297,7 @@ export const Constants = {
         "other",
       ],
       brand_font_role: ["heading", "body", "accent", "other"],
-      business_type: ["storefront", "service_area"],
+      business_type: ["storefront", "service_area", "ecommerce"],
       change_status: ["proposed", "approved", "vetoed"],
       city_tier: ["1", "2", "fold"],
       claim_status: ["sourced", "unverified", "confirmed"],

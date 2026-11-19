@@ -24,7 +24,7 @@ Code: `src/lib/citations.ts` (pure rules, CSV, mapping, comparison, export),
 `src/lib/citations-data.ts` (reads), `src/app/citation-actions.ts` (writes),
 `src/components/citations/*`, migrations
 `supabase/migrations/20261021160410_citations_foundation.sql` and
-`20261021230000_citation_enrichment_and_field_checks.sql` (follow-up, below).
+`20261118230000_citation_enrichment_and_field_checks.sql` (follow-up, below).
 
 ## Overlap with what was already there
 
@@ -391,7 +391,7 @@ Oct 21 2026.** The history of the instruction is kept:
 ## Follow-up from the pilot audit (Oct 21 2026)
 
 Executive OS task `35a99cb0` (rollout `6e4a061f`; audit result `ef343683` in
-task `c0e9965e`). Migration `20261021230000_citation_enrichment_and_field_checks.sql`
+task `c0e9965e`). Migration `20261118230000_citation_enrichment_and_field_checks.sql`
 is additive and **not applied to production**; nothing here touches the live
 Logic Solar records. It writes no client row except the key history, which
 copies each existing listing's current key.
@@ -490,7 +490,7 @@ equivalent. Notes use general words and never quote the address. The CSV adds
 
 ### Before applying
 
-- Apply `20261021230000` after review, then deploy the code: the old code
+- Apply `20261118230000` after review, then deploy the code: the old code
   would insert checks without field statuses, which the new guard refuses.
   Code and migration go together; `CITATIONS_ENABLED` can stay on.
 - The migration drops the three unnamed Phase 1 check rules by definition and

@@ -151,18 +151,20 @@ begin
   -- or a portal contact of the inquiry's own client (crm_lite.test.sql P*);
   -- the consent, sender, switch, delivery-test and gate functions refuse
   -- anyone but a teammate (admins for the switch and tests): D11h here.
-  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, blog_publication_cancel, blog_publication_queue, communication_record_consent, communication_secret_status, communication_set_primary_number, communication_update_conversation, content_delegation_configure, content_delegation_configure_edits, content_delegation_exclude, content_delegation_include, content_draft_approve, content_draft_regenerate, content_draft_request, crm_confirm_delivery_test, crm_inquiry_add_note, crm_inquiry_set_status, crm_notification_block_reason, crm_record_notification_consent, crm_set_sms_alerts, crm_set_sms_sender, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, publisher_set_account_enabled, publisher_set_gbp_transport, publisher_unbind_account, secret_present, social_history_set_learning, social_history_style_review, social_post_readiness among security-definer functions',
+  -- review_queue, social_post_approve_and_schedule and
+  -- social_post_set_no_image_reason (20261116150000) refuse anyone not on the
+  -- team: D11n here, review_to_delivery.test.sql.
+  perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, blog_publication_cancel, blog_publication_queue, claim_classify, claim_evidence_request_upload, claim_revoke, claim_verify, communication_record_consent, communication_secret_status, communication_set_primary_number, communication_update_conversation, content_delegation_configure, content_delegation_configure_edits, content_delegation_exclude, content_delegation_include, content_draft_approve, content_draft_regenerate, content_draft_request, crm_confirm_delivery_test, crm_inquiry_add_note, crm_inquiry_set_status, crm_notification_block_reason, crm_record_notification_consent, crm_set_sms_alerts, crm_set_sms_sender, is_team, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, publisher_set_account_enabled, publisher_set_gbp_transport, publisher_unbind_account, review_queue, secret_present, social_history_set_learning, social_history_style_review, social_post_approve_and_schedule, social_post_readiness, social_post_set_no_image_reason among security-definer functions',
     (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
      where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
        and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'blog_publication_cancel', 'blog_publication_queue', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'content_delegation_configure', 'content_delegation_configure_edits', 'content_delegation_exclude', 'content_delegation_include', 'content_draft_approve', 'content_draft_regenerate', 'content_draft_request', 'crm_confirm_delivery_test', 'crm_inquiry_add_note', 'crm_inquiry_set_status', 'crm_notification_block_reason', 'crm_record_notification_consent', 'crm_set_sms_alerts', 'crm_set_sms_sender', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'publisher_set_account_enabled', 'publisher_set_gbp_transport', 'publisher_unbind_account', 'secret_present', 'social_history_set_learning', 'social_history_style_review', 'social_post_readiness']);
+    = array['authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'blog_publication_cancel', 'blog_publication_queue', 'claim_classify', 'claim_evidence_request_upload', 'claim_revoke', 'claim_verify', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'content_delegation_configure', 'content_delegation_configure_edits', 'content_delegation_exclude', 'content_delegation_include', 'content_draft_approve', 'content_draft_regenerate', 'content_draft_request', 'crm_confirm_delivery_test', 'crm_inquiry_add_note', 'crm_inquiry_set_status', 'crm_notification_block_reason', 'crm_record_notification_consent', 'crm_set_sms_alerts', 'crm_set_sms_sender', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'publisher_set_account_enabled', 'publisher_set_gbp_transport', 'publisher_unbind_account', 'review_queue', 'secret_present', 'social_history_set_learning', 'social_history_style_review', 'social_post_approve_and_schedule', 'social_post_readiness', 'social_post_set_no_image_reason']);
 
 
-  -- portal_client and portal_site are simple views, so Postgres would let a
-  -- write through them (as the owner, bypassing RLS) if a grant allowed it.
-  -- The grants in A3 are what stop that; this records why they matter.
-  perform t.ok('A8 portal_client / portal_site are auto-updatable, so the SELECT-only grant is load-bearing',
-    pg_relation_is_updatable('public.portal_client', false) > 0 and pg_relation_is_updatable('public.portal_site', false) > 0);
+  -- Identity remains a simple view; the scope-wrapped site projection is no
+  -- longer auto-updatable. A3 still pins SELECT-only grants on every view.
+  perform t.ok('A8 identity grant is load-bearing and scoped site is not auto-updatable',
+    pg_relation_is_updatable('public.portal_client', false) > 0 and pg_relation_is_updatable('public.portal_site', false) = 0);
 end $$;
 
 -- ── B. Anonymous caller ─────────────────────────────────────────────────────
@@ -298,7 +300,7 @@ begin
   perform t.ok('D11 portal user cannot call any other security-definer function',
     not exists (select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
       where ns.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
-        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'blog_publication_cancel', 'blog_publication_queue', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'content_delegation_configure', 'content_delegation_configure_edits', 'content_delegation_exclude', 'content_delegation_include', 'content_draft_approve', 'content_draft_regenerate', 'content_draft_request', 'crm_confirm_delivery_test', 'crm_inquiry_add_note', 'crm_inquiry_set_status', 'crm_notification_block_reason', 'crm_record_notification_consent', 'crm_set_sms_alerts', 'crm_set_sms_sender', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'publisher_set_account_enabled', 'publisher_set_gbp_transport', 'publisher_unbind_account', 'secret_present', 'social_history_set_learning', 'social_history_style_review', 'social_post_readiness')
+        and p.proname not in ('authority_decide', 'authority_draft_start', 'authority_lock_opportunity', 'billing_livemode', 'blog_publication_cancel', 'blog_publication_queue', 'claim_classify', 'claim_evidence_request_upload', 'claim_revoke', 'claim_verify', 'communication_record_consent', 'communication_secret_status', 'communication_set_primary_number', 'communication_update_conversation', 'content_delegation_configure', 'content_delegation_configure_edits', 'content_delegation_exclude', 'content_delegation_include', 'content_draft_approve', 'content_draft_regenerate', 'content_draft_request', 'crm_confirm_delivery_test', 'crm_inquiry_add_note', 'crm_inquiry_set_status', 'crm_notification_block_reason', 'crm_record_notification_consent', 'crm_set_sms_alerts', 'crm_set_sms_sender', 'is_team', 'portal_billing_summary_row', 'portal_client_id', 'portal_entitlement_rows', 'portal_seen', 'publisher_set_account_enabled', 'publisher_set_gbp_transport', 'publisher_unbind_account', 'review_queue', 'secret_present', 'social_history_set_learning', 'social_history_style_review', 'social_post_approve_and_schedule', 'social_post_readiness', 'social_post_set_no_image_reason')
 
         and has_function_privilege(p.oid, 'execute')));
   perform t.ok('D11k the delegation policy doors (20261019230000) refuse a portal user',
@@ -306,6 +308,15 @@ begin
     and t.try($q$select content_delegation_exclude('00000000-0000-4000-b000-00000000000a', null, 'x')$q$) like '42501%'
     -- 20261020200000: the edit switch too.
     and t.try($q$select content_delegation_configure_edits(true)$q$) like '42501%');
+  perform t.ok('D11m the claim verification writers and the evidence upload request (20261104200000) refuse a portal user',
+    t.try('select claim_classify(gen_random_uuid(), ''offering'', ''x'')') = '42501'
+    and t.try('select claim_evidence_request_upload(gen_random_uuid(), repeat(''a'', 64), 1, ''application/pdf'')') = '42501'
+    and t.try('select claim_verify(gen_random_uuid(), ''verify'', ''client_contract'', ''x'', current_date, ''x'')') = '42501'
+    and t.try('select claim_revoke(gen_random_uuid(), ''x reason'', ''x'')') = '42501');
+  perform t.ok('D11n the review queue, Approve & schedule and the no-image reason (20261116150000) refuse a portal user',
+    t.try('select review_queue(null)') = '42501'
+    and t.try('select social_post_approve_and_schedule(gen_random_uuid(), now(), now() + interval ''1 day'')') = '42501'
+    and t.try('select social_post_set_no_image_reason(gen_random_uuid(), ''none'')') = '42501');
   perform t.ok('D11b social_post_readiness refuses a portal user',
     t.try('select social_post_readiness(gen_random_uuid())') = '42501');
   perform t.ok('D11c authority_decide refuses a portal user',

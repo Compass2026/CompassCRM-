@@ -80,6 +80,9 @@ for f in "${MIGRATIONS[@]}" ${LATE[@]+"${LATE[@]}"}; do
 done
 
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/fixtures.sql" -o /dev/null
+# Legacy suites run with the recorded core-keyword exception for their fictional
+# clients; the two core suites disable it and test the strict rule.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/core_keyword_legacy_exempt.sql" -o /dev/null
 # Billing rows for the portal clients while the generic portal checks run
 # (0062's views are portal views too), removed straight after.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_fixtures.sql" -o /dev/null
@@ -87,6 +90,7 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billin
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth_portal_fixtures.sql" -o /dev/null
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_access.test.sql"
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_leads_only.test.sql"
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/client_growth_portal_teardown.sql" -o /dev/null
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/crm_lite_portal_teardown.sql" -o /dev/null
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/portal_billing_teardown.sql" -o /dev/null
@@ -108,6 +112,10 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/reporting_con
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/social_post_review.test.sql"
 # 0046: Business Profile publisher schema (runs, outcomes, reminder cycles).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/publisher_runs.test.sql"
+# 20261116150000: review to delivery (the review queue, Approve & schedule with
+# a bound time and destination, past / held / blocked refusals, reject →
+# revise → fresh review with unchanged content refused, kept history).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/review_to_delivery.test.sql"
 # 0047: AI Drafter write boundary and the Client Intelligence loader. Switches
 # between the worker (postgres), the post-drafter function (authenticator +
 # service_role) and a person (authenticator + authenticated).
@@ -266,6 +274,8 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_draft_cla
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/brand_workspaces.test.sql"
 # New GBP drafts pin the existing client binding before human review.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/drafter_gbp_destination.test.sql"
+# Several Business Profile locations per client; slots and posts never redirected.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/gbp_location_per_post.test.sql"
 
 # Agency review ledger: human actor, versions, stage gates and portal isolation.
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/agency_rollout.test.sql"
@@ -284,10 +294,31 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_delegation_
 # 20261020200000: delegated post edits (withdraw → replace media → resubmit
 # under a receipt; identity bound to the executing transaction; never approves).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edits.test.sql"
+# 20261029180000: delegated copy edits (withdraw → set copy and claims →
+# resubmit under a receipt; the copy checked clean; never approves).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edit_copy.test.sql"
+# 20261117010000: pending changes (an Executive OS request keeps its post out
+# of Ready and unapprovable until applied, rejected, withdrawn or superseded;
+# an approved revision closes its own hold) and revising a rejected post
+# through the delegated door for a fresh review.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/review_pending_changes.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_standard.test.sql"
+# Weekly Facebook / GBP slots: readiness reasons, forward-only queue, one task
+# per slot, binding claim, governed link, launching readiness (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_social_slots.test.sql"
+# 20261028170000: keyword owner page vs related service, on the fixture the
+# TypeScript resolver is tested against too (tests/keyword-owner.test.mjs).
+psql_as supabase_admin -d sandbox -v owner_cases="$(cat "$ROOT/tests/fixtures/keyword-owner-cases.json")" \
+  -f "$ROOT/supabase/tests/sandbox/keyword_owner_resolver.test.sql"
+# ...and its rollback (containment, down script, release), run and undone.
+# Some ERROR lines are expected there: the refusals it tests.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/keyword_owner_resolver_rollback.test.sql"
+# 20261029030000: keyword_owner's index and slot readiness judged per site;
+# the rows are compared with the previous definition (run and undone).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/readiness_scale.test.sql"
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid.test.sql"
 
 # Map-tracking-only clients skip every onboarding trigger; full clients keep them.
@@ -301,3 +332,34 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/map_grid_market_cen
 # dated evidence, the correction queue, admin-approved manual fulfillment
 # with cash and prepaid credits apart, team-only access (rolled back).
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/citations.test.sql"
+# New Client Onboarding v1.0 (20261029170000): legacy BrightLocal / Metricool
+# tasks relabelled only while open (replay hooks), future templates,
+# idempotent enrollment, client / site / location isolation, evidence and
+# sign-off rules, the Citation Tracker gate, team-only access (rolled back).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/client_onboarding.test.sql"
+# 20261029200000: site-program readiness (Gate B / Gate C), read-only: the
+# place matcher and its seed, per-site gates, text-only places, client-wide
+# evidence, isolation, access, no writes, BHG-shaped timing, rollback (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/site_program_readiness.test.sql" -o /dev/null
+# 20261030180000: the weekly delivery standard (5 Facebook / 5 GBP / 3 blogs
+# per website per Chicago week): adoption from a future Monday, partial first
+# week, five-week months, month-boundary and DST weeks, two locations per
+# site, three brand sites on one location (one GBP post per location per day,
+# over-capacity flagged in readiness), v1 reconciliation without double
+# credit, monthly clients unchanged, the rollback (rolled back).
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_delivery_standard.test.sql" -o /dev/null
+# 20261030190000: the Authority engine's Core 50 scope, read-only: grounding,
+# per-purpose owner verdicts, places, three brand sites, scoped input, the
+# fingerprint's core section, access, no writes, BHG-shaped timing, rollback.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/authority_core_scope.test.sql" -o /dev/null
+# 20261103220000: the claims registry, read-only: buckets, freshness, source
+# classes, contradiction and structured-phone indicators, affected posts and
+# drafts, three brand sites, the column guard (person / function / worker),
+# append-only history, approval hashes unchanged, access, no writes, rollback.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/claim_registry.test.sql" -o /dev/null
+# 20261104200000: controlled claims verification (PR2a): owner authority,
+# SHA-256 evidence registration and storage immutability, the decision ledger
+# and projection guard (owner / second admin / member / function / worker /
+# anon), evidence rules, BHG scope, registry integrity, audit, kept history,
+# approval hashes unchanged, client delete, down then up.
+psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/claim_verification.test.sql" -o /dev/null

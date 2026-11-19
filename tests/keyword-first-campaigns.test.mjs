@@ -43,13 +43,23 @@ test("the same normalized owner URL may be shared by service, keyword and page g
   assert.equal(result.ok, true, JSON.stringify(result.refusals));
 });
 
-test("a supporting keyword cannot bypass its primary keyword's owner conflict", () => {
+test("an owner conflict refuses the keyword it is on, not every keyword of the same service", () => {
+  // 20261028170000: the owner is the keyword's own explicit claim. A service's
+  // primary keyword no longer co-owns every keyword of that service (that rule
+  // blocked whole services behind one broken page group).
   const input = lucas();
   input.pageGroups.push({ ...input.pageGroups[0], id: "competing", target_url: `${PAGE}-other` });
+  const core = buildBrief(input, TARGET);
+  assert.equal(core.ok, false);
+  assert.ok(core.refusals.some((r) => r.code === "keyword_owner_conflict"), JSON.stringify(core.refusals));
   const supporting = input.keywords[1];
-  const result = buildBrief(input, { ...TARGET, keywordId: supporting.id, intent: supporting.intent });
-  assert.equal(result.ok, false);
-  assert.ok(result.refusals.some((r) => r.code === "keyword_owner_conflict"));
+  const own = buildBrief(input, { ...TARGET, keywordId: supporting.id, intent: supporting.intent });
+  assert.ok(!own.ok ? !own.refusals.some((r) => r.code === "keyword_owner_conflict") : true, JSON.stringify(own));
+  // An equivalent row (same text) on another page still conflicts.
+  input.keywords.push({ ...supporting, id: "dup-row", keyword: `  ${supporting.keyword.toUpperCase()} `, target_url: `${PAGE}-other` });
+  const dup = buildBrief(input, { ...TARGET, keywordId: supporting.id, intent: supporting.intent });
+  assert.equal(dup.ok, false);
+  assert.ok(dup.refusals.some((r) => r.code === "keyword_owner_conflict"), JSON.stringify(dup.refusals));
 });
 
 const base = {

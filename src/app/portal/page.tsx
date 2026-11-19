@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { propertySearchTotals } from "@/lib/search-totals";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import {
 
 export default async function PortalOverviewPage() {
   const supabase = await createClient();
+  await requirePortalReportingAccess(supabase);
 
   const [
     { data: client },

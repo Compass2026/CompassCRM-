@@ -3,7 +3,7 @@ import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { EMBEDDED_FONTS } from "../../supabase/functions/creative-engine/fonts.generated";
-import { agreementPrice, agreementTermBlocks, serviceLine, type Contract } from "./agreements";
+import { agreementPrice, agreementTermBlocks, MANUAL_AGREEMENT_PAYMENT, serviceLine, type Contract } from "./agreements";
 
 // Embedded OFL fonts also used by the Creative Engine. The exact snapshot,
 // both signatures, and the signing evidence become an immutable PDF artifact.
@@ -125,7 +125,7 @@ export async function buildAgreementPdf(c: Contract) {
     8,
   );
   para(
-    "Payment authorization is collected separately by the payment processor. This document is an electronically signed record, not a certificate-based digital signature.",
+    `${s.scope.plan.collection === "external" ? MANUAL_AGREEMENT_PAYMENT : "Payment authorization is collected separately by the payment processor."} This document is an electronically signed record, not a certificate-based digital signature.`,
     8,
   );
   const pages = doc.getPages();

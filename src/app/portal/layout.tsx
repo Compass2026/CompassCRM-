@@ -1,3 +1,5 @@
+import { WorkspaceShell } from "@/components/client-workspace/shell";
+import { hasPortalReportingAccess } from "@/lib/portal-access";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,10 @@ export default async function PortalLayout({
 
   // So the Overview tab can show who has actually signed in.
   await supabase.rpc("portal_seen");
+
+  if (!(await hasPortalReportingAccess(supabase))) {
+    return <WorkspaceShell businessName={client.name || "Your business"}>{children}</WorkspaceShell>;
+  }
 
   // Billing appears once the client has an agreement (plan) with Compass.
   const { data: billing } = await supabase

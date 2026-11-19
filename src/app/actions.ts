@@ -34,7 +34,7 @@ function verticalSlug(form: FormData): string | null {
 
 function businessType(form: FormData): Enums["business_type"] | null {
   const v = str(form, "business_type");
-  return v === "storefront" || v === "service_area" ? v : null;
+  return v === "storefront" || v === "service_area" || v === "ecommerce" ? v : null;
 }
 
 // The intake. Everything the Foundation worker reads on its first run is

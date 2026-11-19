@@ -138,7 +138,7 @@ export function createBillingStore(supabase: Client): BillingStore {
         supabase.from("team_members").select("id, role").eq("auth_user_id", data.user.id).maybeSingle());
       if (m) return { kind: "team", memberId: m.id, role: m.role === "admin" ? "admin" : "member" };
       const p = await maybe<{ id: string; client_id: string }>(
-        supabase.from("portal_users").select("id, client_id").eq("auth_user_id", data.user.id).eq("is_active", true).maybeSingle());
+        supabase.from("portal_users").select("id, client_id").eq("auth_user_id", data.user.id).eq("is_active", true).eq("access_scope", "full").maybeSingle());
       return p ? { kind: "portal", portalUserId: p.id, clientId: p.client_id } : null;
     },
 

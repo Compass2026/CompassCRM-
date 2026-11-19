@@ -14,9 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-// Settings › Publisher › Business Profile through Zernio. One row per piloted
-// client (and any client with a location): its bound Business Profile
-// location, if any. Verify asks the publisher what the publish key sees
+// Settings › Publisher › Business Profile through Zernio. One row per bound
+// Business Profile location of each piloted client (a client may have
+// several; each post names its own), plus a row to bind another location. Verify asks the publisher what the publish key sees
 // (accounts and their locations; the key is never shown). Binding names one
 // client and one location, is re-read in Zernio first and never enables; only
 // an admin switches a bound location on or off, or removes the binding.
@@ -33,6 +33,8 @@ export type ZernioGbpRow = {
   health: string | null;
   // The client's explicit Business Profile transport.
   transport: "google" | "zernio";
+  // The row that binds an additional location for a client that has one.
+  another?: boolean;
 };
 
 function Status({ state }: { state: ActionState }) {
@@ -46,12 +48,12 @@ function Row({ row, admin }: { row: ZernioGbpRow; admin: boolean }) {
   const [unbindState, unbind, unbinding] = useActionState<ActionState, FormData>(unbindZernioAccountAction, null);
   const [transportState, setTransport, settingTransport] = useActionState<ActionState, FormData>(setGbpTransportAction, null);
   return (
-    <li className="space-y-2 rounded-md border p-3" data-gbp-row={row.client_id}>
+    <li className="space-y-2 rounded-md border p-3" data-gbp-row={row.client_id} data-gbp-location={row.location_id ?? (row.another ? "another" : "")}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{row.client}</span>
         {row.location_id
           ? <span className="text-xs text-muted-foreground">Location {row.location_name ?? "?"} (<span className="font-mono">{row.location_id}</span>)</span>
-          : <span className="text-xs text-muted-foreground">No Business Profile location bound.</span>}
+          : <span className="text-xs text-muted-foreground">{row.another ? "Bind another Business Profile location for this client." : "No Business Profile location bound."}</span>}
         <Badge variant="outline" data-gbp-transport>{row.transport === "zernio" ? "Through Zernio only" : "Direct to Google"}</Badge>
         {row.account_id
           ? <Badge variant="outline" className={row.enabled ? "bg-green-100 text-green-800" : ""}>{row.enabled ? "Publishing on" : "Bound, publishing off"}</Badge>
@@ -167,7 +169,7 @@ export function ZernioGbpCard({ rows, admin, keyPresent }: { rows: ZernioGbpRow[
       <Seen state={seen} />
       {rows.length === 0
         ? <p className="text-xs text-muted-foreground">No client is on the pilot list or has a Business Profile location bound.</p>
-        : <ul className="space-y-2">{rows.map((r) => <Row key={r.client_id} row={r} admin={admin} />)}</ul>}
+        : <ul className="space-y-2">{rows.map((r) => <Row key={`${r.client_id}:${r.location_id ?? "new"}`} row={r} admin={admin} />)}</ul>}
       <p className="text-xs text-muted-foreground">
         Binding a location moves the client to Zernio: its Business Profile posts go through Zernio only, pinned to that
         location, never directly to Google, and only when the publisher is on, the client is piloted and the location is

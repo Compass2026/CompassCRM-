@@ -182,8 +182,9 @@ export function briefConflicts(s: AuthorityState, brief: Brief): AuthorityConfli
   if (o.keyword_id !== (t.keyword?.id ?? null)) mismatch.push("keyword");
   if ((o.opportunity?.target?.cta ?? null) !== t.cta.type) mismatch.push("button");
   if (t.post_type !== "standard" || t.offer) mismatch.push("post type");
-  if (o.target_path !== normPath(t.service?.page_url ?? null, s.latest_run?.site ?? null)) {
-    mismatch.push(`page (${o.target_path ?? "none"} vs ${t.service?.page_url ?? "none"})`);
+  const page = t.owner_page?.display_url ?? t.service?.page_url ?? null;
+  if (o.target_path !== normPath(page, s.latest_run?.site ?? null)) {
+    mismatch.push(`page (${o.target_path ?? "none"} vs ${page ?? "none"})`);
   }
   if (mismatch.length) {
     out.push({ code: "target_mismatch", message: `The Drafter's own target differs from the Authority opportunity: ${mismatch.join(", ")}.` });

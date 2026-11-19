@@ -10,6 +10,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Compass Client Platform
 
+## Client calling and summaries
+
+See `docs/client-calling-rollout.md`. Calling, consent-based recordings,
+Twilio Conversation Intelligence, and Resend summaries are configured per
+client, with service-only tables and authenticated playback. The additive
+`20261102231538_client_call_intelligence.sql` migration enables no client.
+Deploy the phone, voice webhook, email webhook, and call worker together;
+register the worker cron after deployment. Live audio, caller ID, privacy,
+and summary delivery require a controlled pilot test before broader rollout.
+
 ## Agency rollout reviews (October 14, 2026)
 
 See `docs/agency-rollout.md`. The team-only append-only review ledger keeps
@@ -17,6 +27,183 @@ accepted stage separate from current health. No client stage is inferred from
 setup counts; every brand and the parent/shared scope require their own review.
 Scope changes require renewed verification. No publisher, consent, billing,
 portal, or worker activation is part of a rollout review.
+
+## New Client Onboarding v1.0 (October 29, 2026; `20261029170000` written, **not applied**)
+
+See `docs/client-onboarding.md`. One reusable checklist per client / site /
+business location (`client_onboarding_items`, standard in `onboarding_items`),
+shown on the client's Onboarding tab and as one Control Center check. Items
+point at existing records (pipeline task keys, Citation Tracker listings,
+GSC / GA4 imports, Zernio bindings, sites); those are signals, never a
+sign-off. Nothing is complete by omission: `scope_sites` / `scope_locations`
+are decisions and `client_onboarding_gaps` keeps a client incomplete until
+every site and location has its rows (or "none" is decided with a reason).
+Verified needs a signed-in teammate, every prerequisite done in the same
+site / location (a missing row is never satisfied), and exact evidence:
+GSC / GA4 imports for the site's own host, the location's own named GBP
+profile / the site's own Page (one account credits one location / site).
+Enrollment is idempotent and adds rows only; new full-service clients and
+their later sites / locations are enrolled automatically, map-tracking and
+existing clients are not. Future templates: Metricool → `zernio_connect`,
+BrightLocal LRT / LSG → `bing_webmaster` / `map_grid_profile`. The migration
+changes no existing task; open legacy tasks are labelled only by the reviewed
+`supabase/deferred/20261029_legacy_task_labels.sql`. Apply the migration
+before deploying the code.
+
+## Controlled Claims Verification, PR2a (P1.1b, November 4, 2026; `20261104200000` applied November 6, 2026; `claim-evidence` deployed November 6, 2026)
+
+Released Nov 6 2026 (PR #220, merge `8724e6b`): `docs/claims-verification-rollout.md`
+has the pins, every step and the smoke-test results. See `docs/claim-registry.md` §Verification and
+`docs/proposals/pr2-controlled-claims-verification.md` (ChatGPT architecture
+review, Executive OS 11454716).
+
+- **Only the verification owner decides.** That is Tom, in
+  `claim_verification_authorities`, which only a reviewed migration writes;
+  the migration seeds team member `d73e1bf1` if it exists, is an admin and has a
+  sign-in. Not another admin, Claude, an Edge Function, the worker or an
+  Executive OS instruction. `claim_reviewer_authority()` = a human session
+  (`post_caller_is_human()`) + an active owner row + still an admin.
+- **Writers:** `claim_classify`, `claim_verify` (`verify` | `review`) and
+  `claim_revoke`. Each takes the registry's `fingerprint` and `review_id` back,
+  so a stale screen gets `CV409`. **None writes `claims.status`, `claim` or
+  `source`**, so content eligibility, drafting, approval and publishing are
+  unchanged; the migration hash-pins every other reader of `claims`. Verifying
+  an `unverified` claim is refused; confirming it is PR2b.
+- **The ledger:** `claim_reviews`, append-only, with reviewer, authority, time
+  and txid stamped by trigger, plus a `creative_governance_events` row per
+  decision. The `claims` registry columns plus `review_id` are its projection:
+  `claims_registry_guard` refuses any change that does not match a review
+  written in this transaction by this caller. **A claim with any review history
+  cannot be deleted** (23001); retire / supersede are PR2b.
+- **Evidence:**
+  - Files are private, content-addressed (`<client>/<sha256>.<ext>`) in the
+    `claim-evidence` bucket, which has a team read policy and no write policy.
+  - The `claim-evidence` Edge Function (team JWT) records the upload request
+    from the caller's own session (`claim_evidence_request_upload`, JWT
+    forwarded; the database stamps the requester), signs a one-time upload,
+    re-hashes the stored bytes and sniffs the type, then calls
+    `claim_evidence_register` with the request. A mismatch is deleted. The
+    register is executable by the **service role**, which every Edge
+    Function holds: byte integrity trusts that key (Re-check hash detects a
+    lie); the uploader never comes from it.
+  - Real Storage: `tests/claim-evidence-storage-integration.mjs` against a
+    nonproduction stack (local Supabase, Nov 5: 12/12).
+  - A registered file is never replaced or deleted (a trigger on
+    `storage.objects`).
+  - Pages and listings count only as uploaded captures (URL + capture date,
+    30 days). A Drive link or live URL is never verification.
+  - Phone claims verify against an approved `citation_locations` row on the
+    claim's own brand site, with its identity version pinned by SHA-256.
+- **Integrity:** registry v2 drops a verified claim to *needs review* when its
+  file, location identity, fingerprint or brand-site set changes, or when its
+  status changes after the verification. A status change needs Tom's fresh
+  review, even if the status is put back.
+- **Hosted Storage:** `claim-evidence` bucket settings (public, limits,
+  versioning, lifecycle) are fixed by a trigger. A registered file can't be
+  archived, marked deleted, re-flagged or duplicated at its name. Registration
+  needs an unversioned private bucket.
+  Verification columns with no ledger entry read `verification_unrecorded`,
+  never verified.
+- **Rollback** refuses once any review or evidence exists (history is kept).
+  Fix forward.
+
+## Claims Registry v1 (P1.1a, November 3, 2026; `20261103220000` applied November 4, 2026)
+
+See `docs/claim-registry.md`. COMPASS-2027-ROADMAP W1: a read-only view of
+each claim on the Intelligence tab.
+
+- **What it shows:** source class and link, who verified it and when, its
+  review interval and due date, the brand site that may use it, the posts and
+  drafts that cite it, and contradiction indicators.
+- **Reuses existing pieces.** `claims` gains nullable `kind`,
+  `verification_method`, `verified_at`, `verified_by`, `review_by` and
+  `superseded_by`, all empty (no backfill). History goes to the existing
+  `creative_governance_events` with `subject_type = 'claim'`.
+- **Changes no gate.** Citable is still "confirmed, or sourced with a
+  source". The registry reports this rule as `legacy_usable`. The migration
+  hashes every reader of `claims` before and after and refuses to commit if
+  any changed.
+- **`claim_registry(client)`:** STABLE, security invoker, team only. Each
+  claim falls in one bucket (superseded / unverified / missing_source /
+  stale / needs_review / due / verified).
+  - Nothing is verified until PR2 classifies and verifies it by a method
+    authoritative for its kind (`claim_review_intervals`, ChatGPT D1 / D2).
+  - A URL alone never verifies a claim.
+- **The new columns were locked until PR2** (`claims_registry_guard`,
+  ChatGPT review `42aca6fb`): no signed-in teammate, Edge Function, worker or
+  PostgREST caller may set them (42501); only a superuser session can. PR2a
+  (`20261104200000`, above) replaces the lock with the owner's writers.
+  Citable under current rules (`legacy_usable`) is reported apart from
+  independently verified (`verification_state`).
+- **Indicators only:** an 8-character id in another claim's note is a
+  tentative `supersession_mentioned`. A phone matching an approved
+  `citation_locations` number (active, `approved_at` and `approved_by` set) is
+  that location's; any other number is only a potential mismatch.
+- **BHG:** one program per brand workspace (`claim_ids`). Shared and
+  unassigned claims are labelled. A draft workspace's counts are null, never
+  0.
+
+## Core 50-aware Authority input (P1.3, October 30, 2026; `20261030190000` written, **not applied**; engine `authority-v1.5` not deployed)
+
+See `docs/authority-core-scope.md`. Authority discovery reads only each site
+program's approved Core 50.
+
+- **`authority_core_scope(client)`** returns per site the approved list (id,
+  version, sorted ids), or `proposed_only` / `missing`, and every keyword the
+  list grounds (`core_keyword_grounding()`), with three verdicts:
+  `keyword_owner()` per purpose, and the places its text names.
+- **`authority_input_scoped(client)`** is `authority_input()` plus
+  `authority.core`; `authority-run` reads it. `authority_input()` itself is
+  unchanged.
+- **The engine fails closed:**
+  - An off-list, other-site, held, unverified or text-only-place keyword is
+    never a Ready target. It is blocked with its code.
+  - A site with no approved list gets one `core_list:` decision, never the
+    full inventory.
+  - Opportunity keys are unchanged, so re-runs update rows; history is
+    untouched.
+  - Every keyword-targeted opportunity carries a `core` receipt.
+- **`authority_fingerprint()`** gains a `core` section (patched in place on
+  its md5-pinned 0048 definition).
+- **Deploy order:** apply the migration first, then deploy `authority-run`.
+  Runs are a separate authorization.
+
+## Site-program readiness, Gate B / Gate C (October 29, 2026; `20261029200000` written, **not applied**)
+
+See `docs/site-program-readiness.md`. `site_program_readiness(client)` is a
+read-only report, one entry per site program:
+
+- **Gate B (Strategy Ready):** an approved site Core 50, owners per
+  `keyword_owner()`, and places tied to markets.
+- **Gate C (Content Ready):** evidence for safe drafting, never permission
+  to publish.
+- **Properties:** STABLE and security invoker. Teammates only (42501
+  otherwise). Approval is read from `status` / `approved_at`, never from
+  `source_ref`. Unknown figures are null, never 0.
+- **Places in keyword text:** these are read in SQL (`core_places_in` over
+  `place_names`, loaded by the data step `supabase/seeds/place-names-v1.sql`).
+  - A place named only in the text is never green: an unrecorded market is
+    blocked, and a recorded market without `market_id` / `city` is not
+    verified.
+  - Unless the reference is place-names-v1 exactly (count and row digest
+    pinned in `place_reference_status()`), every keyword is
+    `geography_unassessed`. The seed is all or nothing.
+- **Claims and `brand_assets` carry no site:** for a multi-brand client they
+  are reported with scope `client`, and Gate C cannot be ready on them.
+  Missing own-work proof is `limited`, not blocked.
+- **Held offerings in existing content:** counted by
+  `promotion_hold_conflict_counts()`, a team-readable twin of
+  `promotion_hold_conflicts()`.
+  - It inlines the two helpers kept from `authenticated`; their grants are
+    unchanged.
+  - The sandbox proves the counts equal, and pins the three definitions'
+    md5s.
+  - Known conflicts make Gate C limited; unreadable ones make it not verified.
+- **Not per-draft gates:** Gate B scores whole-site strategy completeness.
+  Each draft is still decided by its own keyword and content gates.
+- **Ownership:** it changes no existing gate. Slot, channel and destination
+  readiness stay with the Authority rollout (`social_slot_readiness`).
+- **Receipt:** `scripts/site-program-readiness.mjs`.
 
 ## Client progress and backlinks (October 12, 2026)
 
@@ -173,7 +360,13 @@ Both are idempotent: natural-key unique indexes on `rank_snapshots`,
   every 20 minutes, a no-op when nothing is ready) reads `tasks_ready`,
   fetches each result, writes organic + map-pack positions to
   `rank_snapshots` with `source = 'dataforseo'` and `recorded_at` = the
-  run's start (the client's site host or business name identifies "us"),
+  run's start (the keyword's own website identifies "us": the client's one
+  site, or for a multi-brand client the brand site owning the keyword's
+  service — `supabase/functions/_shared/rank-site.ts`, Oct 27 2026; the
+  host judged against is stored on `rank_snapshots.site_host`, and a
+  keyword whose site cannot be resolved is neither posted nor recorded but
+  named in the run's error; the business or brand name still counts in the
+  map pack),
   stamps `keywords.last_checked`, completes the run once every posted task
   has answered and recomputes the City Index; a run still open after three
   hours is marked failed with the shortfall. **Locations:** every
@@ -925,6 +1118,228 @@ and the per-site survey in `docs/website-updates.md`.
   Since Sept 20 the side-branch name for a build parked next to someone
   else's site is `compass/foundation-build`.
 
+## Weekly Facebook and Business Profile drafts (Oct 27 2026)
+
+Migration `20261027191343_weekly_social_slots.sql` (sandbox suite
+`weekly_social_slots.test.sql`). The monthly delivery standard (since superseded by the weekly
+standard; see `docs/delivery-standard.md`) planned 8 Facebook + 8 GBP posts per site; until this, nothing drafted them.
+
+- **Wednesday beat** (`create_weekly_blog_tasks`, unchanged cron): besides
+  the blog slots, `queue_standard_social_tasks()` opens one CLAUDE task
+  keyed `social_slot:<plan item>` per standard Facebook / GBP slot dated
+  this week that `social_slot_readiness()` calls ready, and fires the worker
+  once per client. A unique index makes a second task per slot impossible.
+  Forward only: slots before this week are never queued.
+- **Ready** = client active or launching, slot not held / linked / queued,
+  brand approved (the slot's brand site for multi-brand clients, else the
+  board), destination bound through the publisher (Facebook: the site's own
+  Page, never a sister brand's; GBP: zernio transport and exactly one
+  verified location, shared by every brand of the client), and an active
+  keyword with a recorded intent, an approved service and an owner page.
+  Anything else is skipped with the first reason, logged in
+  `delivery_queue_log` (team read-only). The keyword check is judged once
+  per site, over the site's own approved list and the supporting terms
+  naming one of its keywords (`20261029030000`; same answers, proven
+  against the previous definition), and `keyword_owner`'s same-text lookup
+  uses `keywords_client_norm_kw`. At BHG's scale (3 × 50 plus supporting
+  terms) a week's readiness went from about 42 s to well under a second.
+- **Core keyword list** (Tom, Oct 27: every program derives from its
+  approved core 50, **per site**). `core_keyword_lists` holds versioned
+  lists per site program (`brand_workspace_id`: each brand site of a
+  multi-brand client — BHG has three — else the client): proposed →
+  approved only by a signed-in teammate (Keywords tab › Core keyword list)
+  and only with **exactly 50 valid keywords** (active, intent recorded, a
+  service of that site; judged at approval, `core_list_incomplete`
+  otherwise — an incomplete list stays a proposal). Never edited or
+  deleted; a new approval supersedes the old. A long-tail keyword counts
+  only through `keywords.core_parent_keyword_id`. Approving a list sets
+  `is_tracked` to the union of the client's approved site lists
+  (`normalize_tracked_keywords` keeps the 0033 top-50 rule only for
+  clients with none); `core_keyword_site_coverage` reports per site.
+  Readers judge each organic row against its keyword's own website
+  (`keyword_site_hosts` / `keyword_rank_state`, inlined in the ranking
+  views and used by the City Index): a sister brand's page is
+  `third_party`, and an older multi-brand row (no `site_host`, judged
+  against "the first site") is `unverified` unless it shows a page on the
+  keyword's own site. No stored row is rewritten.
+  Proposals are data steps (`supabase/seeds/core-keyword-lists-v1-proposed.sql`,
+  `bhg-core-keyword-lists-v1-proposed.sql`), not approvals.
+- **No fail-open.** Every content path is gated, whoever writes it: the
+  weekly queue (per site: one site's missing list never stops its sister),
+  claim and link, `drafter_write`, `content_draft_open_weekly`, any social
+  post or content draft (blog or page) entering review **or revised while
+  in review** (keyword, service, destination, plan item), and every
+  `page_rewrite` / `page_added` / `blog_post` change_log row, which must
+  name its `sites` row (`object_type 'site'`), the site's program
+  (`client_brand_workspaces.blog_site_id`) and `after.keyword_id`, with
+  `after.url` on that site. No approved list, or a revoked one → refused.
+  `core_keyword_links` records keyword, list and version for each entry
+  and each revision. The only bypass is a recorded exception
+  (`core_keyword_exemptions`, granted by a signed-in team admin with a
+  reason; production has none).
+- **Location markets.** `gbp_location_markets` says which city keywords a
+  Business Profile location takes (`office` / `service_area` / `all` for a
+  shared profile). A city keyword posted to a location must be one of its
+  markets (`market_not_applicable`); a client with a single verified
+  location and no rows is unaffected. Since Oct 31 2026 the only row is
+  Logic's Wichita office (Tom's confirmation; the seed's BHG row is not
+  applied). post-drafter v9 also limits a Business Profile brief's approved
+  places to its location's `office` / `service_area` markets, so the copy
+  names no other city (the linter refuses one); an `all` profile, a
+  location with no rows, Facebook and blog briefs keep the client's places.
+  The brief also refuses a city keyword outside the location's markets
+  (`market_not_applicable`) and, for a client with several offices,
+  locations or verified profiles, a profile with no recorded market
+  (`location_market_unmapped`) instead of offering it every city.
+  The rows take effect on insert (there is no proposed state), so
+  `supabase/seeds/gbp-location-markets-v1-after-scope-confirmation.sql`
+  (Logic Wichita office, BHG shared HQ all) refuses to run until
+  `compass.market_scope_confirmed` names Tom's confirmation; it is not one
+  of the keyword proposal seeds.
+- **Worker:** one token per run (`worker-routine:<run id>`, reused on
+  retries) → `social_slot_claim` (the binding one-hour claim, same door as
+  `authority_draft_claim`; refuses a slot no longer eligible) →
+  `post-drafter` brief / check / submit → `social_slot_link`, which
+  re-checks eligibility, accepts only the governed in-review draft written
+  for that task at the slot's destination and brand on a current core
+  keyword, fills the slot's keyword / service / intent / owner page and
+  closes the task. The skill's "Weekly social slot" playbook.
+- **Launching clients:** readiness, not lifecycle. A launching client
+  whose brand is approved now gets its standard blog tasks (from this week
+  on, `queue_standard_blog_tasks_site`, so no backlog) and its social
+  tasks. Lifecycle and publishing are untouched: drafts wait for review,
+  and the publisher still needs Tom's approval, the account switch and the
+  pilot list.
+- **BHG:** three brand sites share one GBP location; each site's GBP slots
+  are queued, and a task whose location has other open slots that day
+  tells the worker to choose a different service and topic.
+
+## Weekly delivery standard (Oct 30 2026; `20261030180000` applied)
+
+**Current standard (Tom, Nov 6 2026):** per eligible website 5 Facebook,
+5 GBP and 3 blogs a week plus one webpage refresh a month; BHG's shared GBP
+gets 7 posts a week in total, rotating among its three programs; Medic
+Wisdom, Resilient and Shewmaker are deferred. The operating rules (read the
+CRM first, foundation corrections before drafting, preserve existing work,
+in review is not published) are in `docs/delivery-standard.md` § Current
+standard. The monthly 8 / 8 / 8 standard and the open BHG question below are
+**superseded** and kept as history. Lucas and Logic are adopted from Nov 2.
+
+
+Tom (Executive OS decision `0b407d66-de7d-4086-b6de-013f793bcbd4`): per
+website per week 5 Facebook, 5 GBP, 3 blogs; 1 page refresh a month.
+Standard v2 (`cadence = 'weekly'`); rules, dry-run numbers
+and open decisions in `docs/delivery-standard.md`; sandbox suite
+`weekly_delivery_standard.test.sql`.
+
+- **Adoption is data:** `client_weekly_delivery_standards` (start date →
+  `effective_week`, the first Monday on or after it; never in the past;
+  needs the monthly adoption; append-only). The migration adopts nobody and
+  opens no slot. Weeks are Monday–Sunday America/Chicago; an item counts in
+  the week of its own date (published → publication date).
+- **First week starts at the next Monday, never pro-rated;** a week planned
+  late gets only the days left, and a rerun later in the week adds nothing
+  back. No catch-up.
+- **GBP collision rule:** at most `gbp_daily_location_cap` (1) post per
+  location per Chicago day. Over-capacity slots are opened and flagged by
+  `social_slot_readiness` (`Over capacity: …`), never dropped, never queued.
+  Three sites on one location: 7 of 15 fit a week — that client's cadence is an
+  open decision for Tom; 7 does not meet the 15 he asked for.
+- **Reconciliation:** v1 slots with work attached stay and count once by
+  date (the Oct 29 pilots in the week of Oct 26); unattached v1 slots from
+  the first weekly week are retired (blocked, `retired_at`, old hold kept),
+  never deleted. `delivery_week_report()` is the read-only view.
+- **Monthly readers:** `delivery_targets()` sums each week's days into the
+  month for weekly clients (the v1 body is `delivery_targets_monthly`,
+  unchanged for everyone else); the blog gate follows it.
+- **Cron:** new `delivery-standard-week` (Mon 10:00 UTC, weekly clients
+  only: plans this and next week, queues this week's drafts).
+  `delivery-standard-month` / `weekly-blog-posts` keep their definitions;
+  `plan_delivery_month()` plans a weekly client's month week by week plus
+  its monthly page refresh, and the Wednesday beat queues a weekly client's
+  drafts through **next** Sunday so Monday's content is drafted ahead.
+
+## Keyword owner page vs related service (Oct 28 2026; `20261028170000` written, **not applied**)
+
+Every gate used to take a keyword's service and treat `services.page_url`
+as the keyword's page, so a city term owned by its city page, a Home or
+brand term with no service, and a BHG brand-site term with no service were
+refused, and a service's primary keyword co-owned every keyword of that
+service. The migration separates the two:
+
+- **Owner page:** exactly one explicit claim on the keyword: an approved
+  page group naming it (or an equivalent row of the **same site program**)
+  primary, its `target_url`, or the page of an approved service naming it
+  primary. Two different claims are `keyword_owner_conflict`, never a
+  priority order. With no claim, the related service's page; never Home by
+  default. The page group's `page_type` gives the role: service, city, home,
+  brand (`other`), or blog (a published article).
+- **Related service:** `keywords.service_id`, optional; when set, approved
+  and on the same site. A service page owner needs it unless the intent is
+  navigational.
+- **One resolver, two twins:** SQL `keyword_owner(client, program,
+  keyword, purpose)` and TypeScript `authority/keyword-owner.ts`. Both are
+  held to `tests/fixtures/keyword-owner-cases.json` (46 cases: relative
+  paths, aliases, same text on another brand site, same-named cities, wrong
+  site, unapproved service, held market, 404, duplicate owners, no-service
+  Home). Purposes are post, blog, refresh and add (`core_owner_allows`):
+  - Home anchors posts but no new blog.
+  - A reviews page takes commercial and navigational posts.
+  - A refresh rewrites the owner page, never an article.
+- **Evidence it needs:**
+  - `client_service_markets` is organic scope. Offices are backfilled from
+    active physical locations. Anything else is a recorded decision (source
+    and date) or a signed-in teammate's. It is separate from
+    `gbp_location_markets` (publication); a Business Profile post needs
+    both.
+  - `keywords.market_id` is explicit. A bare `keywords.city` resolves only
+    when exactly one market of the site has that name.
+  - `owner_page_checks`: unchecked means `page_not_verified`, and a check
+    older than 45 days counts as unchecked. The `owner-page-check` function
+    (team JWT or cron secret) records `http` verdicts for the pages
+    `owner_page_check_targets` lists (each keyword resolved once since
+    `20261028235000`; BHG's 123 keywords take about 4 s); a host that answers
+    any path with the same page content (its `<main>`, or body, without
+    header / nav / footer, compared in full) is `soft_404`. SPA routes
+    (Show Me Design) are verified by a `rendered` check.
+  - `client_promotion_holds` holds offerings, with the person's words and
+    date. No keyword, core parent, related service, owner page, CTA or
+    copy may promote a held offering. Only a signed-in teammate releases a
+    hold. Phrases match by word stem in any order within a short span
+    (`core_hold_hit` / `holdHit`: "solar panel repairs", "we will monitor
+    your solar system") inside one field, one link address or one JSON
+    string value — never across fields, and never joining a link's
+    address to the words around it (`20261029010000`, after an approved
+    installation article matched across its topic and keyword fields);
+    prose they do not name is the reviewer's to catch. The database checks the copy itself on every forward step —
+    review, approval, scheduling, the publisher's claim, an edit in any of
+    those, a blog release and its claim, a page change, a planner slot —
+    so content written before a hold stops at its next step: refused with
+    the reason, a queued article's claim recorded `blocked`, a slot marked
+    `blocked`. Nothing is deleted or rewritten. `promotion_hold_conflicts
+    (client)` lists what already matches.
+- **Patched:**
+  - eligibility (a 5-argument form with purpose), grounding, the list guard;
+  - the post / draft / change review gates (`cta_not_owner`,
+    `owner_page_mismatch`, `refresh_not_owner`);
+  - drafter_write: the brief must name the database's owner, so a brief
+    from an older drafter is refused;
+  - `social_slot_link` (the slot target is the owner page), readiness;
+  - `client_intelligence_for_content(client, service, keyword)`, which adds
+    `owner_context`;
+  - `content_plan_board`, the planner's Authority path, and the worker
+    skill's Map-first rule.
+- **Deploy order:**
+  1. Apply the migration. Drafting fails closed until step 2: briefs
+     without an owner page are refused.
+  2. Deploy `post-drafter` and `content-drafter` (both pass `p_keyword_id`,
+     which the old loader lacks).
+  3. Deploy `owner-page-check`, and run it per client.
+  4. Record markets and holds as data steps.
+
+  Rollback: redeploy the previous functions, then restore the patched
+  functions from `20261027191343`. Nothing here rewrites existing rows.
+
 ## Reporting worker (Sept 13 2026)
 
 **Nine-area scorecard update (PR #50, app not deployed; 0041 applied Sept 23 as `20260923015843`):** see
@@ -1616,6 +2031,13 @@ Design, gates, endpoints and Lucas state: `docs/zernio-publisher.md`.
   per concept (copy, image). It never approves, schedules or publishes.
   `source-assets` `upload_slot` / `register` file generated graphics into
   private storage as unreviewed `social_post` assets marked non-evidentiary.
+- **Business Profile drafts name their location** (`20261027190935`): a
+  brief reads the client's verified Zernio locations, takes the one
+  `socialAccountId` names (never a Page, an unverified or another client's
+  row), the only one when none is named, and with several refuses until the
+  draft names one. Until the Oct 29 2026 fix `post-drafter` loaded accounts
+  for Facebook briefs only, so a named location was always refused as
+  `social_account_unknown`; the weekly slot pilot drafted with it omitted.
 
 ## Business Profile through Zernio (Oct 11 2026; migration `20261011050000` not yet applied)
 
@@ -2173,6 +2595,15 @@ measured → resubmit for a fresh review, in one transaction under a
 `content_edit_receipts` row. Never approves, schedules or publishes; refuses
 approved, scheduled and published posts. Full design: `docs/delegated-post-edits.md`.
 
+- **Copy edits** (`20261029180000`, content-approvals v4, Oct 29 2026): a second
+  change kind, `replace_copy {copy, claim_ids}`, on the same door. The function
+  lints the copy against a brief rebuilt for the post's own target (the
+  post-drafter's `buildBrief` / `lintDraft`); execute refuses anything not
+  checked clean or not the receipt's copy, and any claim that is not a usable
+  claim of the client, then withdraws, sets the copy, links exactly those
+  claims and resubmits. The authority must list `replace_copy`. Executive OS's
+  `content_revise` needs the matching change before it can be called.
+
 - Identity is the executing receipt in THIS transaction (`content_edit_receipt()`,
   txid-bound, service role) — never a session flag alone. History records
   `actor_kind = 'assistant'` with the receipt and no person; `updated_by` is the
@@ -2180,6 +2611,78 @@ approved, scheduled and published posts. Full design: `docs/delegated-post-edits
 - Policy: `content_delegation_settings.allow_edit` (seeded on; admin-only
   `content_delegation_configure_edits`) plus the existing exclusions; the post's
   channel / service must be inside the authority Executive OS sends.
+
+## Review to delivery (Nov 16 2026; `20261116150000_review_to_delivery.sql`, applied Nov 16)
+
+One review queue and one decision path for Facebook and Business Profile
+posts, on top of 0045's review gate, 0054's creative guard and the delegated
+approval path. Tests: `supabase/tests/sandbox/review_to_delivery.test.sql`
+(sandbox), `tests/review-queue.test.mjs`.
+
+- **`/review`** (`src/app/(app)/review/page.tsx`, `review_queue()`): every
+  client's posts in review, approved, scheduled, publishing, failed and
+  recently published, each with the final copy, the attached images (signed
+  from the private bucket), the destination, the slot date and a proposed
+  publish time (`src/lib/review-queue.ts` `proposeTimes`: the slot if it is
+  still ahead, otherwise the next weekday, one per destination per day).
+  Stages: ready / needs preparation (not grounded, or no image and no
+  `no_image_reason`) / revising / blocked (held client, no account) /
+  approved / scheduled / publishing / failed / published with URL and
+  provider id.
+- **Approve & schedule** (`social_post_approve_and_schedule`) approves and
+  schedules in one transaction. An approval and a schedule made together, or
+  a schedule made under the owner's delegated decision
+  (`compass.delegation_write`), set `approved_publish_at`: moving or
+  unscheduling that post (or a person re-queuing it after a failure) is
+  refused until it is reopened for a fresh review. **Approve only** never
+  schedules; a later separate schedule is a separate decision.
+- Every approval records `approved_destination`; scheduling or the publisher's
+  claim is refused when the account's Page / location binding changed since.
+  Scheduling a past time, and scheduling or claiming a post of a paused /
+  offboarded client, are refused (promotion holds were already enforced).
+- **Reject → revise → fresh review:** a rejection may name the copy, the image
+  (any attached photo, not only a Creative Engine graphic) or both, and
+  records `rejected_copy_hash` / `rejected_media_hash`; resubmitting the same
+  copy or image is refused with the feedback. `social_post_history` keeps
+  every copy change (before/after), rejection, resubmission and a full
+  record of a discarded (deleted) draft, surviving the delete.
+- Existing approvals were kept: approved posts got their current destination
+  as `approved_destination` and no time binding.
+
+### Pending changes (Nov 17 2026; `20261117010000_review_pending_changes.sql`, content-approvals v5)
+
+Tom: "Show 'Ready for final review' only when the displayed copy and image
+are the actual final version." A copy or image change that Executive OS has
+asked Tom to approve is a **hold** (`content_edit_holds`, keyed by the
+Executive OS approval id). Executive OS opens it (content-approvals mode
+`hold`) when it files the request and releases it (`release`: rejected,
+withdrawn or superseded) when Tom rejects it or the operator withdraws or
+supersedes it. Compass closes a hold itself when the approved revision
+executes or is refused, and `stage_media` with `approval_id` closes an
+approved stage's hold.
+
+- While a hold is open the post is under **Needs preparation** with the
+  pending change listed (`review_queue().pending_changes`, the card's amber
+  list), and approving it is refused by `social_posts_ab_pending_change`
+  (every door: Review page, post page, delegated approval).
+- Holds are records: written only by the content-approvals functions, closed
+  once, never deleted (a deleted post takes its holds with it).
+- **A rejected post is revised through the delegated door** too
+  (`content_edit_execute` admits `rejected`): withdraw → change → resubmit for
+  a fresh review; the rejection guards still refuse the same copy or image.
+  `content_review_batch` lists rejected posts with `feedback`,
+  `rejection_category` and `pending_changes`.
+- Tests: `supabase/tests/sandbox/review_pending_changes.test.sql` (RP1–RP10,
+  incl. the rollback), `tests/review-workflow-integration.mjs`
+  (`npm run test:review-workflow`, in CI: a pending change, reject → revise →
+  fresh review, Approve & schedule → the publisher at the approved time →
+  published with the provider's id and URL; only Zernio is fake),
+  `tests/content-edits.test.mjs` (the modes). Rollback:
+  `supabase/rollback/20261117010000_review_pending_changes.down.sql`, then
+  content-approvals v4.
+- Executive OS's side (the hooks that open and release holds, withdrawing /
+  superseding a request, copy edits under a scoped standing policy) is
+  Compass2026/ExecutiveOS `claude/review-workflow-finish`.
 
 ## Known state / open items (as of Sept 13 2026)
 

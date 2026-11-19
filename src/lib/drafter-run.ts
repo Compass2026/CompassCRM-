@@ -35,7 +35,7 @@ type PostNow = { copy: string | null; cta_url: string | null; linkedClaimIds: st
 
 export function drafterSummary(run: DrafterRunRow, post: PostNow): DrafterSummary {
   const lint = (run.lint ?? {}) as { ok?: boolean; warnings?: { code: string; message: string }[] };
-  const target = (run.target ?? {}) as { service?: { page_url?: string | null } | null; cta?: { url?: string | null } | null };
+  const target = (run.target ?? {}) as { owner_page?: { display_url?: string | null } | null; service?: { page_url?: string | null } | null; cta?: { url?: string | null } | null };
   const edited: string[] = [];
   if (run.copy_hash && run.copy_hash !== post.copyHash) edited.push("copy");
   const was = [...run.claim_ids].sort().join(",");
@@ -51,7 +51,7 @@ export function drafterSummary(run: DrafterRunRow, post: PostNow): DrafterSummar
     briefVersion: run.brief_version,
     briefHash: run.brief_hash,
     briefHashShort: run.brief_hash.replace(/^sha256:/, "").slice(0, 12),
-    targetPage: target.service?.page_url ?? target.cta?.url ?? null,
+    targetPage: target.owner_page?.display_url ?? target.service?.page_url ?? target.cta?.url ?? null,
     claimCount: run.claim_ids.length,
     editedAfterCheck: edited,
   };

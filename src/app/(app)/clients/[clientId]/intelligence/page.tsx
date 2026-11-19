@@ -14,6 +14,8 @@ import {
 } from "@/lib/client-intelligence";
 import { cn } from "@/lib/utils";
 import { getClientEntitlements, serviceScope } from "@/lib/entitlements";
+import type { ClaimRegistry } from "@/lib/claim-registry";
+import { ClaimRegistrySection } from "@/components/claim-registry";
 
 const statusStyles: Record<AreaStatus, string> = {
   ready: "bg-green-100 text-green-800 border-green-200",
@@ -54,9 +56,12 @@ export default async function IntelligencePage({
   // B5: the agreement's service scope is read separately (the entitlement
   // contract), not added to client_intelligence_input: Authority fingerprints
   // that document, and what a post may cite does not depend on the agreement.
-  const [{ data, error }, scope] = await Promise.all([
+  // The claims registry (20261103220000) is read beside it, never into it:
+  // it reports on the claims and changes nothing a draft may cite.
+  const [{ data, error }, scope, registry] = await Promise.all([
     supabase.rpc("client_intelligence_input", { p_client_id: clientId }),
     getClientEntitlements(supabase, clientId).then(serviceScope, (e: Error) => e.message),
+    supabase.rpc("claim_registry", { p_client_id: clientId }),
   ]);
   const input = data as unknown as IntelligenceInput | null;
   if (error || !input?.client) {
@@ -163,6 +168,12 @@ export default async function IntelligencePage({
           );
         })}
       </section>
+
+      <ClaimRegistrySection
+        clientId={clientId}
+        registry={registry.error ? null : (registry.data as unknown as ClaimRegistry | null)}
+        error={registry.error?.message ?? null}
+      />
 
       <Card>
         <CardHeader>

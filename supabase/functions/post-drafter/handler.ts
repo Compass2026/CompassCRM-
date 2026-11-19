@@ -59,9 +59,9 @@ import { MAX_ATTEMPTS, modelRequest } from "./prompt.ts";
 import type { Store, WriteError } from "./store.ts";
 import { DRAFTER_VERSION, type Brief, type DraftTarget, type LintResult, type ModelDraft } from "./types.ts";
 
-export const HANDLER_VERSION = 8;
+export const HANDLER_VERSION = 9;
 export const MODES = ["brief", "check", "submit", "version"] as const;
-export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims"] as const;
+export const FEATURES = ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims", "gbp_location_markets"] as const;
 
 export type Deps = {
   store: Store;
@@ -138,15 +138,17 @@ export function createPostDrafter(deps: Deps) {
   async function rebuild(clientId: string, target: DraftTarget):
     Promise<{ ok: true; brief: Brief; hash: string; state: string | null } | { ok: false; status: number; body: Json }> {
     let input;
-    try { input = await store.input(clientId, target.serviceId); } catch (e) {
+    try { input = await store.input(clientId, target.serviceId, target.keywordId ?? null); } catch (e) {
       if ((e as {code?:string}).code === "23514") return {ok:false,status:422,body:{eligible:false,refusals:[{code:"brand_service_required",message:(e as Error).message}]}};
       throw e;
     }
     if (!input?.client) return { ok: false, status: 404, body: { error: "client_not_found" } };
-    // A Facebook brief also reads the client's Facebook Pages (v3).
-    const result = target.channel === "facebook"
-      ? buildBrief(input, target, { socialAccounts: workspaceAccounts(input, await store.socialAccounts(clientId)) })
-      : buildBrief(input, target);
+    // Every brief reads the client's destinations: a Facebook brief its Pages
+    // (v3), a Business Profile brief its verified locations, so a draft may
+    // name its own (20261027190935). Without them a named location was always
+    // refused as unknown, and a client with several locations was never asked
+    // to choose until drafter_write refused the draft.
+    const result = buildBrief(input, target, { socialAccounts: workspaceAccounts(input, await store.socialAccounts(clientId)) });
     if (!result.ok) return { ok: false, status: 422, body: { eligible: false, refusals: result.refusals } };
     return { ok: true, brief: result.brief, hash: await briefHash(result.brief), state: input.client.state ?? null };
   }

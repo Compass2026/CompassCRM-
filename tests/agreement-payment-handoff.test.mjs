@@ -93,6 +93,55 @@ test("prepare while issued, verify, sign, and reach the exact payment capability
     await assert.rejects(prepare(issued.id,null),/agreement_signed_scope_changed/);
     await owner(); await db.exec("update plans set agreed_amount_cents=50000"); await runtime();
     await db.exec("set test.live='false'"); await assert.rejects(prepare(issued.id),/agreement_live_issued_required/);
+    // Apply the external-payment fix after a Stripe agreement has been signed.
+    // Existing scope comparisons, frozen records and payment handoff must survive.
+    await owner();
+    await db.exec(`alter table plans add column external_amount_cents bigint,
+      add column external_currency text, add column external_interval text`);
+    const scopeBefore = (await db.query("select agreement_private.scope($1) as scope", [client])).rows[0].scope;
+    await db.exec(readFileSync(new URL("../supabase/migrations/20261030034002_external_payment_agreement_scope.sql", import.meta.url), "utf8"));
+    assert.deepEqual((await db.query("select agreement_private.scope($1) as scope", [client])).rows[0].scope, scopeBefore);
+    await db.exec("set test.live='true'");
+    await runtime();
+    const unchanged = await prepare(signed.id, null);
+    assert.deepEqual(unchanged.snapshot, signed.snapshot);
+    assert.equal(unchanged.content_hash, signed.content_hash);
+    assert.equal(unchanged.signed_at, signed.signed_at);
+    await owner();
+    // Deliberately stale Stripe fields must not supply any external fee data.
+    await db.query(`insert into plans(client_id,collection,agreed_amount_cents,agreed_currency,
+      agreed_billing_interval,agreed_billing_interval_count,external_amount_cents,external_currency,
+      external_interval,start_date) values($1,'external',99999,'eur','year',3,50000,'usd','month','2026-10-30')`, [other]);
+    await runtime();
+    const externalDraft = await staff("create", {client_id: other});
+    assert.deepEqual(externalDraft.snapshot.scope.plan, {
+      package_id:null, collection:"external", amount_cents:50000, currency:"usd",
+      interval:"month", interval_count:1, start_date:"2026-10-30", term_months:null, managed_ad_budget_cents:null,
+    });
+    await owner();
+    await db.query("update plans set external_amount_cents=60000,external_currency='cad',external_interval='year' where client_id=$1", [other]);
+    await runtime();
+    const externalSaved = await staff("save", {id:externalDraft.id,client_id:other,
+      recipient_name:"Manual Customer",recipient_email:"manual@example.com",
+      terms:"Fictional manual payment agreement. Payments are made manually; no automatic billing."});
+    assert.equal(externalSaved.snapshot.scope.plan.amount_cents,60000);
+    assert.equal(externalSaved.snapshot.scope.plan.currency,"cad");
+    assert.equal(externalSaved.snapshot.scope.plan.interval,"year");
+    const externalIssued = await staff("issue", {id:externalDraft.id,reviewed:true,provider_name:"Admin",token_hash:hash("manual signing link")});
+    await assert.rejects(prepare(externalIssued.id,null),/agreement_stripe_required/);
+    const manualSigner = async (action,args={}) => (await db.query("select agreement_private.signer($1,$2,$3,$4) as r",[hash("manual signing link"),hash("manual session"),action,args])).rows[0].r;
+    await manualSigner("code",{code_hash:hash("654321")});
+    assert.deepEqual(await manualSigner("verify",{code_hash:hash("654321"),session_hash:hash("manual session")}),{ok:true});
+    const externalSigned = await manualSigner("sign",{name:"Manual Customer",consent:true,content_hash:externalIssued.content_hash});
+    assert.equal(externalSigned.status,"signed");
+    assert.equal(externalSigned.payment_url,null);
+    assert.equal(activeAgreementPayment(externalSigned),null);
+    assert.equal(activeAgreementPayment({...externalSigned,payment_url:`/pay/${paymentToken}`,payment_expires_at:new Date(Date.now()+86400000).toISOString()}),null);
+    await assert.rejects(prepare(externalSigned.id,null),/agreement_stripe_required/);
+    await owner();
+    for (const table of ["checkout_sessions","stripe_customers","billing_payment_links"]) {
+      assert.equal((await db.query(`select count(*)::int as n from ${table} where client_id=$1`,[other])).rows[0].n,0);
+    }
   } finally { await db.close(); }
 });
 test("agreement links accept only exact same-origin capabilities and Stripe Checkout", () => {

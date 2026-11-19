@@ -37,6 +37,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { SCOPES, missingGoogleScopes } from "./scopes.ts";
+import { createMailbox } from "../client-mailbox/handler.ts";
 
 const ACCT = "https://mybusinessaccountmanagement.googleapis.com/v1";
 const BIZ = "https://mybusinessbusinessinformation.googleapis.com/v1";
@@ -75,6 +76,12 @@ Deno.serve(async (req) => {
   };
   const self = `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-connect`;
   const url = new URL(req.url);
+
+  // A separate client-owned mailbox flow reuses the registered Google callback,
+  // but never reads or writes the agency operations refresh token.
+  if (req.method === "GET" && (url.searchParams.get("state") ?? "").startsWith("mailbox.")) {
+    return createMailbox(supabase, Deno.env.get("SUPABASE_URL")!)(req);
+  }
 
   const signingKey = await secret("SYNC_CRON_SECRET");
   if (!signingKey) return Response.json({ error: "SYNC_CRON_SECRET is not in Vault" }, { status: 500 });

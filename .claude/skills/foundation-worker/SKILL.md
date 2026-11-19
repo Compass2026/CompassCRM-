@@ -16,6 +16,19 @@ layout and the trigger behaviour this skill relies on. The Supabase project is
 
 ## Ground rules
 
+- **The current delivery standard (Tom, Nov 6 2026) is in
+  `docs/delivery-standard.md` § Current standard:** per eligible website
+  5 Facebook, 5 GBP and 3 blogs a week plus one webpage refresh a month;
+  BHG's shared GBP 7 a week in total, rotating among its three programs;
+  Medic Wisdom, Resilient and Shewmaker deferred (plan and draft nothing for
+  them). Older 8 / 8 / 8 monthly wording below is superseded history. Work
+  the slots that exist; never open extra ones to reach a number.
+- **Read the CRM before acting; foundation before drafting.** A brief
+  freezes the brand, claims and campaign; the blog publisher refuses an
+  article whose foundation changed. If the brand board, Brand tab or claims
+  are being corrected, or the board is not approved, block the draft with
+  that reason rather than writing against stale foundation. Report work as
+  *in review*, never as done or published; only Tom approves or publishes.
 - **Stage status decides what is work, never open tasks.** Six clients carry
   open checklist tasks on stages the Sept 7 backfill marked `complete`. Leave
   them alone.
@@ -305,9 +318,28 @@ select c.name, c.id as client_id, t.id as task_id, t.due_date, s.content_paths, 
 from tasks t
 join clients c on c.id = t.client_id
 left join sites s on s.client_id = c.id
-where t.key = 'blog_post' and t.status <> 'done' and c.status = 'active'
+where t.key = 'blog_post' and t.status <> 'done' and c.status in ('active', 'launching')
   -- a draft already written (in review, rejected, …) waits for a person
   and not exists (select 1 from content_drafts d where d.source_task_id = t.id and d.status <> 'requested')
+order by t.due_date, c.name;
+```
+
+  A launching client's task exists only when its brand is approved
+  (`create_weekly_blog_tasks`, 20261027191343); work it like an active
+  client's. Lifecycle is not yours to change.
+
+- **Weekly social slot** — an open task keyed `social_slot:<plan item id>`
+  (20261027191343): the Wednesday beat queued a ready Facebook or Business
+  Profile slot of the monthly delivery standard (brand approved, destination
+  bound and verified, a usable keyword). The fire's reason starts `Weekly
+  drafts`.
+
+```sql
+select c.name, c.id as client_id, t.id as task_id, t.status, t.due_date, t.notes,
+       substring(t.key from 13)::uuid as plan_item_id
+from tasks t join clients c on c.id = t.client_id
+where t.key like 'social\_slot:%' and t.status in ('open', 'in_progress')
+  and c.status in ('active', 'launching')
 order by t.due_date, c.name;
 ```
 
@@ -340,9 +372,11 @@ order by t.created_at;
 ```
 
 Order within a client: Foundation → Website → SEO → Reporting → Website
-updates → Blog post → Authority draft request → Content draft request. A
-payload naming "Website updates", "Weekly blog post", "Authority draft
-request" or "Content draft request" points at those units.
+updates → Blog post → Weekly social slot → Authority draft request → Content
+draft request. A payload naming "Website updates", "Weekly blog post",
+"Weekly drafts", "Authority draft request" or "Content draft request" points
+at those units. A `Weekly drafts` fire may carry several social slot tasks
+for the client: work them all in that run, one after another.
 
 Runs are started by the CRM (`worker_fires` records why — a client created, a
 stage completed, Website activated, a stage reopened) and by a daily sweep.
@@ -1447,12 +1481,18 @@ on its own), close `ga4` with the property and id in `notes`. `skipped`
 (`GA4_ACCOUNT_ID` or the token missing) or `failed` → `owner = 'TOM'`,
 detail in `notes`, leave open.
 
-**BrightLocal** (`brightlocal_lrt`, `brightlocal_lsg`) are Tom's and
-billable; give each `notes` with the exact inputs: the location (name,
-city, GBP place id), the tracked list count and a Drive doc
-`Tracked Keywords — <Client>` in `03 Keywords` (one keyword per line,
-with city), the grid (center, size, spacing, the money keywords), and
-"paste the report id on the Keywords tab (LRT) / the grid config (LSG)".
+**Map grid and Bing** (`map_grid_profile`, `bing_webmaster`; since Oct 29
+2026 they replace the BrightLocal templates) are Tom's. Give
+`map_grid_profile` `notes` with the grid inputs (center, size, spacing,
+the money keywords) and "prepare the profile on Map rankings; weekly scans
+stay off until Tom enables them". Give `bing_webmaster` `notes` with the
+site URL and sitemap URL ("import from Search Console or verify by DNS;
+record the evidence on the Onboarding tab — this is not Bing Places").
+Never create a BrightLocal Local Rank Tracker or Local Search Grid report.
+Older clients may still carry open `brightlocal_lrt` / `brightlocal_lsg`
+tasks titled "[Legacy — do not buy]": leave them for Tom. The worker
+never marks an Onboarding checklist item verified (the database refuses
+anyone but a signed-in teammate).
 
 **First sync** (`first_sync`). Run the two read-only syncs for this
 client and see what lands:
@@ -1468,7 +1508,7 @@ done
 Both answer 202 and finish in the background; wait two minutes, then count
 `rank_snapshots` (via the client's keywords) and `gsc_snapshots` for the
 client recorded in the last ten minutes. Rows landed → close `first_sync`
-with the counts. Nothing landed (no BrightLocal reports yet, no GSC
+with the counts. Nothing landed (no rank-sync snapshots yet, no GSC
 property) → leave it open with a note saying which source is missing; it
 closes on a later run once Tom's tasks are done. Stage `complete` either
 way; evidence: location, tracked count, grid summary, GSC state, what the
@@ -1673,6 +1713,22 @@ where service_key in ('website_pages', 'website_refreshes');
 select enabled from client_entitlements_for('<client_id>') where service_key = 'website';
 ```
 
+**Core keywords (Tom, Oct 27).** Every new page and refresh traces to the
+client's approved core keyword list: pick only a keyword in it, or a
+long-tail keyword whose `core_parent_keyword_id` is in it. No approved list
+→ change nothing, leave `site_updates` open with the note "No approved core
+keyword list; left for Tom", stop. Every `change_log` row for a
+`page_rewrite`, `page_added` or `blog_post` carries its keyword as
+`after.keyword_id`, names the `sites` row it changes (`object_type =
+'site'`, `object_id`; for a multi-brand client the site must be a brand
+site's `blog_site_id`) and keeps `after.url` on that site's host. The
+database refuses anything else (`core_keyword_required` /
+`keyword_not_eligible`), also when the list was revoked, and records keyword,
+list and version itself, again on any later change of keyword or URL. A
+refusal means the keyword was not core for that site: pick one that is. A
+client with no `sites` row gets no change_log page row: leave `site_updates`
+open with the note "No sites row; left for Tom".
+
 `remaining` is this run's cap for each kind (pages already added or
 proposed this month count). `website` not enabled, or both allocations 0 →
 not in the agreement: change nothing, leave `site_updates` open with the
@@ -1682,14 +1738,23 @@ read: <error>; nothing planned". Billing state never matters here — never
 read Stripe, invoices or `client_billing_status`. Work already done beyond
 a lowered allocation stays; never revert it to fit.
 
-**1. Map first (every month, cheap).** For every tracked keyword with no
-`target_url`, pick the page: the `page_groups` row whose primary or
-supporting keywords include it (its `target_url`), else the city route for
-its `city`, else the service page for its `service_id`, else the home page.
-Write `keywords.target_url`. Fill `page_groups.target_url` from the site
-where the page exists (read the tree: `site-push {read: true}` lists paths;
-`src/app/<route>/page.tsx` or a `data/locations.json` slug is a page). A
-page group with no page is a candidate below.
+**1. Map first (every month, cheap).** A keyword's page is its **owner
+page** (20261028170000): `select keyword_owner('<client>', null, '<keyword>',
+'refresh')` returns it, or the first reason there is none. Its service is the
+related topic, never a second owner. For a tracked keyword with no owner
+(`target_page_missing`), the owner is, in this order, the `target_url` of the
+approved page group whose PRIMARY keyword it is, else its existing
+`keywords.target_url`, else its related service's page — never a city route
+or the home page by guess, and never a `target_url` that differs from its
+primary group's target (that is a `keyword_owner_conflict`, which stays
+visible for Tom; do not pick a winner). Fill `page_groups.target_url` from the
+site where the page exists (read the tree: `site-push {read: true}` lists
+paths; `src/app/<route>/page.tsx` or a `data/locations.json` slug is a page)
+— city and Home groups included. A page group with no page is a candidate
+below. After mapping, run `owner-page-check` `{client_id}`: an owner page that
+has never been checked live is `page_not_verified`, and a page that answers
+any path with the same HTML (a single-page app) is `soft_404` until someone
+reads the rendered page and records a `method = 'rendered'` check.
 
 **2. Pick the month's work** from the evidence, in this order, until the
 caps from step 0 are met (`remaining` new pages, `remaining` refreshes):
@@ -1767,7 +1832,7 @@ and say so; record the revert as a `change_log` row `change_type =
 change one `change_log` row: `object_type = 'site'`, `object_id` = the
 `sites.id` you pushed to, `change_type` in `page_added` / `page_rewrite` /
 `faq_added` / `pull_request`, `before` (old entry or `{}`), `after` `{url,
-title, keyword, commit, pull_request_url}`, `reasoning` (the evidence: rank,
+title, keyword, keyword_id, commit, pull_request_url}`, `reasoning` (the evidence: rank,
 impressions, missing page), `status = 'approved'` for a published change,
 `'proposed'` for a PR or a Doc. A published refresh (`page_rewrite`) also
 carries its live receipt in `after`: `verified_at` (ISO time of the check
@@ -1797,8 +1862,12 @@ errors, block the task with "Entitlements could not be read: <error>" and
 stop. **Each post serves one long-tail keyword and one service page**, in
 the brand voice (`get_brand_profile`), sourced facts only.
 
-1. **Pick the keyword:** a tracked P2 / P3 keyword with `informational` or
-   `commercial` intent (`keywords.intent`), no post yet
+1. **Pick the keyword:** from the client's approved core keyword list
+   (`core_keyword_lists`, `status = 'approved'`), or a long-tail keyword whose
+   `core_parent_keyword_id` is in it; for a task naming a `plan_item:` the
+   open is refused otherwise (`core_keyword_required`) and the grounding is
+   recorded in `core_keyword_links`. Among those: a P2 / P3 keyword with
+   `informational` or `commercial` intent (`keywords.intent`), no post yet
    (`content_posts.keyword_id`), preferring Search Console queries with
    impressions and a `gsc_snapshots` position past 10, then volume. Note
    the service page it supports (`service_id` → the service's page group
@@ -1831,13 +1900,98 @@ the brand voice (`get_brand_profile`), sourced facts only.
 
 One post, then stop. The next task arrives next Wednesday.
 
+### Weekly social slot (PB7, weekly — the `social_slot:<plan item>` task)
+
+The delivery standard plans each site's Facebook and Business Profile posts
+(weekly 5 + 5 under the current standard; the monthly 8 + 8 is superseded). Every Wednesday `create_weekly_blog_tasks()` queues one task per
+slot dated this week that `social_slot_readiness()` calls ready: the brand
+(board, or the slot's brand site) is approved, the destination is bound and
+verified through the publisher, the client's **core keyword list** is
+approved, and a core keyword with an intent and one verified owner page
+(an approved page group checked live; an approved related service where the
+page is a service page; an approved market for a city term) exists.
+Slots that are not ready are skipped with the reason in `delivery_queue_log`;
+you never see them. Each task is one post. Work every open task of the
+client in the run, one after another.
+
+**Your run token.** At the start of the run make one token and use it for
+every claim, drafter call and link in this run, retries included; never
+reuse another run's token and never use the bare label:
+`select 'worker-routine:' || replace(gen_random_uuid()::text, '-', '') as run_token;`
+Two sessions started together hold different tokens, so only one can claim
+a slot.
+
+1. **Claim:** `select social_slot_claim('<task id>', '<run token>');`
+   - `claimed: true` → it returns the slot, its `social_account_id` and the
+     `core_list_id` / `core_list_version` to draft against.
+   - `claimed_by_other` → another run holds it; skip the task, write nothing.
+   - `not_ready` → eligibility changed since the queue (brand, destination,
+     core list or keyword revoked): set the task `blocked` with `detail` as
+     its note and go to the next task. `task_not_open` → skip.
+2. **Pick a core keyword** for the slot's brand (`brand_workspace_id` → its
+   `service_ids`; the client's otherwise). It must be in that SITE's approved
+   list (`select keyword_ids from core_keyword_lists where client_id =
+   '<client>' and brand_workspace_id is not distinct from '<slot brand site
+   or null>' and status = 'approved'` — BHG's three sites each have their own;
+   a sister site's keyword never qualifies) or a long-tail keyword whose
+   `core_parent_keyword_id` is in it, have a recorded `intent`, and pass
+   `select core_keyword_eligibility('<client>', '<slot brand site or null>',
+   '<keyword>', null, 'post')` (null = usable; else the reason). A Home,
+   city or brand term needs no service; a service page needs its related
+   service. Never draft a held offering (`promotion_held`), even as an
+   aside in copy on another keyword. Never use another keyword, however
+   relevant: drafter_write refuses an unattended run's non-core keyword
+   (`core_keyword_required`) and the link would too. Prefer P1/P2 money
+   keywords, then Search Console impressions, then volume. Write at the
+   keyword's **recorded** intent; never relabel it, and never edit a core
+   list or a keyword's core parent. Avoid a service and intent that already
+   has an open or approved post on this channel this month (`social_posts`
+   with `review_status in ('in_review','approved')`). When the notes say the
+   Business Profile location has other open slots on the same day (BHG:
+   three brand sites, one location), choose a different service and topic
+   from those slots' drafts.
+3. **Draft through `post-drafter`** exactly as the *AI Drafter* playbook
+   below (brief → write → check → submit, at most three submits per brief),
+   with `"claimant": "<run token>"` and `"runtime": "claude-worker-skill"`.
+   The target:
+   - Facebook: `{"channel": "facebook", "postType": "standard", "intent":
+     "<keyword intent>", "serviceId", "keywordId", "socialAccountId":
+     "<social_account_id from the claim>", "assetIds": []}`. No button, no
+     URL, no hashtags.
+   - Business Profile: `{"channel": "google_business", "postType":
+     "standard", "intent", "serviceId", "keywordId", "ctaType":
+     "LEARN_MORE", "ctaUrl": "<the keyword's owner page, from the brief's target.owner_page>",
+     "socialAccountId": "<social_account_id from the claim>", "assetIds": []}`.
+     That is the slot's own location (a multi-location client's slot names
+     it; a single-location client has one). Never another location, and
+     write for that market: its city, its phone and page from the brief.
+   Usable claims only, brand voice from the brief. A Facebook post and a
+   Business Profile post for the same week are different copy.
+4. **Link:** `select social_slot_link('<task id>', '<post_id>', '<run token>');`
+   It re-checks eligibility now, checks the post is yours for this slot
+   (client, channel, destination, brand, in review, written after the task)
+   and that its keyword traces to the **current** approved core list, records
+   list, version and core keyword in `core_keyword_links`, fills the slot's
+   keyword / service / intent / owner page and closes the task. A refusal
+   (`not_ready: …`, `core_keyword_required`, `CD409` when your claim lapsed)
+   → leave the post in review, set the task `blocked` with the refusal, and
+   report both ids.
+5. **Report:** client, slot, channel, destination, keyword, core list
+   version, `post_id`, `run_id`, `review_task_id`. Images are a separate step
+   (Brand › Creative use, or `content_stage_media` / `content_revise` in
+   Executive OS); the post waits in review for a person either way.
+
+**Never:** approve, schedule or publish; switch a publisher or pilot on;
+clear a hold; draft a slot whose task you did not claim with this run's
+token; draft a slot dated before this week; use a keyword outside the
+approved core list; use another brand's Page or another client's location.
+
 ### AI Drafter — one Business Profile post (drafter v1)
 
-Only when a person asks for one by name (client, service, intent, keyword,
-button). Never on your own initiative and never as a batch: automatic
-drafting is not built, and when it is it will follow the agreement (the
-`gbp` feature and room in `gbp_posts`, from `client_entitlements_for` /
-`client_quota_usage`), never billing. You are the model
+When a person asks for one by name (client, service, intent, keyword,
+button), or for a queued *Weekly social slot* task above (which also drafts
+Facebook posts, through the same brief / check / submit). Never on your own
+initiative and never as a batch outside those tasks. You are the model
 adapter; the `post-drafter` Edge Function owns the brief, the linter and the
 write. The CRM is still your only channel, and SQL is never the write path.
 
@@ -1889,7 +2043,7 @@ after `stale_brief`) starts a new count.
 **Never:** insert or edit `social_posts`, `post_claims`, `post_assets` or
 `drafter_runs` by SQL; edit the post after submit; approve, reject,
 schedule or publish it (no function mode does that, and you never call the
-publisher); draft for any channel but `google_business`; cite a claim that
+publisher); draft for any channel but `google_business` (or `facebook` for a Weekly social slot task); cite a claim that
 is not in the brief; retry past three.
 
 **Report:** client, target, `brief_hash`, attempts used, and the answer —

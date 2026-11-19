@@ -2,11 +2,14 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import type {Database} from './database.types';
 import {completeRead} from './integration-health.ts';
 import {buildOperationalEvidence} from './operations-evidence.ts';
+import type {OnboardingGap,OnboardingRow} from './client-onboarding';
 export async function loadOperationalEvidence(db:SupabaseClient<Database>,clientIds:string[],now:string){
  if(!clientIds.length)return {cards:[],alerts:[],checks:{}};
  // Team-session RLS only. Do not read message bodies, recipients, secrets,
  // provider payloads or financial identifiers into the agency dashboard.
- const [clients,keywords,rankings,rankRuns,backlinks,backlinkChecks,backlinkRuns,profileMeasures,social,socialAccounts,notifications,billing,sites,brands,services,claims,authority]=await Promise.all([
+ const [onboarding,onboardingGaps,clients,keywords,rankings,rankRuns,backlinks,backlinkChecks,backlinkRuns,profileMeasures,social,socialAccounts,notifications,billing,sites,brands,services,claims,authority]=await Promise.all([
+  db.from('client_onboarding_overview').select('*',{count:'exact'}).in('client_id',clientIds).limit(3000),
+  db.from('client_onboarding_gaps').select('*',{count:'exact'}).in('client_id',clientIds).limit(3000),
   db.from('clients').select('id,name,website_url',{count:'exact'}).in('id',clientIds).limit(3000),
   db.from('keywords').select('id,client_id,is_active,is_tracked,service_id,intent,target_url',{count:'exact'}).in('client_id',clientIds).limit(3000),
   db.from('client_growth_rankings').select('client_id,keyword_id,checked_at,result_type',{count:'exact'}).in('client_id',clientIds).limit(3000),
@@ -27,5 +30,5 @@ export async function loadOperationalEvidence(db:SupabaseClient<Database>,client
  ]);
  const roster=completeRead(clients);
  if(roster===null)throw new Error('Operational client roster unavailable');
- return buildOperationalEvidence({clients:roster,keywords:completeRead(keywords),rankings:completeRead(rankings),rankRuns:completeRead(rankRuns),backlinks:completeRead(backlinks),backlinkChecks:completeRead(backlinkChecks),backlinkRuns:completeRead(backlinkRuns),profileMeasures:completeRead(profileMeasures),social:completeRead(social),socialAccounts:completeRead(socialAccounts),notifications:completeRead(notifications),billing:completeRead(billing),sites:completeRead(sites),brands:completeRead(brands),services:completeRead(services),claims:completeRead(claims),authority:completeRead(authority),now});
+ return buildOperationalEvidence({clients:roster,keywords:completeRead(keywords),rankings:completeRead(rankings),rankRuns:completeRead(rankRuns),backlinks:completeRead(backlinks),backlinkChecks:completeRead(backlinkChecks),backlinkRuns:completeRead(backlinkRuns),profileMeasures:completeRead(profileMeasures),social:completeRead(social),socialAccounts:completeRead(socialAccounts),notifications:completeRead(notifications),billing:completeRead(billing),sites:completeRead(sites),brands:completeRead(brands),services:completeRead(services),claims:completeRead(claims),authority:completeRead(authority),onboarding:completeRead(onboarding) as OnboardingRow[]|null,onboardingGaps:completeRead(onboardingGaps) as OnboardingGap[]|null,now});
 }

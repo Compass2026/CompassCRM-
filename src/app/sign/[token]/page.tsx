@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { agreementSigner } from "@/lib/agreements-server";
-import { activeAgreementPayment, type Contract } from "@/lib/agreements";
+import { activeAgreementPayment, MANUAL_AGREEMENT_PAYMENT, type Contract } from "@/lib/agreements";
 import { AgreementDocument } from "@/components/agreements/agreement-document";
 import { SignAgreement } from "@/components/agreements/sign-agreement";
 import { buttonVariants } from "@/components/ui/button";
@@ -94,8 +94,9 @@ export default async function SigningPage({
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              The sender will provide payment setup separately. Signing this
-              agreement did not authorize a payment.
+              {c.snapshot.scope.plan.collection === "external"
+                ? MANUAL_AGREEMENT_PAYMENT
+                : "The sender will provide payment setup separately. Signing this agreement did not authorize a payment."}
             </p>
           )}
         </section>

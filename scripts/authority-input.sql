@@ -11,6 +11,9 @@
 -- inventory is added by scripts/site-inventory.mjs; the dry run merges both.
 -- Once migration 0048 is applied, `select authority_input('<uuid>')` is the
 -- same read (arrays in a fixed order; the engine's result is identical).
+-- Engine v1.5 (20261030190000) also needs authority.core, the site programs'
+-- approved Core 50: export `select authority_input_scoped('<uuid>')` instead.
+-- Without it the dry run blocks every keyword target (core_scope_missing).
 with c as (select :'client_id'::uuid as id)
 select client_intelligence_input(c.id) || jsonb_build_object('authority', jsonb_build_object(
   'now', now(),

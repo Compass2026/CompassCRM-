@@ -12,6 +12,7 @@
 // numbers, other phone numbers, unapproved places, Brand Board
 // differentiators stated as fact. Plus the channel's own rules (reused from
 // the publisher), words the brand avoids and the keyword-use limit.
+import { holdHit } from "../authority/keyword-owner.ts";
 import { channelProblems } from "../post-publisher/channel.ts";
 import { FACEBOOK_MAX_CHARS } from "../post-publisher/facebook.ts";
 import type { Brief, LintProblem, LintResult, ModelDraft } from "./types.ts";
@@ -101,7 +102,7 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
   const canonicalPhone = digits(brief.client.phone);
   for (const m of copy.matchAll(PHONE_RE)) {
     if (digits(m[0]) === canonicalPhone) spans.push([m.index!, m.index! + m[0].length]);
-    else add("wrong_phone", `The only phone number is ${brief.client.phone}.`, m[0]);
+    else add("wrong_phone", brief.client.phone ? `The only phone number is ${brief.client.phone}.` : "This post names no phone number.", m[0]);
   }
   for (const name of [brief.client.name, ...brief.allowed_facts.crm.services]) spans.push(...spansOf(copy, name));
   let masked = mask(copy, spans);
@@ -139,6 +140,13 @@ export function lintDraft(brief: Brief, draft: ModelDraft, opts: LintOptions = {
   }
 
   // ── Places ──
+  // ── Held offerings (20261028170000): never advertised while held ──
+  // Same matcher as core_hold_hit: inflections and word order within a short span.
+  for (const h of brief.excluded.offerings ?? []) {
+    const hit = holdHit(h.phrases, copy);
+    if (hit) add("held_offering", `"${hit}" promotes ${h.offering}, which is held from promotion.`, hit);
+  }
+
   const allowedPlaces = new Set(brief.allowed_facts.crm.places.map((p) => p.toLowerCase()));
   const placeText = mask(copy, [...spans, ...brief.allowed_facts.crm.places.flatMap((p) => spansOf(copy, p))]);
   for (const m of placeText.matchAll(/\b(?:[A-Z][a-z'.]+\s){1,3}Count(?:y|ies)\b/g)) {

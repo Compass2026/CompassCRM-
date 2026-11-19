@@ -29,7 +29,23 @@
 //                   the stored bytes here (sha256, signature type, size,
 //                   dimensions), then in ONE transaction withdraw the post,
 //                   replace its media and resubmit it for a fresh review.
+//                   change.kind replace_copy (20261029180000) instead lints
+//                   the proposed copy and claims against a brief rebuilt for
+//                   the post's own target (the post-drafter's rules), then in
+//                   ONE transaction withdraws the post, sets its copy, links
+//                   exactly those claims and resubmits it.
 //   revise_status → the receipt and the post now.
+//
+// Pending changes (20261117010000, v5): a change Executive OS has asked Tom
+// to approve keeps the post out of "Ready for final review" until it is
+// applied, rejected, withdrawn or superseded.
+//   hold          → open a hold for one post, keyed by the Executive OS
+//                   approval id (idempotent). The post shows under Needs
+//                   preparation with the pending change; approving it is refused.
+//   release       → close it: rejected, withdrawn or superseded (idempotent; an
+//                   unknown ref releases nothing). An approved revise closes its
+//                   own hold when it executes or is refused, and stage_media
+//                   with approval_id closes the stage's hold.
 //
 // Auth: the x-compass-delegation-key header must equal the Vault secret
 // EXECUTIVE_OS_DELEGATION_SECRET (constant-time). Nothing else is accepted —
@@ -41,9 +57,11 @@
 // never executes twice.
 
 import { measure, sha256Hex } from "../_shared/image-meta.ts";
+import type { CopyCheckResult } from "./copy-check.ts";
 
-export const HANDLER_VERSION = 3;
-export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status"] as const;
+export const HANDLER_VERSION = 5;
+export const MODES = ["version", "batch", "authorize", "status", "stage_media", "revise", "revise_status", "hold", "release"] as const;
+export const RELEASE_REASONS = ["rejected", "withdrawn", "superseded"] as const;
 const ACTIONS = ["approve", "publish", "approve_and_publish"] as const;
 const CHANNELS = ["chatgpt", "claude"] as const;
 export const CONTENT_CHANNELS = ["blog", "facebook", "google_business"] as const;
@@ -55,6 +73,9 @@ const HEX = /^[0-9a-f]{64}$/;
 const POST_CHANNELS = ["facebook", "google_business"] as const;
 const EDIT_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const MAX_EDIT_BYTES = 30 * 1024 * 1024;
+export const EDIT_KINDS = ["replace_media", "replace_copy"] as const;
+export const MAX_COPY_CHARS = 5000;
+const MAX_COPY_CLAIMS = 10;
 
 type Json = Record<string, unknown>;
 export type DbError = { code: string | null; message: string };
@@ -80,6 +101,9 @@ export type Store = {
   editExecute(id: string, measured: Json): Promise<DbResult<Json>>;
   editRefuse(id: string, code: string, message: string): Promise<DbResult<Json>>;
   editStatus(operationId: string): Promise<DbResult<Json>>;
+  // Pending changes.
+  holdOpen(p: Json): Promise<DbResult<Json>>;
+  holdClose(ref: string, reason: string, note: string | null, supersededBy: string | null): Promise<DbResult<Json>>;
 };
 
 const reply = (status: number, body: Json) => Response.json(body, { status });
@@ -186,11 +210,18 @@ export function parseRevise(b: Json): Json | string {
   if (!isStr(post.service_id) || !UUID.test(post.service_id)) return "post.service_id is the post's service from batch";
   if (!isStr(post.review_hash) || !HASH.test(post.review_hash)) return "post.review_hash is the review_hash from batch";
   if (!str(post.destination, 300)) return "post.destination is the destination from batch";
-  if (change.kind !== "replace_media") return "change.kind is replace_media";
-  if (!isStr(change.stage_id) || !UUID.test(change.stage_id)) return "change.stage_id is the stage from stage_media";
-  if (!isStr(change.sha256) || !HEX.test(change.sha256)) return "change.sha256 is the staged file's sha256";
-  if (!str(change.label, 200)) return "change.label names the asset";
-  if (!str(change.provenance, 1000)) return "change.provenance says how the image was made";
+  if (!EDIT_KINDS.includes(change.kind as typeof EDIT_KINDS[number])) return `change.kind is one of ${EDIT_KINDS.join(", ")}`;
+  if (change.kind === "replace_media") {
+    if (!isStr(change.stage_id) || !UUID.test(change.stage_id)) return "change.stage_id is the stage from stage_media";
+    if (!isStr(change.sha256) || !HEX.test(change.sha256)) return "change.sha256 is the staged file's sha256";
+    if (!str(change.label, 200)) return "change.label names the asset";
+    if (!str(change.provenance, 1000)) return "change.provenance says how the image was made";
+  } else {
+    if (!str(change.copy, MAX_COPY_CHARS)) return `change.copy is the post's new copy (1–${MAX_COPY_CHARS} characters)`;
+    if (!Array.isArray(change.claim_ids) || change.claim_ids.length > MAX_COPY_CLAIMS
+        || !change.claim_ids.every((c) => isStr(c) && UUID.test(c))) return `change.claim_ids lists up to ${MAX_COPY_CLAIMS} claim ids`;
+    if (new Set(change.claim_ids as string[]).size !== change.claim_ids.length) return "change.claim_ids lists a claim twice";
+  }
   if (!CHANNELS.includes(ex.channel as typeof CHANNELS[number])) return "executor.channel is chatgpt or claude";
   if (!str(ex.executed_by, 120)) return "executor.executed_by names the assistant";
   if (!isStr(ex.account_email) || !/^[^@\s]+@[^@\s]+$/.test(ex.account_email)) return "executor.account_email is the authorizing owner";
@@ -205,8 +236,11 @@ export function parseRevise(b: Json): Json | string {
     operation_id: b.operation_id, client_id: b.client_id,
     post: { channel: post.channel, id: post.id, service_id: (post.service_id as string).toLowerCase(), review_hash: post.review_hash,
             destination: (post.destination as string).trim() },
-    change: { kind: "replace_media", stage_id: change.stage_id, sha256: change.sha256, label: (change.label as string).trim(),
-              provenance: (change.provenance as string).trim() },
+    change: change.kind === "replace_media"
+      ? { kind: "replace_media", stage_id: change.stage_id, sha256: change.sha256, label: (change.label as string).trim(),
+          provenance: (change.provenance as string).trim() }
+      // The copy exactly as sent (it is what gets linted and published).
+      : { kind: "replace_copy", copy: change.copy, claim_ids: (change.claim_ids as string[]).map((c) => c.toLowerCase()) },
     executor: { channel: ex.channel, executed_by: (ex.executed_by as string).trim(), account_email: ex.account_email },
     authority: { kind: au.kind, id: au.id, channels: au.channels, service_ids: au.service_ids, operations: au.operations },
     reason: (b.reason as string).trim(),
@@ -214,7 +248,45 @@ export function parseRevise(b: Json): Json | string {
   };
 }
 
-export function createContentApprovals(deps: { store: Store }) {
+/** Validates a hold request. Returns the RPC payload or an error message. */
+export function parseHold(b: Json): Json | string {
+  const post = (b.post ?? {}) as Json;
+  if (!isStr(b.ref) || !UUID.test(b.ref)) return "ref is the Executive OS approval id (uuid)";
+  if (!isStr(b.client_id) || !UUID.test(b.client_id)) return "client_id must be a uuid";
+  if (!POST_CHANNELS.includes(post.channel as typeof POST_CHANNELS[number])) return "post.channel is facebook or google_business";
+  if (!isStr(post.id) || !UUID.test(post.id)) return "post.id must be a uuid";
+  if (!EDIT_KINDS.includes(b.kind as typeof EDIT_KINDS[number])) return `kind is one of ${EDIT_KINDS.join(", ")}`;
+  if (b.review_hash != null && (!isStr(b.review_hash) || !HASH.test(b.review_hash))) return "review_hash is the review_hash from batch, or null";
+  if (!str(b.summary, 300)) return "summary says what is pending (1–300 characters)";
+  if (!str(b.requested_by, 160)) return "requested_by names the assistant";
+  return {
+    ref: (b.ref as string).toLowerCase(), client_id: (b.client_id as string).toLowerCase(),
+    post: { channel: post.channel, id: (post.id as string).toLowerCase() }, kind: b.kind,
+    review_hash: b.review_hash ?? null, summary: (b.summary as string).trim(), requested_by: (b.requested_by as string).trim(),
+  };
+}
+
+/** Validates a release request. Returns the arguments or an error message. */
+export function parseRelease(b: Json): { ref: string; reason: string; note: string | null; supersededBy: string | null } | string {
+  if (!isStr(b.ref) || !UUID.test(b.ref)) return "ref is the Executive OS approval id (uuid)";
+  if (!RELEASE_REASONS.includes(b.reason as typeof RELEASE_REASONS[number])) return `reason is one of ${RELEASE_REASONS.join(", ")}`;
+  if (b.note != null && (!isStr(b.note) || b.note.length > 1000)) return "note is up to 1000 characters";
+  if (b.superseded_by_ref != null && (!isStr(b.superseded_by_ref) || !UUID.test(b.superseded_by_ref))) return "superseded_by_ref is a uuid";
+  if (b.superseded_by_ref != null && b.reason !== "superseded") return "superseded_by_ref goes with reason superseded";
+  return {
+    ref: (b.ref as string).toLowerCase(), reason: b.reason as string,
+    note: isStr(b.note) && b.note.trim() ? b.note.trim() : null,
+    supersededBy: isStr(b.superseded_by_ref) ? b.superseded_by_ref.toLowerCase() : null,
+  };
+}
+
+export type ContentApprovalsDeps = {
+  store: Store;
+  // The post-drafter's brief and linter for a proposed copy edit (copy-check.ts).
+  copyCheck?: (clientId: string, postId: string, copy: string, claimIds: string[]) => Promise<CopyCheckResult>;
+};
+
+export function createContentApprovals(deps: ContentApprovalsDeps) {
   const { store } = deps;
 
   async function authorized(req: Request): Promise<boolean> {
@@ -232,7 +304,8 @@ export function createContentApprovals(deps: { store: Store }) {
     const mode = body.mode;
 
     if (mode === "version") {
-      return reply(200, { version: HANDLER_VERSION, modes: MODES, actions: ACTIONS, channels: CHANNELS, content_channels: CONTENT_CHANNELS });
+      return reply(200, { version: HANDLER_VERSION, modes: MODES, actions: ACTIONS, channels: CHANNELS, content_channels: CONTENT_CHANNELS,
+        edit_kinds: deps.copyCheck ? EDIT_KINDS : ["replace_media"] });
     }
 
     if (mode === "batch") {
@@ -291,6 +364,31 @@ export function createContentApprovals(deps: { store: Store }) {
     }
 
     if (mode === "stage_media") return stageMedia(body);
+    if (mode === "hold") {
+      const p = parseHold(body);
+      if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
+      const r = await store.holdOpen(p).catch(unconfirmed);
+      if (r.error) {
+        if (r.error.code && REFUSAL.test(r.error.code)) return refusedAtDb(r.error);
+        return reply(503, { error: "outcome_unknown", message: "The hold did not confirm; retry with the same ref." });
+      }
+      const h = r.data as Json;
+      return reply(h.replayed ? 200 : 201, { hold: { id: h.id, ref: h.ref, status: h.closed_at ? "closed" : "open", post_id: h.post_id,
+        opened_at: h.opened_at, close_reason: h.close_reason ?? null, replayed: !!h.replayed } });
+    }
+    if (mode === "release") {
+      const p = parseRelease(body);
+      if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
+      const r = await store.holdClose(p.ref, p.reason, p.note, p.supersededBy).catch(unconfirmed);
+      if (r.error) {
+        if (r.error.code && REFUSAL.test(r.error.code)) return refusedAtDb(r.error);
+        return reply(503, { error: "outcome_unknown", message: "The release did not confirm; retry with the same ref." });
+      }
+      const out = r.data as Json;
+      const h = out.hold as Json | null;
+      return reply(200, { released: !!out.released, hold: h ? { id: h.id, ref: h.ref, status: h.closed_at ? "closed" : "open", post_id: h.post_id,
+        opened_at: h.opened_at, closed_at: h.closed_at ?? null, close_reason: h.close_reason ?? null, superseded_by_ref: h.superseded_by_ref ?? null } : null });
+    }
     if (mode === "revise") return revise(body);
     if (mode === "revise_status") {
       if (!isStr(body.operation_id) || !OPERATION.test(body.operation_id)) return reply(400, { error: "operation_id is required" });
@@ -314,10 +412,20 @@ export function createContentApprovals(deps: { store: Store }) {
     if (typeof p === "string") return reply(400, { error: "invalid_request", message: p });
     const st = await store.editStage(p).catch(unconfirmed);
     if (st.error) {
-      if (st.error.code && REFUSAL.test(st.error.code)) return refusedAtDb(st.error);
+      if (st.error.code && REFUSAL.test(st.error.code)) {
+        // An approved stage that is refused will never run: its hold closes with the reason.
+        if (isStr(body.approval_id) && UUID.test(body.approval_id)) {
+          await store.holdClose(body.approval_id.toLowerCase(), "refused", st.error.message, null).catch(unconfirmed);
+        }
+        return refusedAtDb(st.error);
+      }
       return reply(503, { error: "outcome_unknown", message: "Staging did not confirm; retry with the same operation_id." });
     }
     const stage = st.data as Json;
+    // A stage Tom approved in Executive OS was the pending change: it has run.
+    if (isStr(body.approval_id) && UUID.test(body.approval_id)) {
+      await store.holdClose(body.approval_id.toLowerCase(), "executed", `Staged by content-approvals (stage ${stage.id})`, null).catch(unconfirmed);
+    }
     let slot: Awaited<ReturnType<Store["uploadSlot"]>>;
     try {
       slot = await store.uploadSlot(String(stage.storage_path));
@@ -343,6 +451,11 @@ export function createContentApprovals(deps: { store: Store }) {
     const receipt = rec.data as Json;
     if (receipt.status === "executed" || receipt.status === "refused") return reply(200, { receipt, replayed: true });
     const id = receipt.id as string;
+    const refuse = async (code: string, message: string, extra: Json = {}) => {
+      const refused = await store.editRefuse(id, code, `${code}: ${message}`);
+      return reply(422, { error: code, message: `${code}: ${message}`, ...extra, receipt: refused.data ?? receipt });
+    };
+    if ((p.change as Json).kind === "replace_copy") return reviseCopy(p, id, receipt, refuse);
 
     // The bytes as stored, measured here: the database never trusts a declared hash.
     let read: StoredRead;
@@ -351,10 +464,6 @@ export function createContentApprovals(deps: { store: Store }) {
     } catch {
       return reply(503, { error: "outcome_unknown", message: "The stored file could not be read; retry with the same operation_id.", receipt });
     }
-    const refuse = async (code: string, message: string) => {
-      const refused = await store.editRefuse(id, code, `${code}: ${message}`);
-      return reply(422, { error: code, message: `${code}: ${message}`, receipt: refused.data ?? receipt });
-    };
     if (!read.ok) {
       if (read.reason === "missing") return refuse("bytes_missing", "nothing was uploaded to the slot");
       if (read.reason === "too_large") return refuse("bytes_mismatch", `the stored file is larger than ${MAX_EDIT_BYTES} bytes`);
@@ -364,6 +473,26 @@ export function createContentApprovals(deps: { store: Store }) {
     if (!meta) return refuse("bytes_mismatch", "the stored file is not a PNG, JPEG or WebP image");
     const measured = { content_hash: await sha256Hex(read.bytes), ...meta };
 
+    return execute(id, receipt, measured);
+  }
+
+  // The copy, checked here against the post's own rebuilt brief; the
+  // database refuses anything not checked clean, or not the receipt's copy.
+  async function reviseCopy(p: Json, id: string, receipt: Json,
+                            refuse: (code: string, message: string, extra?: Json) => Promise<Response>): Promise<Response> {
+    if (!deps.copyCheck) return refuse("copy_check_unavailable", "this deployment cannot check copy; nothing was changed");
+    const change = p.change as { copy: string; claim_ids: string[] };
+    let checked: CopyCheckResult;
+    try {
+      checked = await deps.copyCheck(p.client_id as string, (p.post as Json).id as string, change.copy, change.claim_ids);
+    } catch {
+      return reply(503, { error: "outcome_unknown", message: "The copy check did not confirm; retry with the same operation_id.", receipt });
+    }
+    if (!checked.ok) return refuse(checked.code, checked.message, { problems: checked.problems });
+    return execute(id, receipt, { lint_ok: true, brief_hash: checked.brief_hash, checked_copy: change.copy, warnings: checked.warnings });
+  }
+
+  async function execute(id: string, receipt: Json, measured: Json): Promise<Response> {
     const ex = await store.editExecute(id, measured).catch(unconfirmed);
     if (ex.error) {
       if (ex.error.code && REFUSAL.test(ex.error.code)) {

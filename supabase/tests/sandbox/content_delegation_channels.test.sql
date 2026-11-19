@@ -112,6 +112,10 @@ begin
     fb->>'channel' = 'facebook' and fb->>'destination' = 'facebook:555000111222' and fb->>'destination_name' = 'DGS Page'
     and gb->>'channel' = 'google_business' and gb->>'destination' = 'google_business:locations/9876543210'
     and fb->>'review_hash' ~ '^sha256:[0-9a-f]{64}$' and fb->>'review_hash' <> gb->>'review_hash', b::text);
+  perform cd.ok('DC5b a social review link opens the CRM post page (/social/), never /posts/ (20261029160000)',
+    fb->>'review_url' = 'https://compass-crm-ten.vercel.app/clients/' || cd.id('dgs') || '/social/' || cd.id('fb1')
+    and gb->>'review_url' = 'https://compass-crm-ten.vercel.app/clients/' || cd.id('dgs') || '/social/' || cd.id('gb1')
+    and not exists (select 1 from jsonb_array_elements(b->'items') x where x->>'review_url' like '%/posts/%'), b::text);
   perform cd.ok('DC6 the publisher would send the bound posts; the unbound Page says why not',
     jsonb_array_length(fb->'publish_problems') = 0 and jsonb_array_length(gb->'publish_problems') = 0
     and ub->>'publish_problems' like '%not bound to the publisher%', ub::text);

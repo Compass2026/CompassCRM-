@@ -1,9 +1,11 @@
+import { requirePortalReportingAccess } from "@/lib/portal-access";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatMonth, workLabel } from "@/lib/portal";
 
 export default async function PortalWorkLogPage() {
   const supabase = await createClient();
+  await requirePortalReportingAccess(supabase);
   const { data: work } = await supabase
     .from("portal_work_log")
     .select("*")

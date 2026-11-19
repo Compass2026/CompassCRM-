@@ -702,10 +702,12 @@ begin
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.prosecdef and p.proname like 'billing%' and p.proname <> 'billing_livemode'
         and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))));
+  -- ON DELETE RESTRICT refuses these: 23503 through PostgreSQL 17, 23001
+  -- (restrict_violation) from 18 on.
   e := bl.try(format('delete from clients where id = %L', bl.id('c1')));
-  perform bl.ok('I5 a client with billing history cannot be deleted (offboard it instead)', e like '23503%', e);
+  perform bl.ok('I5 a client with billing history cannot be deleted (offboard it instead)', e like '23503%' or e like '23001%', e);
   e := bl.try(format('delete from clients where id = %L', bl.id('c2')));
-  perform bl.ok('I6 ...nor a client with a linked Stripe customer', e like '23503%', e);
+  perform bl.ok('I6 ...nor a client with a linked Stripe customer', e like '23503%' or e like '23001%', e);
 end $$;
 
 \o

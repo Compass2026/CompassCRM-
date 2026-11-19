@@ -40,6 +40,7 @@ import {
 } from "./types.ts";
 import { claimCategories, hostOf, normalizeUrl, stableJson, words } from "./rules.ts";
 import { assessIntent } from "../authority/intent.ts";
+import { approvedMarketPlaces, normWords, ownerNormUrl, resolveKeywordOwner, type OwnerContext, type OwnerPurpose } from "../authority/keyword-owner.ts";
 import { buildPlaceIndex } from "../authority/urls.ts";
 
 export const MAX_CLAIMS = 2;
@@ -136,7 +137,36 @@ export function eligibleClaims(
   return { eligible, excluded: excludedClaims };
 }
 
-export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { socialAccounts?: SocialAccountRow[] } = {}): BriefResult {
+// The owner context the loader returns (20261028170000). A fixture or a legacy
+// caller without one gets the same resolver over the input's own rows, with
+// nothing checked live and every group taken as a service page: enforce is
+// off, so only explicit conflicts, wrong pages and holds refuse.
+export function ownerContextOf(input: DrafterInput): OwnerContext {
+  const given = (input as DrafterInput & { owner_context?: OwnerContext }).owner_context;
+  if (given) return given;
+  return {
+    enforce: false,
+    program_id: null,
+    site_url: input.client.website_url ?? null,
+    workspaces: [],
+    keywords: input.keywords.map((k) => ({ id: k.id, keyword: k.keyword, is_active: !!k.is_active, intent: k.intent ?? null,
+      service_id: k.service_id ?? null, target_url: k.target_url ?? null, city: null, market_id: null, core_parent_keyword_id: null })),
+    services: input.services.map((s) => ({ id: s.id, status: s.status, page_url: s.page_url ?? null, primary_keyword_id: s.primary_keyword_id ?? null })),
+    page_groups: input.pageGroups.map((g) => ({ id: g.id, status: g.status, page_type: (g as { page_type?: string }).page_type ?? "service",
+      target_url: g.target_url, primary_keyword_id: g.primary_keyword_id })),
+    published_posts: [],
+    markets: [],
+    page_checks: [],
+    holds: [],
+    as_of: `${input.asOf}T12:00:00Z`,
+  };
+}
+
+export function buildBrief(
+  input: DrafterInput,
+  target: DraftTarget,
+  extra: { socialAccounts?: SocialAccountRow[]; purpose?: OwnerPurpose } = {},
+): BriefResult {
   // Missing target fields inherit from the selected keyword. Explicit
   // disagreements still refuse below; never rewrite the stored keyword.
   const selected = input.keywords.find((k) => k.id === target.keywordId);
@@ -169,6 +199,8 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   // ── Facebook: a standard post with no button, on a named Page of this client ──
   const facebook = target.channel === "facebook";
   let socialAccount: Brief["target"]["social_account"] | null = null;
+  // The Business Profile location a post goes to (named, or the only one).
+  let gbpLocation: SocialAccountRow | null = null;
   if (facebook) {
     if (target.postType !== "standard") refuse("post_type_invalid", "Facebook drafts are standard posts in v1.");
     if (target.ctaType?.trim() || target.ctaUrl?.trim()) refuse("cta_not_applicable", "Facebook posts carry no button.");
@@ -176,8 +208,29 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     if (!target.socialAccountId) refuse("social_account_missing", "A Facebook draft names the client's Facebook Page (socialAccountId).");
     else if (!account) refuse("social_account_unknown", "The Facebook Page is not one of this client's Facebook accounts.");
     else socialAccount = { id: account.id, page_id: account.external_account_id, name: account.display_name };
-  } else if (target.socialAccountId) {
-    refuse("social_account_not_applicable", "Only a Facebook draft names a social account.");
+  } else {
+    // A Business Profile draft goes to one of the client's verified locations:
+    // the one it names, or the only one. With several, it must name one
+    // (drafter_write enforces the same; 20261027190935).
+    const locations = (extra.socialAccounts ?? []).filter((a) => a.platform === "google_business"
+      && a.publish_provider === "zernio" && !!a.publish_page_id && !!a.publish_verified_at);
+    // Blog briefs reuse these fact checks with a placeholder channel. Only
+    // an actual GBP post needs a separately verified eligible location.
+    if (input.client.business_type === "ecommerce" && (extra.purpose ?? "post") === "post" && locations.length === 0) {
+      refuse("gbp_location_required", "An online store needs a separately verified eligible Business Profile location. Use Facebook or website content while none is recorded.");
+    }
+    if (target.socialAccountId) {
+      const location = locations.find((a) => a.id === target.socialAccountId);
+      if (!location) refuse("social_account_unknown", "The Business Profile location is not one of this client's verified locations.");
+      else {
+        socialAccount = { id: location.id, page_id: location.publish_page_id ?? null, name: location.display_name };
+        gbpLocation = location;
+      }
+    } else if (locations.length > 1) {
+      refuse("social_account_missing", `This client has ${locations.length} Business Profile locations; the draft names one (socialAccountId).`);
+    } else if (locations.length === 1) {
+      gbpLocation = locations[0];
+    }
   }
 
   // ── Per-draft gate ──
@@ -208,35 +261,36 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     gate.offer = "not_applicable";
   }
 
-  // ── Service and target page ──
-  const needsService = campaignMode === "keyword" && target.postType === "standard" && intent !== "navigational";
+  // ── Owner page and related service (20261028170000) ──
+  // The keyword's owner page is the one page that explicitly claims it; the
+  // service is the related topic. One resolver (authority/keyword-owner.ts,
+  // SQL's keyword_owner() twin) decides, for this purpose.
+  const ownerCtx = ownerContextOf(input);
+  // The site program comes from the loader's owner context (the brand site it
+  // scoped the input to); a derived legacy context has none.
+  const program = ownerCtx.program_id;
+  const purpose: OwnerPurpose = extra.purpose ?? "post";
   let service: DrafterInput["services"][number] | null = null;
   let pageUrl: string | null = null;
   let pageGroupId: string | null = null;
+  let ownerPage: Brief["target"]["owner_page"] = null;
   if (target.serviceId) {
     service = input.services.find((s) => s.id === target.serviceId) ?? null;
     if (!service) refuse("service_unknown", "The service is not one of this client's services.");
     else if (service.status !== "approved") refuse("service_not_approved", `${service.name} is ${service.status}, not approved.`);
-  } else if (needsService) {
-    refuse("service_missing", `A standard ${intent} post needs an approved service as its topic.`);
   }
-  if (service) {
-    const page = normalizeUrl(service.page_url);
-    const siteHost = hostOf(input.client.website_url);
-    if (!page) refuse("target_page_missing", `${service.name} has no page to link to.`);
-    else if (!page.startsWith("https://")) refuse("target_page_invalid", `${service.page_url} is not an https page.`);
-    else if (!siteHost || hostOf(page) !== siteHost) refuse("target_page_invalid", `${service.page_url} is not on the client's website (${input.client.website_url}).`);
+  if (target.keywordId) {
+    const owned = resolveKeywordOwner(ownerCtx, target.keywordId, { program, purpose });
+    if (!owned.ok) refuse(owned.code, `${owned.message}`);
     else {
-      const group = input.pageGroups.find((g) => normalizeUrl(g.target_url) === page);
-      if (!group) refuse("target_page_unapproved", `No page group targets ${service.page_url}.`);
-      else if (group.status !== "approved") refuse("target_page_unapproved", `The page group for ${service.page_url} is ${group.status}, not approved.`);
-      else {
-        pageUrl = service.page_url;
-        pageGroupId = group.id;
-      }
+      pageUrl = owned.owner.display_url;
+      pageGroupId = owned.owner.page_group_id;
+      ownerPage = { url: owned.owner.url, display_url: owned.owner.display_url, page_group_id: owned.owner.page_group_id,
+        role: owned.owner.role, market: owned.owner.market, program_id: owned.owner.program_id };
+      gate.owner_page = `${owned.owner.role}${owned.notes.length ? " (not enforced: " + owned.notes.join("; ") + ")" : ""}`;
     }
-    gate.service = service.status === "approved" && pageUrl ? "approved_with_page" : "not_ready";
   }
+  if (service) gate.service = service.status === "approved" && pageUrl ? "approved_with_owner_page" : "not_ready";
 
   // ── CTA ──
   const ctaType = target.ctaType?.trim() || null;
@@ -246,14 +300,14 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     else if (ctaType === "CALL") {
       if (target.ctaUrl) refuse("cta_invalid", "A Call button takes no link.");
     } else {
-      const want = pageUrl ?? (intent === "navigational" ? input.client.website_url : null);
-      if (!want) refuse("cta_invalid", "The button needs the approved target page.");
-      else if (target.ctaUrl && normalizeUrl(target.ctaUrl) !== normalizeUrl(want)) refuse("cta_invalid", `The button must link to the target page ${want}, not ${target.ctaUrl}.`);
+      const want = pageUrl;
+      if (!want) refuse("cta_invalid", "The button needs the keyword's owner page.");
+      else if (target.ctaUrl && ownerNormUrl(target.ctaUrl) !== ownerNormUrl(want)) refuse("cta_invalid", `The button must link to the owner page ${want}, not ${target.ctaUrl}.`);
       else ctaUrl = want;
     }
   }
 
-  // ── Keyword foundation and unique owner ──
+  // ── Keyword foundation ──
   let keyword: Brief["target"]["keyword"] = null;
   if (target.keywordId) {
     const k = input.keywords.find((x) => x.id === target.keywordId);
@@ -267,21 +321,6 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
         clientName: input.client.name, places: buildPlaceIndex(places, places, []),
       });
       if (assessed.conflict) refuse("keyword_intent_conflict", `"${k.keyword}": ${assessed.reason} Review the keyword intent before drafting.`);
-      if (k.target_url && pageUrl && normalizeUrl(k.target_url) !== normalizeUrl(pageUrl)) refuse("keyword_wrong_page", `"${k.keyword}" targets ${k.target_url}, not ${pageUrl}.`);
-      // Check equivalent keyword rows too: separate IDs must not hide two
-      // primary owners for the same demand. Supporting assets keep one owner.
-      const sameText = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
-      const primary = input.keywords.find((x) => x.id === service?.primary_keyword_id);
-      const ownerKeywords = new Set([sameText(k.keyword), ...(primary ? [sameText(primary.keyword)] : [])]);
-      const cluster = input.keywords.filter((x) => x.is_active && ownerKeywords.has(sameText(x.keyword)));
-      const ids = new Set(cluster.map((x) => x.id));
-      const owners = new Set([
-        pageUrl,
-        ...cluster.map((x) => x.target_url),
-        ...input.services.filter((s) => s.status === "approved" && s.primary_keyword_id && ids.has(s.primary_keyword_id)).map((s) => s.page_url),
-        ...input.pageGroups.filter((g) => g.status === "approved" && g.primary_keyword_id && ids.has(g.primary_keyword_id)).map((g) => g.target_url),
-      ].map(normalizeUrl).filter(Boolean));
-      if (owners.size > 1) refuse("keyword_owner_conflict", `"${k.keyword}" has competing owner pages: ${[...owners].join(", ")}. Resolve ownership before drafting.`);
       keyword = { id: k.id, text: k.keyword, tracked: !!k.is_tracked, money: !!k.is_money, max_exact_uses: KEYWORD_MAX_EXACT_USES };
     }
   }
@@ -312,10 +351,57 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   if (assets.length > 1) refuse("too_many_assets", facebook ? "Facebook posts take one image in v1." : "Business Profile posts take one image in v1.");
 
   // ── Facts a draft may state; what it may not ──
-  const places = [...new Set(input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name).filter(Boolean) as string[])];
+  const clientPlaces = [...new Set([
+    ...input.locations.filter((l) => l.is_active).map((l) => l.city ?? l.name),
+    ...approvedMarketPlaces(ownerCtx, program),
+  ].filter(Boolean) as string[])];
+  // A Business Profile post speaks for its own location. When the location's
+  // markets are recorded (an office or a service area, not 'all'), only those
+  // are approved places, so an office profile in one city never names the
+  // client's other cities (Oct 31 2026). A shared 'all' profile, a location
+  // with nothing recorded, Facebook and blog briefs keep the client's places.
+  const gbpPost = !!gbpLocation && (extra.purpose ?? "post") === "post";
+  const recorded = gbpPost ? (gbpLocation?.markets ?? []) : [];
+  const scoped = recorded.length > 0 && !recorded.some((m) => m.kind === "all");
+  const places = scoped
+    ? [...new Set(recorded.map((m) => m.market.trim()).filter(Boolean))]
+    : clientPlaces;
+  // A client with several offices (or locations) must say which market a
+  // profile serves before it is drafted for; otherwise the brief would offer
+  // every office's cities to every profile.
+  const offices = ownerCtx.markets.filter((m) => m.status === "approved" && m.basis === "office").length;
+  const verifiedLocations = (extra.socialAccounts ?? []).filter((a) => a.platform === "google_business"
+    && a.publish_provider === "zernio" && !!a.publish_page_id && !!a.publish_verified_at).length;
+  if (gbpPost && recorded.length === 0
+      && (offices > 1 || verifiedLocations > 1 || input.locations.filter((l) => l.is_active).length > 1)) {
+    refuse("location_market_unmapped", `${gbpLocation?.display_name ?? "This Business Profile location"} has no recorded market and the client has several offices or locations; record the location's market (gbp_location_markets) before drafting.`);
+  }
+  // A city keyword must be one of the location's markets (core_market_problem in SQL).
+  const keywordCity = ownerCtx.keywords.find((k) => k.id === target.keywordId)?.city?.trim();
+  if (scoped && keywordCity && !places.some((p) => p.toLowerCase() === keywordCity.toLowerCase())) {
+    refuse("market_not_applicable", `${keywordCity} is not a market of ${gbpLocation?.display_name ?? "this Business Profile location"} (${places.join(", ")}).`);
+  }
+  // Offerings held from promotion: the linter refuses copy that names them.
+  const heldOfferings = ownerCtx.holds.filter((h) => h.brand_workspace_id === null || h.brand_workspace_id === program)
+    .map((h) => ({ offering: h.offering, phrases: h.phrases.map(normWords) }));
   const excludedFacts: Brief["excluded"]["facts"] = [];
   if (filled(input.client.service_area)) {
     excludedFacts.push({ fact: `Service area text: "${input.client.service_area}"`, reason: "Only active locations are approved places; the free-text service area is not." });
+  }
+  // The client's phone is not recorded for any one location, so a post scoped
+  // to a location carries no phone and no Call button; its button is Learn
+  // More to the owner page (Nov 2 2026).
+  const phone = scoped ? "" : input.client.phone ?? "";
+  if (scoped && ctaType === "CALL") {
+    refuse("cta_invalid", `${gbpLocation?.display_name ?? "This Business Profile location"} has no recorded phone; use Learn More to the owner page.`);
+  }
+  if (scoped && filled(input.client.phone)) {
+    excludedFacts.push({ fact: "The client's phone number", reason: `Not recorded for this Business Profile location (${places.join(", ")}); the post names no phone.` });
+  }
+  const elsewhere = scoped ? clientPlaces.filter((p) => !places.some((q) => q.toLowerCase() === p.toLowerCase())) : [];
+  if (elsewhere.length) {
+    excludedFacts.push({ fact: `Places outside this Business Profile location: ${elsewhere.join(", ")}`,
+      reason: `This location's recorded markets are ${places.join(", ")}; the client's other places belong to other locations or the website.` });
   }
   if (filled(input.client.address_line1)) excludedFacts.push({ fact: "Street address", reason: "Never stated (hard rule)." });
   for (const d of differentiators) {
@@ -329,14 +415,17 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
   const brief: Brief = {
     version: DRAFTER_VERSION,
     as_of: input.asOf,
-    client: { id: input.client.id, name: input.client.name, phone: input.client.phone ?? "", website: input.client.website_url ?? "" },
+    client: { id: input.client.id, name: input.client.name, phone, website: input.client.website_url ?? "" },
     gate,
     target: {
       channel: target.channel as Brief["target"]["channel"],
       post_type: target.postType,
       campaign_mode: campaignMode,
       search_intent: intent,
-      service: service && pageUrl && pageGroupId ? { id: service.id, name: service.name, page_url: pageUrl, page_group_id: pageGroupId } : null,
+      // The related service (the topic); its page is not the owner unless the resolver said so.
+      service: service ? { id: service.id, name: service.name, page_url: service.page_url ?? null,
+        page_group_id: ownerPage && service.page_url && ownerNormUrl(service.page_url) === ownerPage.url ? pageGroupId : null } : null,
+      owner_page: ownerPage,
       keyword,
       cta: { type: ctaType, url: ctaUrl, in_copy_phrase: input.board?.standing_cta ?? null },
       offer,
@@ -346,7 +435,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
     allowed_facts: {
       crm: {
         business_name: input.client.name,
-        phone: input.client.phone ?? "",
+        phone,
         website: input.client.website_url ?? "",
         places,
         services: service ? [service.name] : input.services.filter((s) => s.status === "approved").map((s) => s.name),
@@ -356,7 +445,7 @@ export function buildBrief(input: DrafterInput, target: DraftTarget, extra: { so
       min_claims: minClaims,
       max_claims: MAX_CLAIMS,
     },
-    excluded: { claims: excludedClaims, facts: excludedFacts },
+    excluded: { claims: excludedClaims, facts: excludedFacts, offerings: heldOfferings },
     brand: {
       positioning: input.brand?.positioning ?? null,
       voice_tone: input.brand?.voice_tone ?? null,

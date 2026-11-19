@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createContentApprovals, parseRevise, parseStage } from "../supabase/functions/content-approvals/handler.ts";
+import { createContentApprovals, parseHold, parseRelease, parseRevise, parseStage } from "../supabase/functions/content-approvals/handler.ts";
 
 const KEY = "delegation-secret-value";
 const CLIENT = "102d3b20-2795-44ae-bd64-d1e43916291c";
@@ -48,6 +48,10 @@ function fakeStore(o = {}) {
       return o.execute ?? { data: { id, status: "executed", result: { review_status: "in_review", publish_status: "not_scheduled" } }, error: null }; },
     async editRefuse(id, code, message) { calls.push(["editRefuse", id, code, message]); return { data: { id, status: "refused", refusal_code: code }, error: null }; },
     async editStatus(op) { calls.push(["editStatus", op]); return o.status ?? { data: null, error: null }; },
+    async holdOpen(p) { calls.push(["holdOpen", p]); if (o.holdThrows) throw new Error("fetch failed");
+      return o.hold ?? { data: { id: "h1", ref: p.ref, post_id: p.post.id, opened_at: "2026-11-17T10:00:00Z", closed_at: null, replayed: false }, error: null }; },
+    async holdClose(ref, reason, note, by) { calls.push(["holdClose", ref, reason, note, by]);
+      return o.release ?? { data: { released: true, hold: { id: "h1", ref, post_id: POST, closed_at: "2026-11-17T11:00:00Z", close_reason: reason, superseded_by_ref: by } }, error: null }; },
   };
   return s;
 }
@@ -76,8 +80,8 @@ const reviseBody = (o = {}) => ({
 test("version lists the edit modes; only the delegation key opens them", async () => {
   const r = await call(fakeStore(), post({ mode: "version" }));
   const v = await r.json();
-  assert.equal(v.version, 3);
-  for (const m of ["stage_media", "revise", "revise_status"]) assert.ok(v.modes.includes(m), m);
+  assert.equal(v.version, 5);
+  for (const m of ["stage_media", "revise", "revise_status", "hold", "release"]) assert.ok(v.modes.includes(m), m);
   assert.equal((await call(fakeStore(), post(stageBody(), "wrong"))).status, 403);
   assert.equal((await call(fakeStore(), post(reviseBody(), null))).status, 403);
 });
@@ -236,4 +240,70 @@ test("revise_status returns the receipt and the post now, or 404", async () => {
   assert.equal(r.status, 200);
   assert.equal((await r.json()).receipt.post_now.review_status, "in_review");
   assert.equal((await call(fakeStore(), post({ mode: "revise_status" }))).status, 400);
+});
+
+// ── Pending changes (20261117010000, v5) ────────────────────────────────────
+const REF = "0e1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const REF2 = "1e1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const holdBody = (o = {}) => ({
+  mode: "hold", ref: REF, client_id: CLIENT, post: { channel: "facebook", id: POST }, kind: "replace_copy", review_hash: HASH,
+  summary: "Revise one Facebook post in Compass: replace its copy", requested_by: "Claude via Executive OS", ...o,
+});
+
+test("hold and release requests are validated before the database is called", () => {
+  assert.equal(typeof parseHold(holdBody()), "object");
+  assert.equal(typeof parseHold(holdBody({ kind: "replace_media", review_hash: null })), "object");
+  for (const b of [holdBody({ ref: "pol-1" }), holdBody({ kind: "approve" }), holdBody({ post: { channel: "blog", id: POST } }),
+                   holdBody({ review_hash: "abc" }), holdBody({ summary: " " }), holdBody({ requested_by: "" })]) {
+    assert.equal(typeof parseHold(b), "string", JSON.stringify(b));
+  }
+  assert.deepEqual(parseRelease({ ref: REF, reason: "superseded", superseded_by_ref: REF2, note: " newer request " }),
+    { ref: REF, reason: "superseded", note: "newer request", supersededBy: REF2 });
+  for (const b of [{ ref: REF, reason: "executed" }, { ref: REF, reason: "approved" }, { ref: "x", reason: "withdrawn" },
+                   { ref: REF, reason: "withdrawn", superseded_by_ref: REF2 }, { ref: REF, reason: "rejected", note: "x".repeat(1001) }]) {
+    assert.equal(typeof parseRelease(b), "string", JSON.stringify(b));
+  }
+});
+
+test("hold opens once per approval; release closes it; outcomes stay honest", async () => {
+  const s = fakeStore();
+  let r = await call(s, post(holdBody()));
+  assert.equal(r.status, 201);
+  assert.equal((await r.json()).hold.status, "open");
+  assert.deepEqual(s.calls[0], ["holdOpen", { ref: REF, client_id: CLIENT, post: { channel: "facebook", id: POST }, kind: "replace_copy",
+    review_hash: HASH, summary: "Revise one Facebook post in Compass: replace its copy", requested_by: "Claude via Executive OS" }]);
+
+  r = await call(fakeStore({ hold: { data: null, error: { code: "23514", message: "not_holdable: the post is approved / scheduled" } } }), post(holdBody()));
+  assert.equal(r.status, 422);
+  assert.equal((await r.json()).error, "not_holdable");
+  r = await call(fakeStore({ holdThrows: true }), post(holdBody()));
+  assert.equal(r.status, 503, "a thrown call is unknown, not a refusal");
+
+  const s2 = fakeStore();
+  r = await call(s2, post({ mode: "release", ref: REF, reason: "superseded", superseded_by_ref: REF2, note: "Refiled against the new review hash" }));
+  assert.equal(r.status, 200);
+  const out = await r.json();
+  assert.equal(out.released, true);
+  assert.equal(out.hold.close_reason, "superseded");
+  assert.deepEqual(s2.calls[0], ["holdClose", REF, "superseded", "Refiled against the new review hash", REF2]);
+  // Unknown ref: nothing to release, not an error.
+  r = await call(fakeStore({ release: { data: { released: false, hold: null }, error: null } }), post({ mode: "release", ref: REF, reason: "withdrawn" }));
+  assert.deepEqual(await r.json(), { released: false, hold: null });
+  // Only the delegation key.
+  assert.equal((await call(fakeStore(), post(holdBody(), "wrong"))).status, 403);
+});
+
+test("an approved stage closes its own hold; a refused one closes it as refused", async () => {
+  const s = fakeStore();
+  await call(s, post(stageBody({ approval_id: REF })));
+  assert.deepEqual(s.calls.map((c) => c[0]), ["editStage", "holdClose", "uploadSlot"]);
+  assert.equal(s.calls[1][2], "executed");
+  assert.ok(!("approval_id" in s.calls[0][1]), "the stage record never carries the approval id (its request hash is unchanged)");
+  const s2 = fakeStore({ stage: { data: null, error: { code: "23514", message: "channel_mismatch: post is a google_business post" } } });
+  await call(s2, post(stageBody({ approval_id: REF })));
+  assert.deepEqual(s2.calls.map((c) => [c[0], c[2]]), [["editStage", undefined], ["holdClose", "refused"]]);
+  // A stage under a standing policy has no approval and touches no hold.
+  const s3 = fakeStore();
+  await call(s3, post(stageBody()));
+  assert.ok(!s3.calls.some((c) => c[0] === "holdClose"));
 });

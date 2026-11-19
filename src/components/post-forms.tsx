@@ -56,6 +56,7 @@ export type DraftValues = {
   offer_id: string | null;
   keyword_id: string | null;
   notes: string | null;
+  social_account_id?: string | null;
 };
 
 // New draft (no postId) or edit a draft. Frozen posts never render this.
@@ -66,6 +67,7 @@ export function PostDraftForm({
   services,
   offers,
   keywords,
+  locations = [],
 }: {
   clientId: string;
   postId?: string;
@@ -73,6 +75,9 @@ export function PostDraftForm({
   services: Option[];
   offers: Option[];
   keywords: Option[];
+  // The client's bound Business Profile locations. With two or more, a
+  // Business Profile draft names one; with one, it goes there.
+  locations?: Option[];
 }) {
   const bound = postId
     ? updatePostAction.bind(null, clientId, postId)
@@ -105,6 +110,28 @@ export function PostDraftForm({
             ))}
           </select>
         </div>
+        {gbp && locations.length > 1 && (
+          <div className="space-y-1 sm:col-span-3">
+            <Label htmlFor="social_account_id">Business Profile location</Label>
+            <select
+              id="social_account_id"
+              name="social_account_id"
+              defaultValue={post?.social_account_id ?? ""}
+              className={selectClass}
+              required
+            >
+              <option value="" disabled>Choose the location this post is for</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              This client has several connected locations. The post goes only to the one chosen here; a location that is not connected yet cannot be chosen.
+            </p>
+          </div>
+        )}
         <div className="space-y-1">
           <Label htmlFor="post_type">Post type</Label>
           <select

@@ -154,6 +154,19 @@ approved templates, and connected merchant accounts before enabling issuance.
 
 ## Validation and release
 
+External collection snapshots use `external_amount_cents`, `external_currency`
+and `external_interval` from the existing plan, with one interval per payment.
+Record the manual method (including Zelle when `external_method = other`), due
+date and instructions in the plan notes and reviewed contract terms. External
+agreements use manual-payment wording in the email, signed page and PDF, and
+never expose an online payment handoff. The database payment-preparation guard
+continues to require Stripe collection before calling billing.
+
+Migration `20261030034002_external_payment_agreement_scope.sql` replaces only
+the private scope reader. Save an existing draft to refresh its fee snapshot.
+Issued/signed documents and stored artifacts are not rewritten. Stripe scope
+keys and values stay identical so existing signed-scope checks still succeed.
+
 `tests/native-agreements.test.mjs` runs the real migration in PostgreSQL/WASM,
 including Supabase-shaped default grants, actor authorization, stranger/portal
 isolation, consent, null-code rejection, guessing limits, link replacement,

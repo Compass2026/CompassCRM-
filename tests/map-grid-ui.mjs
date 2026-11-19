@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {mkdirSync,existsSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 import {localGrid,distanceMiles} from '../supabase/functions/_shared/map-grid.ts';
+import {isoWeekStart,WEEKLY_SLOT_MS} from '../src/lib/map-grid-weekly.ts';
 const clientId='00000000-0000-4000-8000-000000000001',teamId='00000000-0000-4000-8000-000000000011';
 const kw='00000000-0000-4000-8000-000000000021',kw2='00000000-0000-4000-8000-000000000022';
 const center={lat:38.805,lng:-90.815},keywords=[{id:kw,keyword:'roof repair'},{id:kw2,keyword:'roof replacement'}];
@@ -19,7 +20,13 @@ const profile2={...market,id:'profile2',client_id:clientId,grid_config_id:'grid2
 // Another client's run (profile 'other'): never reachable under this client.
 const attempts=[{profile_id:'profile2',outcome:'error',message:'Grid keyword mismatch',attempted_at:new Date().toISOString(),run_id:null}];
 const scanned=[];
-runs.push({id:'market',profile_id:'profile2',started_at:'2026-10-14T01:00:00Z',status:'complete',config:market,error:null},{id:'o1',profile_id:'other',started_at:'2026-10-14T01:00:00Z',status:'complete',config,error:null});
+// The Wichita grid's weekly scan, placed in the week the production rule checks
+// (src/lib/map-grid-weekly.ts): this week once Thursday's 14:00 UTC slot has
+// passed, last week before it. A minute after that week's slot, so never in the future.
+const nowMs=Date.now(),thisWeek=isoWeekStart(nowMs),targetWeek=nowMs<thisWeek+WEEKLY_SLOT_MS?thisWeek-7*86400000:thisWeek;
+const marketAt=new Date(targetWeek+WEEKLY_SLOT_MS+60000).toISOString().replace(/\.\d{3}Z$/,'Z');
+const marketLabel=`${marketAt.slice(0,10)} ${marketAt.slice(11,16)} UTC · complete · dense 1/2/5 mi`;
+runs.push({id:'market',profile_id:'profile2',started_at:marketAt,status:'complete',config:market,error:null},{id:'o1',profile_id:'other',started_at:'2026-10-14T01:00:00Z',status:'complete',config,error:null});
 const make=(cfg,pending,c=center)=>cfg.keywords.flatMap(k=>cfg.points.map((p,i)=>{const d=distanceMiles(c,p),queued=pending&&i%17===5;return{...p,id:`${k.id}-${i}`,keyword_id:k.id,keyword:k.keyword,point_index:i,state:queued?'queued':'complete',position:queued?null:d>4.5&&i%3===0?null:1+Math.floor(d*2),results:queued?null:[{place_id:'ChIJfixture',position:1+Math.floor(d*2),title:'Fixture Roofing',domain:'example.test'}],cost:.0006,error:null,checked_at:'2026-10-16T01:01:00Z'};}));
 const checks={dense:make(config,true),broad:make(broad,false),market:make(market,false,wichita)};
 const baseline=keywords.map(k=>({grid_config_id:'grid',keyword_id:k.id,recorded_at:'2026-09-24T14:00:00Z',points:broad.points.map(p=>({...p,position:2}))}));
@@ -156,7 +163,7 @@ try{
  assert.deepEqual(await page.getByLabel('Map location').locator('option').allTextContents(),['Fictional pilot','Fictional pilot — Wichita, KS']);
  await page.getByLabel('Map location').selectOption('profile2');await page.waitForURL(/profile=profile2/);
  assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
- assert.deepEqual(await page.getByLabel('Scan history').locator('option').allTextContents(),['2026-10-14 01:00 UTC · complete · dense 1/2/5 mi']);
+ assert.deepEqual(await page.getByLabel('Scan history').locator('option').allTextContents(),[marketLabel]);
  // Refresh keeps the selected location; the first profile's history is not mixed in.
  await page.reload({waitUntil:'networkidle'});assert.equal(await page.getByLabel('Map location').inputValue(),'profile2');
  assert.equal(starts,startsBeforeLocations);

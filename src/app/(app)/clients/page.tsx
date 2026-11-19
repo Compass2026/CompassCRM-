@@ -67,6 +67,7 @@ export default async function ClientsPage() {
                   >
                     <option value="service_area">Service area (goes to the customer)</option>
                     <option value="storefront">Storefront (customers come in)</option>
+                    <option value="ecommerce">E-commerce (online store)</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -76,16 +77,16 @@ export default async function ClientsPage() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1 col-span-2">
-                  <Label htmlFor="city">Home city</Label>
-                  <Input id="city" name="city" required />
+                  <Label htmlFor="city">Home city (local businesses)</Label>
+                  <Input id="city" name="city" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="state">State</Label>
-                  <Input id="state" name="state" placeholder="MO" maxLength={2} required />
+                  <Input id="state" name="state" placeholder="MO" maxLength={2} />
                 </div>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="service_area">Service area</Label>
+                <Label htmlFor="service_area">Service area / shipping market</Label>
                 <Input id="service_area" name="service_area" placeholder="St. Louis metro: Kirkwood, Clayton, Chesterfield…" />
               </div>
               <div className="space-y-1">

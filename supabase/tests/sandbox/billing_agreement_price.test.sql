@@ -189,7 +189,8 @@ begin
   e := agp.try(format($q$update plans set package_id = %L where client_id = %L$q$, agp.id('pkg_other'), agp.id('legacy')));
   perform agp.ok('B15 the package cannot change under a bound price', e like '23503%', e);
   e := agp.try(format($q$delete from billing_package_prices where id = %L$q$, agp.id('pp500')));
-  perform agp.ok('B16 a bound package price cannot be deleted', e like '23503%', e);
+  -- ON DELETE RESTRICT: 23503 through PostgreSQL 17, 23001 from 18 on.
+  perform agp.ok('B16 a bound package price cannot be deleted', e like '23503%' or e like '23001%', e);
   e := agp.try(format($q$update plans set notes = 'Contract signed.', term_months = null where client_id = %L$q$, agp.id('legacy')));
   perform agp.ok('B17 editing anything else of a bound agreement needs no re-binding', e is null, e);
 end $$;

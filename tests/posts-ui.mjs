@@ -274,10 +274,10 @@ try {
 
   // Schedule; the approval is untouched.
   const before = sql(`select reviewed_by || '|' || reviewed_at || '|' || approved_hash from social_posts where id = '${POST_A}'`);
-  await page.getByLabel("Publish at (Central)").fill("2026-10-06T09:30");
+  await page.getByLabel("Publish at (Central)").fill("2030-10-07T09:30");
   await page.getByRole("button", { name: "Schedule" }).click();
   await page.getByText(/Scheduled for/).waitFor();
-  assert.equal(sql(`select publish_status || '|' || to_char(scheduled_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') from social_posts where id = '${POST_A}'`), "scheduled|2026-10-06 09:30");
+  assert.equal(sql(`select publish_status || '|' || to_char(scheduled_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') from social_posts where id = '${POST_A}'`), "scheduled|2030-10-07 09:30");
   assert.equal(sql(`select reviewed_by || '|' || reviewed_at || '|' || approved_hash from social_posts where id = '${POST_A}'`), before);
   ok("Scheduling (Central time) leaves the approval exactly as it was");
   assert.equal(await page.getByRole("button", { name: "Mark published" }).count(), 0, "no manual publish for a Business Profile post");
@@ -526,7 +526,9 @@ try {
   ok("Approved Business Profile post: Zernio route, exact location and the no-write preflight (real function) from the post page");
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
-  const gbpRow = page.locator(`[data-gbp-row="${CLIENT_A}"]`);
+  // One row per bound location, plus a row to bind another (20261027190935).
+  const gbpRow = page.locator(`[data-gbp-row="${CLIENT_A}"][data-gbp-location="locations/7770001"]`);
+  assert.equal(await page.locator(`[data-gbp-row="${CLIENT_A}"][data-gbp-location="another"]`).count(), 1, "a row binds another location");
   assert.match(await gbpRow.textContent(), /locations\/7770001/);
   assert.match(await gbpRow.textContent(), /Bound, publishing off/);
   assert.equal(await gbpRow.locator("[data-gbp-transport]").textContent(), "Through Zernio only", "binding moved the client to Zernio");

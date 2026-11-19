@@ -10,5 +10,6 @@ export function workspaceGate(input: DrafterInput): Record<string, string> {
 }
 export function workspaceAccounts(input: DrafterInput, accounts: SocialAccountRow[]): SocialAccountRow[] {
   const w = (input as WorkspaceInput).workspace;
-  return w ? accounts.filter(a => a.id === w.facebook_account_id) : accounts;
+  // A brand site has its own Facebook Page; Business Profile locations are the client's.
+  return w ? accounts.filter(a => a.platform === "google_business" || a.id === w.facebook_account_id) : accounts;
 }

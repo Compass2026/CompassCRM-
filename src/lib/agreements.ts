@@ -103,10 +103,13 @@ export function safePaymentUrl(url: string | null): string | null {
   }
 }
 export function activeAgreementPayment(c: Contract): string | null {
+  if (c.snapshot.scope.plan.collection === "external") return null;
   return c.payment_expires_at && Date.parse(c.payment_expires_at) > Date.now()
     ? safePaymentUrl(c.payment_url)
     : null;
 }
+export const MANUAL_AGREEMENT_PAYMENT =
+  "Payments are made manually using the payment method stated in your agreement. No automatic billing or online payment setup is required.";
 export const agreementErrors: Record<string, string> = {
   unavailable:
     "This agreement link is unavailable or expired. Contact the sender for a new link.",

@@ -1,0 +1,988 @@
+{
+ "G": {
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
+  "client": "SPR Sample G (fictional)",
+  "version": "site-program-readiness/v1",
+  "programs": [
+   {
+    "list": {
+     "id": "61ea200d-4ffc-eaa4-1c99-1b252869bd25",
+     "size": 50,
+     "status": "approved",
+     "version": 1,
+     "approved": true,
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
+    },
+    "name": "SPR Sample G (fictional)",
+    "brand": {
+     "source": "brand_board",
+     "approved": true
+    },
+    "holds": {
+     "active": 0,
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
+    },
+    "proof": {
+     "scope": "client",
+     "photos": 6,
+     "unreviewed": 0,
+     "newest_review": "2026-10-29",
+     "creative_approved": 6,
+     "own_work_approved": 6,
+     "site_own_work_approved": 6
+    },
+    "roles": {
+     "service": 50
+    },
+    "claims": {
+     "scope": "client",
+     "usable": 3,
+     "sourced": 0,
+     "confirmed": 3,
+     "unverified": 0,
+     "site_usable": 3,
+     "review_dates": null,
+     "newest_recorded": "2026-10-29",
+     "oldest_recorded": "2026-10-29",
+     "newest_confirmed": "2026-10-26",
+     "sourced_without_source": 0
+    },
+    "gate_b": {
+     "status": "blocked",
+     "reasons": [
+      {
+       "code": "place_text_only",
+       "count": 1,
+       "severity": "not_verified"
+      },
+      {
+       "code": "place_without_market",
+       "count": 1,
+       "severity": "blocked"
+      }
+     ]
+    },
+    "gate_c": {
+     "status": "blocked",
+     "reasons": [
+      {
+       "code": "strategy_not_ready",
+       "severity": "blocked"
+      }
+     ]
+    },
+    "owners": {
+     "blog": {
+      "ok": 25,
+      "problems": {
+       "owner_role_not_allowed": 25
+      }
+     },
+     "post": {
+      "ok": 50,
+      "problems": {}
+     },
+     "refresh": {
+      "ok": 50,
+      "problems": {}
+     }
+    },
+    "intents": {
+     "none": 0,
+     "commercial": 13,
+     "navigational": 12,
+     "informational": 12,
+     "transactional": 13
+    },
+    "markets": {
+     "approved": 1,
+     "recorded": 1
+    },
+    "site_id": null,
+    "problems": [
+     {
+      "owner": null,
+      "places": [
+       {
+        "basis": "state_named",
+        "place": "Troy",
+        "state": "IL",
+        "market": false
+       }
+      ],
+      "keyword": "zqx interior designer troy il",
+      "geography": "without_market",
+      "keyword_id": "5e82a2d6-8093-061f-877d-33b11cb347a5",
+      "owner_detail": null,
+      "structured_city": null
+     },
+     {
+      "owner": null,
+      "places": [
+       {
+        "basis": "state_named",
+        "place": "Edwardsville",
+        "state": "IL",
+        "market": true
+       }
+      ],
+      "keyword": "zqx interior designer edwardsville il",
+      "geography": "text_only",
+      "keyword_id": "44aa00f6-5f71-9a58-8bd1-9c0d14588fec",
+      "owner_detail": null,
+      "structured_city": null
+     }
+    ],
+    "site_url": "https://g.spr.example.test",
+    "warnings": [
+     {
+      "code": "claims_no_review_date",
+      "detail": "Claims record no expiry or review date yet (W1 / P0.3)."
+     },
+     {
+      "code": "authority_never_run"
+     }
+    ],
+    "authority": {
+     "scope": "client",
+     "status": null,
+     "age_days": null,
+     "last_run_at": null,
+     "engine_version": null,
+     "predates_list_approval": null
+    },
+    "geography": {
+     "none": 48,
+     "assessed": true,
+     "mismatch": 0,
+     "text_only": 1,
+     "structured": 0,
+     "unassessed": 0,
+     "without_market": 1
+    },
+    "onboarding": {
+     "site_level": {},
+     "client_level": {}
+    },
+    "program_id": null,
+    "owner_pages": {
+     "live": 5,
+     "urls": 5,
+     "stale": 0,
+     "top_url": "https://g.spr.example.test/services/zqx-1",
+     "not_live": [],
+     "top_share": 0.2,
+     "unchecked": 0,
+     "oldest_check": "2026-10-28",
+     "top_keywords": 10
+    },
+    "newer_proposal": null,
+    "services_approved": 5
+   }
+  ],
+  "client_id": "b5ceb2d5-1b04-e2bc-ed30-7f4c4508c121",
+  "geography": {
+   "sources": [
+    {
+     "names": 21316,
+     "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
+     "source": "src/data/us-cities.json",
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
+    }
+   ],
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
+  },
+  "multi_brand": false
+ },
+ "M": {
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
+  "client": "SPR Sample M Group (fictional)",
+  "version": "site-program-readiness/v1",
+  "programs": [
+   {
+    "list": {
+     "id": "f7ad77de-09a9-b470-6b8e-34cd4f2f52d4",
+     "size": 50,
+     "status": "approved",
+     "version": 1,
+     "approved": true,
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
+    },
+    "name": "SPR M1",
+    "brand": {
+     "source": "brand_site",
+     "approved": true
+    },
+    "holds": {
+     "active": 0,
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
+    },
+    "proof": {
+     "scope": "client",
+     "photos": 8,
+     "unreviewed": 0,
+     "newest_review": "2026-10-29",
+     "creative_approved": 8,
+     "own_work_approved": 8,
+     "site_own_work_approved": null
+    },
+    "roles": {
+     "service": 50
+    },
+    "claims": {
+     "scope": "client",
+     "usable": 4,
+     "sourced": 0,
+     "confirmed": 4,
+     "unverified": 0,
+     "site_usable": null,
+     "review_dates": null,
+     "newest_recorded": "2026-10-29",
+     "oldest_recorded": "2026-10-29",
+     "newest_confirmed": "2026-10-29",
+     "sourced_without_source": 0
+    },
+    "gate_b": {
+     "status": "ready",
+     "reasons": []
+    },
+    "gate_c": {
+     "status": "not_verified",
+     "reasons": [
+      {
+       "code": "claims_client_scope",
+       "detail": "Claims carry no brand site; none is verified for this site.",
+       "severity": "not_verified"
+      },
+      {
+       "code": "proof_client_scope",
+       "detail": "Assets carry no brand site; no own-work proof is verified for this site.",
+       "severity": "limited"
+      }
+     ]
+    },
+    "owners": {
+     "blog": {
+      "ok": 25,
+      "problems": {
+       "owner_role_not_allowed": 25
+      }
+     },
+     "post": {
+      "ok": 50,
+      "problems": {}
+     },
+     "refresh": {
+      "ok": 50,
+      "problems": {}
+     }
+    },
+    "intents": {
+     "none": 0,
+     "commercial": 13,
+     "navigational": 12,
+     "informational": 12,
+     "transactional": 13
+    },
+    "markets": {
+     "approved": 0,
+     "recorded": 0
+    },
+    "site_id": "b868be76-7235-c090-590e-3ddd26137365",
+    "problems": [],
+    "site_url": "https://m1.spr.example.test",
+    "warnings": [
+     {
+      "code": "claims_no_review_date",
+      "detail": "Claims record no expiry or review date yet (W1 / P0.3)."
+     }
+    ],
+    "authority": {
+     "scope": "client",
+     "status": "completed",
+     "age_days": 0,
+     "last_run_at": "2026-10-29T13:59:56.15432-05:00",
+     "engine_version": "authority-v1.4",
+     "predates_list_approval": false
+    },
+    "geography": {
+     "none": 50,
+     "assessed": true,
+     "mismatch": 0,
+     "text_only": 0,
+     "structured": 0,
+     "unassessed": 0,
+     "without_market": 0
+    },
+    "onboarding": {
+     "site_level": {},
+     "client_level": {}
+    },
+    "program_id": "8b13b273-bdd6-4aa5-70f0-1ee06c7fcc7d",
+    "owner_pages": {
+     "live": 5,
+     "urls": 5,
+     "stale": 0,
+     "top_url": "https://m1.spr.example.test/services/zqx-1",
+     "not_live": [],
+     "top_share": 0.2,
+     "unchecked": 0,
+     "oldest_check": "2026-10-28",
+     "top_keywords": 10
+    },
+    "newer_proposal": null,
+    "services_approved": 5
+   },
+   {
+    "list": {
+     "id": "939dc589-2996-a054-cc8c-07b3e14f3bd0",
+     "size": 50,
+     "status": "approved",
+     "version": 1,
+     "approved": true,
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
+    },
+    "name": "SPR M2",
+    "brand": {
+     "source": "brand_site",
+     "approved": true
+    },
+    "holds": {
+     "active": 0,
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
+    },
+    "proof": {
+     "scope": "client",
+     "photos": 8,
+     "unreviewed": 0,
+     "newest_review": "2026-10-29",
+     "creative_approved": 8,
+     "own_work_approved": 8,
+     "site_own_work_approved": null
+    },
+    "roles": {
+     "none": 1,
+     "service": 49
+    },
+    "claims": {
+     "scope": "client",
+     "usable": 4,
+     "sourced": 0,
+     "confirmed": 4,
+     "unverified": 0,
+     "site_usable": null,
+     "review_dates": null,
+     "newest_recorded": "2026-10-29",
+     "oldest_recorded": "2026-10-29",
+     "newest_confirmed": "2026-10-29",
+     "sourced_without_source": 0
+    },
+    "gate_b": {
+     "status": "blocked",
+     "reasons": [
+      {
+       "code": "owner:keyword_wrong_page",
+       "count": 1,
+       "severity": "blocked"
+      }
+     ]
+    },
+    "gate_c": {
+     "status": "blocked",
+     "reasons": [
+      {
+       "code": "strategy_not_ready",
+       "severity": "blocked"
+      },
+      {
+       "code": "claims_client_scope",
+       "detail": "Claims carry no brand site; none is verified for this site.",
+       "severity": "not_verified"
+      },
+      {
+       "code": "proof_client_scope",
+       "detail": "Assets carry no brand site; no own-work proof is verified for this site.",
+       "severity": "limited"
+      }
+     ]
+    },
+    "owners": {
+     "blog": {
+      "ok": 25,
+      "problems": {
+       "keyword_wrong_page": 1,
+       "owner_role_not_allowed": 24
+      }
+     },
+     "post": {
+      "ok": 49,
+      "problems": {
+       "keyword_wrong_page": 1
+      }
+     },
+     "refresh": {
+      "ok": 49,
+      "problems": {
+       "keyword_wrong_page": 1
+      }
+     }
+    },
+    "intents": {
+     "none": 0,
+     "commercial": 13,
+     "navigational": 12,
+     "informational": 12,
+     "transactional": 13
+    },
+    "markets": {
+     "approved": 0,
+     "recorded": 0
+    },
+    "site_id": "7092304d-f9a6-0ede-2d59-ed93f6a17de2",
+    "problems": [
+     {
+      "owner": "keyword_wrong_page",
+      "places": null,
+      "keyword": "zqx m2 plumbo 7",
+      "geography": null,
+      "keyword_id": "3ace7a15-61eb-174a-a8c0-c44c59d8b5e3",
+      "owner_detail": "https://m1.spr.example.test/services/zqx-1 is not on SPR M2's site https://m2.spr.example.test.",
+      "structured_city": null
+     }
+    ],
+    "site_url": "https://m2.spr.example.test",
+    "warnings": [
+     {
+      "code": "claims_no_review_date",
+      "detail": "Claims record no expiry or review date yet (W1 / P0.3)."
+     }
+    ],
+    "authority": {
+     "scope": "client",
+     "status": "completed",
+     "age_days": 0,
+     "last_run_at": "2026-10-29T13:59:56.15432-05:00",
+     "engine_version": "authority-v1.4",
+     "predates_list_approval": false
+    },
+    "geography": {
+     "none": 50,
+     "assessed": true,
+     "mismatch": 0,
+     "text_only": 0,
+     "structured": 0,
+     "unassessed": 0,
+     "without_market": 0
+    },
+    "onboarding": {
+     "site_level": {},
+     "client_level": {}
+    },
+    "program_id": "b7ce8d54-2770-8e59-fcb8-b2c53097bfce",
+    "owner_pages": {
+     "live": 6,
+     "urls": 6,
+     "stale": 0,
+     "top_url": "https://m2.spr.example.test/services/zqx-1",
+     "not_live": [],
+     "top_share": 0.2,
+     "unchecked": 0,
+     "oldest_check": "2026-10-28",
+     "top_keywords": 10
+    },
+    "newer_proposal": null,
+    "services_approved": 5
+   },
+   {
+    "list": {
+     "id": "be8b23ba-0108-7d1d-e2ce-24d966b6b8d6",
+     "size": 50,
+     "status": "approved",
+     "version": 2,
+     "approved": true,
+     "approved_at": "2026-10-29T14:29:56.15432-05:00"
+    },
+    "name": "SPR M3",
+    "brand": {
+     "source": "brand_site",
+     "approved": true
+    },
+    "holds": {
+     "active": 0,
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
+    },
+    "proof": {
+     "scope": "client",
+     "photos": 8,
+     "unreviewed": 0,
+     "newest_review": "2026-10-29",
+     "creative_approved": 8,
+     "own_work_approved": 8,
+     "site_own_work_approved": null
+    },
+    "roles": {
+     "service": 50
+    },
+    "claims": {
+     "scope": "client",
+     "usable": 4,
+     "sourced": 0,
+     "confirmed": 4,
+     "unverified": 0,
+     "site_usable": null,
+     "review_dates": null,
+     "newest_recorded": "2026-10-29",
+     "oldest_recorded": "2026-10-29",
+     "newest_confirmed": "2026-10-29",
+     "sourced_without_source": 0
+    },
+    "gate_b": {
+     "status": "ready",
+     "reasons": []
+    },
+    "gate_c": {
+     "status": "not_verified",
+     "reasons": [
+      {
+       "code": "claims_client_scope",
+       "detail": "Claims carry no brand site; none is verified for this site.",
+       "severity": "not_verified"
+      },
+      {
+       "code": "proof_client_scope",
+       "detail": "Assets carry no brand site; no own-work proof is verified for this site.",
+       "severity": "limited"
+      }
+     ]
+    },
+    "owners": {
+     "blog": {
+      "ok": 25,
+      "problems": {
+       "owner_role_not_allowed": 25
+      }
+     },
+     "post": {
+      "ok": 50,
+      "problems": {}
+     },
+     "refresh": {
+      "ok": 50,
+      "problems": {}
+     }
+    },
+    "intents": {
+     "none": 0,
+     "commercial": 13,
+     "navigational": 12,
+     "informational": 12,
+     "transactional": 13
+    },
+    "markets": {
+     "approved": 0,
+     "recorded": 0
+    },
+    "site_id": "cd0f11fa-c792-7335-51e8-16763629335e",
+    "problems": [],
+    "site_url": "https://m3.spr.example.test",
+    "warnings": [
+     {
+      "code": "claims_no_review_date",
+      "detail": "Claims record no expiry or review date yet (W1 / P0.3)."
+     },
+     {
+      "code": "authority_predates_list"
+     }
+    ],
+    "authority": {
+     "scope": "client",
+     "status": "completed",
+     "age_days": 0,
+     "last_run_at": "2026-10-29T13:59:56.15432-05:00",
+     "engine_version": "authority-v1.4",
+     "predates_list_approval": true
+    },
+    "geography": {
+     "none": 50,
+     "assessed": true,
+     "mismatch": 0,
+     "text_only": 0,
+     "structured": 0,
+     "unassessed": 0,
+     "without_market": 0
+    },
+    "onboarding": {
+     "site_level": {},
+     "client_level": {}
+    },
+    "program_id": "30f2b880-7564-61ea-d136-4509fecc79ff",
+    "owner_pages": {
+     "live": 5,
+     "urls": 5,
+     "stale": 0,
+     "top_url": "https://m3.spr.example.test/services/zqx-1",
+     "not_live": [],
+     "top_share": 0.2,
+     "unchecked": 0,
+     "oldest_check": "2026-10-28",
+     "top_keywords": 10
+    },
+    "newer_proposal": null,
+    "services_approved": 5
+   }
+  ],
+  "client_id": "731fba80-6178-af7b-f802-c02c23ab4ab9",
+  "geography": {
+   "sources": [
+    {
+     "names": 21316,
+     "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
+     "source": "src/data/us-cities.json",
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
+    }
+   ],
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
+  },
+  "multi_brand": true
+ },
+ "N": {
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
+  "client": "SPR Sample N (fictional)",
+  "version": "site-program-readiness/v1",
+  "programs": [
+   {
+    "list": null,
+    "name": "SPR Sample N (fictional)",
+    "brand": {
+     "source": "brand_board",
+     "approved": false
+    },
+    "holds": {
+     "active": 0,
+     "open_conflicts_client": 0,
+     "open_conflicts_by_kind": {}
+    },
+    "proof": {
+     "scope": "client",
+     "photos": 0,
+     "unreviewed": 0,
+     "newest_review": null,
+     "creative_approved": 0,
+     "own_work_approved": 0,
+     "site_own_work_approved": 0
+    },
+    "roles": null,
+    "claims": {
+     "scope": "client",
+     "usable": 0,
+     "sourced": 0,
+     "confirmed": 0,
+     "unverified": 0,
+     "site_usable": 0,
+     "review_dates": null,
+     "newest_recorded": null,
+     "oldest_recorded": null,
+     "newest_confirmed": null,
+     "sourced_without_source": 0
+    },
+    "gate_b": {
+     "status": "blocked",
+     "reasons": [
+      {
+       "code": "program_site_missing",
+       "severity": "blocked"
+      },
+      {
+       "code": "list_missing",
+       "severity": "blocked"
+      }
+     ]
+    },
+    "gate_c": {
+     "status": "blocked",
+     "reasons": [
+      {
+       "code": "strategy_not_ready",
+       "severity": "blocked"
+      },
+      {
+       "code": "brand_not_approved",
+       "severity": "blocked"
+      },
+      {
+       "code": "services_missing",
+       "severity": "blocked"
+      },
+      {
+       "code": "claims_missing",
+       "severity": "blocked"
+      },
+      {
+       "code": "proof_own_work_missing",
+       "severity": "limited"
+      }
+     ]
+    },
+    "owners": null,
+    "intents": null,
+    "markets": {
+     "approved": 0,
+     "recorded": 0
+    },
+    "site_id": null,
+    "problems": [],
+    "site_url": null,
+    "warnings": [
+     {
+      "code": "authority_never_run"
+     }
+    ],
+    "authority": {
+     "scope": "client",
+     "status": null,
+     "age_days": null,
+     "last_run_at": null,
+     "engine_version": null,
+     "predates_list_approval": null
+    },
+    "geography": null,
+    "onboarding": {
+     "site_level": {},
+     "client_level": {}
+    },
+    "program_id": null,
+    "owner_pages": null,
+    "newer_proposal": null,
+    "services_approved": 0
+   }
+  ],
+  "client_id": "1857e192-f503-4d48-1927-d2c77760123d",
+  "geography": {
+   "sources": [
+    {
+     "names": 21316,
+     "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
+     "source": "src/data/us-cities.json",
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
+    }
+   ],
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
+  },
+  "multi_brand": false
+ },
+ "Q": {
+  "as_of": "2026-10-29T14:29:56.15432-05:00",
+  "client": "SPR Sample Q (fictional)",
+  "version": "site-program-readiness/v1",
+  "programs": [
+   {
+    "list": {
+     "id": "1c9b99a1-7468-495d-6c09-caa56efd59c3",
+     "size": 50,
+     "status": "approved",
+     "version": 1,
+     "approved": true,
+     "approved_at": "2026-10-27T14:29:56.15432-05:00"
+    },
+    "name": "SPR Sample Q (fictional)",
+    "brand": {
+     "source": "brand_board",
+     "approved": true
+    },
+    "holds": {
+     "active": 1,
+     "open_conflicts_client": 4,
+     "open_conflicts_by_kind": {
+      "social_post": 1,
+      "content_post": 1,
+      "content_draft": 1,
+      "content_plan_item": 1
+     }
+    },
+    "proof": {
+     "scope": "client",
+     "photos": 6,
+     "unreviewed": 0,
+     "newest_review": "2026-10-29",
+     "creative_approved": 6,
+     "own_work_approved": 6,
+     "site_own_work_approved": 6
+    },
+    "roles": {
+     "service": 50
+    },
+    "claims": {
+     "scope": "client",
+     "usable": 3,
+     "sourced": 0,
+     "confirmed": 3,
+     "unverified": 0,
+     "site_usable": 3,
+     "review_dates": null,
+     "newest_recorded": "2026-10-29",
+     "oldest_recorded": "2026-10-29",
+     "newest_confirmed": "2026-10-26",
+     "sourced_without_source": 0
+    },
+    "gate_b": {
+     "status": "ready",
+     "reasons": []
+    },
+    "gate_c": {
+     "status": "limited",
+     "reasons": [
+      {
+       "code": "hold_conflicts_open",
+       "count": 4,
+       "detail": "content_draft 1, content_plan_item 1, content_post 1, social_post 1",
+       "severity": "limited"
+      }
+     ]
+    },
+    "owners": {
+     "blog": {
+      "ok": 25,
+      "problems": {
+       "owner_role_not_allowed": 25
+      }
+     },
+     "post": {
+      "ok": 50,
+      "problems": {}
+     },
+     "refresh": {
+      "ok": 50,
+      "problems": {}
+     }
+    },
+    "intents": {
+     "none": 0,
+     "commercial": 13,
+     "navigational": 12,
+     "informational": 12,
+     "transactional": 13
+    },
+    "markets": {
+     "approved": 0,
+     "recorded": 0
+    },
+    "site_id": null,
+    "problems": [],
+    "site_url": "https://q.spr.example.test",
+    "warnings": [
+     {
+      "code": "claims_no_review_date",
+      "detail": "Claims record no expiry or review date yet (W1 / P0.3)."
+     },
+     {
+      "code": "authority_never_run"
+     }
+    ],
+    "authority": {
+     "scope": "client",
+     "status": null,
+     "age_days": null,
+     "last_run_at": null,
+     "engine_version": null,
+     "predates_list_approval": null
+    },
+    "geography": {
+     "none": 50,
+     "assessed": true,
+     "mismatch": 0,
+     "text_only": 0,
+     "structured": 0,
+     "unassessed": 0,
+     "without_market": 0
+    },
+    "onboarding": {
+     "site_level": {},
+     "client_level": {}
+    },
+    "program_id": null,
+    "owner_pages": {
+     "live": 5,
+     "urls": 5,
+     "stale": 0,
+     "top_url": "https://q.spr.example.test/services/zqx-1",
+     "not_live": [],
+     "top_share": 0.2,
+     "unchecked": 0,
+     "oldest_check": "2026-10-28",
+     "top_keywords": 10
+    },
+    "newer_proposal": null,
+    "services_approved": 5
+   }
+  ],
+  "client_id": "f871a41e-869c-189c-a6ad-ebcd32a27dfd",
+  "geography": {
+   "sources": [
+    {
+     "names": 21316,
+     "sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4",
+     "source": "src/data/us-cities.json",
+     "loaded_at": "2026-10-29T14:29:56.15432-05:00"
+    }
+   ],
+   "assessed": true,
+   "reference": {
+    "ok": true,
+    "names": 21316,
+    "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+    "problem": null,
+    "sources": 1,
+    "version": "place-names-v1",
+    "expected": {
+     "names": 21316,
+     "digest": "f45e381b2e2dd9a7f01ab1e3159425c0",
+     "source_sha256": "baa021dfa1320e8ea4eb6910933ff69fe494e072c4d6cb538fa1b41ed44960b4"
+    }
+   }
+  },
+  "multi_brand": false
+ }
+}

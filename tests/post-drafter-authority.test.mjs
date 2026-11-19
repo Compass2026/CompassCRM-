@@ -44,6 +44,7 @@ function fakeStore(s = state()) {
     secret: async (n) => (n === "SYNC_CRON_SECRET" ? "cron-secret" : null),
     teamMemberForJwt: async () => null,
     input: async (id) => (id === CLIENT ? lucas() : null),
+    socialAccounts: async () => [],
     authority: async (c, o, now) => { calls.authority++; assert.equal(now.getTime(), NOW.getTime()); return typeof s === "function" ? s() : s; },
     attempts: async (_c, hash) => calls.runs.filter((r) => r.brief_hash === hash).length + calls.writes.filter((w) => w.brief_hash === hash).length,
     recordRun: async (r) => { calls.runs.push(r); },
@@ -64,10 +65,10 @@ async function hashOf(d) {
   return r.body.brief_hash;
 }
 
-test("version: v8 with keyword-first campaigns, Authority mode, duplicate rule, Facebook drafts, Business Profile graphics and claims", async () => {
+test("version: v9 with keyword-first campaigns, Authority mode, duplicate rule, Facebook drafts, Business Profile graphics, claims and location markets", async () => {
   const v = await call(drafter(fakeStore().store), { mode: "version" });
-  assert.equal(v.body.version, 8);
-  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims"]);
+  assert.equal(v.body.version, 9);
+  assert.deepEqual(v.body.features, ["authority_mode", "duplicate_recent_post", "facebook_drafts", "keyword_first_campaigns", "brand_workspaces", "gbp_social_graphics", "claims", "gbp_location_markets"]);
   assert.deepEqual(v.body.modes, ["brief", "check", "submit", "version"]);
 });
 
@@ -185,7 +186,8 @@ test("Authority and the Drafter disagreeing on the target refuses; the Drafter n
   assert.equal(kw.body.authority_opportunity_id, OPP);
   const svc = await call(drafter(fakeStore(state({ opportunity: { service_id: "2d53aa66-3353-4ea7-b5b9-fd1961a69788", key: "gbp_post:2d53aa66-3353-4ea7-b5b9-fd1961a69788:commercial", keyword_id: null } })).store), A("brief"));
   assert.equal(svc.status, 422);
-  assert.ok(svc.body.refusals.some((r) => r.code === "target_page_missing"));
+  // No keyword, no owner page: refused before any page is chosen (20261028170000).
+  assert.ok(svc.body.refusals.some((r) => r.code === "keyword_missing"), JSON.stringify(svc.body));
 });
 
 test("Authority evidence must be claims the Drafter itself allows", async () => {

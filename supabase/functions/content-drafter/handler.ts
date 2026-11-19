@@ -98,7 +98,7 @@ export function createContentDrafter(deps: Deps) {
       return { ok: false, status: 409, body: { error: "draft_not_open", message: `The draft is ${draft.status}; nothing to write.` } };
     }
     let input;
-    try { input = await store.input(draft.client_id, draft.service_id); } catch (e) {
+    try { input = await store.input(draft.client_id, draft.service_id, draft.keyword_id ?? null); } catch (e) {
       if ((e as {code?:string}).code === "23514") return {ok:false,status:422,body:{eligible:false,refusals:[{code:"brand_service_required",message:(e as Error).message}]}};
       throw e;
     }
