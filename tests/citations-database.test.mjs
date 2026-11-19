@@ -53,9 +53,9 @@ test("citations follow-up migration: existing checks, listings and tasks are pre
         ('d1000000-0000-4000-e000-000000000002', 'd1000000-0000-4000-b000-00000000000a', 'd1000000-0000-4000-d000-0000000000a1', (select id from citation_directories where key = 'manta'), 'https://www.manta.com/c/sample', 'M-1', 'provider_complete', 'brightlocal'),
         ('d1000000-0000-4000-e000-000000000003', 'd1000000-0000-4000-b000-00000000000a', 'd1000000-0000-4000-d000-0000000000a1', (select id from citation_directories where key = 'hotfrog'), 'https://www.hotfrog.com/sample', null, 'provider_complete', 'brightlocal');
       insert into citation_checks (id, listing_id, checked_on, method, result, observed_name, observed_address, observed_phone, evidence) values
-        ('d1000000-0000-4000-f000-000000000001', 'd1000000-0000-4000-e000-000000000001', current_date, 'visited_url', 'accurate', 'Sample Solar', '', '', 'Legacy: name and phone matched (sample)'),
-        ('d1000000-0000-4000-f000-000000000002', 'd1000000-0000-4000-e000-000000000002', current_date, 'visited_url', 'discrepancy', 'Sample Solar', '', '', 'Legacy: no public phone (sample)'),
-        ('d1000000-0000-4000-f000-000000000003', 'd1000000-0000-4000-e000-000000000003', current_date, 'visited_url', 'inaccessible', '', '', '', 'Legacy: parked domain (sample)');
+        ('d1000000-0000-4000-f000-000000000001', 'd1000000-0000-4000-e000-000000000001', (now() at time zone 'America/Chicago')::date, 'visited_url', 'accurate', 'Sample Solar', '', '', 'Legacy: name and phone matched (sample)'),
+        ('d1000000-0000-4000-f000-000000000002', 'd1000000-0000-4000-e000-000000000002', (now() at time zone 'America/Chicago')::date, 'visited_url', 'discrepancy', 'Sample Solar', '', '', 'Legacy: no public phone (sample)'),
+        ('d1000000-0000-4000-f000-000000000003', 'd1000000-0000-4000-e000-000000000003', (now() at time zone 'America/Chicago')::date, 'visited_url', 'inaccessible', '', '', '', 'Legacy: parked domain (sample)');
       insert into citation_tasks (id, client_id, location_id, listing_id, kind, reason) values
         ('d1000000-0000-4000-c000-000000000001', 'd1000000-0000-4000-b000-00000000000a', 'd1000000-0000-4000-d000-0000000000a1', 'd1000000-0000-4000-e000-000000000002', 'correct', 'Legacy correction (sample)');`);
     const snapshot = async () => ({
