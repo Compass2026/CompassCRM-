@@ -129,6 +129,10 @@ const HERO_PHOTO = "00000000-0000-4000-a500-0000000000e2";
 run(PSQL_ADMIN, `insert into brand_assets (id, client_id, kind, label, source, storage_path, mime_type, width, height, size_bytes, content_hash, content_hashed_at, content_measurement, notes) values
      ('${HERO_GRAPHIC}', '${C}', 'social_post', 'Blog hero: homeowner checking an attic (illustrative)', 'upload', '${C}/upload/hero-graphic.png', 'image/png', 1730, 909, 2048, '${"1".repeat(64)}', now(), '{}', 'Generated / non-evidentiary visual.'),
      ('${HERO_PHOTO}', '${C}', 'photo', 'Crew replacing shingles', 'upload', '${C}/upload/crew.png', 'image/png', 1600, 900, 4096, '${"2".repeat(64)}', now(), '{}', null)`);
+// An uploaded graphic whose hash source-assets has not recorded: never offered, but named.
+const HERO_UNHASHED = "00000000-0000-4000-a500-0000000000e3";
+run(PSQL_ADMIN, `insert into brand_assets (id, client_id, kind, label, source, storage_path, mime_type, width, height, size_bytes) values
+     ('${HERO_UNHASHED}', '${C}', 'social_post', 'Uploaded header not hashed yet', 'upload', '${C}/1795195997420-0-header.png', 'image/png', 1920, 1080, 2048)`);
 sql(`insert into page_groups (client_id, name, page_type, status, target_url, supporting_keyword_ids) values ('${C}', 'Roof Replacement', 'service', 'approved', '${PAGE}', '{}')`);
 sql(`insert into content_plan_items (id, client_id, week_start, deliverable, purpose, topic, search_intent, keyword_id, service_id, planned_date)
      values ('${ITEM}', '${C}', '${W}', 'blog', 'educational', 'How long does a roof last', 'informational', '${KW}', '${ROOF}', '${addDays(W, 2)}')`);
@@ -232,6 +236,10 @@ try {
   assert.equal(db(`select status||'/'||version||'/'||author_kind from content_drafts where id = '${draftId}'`), "draft/2/team");
   // The hero image: chosen from the client's stored assets, beside the copy.
   await page.locator("[data-hero-none]").waitFor();
+  // A stored but unhashed upload is explained, not silently left out, and never offered.
+  assert.equal(await page.locator("[data-hero-unhashed]").getAttribute("data-hero-unhashed"), "1");
+  assert.match(await page.locator("[data-hero-unhashed]").innerText(), /Uploaded header not hashed yet[\s\S]*Record hash on Brand › Creative use/);
+  assert.equal(await page.locator(`[data-hero-option="${HERO_UNHASHED}"]`).count(), 0);
   await page.locator(`[data-hero-option="${HERO_GRAPHIC}"]`).click();
   await page.locator("#hero_alt").fill("Homeowner checking attic ventilation with a flashlight");
   await page.getByRole("button", { name: "Save hero image" }).click();
@@ -243,7 +251,7 @@ try {
   await page.evaluate(() => window.scrollTo(0, 0));
   const [heroBox, copyBox] = [await page.locator("[data-draft-hero]").boundingBox(), await page.locator("[data-draft-article]").boundingBox()];
   assert.ok(heroBox.x > copyBox.x + copyBox.width - 1 && Math.abs(heroBox.y - copyBox.y) < 2, "the hero sits beside the copy on desktop");
-  ok("Hero image: chosen from the client's stored assets with alt text, previewed beside the copy, labelled illustrative; the version bumps");
+  ok("Hero image: chosen from the client's stored, hashed assets with alt text (an unhashed upload is named with the fix, never offered), previewed beside the copy, labelled illustrative; the version bumps");
   await page.getByRole("button", { name: "Submit for review" }).click();
   await page.locator('[data-draft-status]:text("In review")').waitFor();
   assert.match(await page.locator("[data-hero-locked]").innerText(), /Withdraw the draft to change its hero image/);

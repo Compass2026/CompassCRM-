@@ -5,13 +5,15 @@ import { createClient } from "@/lib/supabase/server";
 import { requireTeamMember } from "@/lib/team";
 import { isUuid } from "@/lib/tasks";
 import { sameReviewSnapshot, validateReview, type ReviewAsset, type ReviewSnapshot } from "@/lib/creative-use";
+import { recordStoredAssetHash, sourceAssetsCaller } from "@/lib/source-assets-call";
 
 // Creative use review (0054 / 0055). One update of the asset's governed
 // fields, as the signed-in teammate through PostgREST: the database stamps
 // the reviewer and time and writes the governance history; it refuses
 // anyone else. The decision applies to the file the teammate saw — if the
 // hash or the review changed since the page loaded, nothing is written.
-// Nothing here hashes, uploads, generates or publishes.
+// Nothing here hashes, uploads, generates or publishes; "Record hash" (below)
+// only asks the source-assets function to measure the stored file.
 
 export type ReviewAnswer = { ok: true; text: string } | { ok: false; text: string; errors?: string[]; changed?: boolean };
 
@@ -55,4 +57,22 @@ export async function reviewCreativeUseAction(
     : v.patch.creative_use === "excluded" ? "Excluded from creative use."
     : "Saved; the image stays unreviewed.";
   return { ok: true, text };
+}
+
+// "Record hash" for a stored file that has none (an upload whose hash was not
+// recorded, or one filed before uploads asked for it). The app never computes
+// the hash: source-assets reads the stored bytes and records them, called as
+// this teammate (inventory of the one asset, then hash bound to it).
+export async function recordAssetHashAction(clientId: string, assetId: string): Promise<ReviewAnswer> {
+  if (!isUuid(clientId) || !isUuid(assetId)) return { ok: false, text: "Unknown image." };
+  const supabase = await createClient();
+  try { await requireTeamMember(supabase); } catch { return { ok: false, text: NOT_TEAM }; }
+  const { data: asset } = await supabase.from("brand_assets").select("id, storage_path, content_hash")
+    .eq("id", assetId).eq("client_id", clientId).maybeSingle();
+  if (!asset) return { ok: false, text: "This image no longer exists.", changed: true };
+  if (!asset.storage_path) return { ok: false, text: "Only a link is recorded; store the file first (brand-scan import), then hash it." };
+  const r = await recordStoredAssetHash(sourceAssetsCaller(supabase), clientId, assetId);
+  revalidatePath(`/clients/${clientId}/brand/creative-use`);
+  revalidatePath(`/clients/${clientId}/brand`);
+  return r.ok ? { ok: true, text: r.text } : { ok: false, text: r.text };
 }

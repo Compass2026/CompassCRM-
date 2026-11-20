@@ -12,6 +12,7 @@ import {
   normalizeHex,
 } from "@/lib/brand";
 import { renderBrandBoardHtml } from "@/lib/brand-board-html";
+import { isHashableMime, recordStoredAssetHash, sourceAssetsCaller, type HashOutcome } from "@/lib/source-assets-call";
 
 type Enums = Database["public"]["Enums"];
 
@@ -173,17 +174,26 @@ export type RegisterAssetInput = {
   notes?: string | null;
 };
 
-/** Called by the browser uploader after the file lands in Storage. */
+export type RegisterAssetResult = { asset_id: string; hash: HashOutcome | null };
+
+/**
+ * Called by the browser uploader after the file lands in Storage. Records the
+ * row, then asks source-assets (as this teammate) to measure and record the
+ * stored file's hash, so the upload can be reviewed and chosen as a blog
+ * hero. The hash is never taken from the browser. A hash that could not be
+ * recorded does not undo the upload: the outcome says why, and Brand ›
+ * Creative use offers "Record hash" to retry. Non-image files are not hashed.
+ */
 export async function registerAssetAction(
   clientId: string,
   input: RegisterAssetInput
-) {
+): Promise<RegisterAssetResult> {
   if (!input.storage_path.startsWith(`${clientId}/`)) {
     throw new Error("Storage path does not belong to this client");
   }
   const supabase = await createClient();
   const uploadedBy = await currentUserEmail();
-  const { error } = await supabase.from("brand_assets").insert({
+  const { data: inserted, error } = await supabase.from("brand_assets").insert({
     client_id: clientId,
     kind: input.kind,
     label: input.label || input.file_name,
@@ -196,9 +206,14 @@ export async function registerAssetAction(
     height: input.height ?? null,
     notes: input.notes ?? null,
     uploaded_by: uploadedBy,
-  });
+  }).select("id").single();
   if (error) throw new Error(error.message);
+  const hash = isHashableMime(input.mime_type)
+    ? await recordStoredAssetHash(sourceAssetsCaller(supabase), clientId, inserted.id)
+    : null;
   revalidateBrand(clientId);
+  revalidatePath(`/clients/${clientId}/brand/creative-use`);
+  return { asset_id: inserted.id, hash };
 }
 
 export async function addAssetLinkAction(clientId: string, form: FormData) {

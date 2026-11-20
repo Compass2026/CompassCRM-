@@ -4,7 +4,10 @@
 //   version    → what this deployment is.
 //   inventory  → read-only dry run: every asset of the client, whether its
 //                file is stored, what the bytes measure and what recording
-//                them would change. Writes nothing.
+//                them would change. Writes nothing. (v3) Optional
+//                asset_ids: [uuid] inventories only those assets of the
+//                client (the Brand tab's upload and "Record hash" name one,
+//                so a large library is never downloaded for it).
 //   hash       → records the measurement for the assets named in `expect`,
 //                each bound to the hash the inventory reported
 //                ({asset_id: content_hash}). The file is read again; bytes
@@ -35,7 +38,7 @@
 // member (JWT on team_members). Deployed with verify_jwt = true.
 import { importSuggestion, inspect, summarize, type AssetRow, type Entry, type Read } from "./plan.ts";
 
-export const HANDLER_VERSION = 2;
+export const HANDLER_VERSION = 3;
 export const MODES = ["version", "inventory", "hash", "upload_slot", "register"] as const;
 export const MAX_ASSETS = 60;
 export const MAX_UPLOADS = 12;
@@ -112,11 +115,21 @@ export function createSourceAssets({ store }: { store: Store }) {
     if (mode === "register") return register(body!, client, rows, who.via);
 
     if (mode === "inventory") {
-      if (rows.length > MAX_ASSETS) return reply(413, { error: `more than ${MAX_ASSETS} assets; not supported in one call` });
-      const list = await entries(rows);
+      const ids = body?.asset_ids;
+      let scoped = rows;
+      if (ids !== undefined) {
+        if (!Array.isArray(ids) || !ids.length || ids.length > MAX_ASSETS || ids.some((id) => typeof id !== "string" || !UUID.test(id))) {
+          return reply(400, { error: `asset_ids lists 1–${MAX_ASSETS} asset uuids` });
+        }
+        const wanted = new Set(ids.map((id) => String(id).toLowerCase()));
+        scoped = rows.filter((r) => wanted.has(r.id.toLowerCase()));
+      }
+      if (scoped.length > MAX_ASSETS) return reply(413, { error: `more than ${MAX_ASSETS} assets; not supported in one call` });
+      const list = await entries(scoped);
       return reply(200, {
         mode, writes: false, client: { id: client.id, name: client.name },
-        summary: summarize(list), assets: list, link_only_import: importSuggestion(rows),
+        summary: summarize(list), assets: list, link_only_import: importSuggestion(scoped),
+        ...(ids !== undefined ? { missing_asset_ids: (ids as string[]).filter((id) => !scoped.some((r) => r.id.toLowerCase() === id.toLowerCase())) } : {}),
       });
     }
 

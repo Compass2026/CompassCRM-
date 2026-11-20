@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 const selectClass =
   "field";
 
-type Progress = { name: string; state: "uploading" | "done" | "error"; detail?: string };
+type Progress = { name: string; state: "uploading" | "done" | "warn" | "error"; detail?: string };
 
 function slug(name: string) {
   return name
@@ -66,7 +66,7 @@ export function BrandAssetUploader({ clientId }: { clientId: string }) {
           .upload(path, file, { contentType: file.type || undefined, upsert: false });
         if (error) throw new Error(error.message);
         const { width, height } = await imageSize(file);
-        await registerAssetAction(clientId, {
+        const { hash } = await registerAssetAction(clientId, {
           storage_path: path,
           file_name: file.name,
           mime_type: file.type || "application/octet-stream",
@@ -76,7 +76,10 @@ export function BrandAssetUploader({ clientId }: { clientId: string }) {
           width,
           height,
         });
-        update("done");
+        // source-assets measures and records the hash server-side; a miss
+        // keeps the upload and says why (retry: Creative use → Record hash).
+        if (hash && !hash.ok) update("warn", hash.text);
+        else update("done", hash?.text);
       } catch (e) {
         update("error", e instanceof Error ? e.message : "Upload failed");
       }
@@ -162,10 +165,12 @@ export function BrandAssetUploader({ clientId }: { clientId: string }) {
               key={i}
               className={cn(
                 p.state === "error" && "text-destructive",
+                p.state === "warn" && "text-amber-800",
                 p.state === "done" && "text-muted-foreground"
               )}
+              data-upload-state={p.state}
             >
-              {p.state === "uploading" ? "⏳" : p.state === "done" ? "✓" : "✕"} {p.name}
+              {p.state === "uploading" ? "⏳" : p.state === "done" ? "✓" : p.state === "warn" ? "⚠" : "✕"} {p.name}
               {p.detail ? ` — ${p.detail}` : ""}
             </li>
           ))}
