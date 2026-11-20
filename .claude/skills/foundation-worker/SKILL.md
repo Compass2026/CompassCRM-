@@ -1717,7 +1717,9 @@ select enabled from client_entitlements_for('<client_id>') where service_key = '
 
 **Core keywords (Tom, Oct 27).** Every new page and refresh traces to the
 client's approved core keyword list: pick only a keyword in it, or a
-long-tail keyword whose `core_parent_keyword_id` is in it. No approved list
+long-tail keyword whose `core_parent_keyword_id` is in it (the worker never
+sets a core parent: only a teammate links one, on the Keywords tab, and the
+database refuses any other write). No approved list
 → change nothing, leave `site_updates` open with the note "No approved core
 keyword list; left for Tom", stop. Every `change_log` row for a
 `page_rewrite`, `page_added` or `blog_post` carries its keyword as

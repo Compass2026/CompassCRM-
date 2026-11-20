@@ -1152,7 +1152,15 @@ standard; see `docs/delivery-standard.md`) planned 8 Facebook + 8 GBP posts per 
   service of that site; judged at approval, `core_list_incomplete`
   otherwise — an incomplete list stays a proposal). Never edited or
   deleted; a new approval supersedes the old. A long-tail keyword counts
-  only through `keywords.core_parent_keyword_id`. Approving a list sets
+  only through `keywords.core_parent_keyword_id`, which since
+  `20261120190000` (written, not applied) only a signed-in teammate sets,
+  changes or clears, on the Keywords tab (`keyword_link_core_parent` /
+  `keyword_unlink_core_parent`, with a reason, one
+  `keyword_core_link_events` row per change). The parent must be in the
+  child's site's approved list. Both keywords need the same service and
+  intent and a compatible city, market and named place. Links are one
+  level. The `keywords_core_parent_guard` trigger refuses every other
+  write, the worker's included (docs/authority-core-scope.md). Approving a list sets
   `is_tracked` to the union of the client's approved site lists
   (`normalize_tracked_keywords` keeps the 0033 top-50 rule only for
   clients with none); `core_keyword_site_coverage` reports per site.

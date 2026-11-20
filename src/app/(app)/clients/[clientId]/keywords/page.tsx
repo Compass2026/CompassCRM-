@@ -20,6 +20,8 @@ import {
 import { LocationsPanel } from "@/components/locations-panel";
 import { GridConfigCard } from "@/components/grid-config-card";
 import { CoreKeywordListCard } from "@/components/core-keyword-list-card";
+import { KeywordCoreLink } from "@/components/keyword-core-link";
+import { groupCoreLinkOptions } from "@/lib/keyword-core-link";
 import { cn } from "@/lib/utils";
 import { keywordOrganicState } from "@/lib/organic-rank";
 import { keywordSite } from "../../../../../../supabase/functions/_shared/rank-site";
@@ -79,6 +81,16 @@ export default async function KeywordsPage({
       return [k.id, site.ok ? [site.host] : []] as const;
     })
   );
+
+  // Core links (20261120190000): the database lists, per keyword outside its
+  // site's approved core list, the eligible parents and the current link.
+  const [{ data: coreLinkRows }, { data: approvedLists }] = await Promise.all([
+    supabase.rpc("keyword_core_link_options", { p_client_id: clientId }),
+    supabase.from("core_keyword_lists").select("keyword_ids").eq("client_id", clientId).eq("status", "approved"),
+  ]);
+  const coreLinks = groupCoreLinkOptions(coreLinkRows ?? []);
+  const approvedCore = new Set((approvedLists ?? []).flatMap((l) => l.keyword_ids));
+  const hasApprovedCore = (approvedLists ?? []).length > 0;
 
   const physicalLocations = (locations ?? []).filter(
     (l) => l.is_physical_location
@@ -263,7 +275,19 @@ export default async function KeywordsPage({
                     .sort((a, b) => a - b)[0];
                   return (
                     <tr key={k.id} className="border-b last:border-0">
-                      <td className="py-1.5 pr-2 font-medium">{k.keyword}</td>
+                      <td className="py-1.5 pr-2 align-top">
+                        <span className="font-medium">{k.keyword}</span>
+                        {approvedCore.has(k.id) && (
+                          <Badge variant="outline" className="ml-1 text-[10px]">core</Badge>
+                        )}
+                        {(coreLinks.has(k.id) || (k.is_active && hasApprovedCore && !approvedCore.has(k.id))) && (
+                          <KeywordCoreLink
+                            clientId={clientId}
+                            keywordId={k.id}
+                            state={coreLinks.get(k.id) ?? { current: null, candidates: [] }}
+                          />
+                        )}
+                      </td>
                       <td className="py-1.5 pr-2" colSpan={3}>
                         <form
                           action={updateKeywordAction.bind(null, clientId, k.id)}

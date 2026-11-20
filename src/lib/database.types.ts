@@ -7233,6 +7233,66 @@ export type Database = {
           },
         ]
       }
+      keyword_core_link_events: {
+        Row: {
+          action: string
+          actor_id: string
+          client_id: string
+          created_at: string
+          id: number
+          keyword: string
+          keyword_id: string
+          list_id: string | null
+          list_version: number | null
+          parent_id: string | null
+          parent_keyword: string | null
+          previous_parent_id: string | null
+          previous_parent_keyword: string | null
+          reason: string
+        }
+        // Written only by keyword_link_core_parent / keyword_unlink_core_parent.
+        Insert: {
+          action: string
+          actor_id: string
+          client_id: string
+          created_at?: string
+          id?: never
+          keyword: string
+          keyword_id: string
+          list_id?: string | null
+          list_version?: number | null
+          parent_id?: string | null
+          parent_keyword?: string | null
+          previous_parent_id?: string | null
+          previous_parent_keyword?: string | null
+          reason: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          client_id?: string
+          created_at?: string
+          id?: never
+          keyword?: string
+          keyword_id?: string
+          list_id?: string | null
+          list_version?: number | null
+          parent_id?: string | null
+          parent_keyword?: string | null
+          previous_parent_id?: string | null
+          previous_parent_keyword?: string | null
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "keyword_core_link_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       keywords: {
         Row: {
           city: string | null
@@ -13801,6 +13861,34 @@ export type Database = {
       is_team_admin: { Args: never; Returns: boolean }
       keyword_owner: {
         Args: { p_brand_workspace_id: string | null; p_client_id: string; p_keyword_id: string; p_purpose?: string | null }
+        Returns: Json
+      }
+      keyword_core_link_problem: {
+        Args: { p_keyword_id: string; p_parent_id: string; p_places?: boolean }
+        Returns: string | null
+      }
+      keyword_core_link_places: {
+        Args: { p_keyword_id: string; p_recorded: boolean }
+        Returns: string[]
+      }
+      keyword_core_link_options: {
+        Args: { p_client_id: string }
+        Returns: {
+          keyword_id: string
+          parent_id: string
+          parent_keyword: string
+          parent_city: string | null
+          list_version: number | null
+          is_current: boolean
+          problem: string | null
+        }[]
+      }
+      keyword_link_core_parent: {
+        Args: { p_keyword_id: string; p_parent_id: string; p_reason: string }
+        Returns: Json
+      }
+      keyword_unlink_core_parent: {
+        Args: { p_keyword_id: string; p_reason: string }
         Returns: Json
       }
       normalize_tracked_keywords: {
