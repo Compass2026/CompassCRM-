@@ -104,6 +104,9 @@ export type SocialAccountRow = {
   // A location's recorded markets (gbp_location_markets): an office, a
   // service area, or 'all' for a shared profile.
   markets?: { market: string; kind: string }[];
+  // A location's own phone (gbp_location_phones), used only when its
+  // markets scope the brief; null = none recorded.
+  phone?: string | null;
 };
 
 export type Refusal = { code: string; message: string };
