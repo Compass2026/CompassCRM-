@@ -5,7 +5,7 @@ import {
   groupCoreLinkOptions, coreLinkReason, coreLinkErrorMessage, coreParentLabel,
 } from "../src/lib/keyword-core-link.ts";
 
-// 20261120190000: the Keywords tab's core link. The rule lives in SQL
+// 20261120200000: the Keywords tab's core link. The rule lives in SQL
 // (keyword_core_parent_link.test.sql runs it); this covers the shaping, the
 // reason bounds, the refusal text and that the UI only goes through the RPCs.
 
@@ -45,7 +45,7 @@ test("refusals read as sentences; known codes get fixed text", () => {
 });
 
 test("the migration keeps the door team-only, audited, and the gate untouched", () => {
-  const sql = readFileSync("supabase/migrations/20261120190000_keyword_core_parent_link.sql", "utf8");
+  const sql = readFileSync("supabase/migrations/20261120200000_keyword_core_parent_link.sql", "utf8");
   for (const f of ["keyword_link_core_parent(uuid, uuid, text)", "keyword_unlink_core_parent(uuid, text)"]) {
     assert.match(sql, new RegExp(`revoke all on function ${f.replace(/[()]/g, "\\$&")} from public, anon, authenticated, service_role;`));
     assert.match(sql, new RegExp(`grant execute on function ${f.replace(/[()]/g, "\\$&")} to authenticated;`));

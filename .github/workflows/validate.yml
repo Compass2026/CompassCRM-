@@ -126,6 +126,8 @@ jobs:
         run: CHROME_PATH=/usr/bin/google-chrome SCREENSHOTS=docs/screenshots/claim-registry npm run test:claim-registry-ui
       - name: Upload evidence and verify a claim as the verification owner, with fictional clients
         run: CHROME_PATH=/usr/bin/google-chrome SCREENSHOTS=docs/screenshots/claim-verification npm run test:claim-verification-ui
+      - name: Link a long-tail keyword to its core keyword as a teammate, with a fictional client
+        run: CHROME_PATH=/usr/bin/google-chrome npm run test:keyword-core-link-ui
       - uses: actions/upload-artifact@v4
         if: always()
         with:

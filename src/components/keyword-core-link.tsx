@@ -19,7 +19,7 @@ function Result({ state }: { state: CoreLinkActionState }) {
 }
 
 // The core link of one active keyword outside its site's approved core list
-// (20261120190000): its current parent with an unlink control, and a form that
+// (20261120200000): its current parent with an unlink control, and a form that
 // offers only the parents the database says are eligible (same service and
 // intent, compatible city or market, in the approved list).
 export function KeywordCoreLink({ clientId, keywordId, state }: { clientId: string; keywordId: string; state: CoreLinkState }) {

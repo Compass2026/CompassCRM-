@@ -1,4 +1,4 @@
-// Linking a long-tail keyword to the core keyword it serves (20261120190000).
+// Linking a long-tail keyword to the core keyword it serves (20261120200000).
 // The database decides eligibility (keyword_core_link_problem) and lists the
 // options (keyword_core_link_options); this only shapes those rows for the
 // Keywords tab and turns a refusal into a sentence.

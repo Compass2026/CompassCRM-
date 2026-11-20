@@ -23,7 +23,7 @@ do $$ begin
   execute 'alter table core_keyword_exemptions enable trigger core_keyword_exemptions_guard';
 end $$;
 -- This suite sets and clears core parents directly to test the gates that read
--- them; 20261120190000 lets only keyword_link_core_parent write the column
+-- them; 20261120200000 lets only keyword_link_core_parent write the column
 -- (tested in keyword_core_parent_link.test.sql), so open its door here.
 select set_config('compass.core_parent_link', 'on', true);
 create schema ws_test;

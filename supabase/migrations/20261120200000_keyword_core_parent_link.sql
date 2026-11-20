@@ -38,7 +38,7 @@
 -- by the gate (the Keywords tab shows the link's problem today instead).
 -- No keyword is linked here.
 --
--- Rollback: supabase/rollback/20261120190000_keyword_core_parent_link.down.sql
+-- Rollback: supabase/rollback/20261120200000_keyword_core_parent_link.down.sql
 -- (drops the guard, the functions and the event table; links already
 -- made stay on keywords.core_parent_keyword_id and keep grounding drafts).
 

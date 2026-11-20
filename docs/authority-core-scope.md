@@ -258,7 +258,7 @@ every draft's own gates still decide each draft.
 
 Rollback: deploy the previous `authority-run`, then run the down script.
 
-## Linking a long tail to its core keyword (Nov 20 2026, `20261120190000`, written, not applied)
+## Linking a long tail to its core keyword (Nov 20 2026, `20261120200000`, written, not applied)
 
 `core_keyword_grounding()` accepts a keyword that is in its site's approved
 list **or** whose `core_parent_keyword_id` is, and every draft gate enforces
@@ -368,5 +368,5 @@ Supabase MCP and rename the file to the applied version, and let Vercel
 deploy `main`. A teammate then links the Logic keyword on the Keywords tab,
 with a reason, and resubmits the draft.
 
-Rollback: `supabase/rollback/20261120190000_keyword_core_parent_link.down.sql`.
+Rollback: `supabase/rollback/20261120200000_keyword_core_parent_link.down.sql`.
 Links already made stay on the column and keep grounding.

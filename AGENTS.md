@@ -1153,7 +1153,7 @@ standard; see `docs/delivery-standard.md`) planned 8 Facebook + 8 GBP posts per 
   otherwise — an incomplete list stays a proposal). Never edited or
   deleted; a new approval supersedes the old. A long-tail keyword counts
   only through `keywords.core_parent_keyword_id`, which since
-  `20261120190000` (written, not applied) only a signed-in teammate sets,
+  `20261120200000` (written, not applied) only a signed-in teammate sets,
   changes or clears, on the Keywords tab (`keyword_link_core_parent` /
   `keyword_unlink_core_parent`, with a reason, one
   `keyword_core_link_events` row per change). The parent must be in the

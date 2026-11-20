@@ -315,7 +315,7 @@ psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/delivery_stan
 # Weekly Facebook / GBP slots: readiness reasons, forward-only queue, one task
 # per slot, binding claim, governed link, launching readiness (rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/weekly_social_slots.test.sql"
-# 20261120190000: linking a long-tail keyword to its core keyword (the rule's
+# 20261120200000: linking a long-tail keyword to its core keyword (the rule's
 # every refusal, team-only callers, the column guard, the audit trail, the
 # unchanged gate passing for the linked child; rolled back).
 psql_as supabase_admin -d sandbox -f "$ROOT/supabase/tests/sandbox/keyword_core_parent_link.test.sql"

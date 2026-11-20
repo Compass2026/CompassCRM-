@@ -82,7 +82,7 @@ export default async function KeywordsPage({
     })
   );
 
-  // Core links (20261120190000): the database lists, per keyword outside its
+  // Core links (20261120200000): the database lists, per keyword outside its
   // site's approved core list, the eligible parents and the current link.
   const [{ data: coreLinkRows }, { data: approvedLists }] = await Promise.all([
     supabase.rpc("keyword_core_link_options", { p_client_id: clientId }),

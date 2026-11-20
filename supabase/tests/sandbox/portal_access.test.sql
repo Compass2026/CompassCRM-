@@ -154,7 +154,7 @@ begin
   -- review_queue, social_post_approve_and_schedule and
   -- social_post_set_no_image_reason (20261116150000) refuse anyone not on the
   -- team: D11n here, review_to_delivery.test.sql.
-  -- keyword_link_core_parent / keyword_unlink_core_parent (20261120190000)
+  -- keyword_link_core_parent / keyword_unlink_core_parent (20261120200000)
   -- refuse anyone but a signed-in teammate: D11o here,
   -- keyword_core_parent_link.test.sql X*.
   perform t.ok('A7 authenticated can execute exactly authority_decide, authority_draft_start, authority_lock_opportunity, billing_livemode, blog_publication_cancel, blog_publication_queue, claim_classify, claim_evidence_request_upload, claim_revoke, claim_verify, communication_record_consent, communication_secret_status, communication_set_primary_number, communication_update_conversation, content_delegation_configure, content_delegation_configure_edits, content_delegation_exclude, content_delegation_include, content_draft_approve, content_draft_regenerate, content_draft_request, crm_confirm_delivery_test, crm_inquiry_add_note, crm_inquiry_set_status, crm_notification_block_reason, crm_record_notification_consent, crm_set_sms_alerts, crm_set_sms_sender, is_team, keyword_link_core_parent, keyword_unlink_core_parent, portal_billing_summary_row, portal_client_id, portal_entitlement_rows, portal_seen, publisher_set_account_enabled, publisher_set_gbp_transport, publisher_unbind_account, review_queue, secret_present, social_history_set_learning, social_history_style_review, social_post_approve_and_schedule, social_post_readiness, social_post_set_no_image_reason among security-definer functions',
@@ -320,7 +320,7 @@ begin
     t.try('select review_queue(null)') = '42501'
     and t.try('select social_post_approve_and_schedule(gen_random_uuid(), now(), now() + interval ''1 day'')') = '42501'
     and t.try('select social_post_set_no_image_reason(gen_random_uuid(), ''none'')') = '42501');
-  perform t.ok('D11o the keyword core-parent link (20261120190000) refuses a portal user',
+  perform t.ok('D11o the keyword core-parent link (20261120200000) refuses a portal user',
     t.try('select keyword_link_core_parent(gen_random_uuid(), gen_random_uuid(), ''portal try'')') = '42501'
     and t.try('select keyword_unlink_core_parent(gen_random_uuid(), ''portal try'')') = '42501');
   perform t.ok('D11b social_post_readiness refuses a portal user',

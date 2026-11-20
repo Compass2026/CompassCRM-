@@ -1,4 +1,4 @@
--- Rollback of 20261120190000_keyword_core_parent_link.sql. Drops the column
+-- Rollback of 20261120200000_keyword_core_parent_link.sql. Drops the column
 -- guard, the link functions, the rule and the event table. Links already made
 -- stay on keywords.core_parent_keyword_id and keep grounding drafts exactly as
 -- before; with the guard gone the column is unguarded again (as it was).

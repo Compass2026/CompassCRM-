@@ -1,4 +1,4 @@
-// Browser acceptance for the Keywords tab's core link (20261120190000). Run by
+// Browser acceptance for the Keywords tab's core link (20261120200000). Run by
 // `npm run test:keyword-core-link-ui` (scripts/test-tasks-ui.sh with UI_SPEC
 // set): a real Postgres replay behind PostgREST, so the server action calls
 // keyword_link_core_parent / keyword_unlink_core_parent as the signed-in

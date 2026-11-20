@@ -21,7 +21,7 @@ export async function reviewCoreKeywordList(clientId: string, id: string, versio
 export type CoreLinkActionState = { ok: boolean; message: string } | null;
 
 // A teammate links an active long-tail keyword to a core keyword of its site's
-// approved list, changes that link, or clears it (20261120190000). The
+// approved list, changes that link, or clears it (20261120200000). The
 // database checks the caller, the rule and the reason, and records who did
 // what and why; the column has no other writer.
 export async function linkCoreParent(

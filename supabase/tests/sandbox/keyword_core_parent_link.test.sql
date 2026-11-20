@@ -1,4 +1,4 @@
--- 20261120190000: linking a long-tail keyword to its core keyword. Fictional
+-- 20261120200000: linking a long-tail keyword to its core keyword. Fictional
 -- clients and example.test hosts only; everything is rolled back. Run as
 -- supabase_admin (it switches to PostgREST's authenticator login).
 --   S  single site, approved core list v1 of 50:
@@ -277,7 +277,7 @@ do $$ begin
 end $$;
 
 -- ── Rollback ────────────────────────────────────────────────────────────────
-\ir ../../rollback/20261120190000_keyword_core_parent_link.down.sql
+\ir ../../rollback/20261120200000_keyword_core_parent_link.down.sql
 do $$ begin
   perform kl.ok('R1 the down script removes the door, the rule, the guard and the history; links made stay and still ground',
     to_regprocedure('keyword_link_core_parent(uuid, uuid, text)') is null and to_regprocedure('keyword_core_link_problem(uuid, uuid, boolean)') is null
