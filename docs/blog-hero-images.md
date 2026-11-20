@@ -47,9 +47,28 @@ part of the client's website.
   expected-head, release-hash and live-verification checks are unchanged; live
   verification also requires an `<img>` with the approved src and alt.
 - Article JSON: `heroImage: { src, alt, width, height, illustrative }`.
+- Markdown post (`markdown_blog`, Nov 2026): the same fields as a
+  `hero_image` block mapping at the end of the front matter, after
+  `keyword_id` (values JSON-quoted like the other keys):
+
+  ```yaml
+  hero_image:
+    src: "/blog/images/<slug>-<hash12>.webp"
+    alt: "…"
+    width: 1920
+    height: 1080
+    illustrative: true
+  ```
+
+  A hero-less post is byte-for-byte what the adapter wrote before. Alt text
+  with a line break or control character refuses (manual review).
 - site-push's content-entry exception accepts the image only as a
   content-addressed file directly inside the recorded folder
-  (`content_paths.blog_images`, default `public/blog/images`), on JSON blogs.
+  (`content_paths.blog_images`, default `public/blog/images`), on JSON,
+  Foundation posts-file and Markdown blogs. On a Foundation site the image
+  must travel with the posts file, and on a Markdown blog with its own post
+  (`<blog_dir>/<slug>.mdx` in the same request); an image alone, or beside a
+  different post, is not a data entry.
 
 ## Site contract
 
@@ -62,5 +81,25 @@ sites exactly as before). A hero article additionally requires:
 
 A site without them **refuses** the article ("needs the Compass blog hero
 image upgrade") rather than publishing it without its image. The folder must
-match the site row's `content_paths.blog_images` (default above). The
-Markdown adapter refuses hero articles.
+match the site row's `content_paths.blog_images` (default above).
+
+The same keys opt a **Markdown blog** in (`adapter: "markdown_blog"`); a
+Markdown site without them refuses a hero article exactly like a JSON site.
+The site renders `hero_image` from the front matter with its width, height
+and alt, and shows no automatic "Illustration" caption for an illustrative
+hero (the flag stays internal; the alt text carries the description). A
+Markdown post has no TL;DR slot, so an article with both a TL;DR and a hero
+still refuses on a Markdown blog (the summary must sit above the hero).
+
+Opted in: `Compass2026/BHGSafetyPartners` (bhgsafety.com), once its
+`compass/blog-hero-support` PR is merged. `BHG-Heavy-Equipment` and
+`BHG-Forklift-Training` have not opted in and refuse hero articles.
+
+**Release order** for a Markdown site: after the CRM merge, deploy
+`site-push` first (it bundles `src/lib/content-adapters.ts`, which accepts
+the image), then `blog-publisher` (it bundles
+`content-drafter/publication.ts`, which writes it); then merge the site's PR
+so its `compass-blog.json` advertises `hero_image`. A new publisher talking
+to an old site-push would have its push refused after authorisation and the
+release marked uncertain, so site-push goes first. An opted-in site with an
+old publisher simply refuses the hero article before writing.
