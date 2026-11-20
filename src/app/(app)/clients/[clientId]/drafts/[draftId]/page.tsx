@@ -57,6 +57,14 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
         .select("id, client_id, kind, label, notes, source, storage_path, content_hash, mime_type, width, height, size_bytes, file_name")
         .eq("id", d.hero_asset_id).maybeSingle()
     : { data: null };
+  // Stored photos and graphics that cannot be chosen yet because source-assets
+  // has not recorded their hash: named in the picker, never offered.
+  const { data: unhashedRows } = isBlog
+    ? await supabase.from("brand_assets").select("id, label, kind")
+        .eq("client_id", clientId).in("kind", [...HERO_KINDS]).in("mime_type", [...HERO_MIME])
+        .not("storage_path", "is", null).is("content_hash", null).order("created_at", { ascending: false })
+    : { data: [] };
+  const heroUnhashed = (unhashedRows ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind }));
   const heroAssets = [...(assetRows ?? []), ...(heroRow ? [heroRow] : [])];
   const heroPaths = heroAssets.map((a) => a.storage_path).filter((p): p is string => !!p);
   const { data: signed } = heroPaths.length
@@ -210,7 +218,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
               </ul>
             )}
             {actions.includes("edit") ? (
-              <HeroPicker clientId={clientId} draftId={draftId} version={d.version} options={heroOptions}
+              <HeroPicker clientId={clientId} draftId={draftId} version={d.version} options={heroOptions} unhashed={heroUnhashed}
                 current={d.hero_asset_id} alt={d.hero_alt} illustrativeLabel={ILLUSTRATIVE_LABEL} />
             ) : (
               <p className="text-xs text-muted-foreground" data-hero-locked>

@@ -12,6 +12,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { chromium } from "playwright-core";
+import { createSourceAssets } from "../supabase/functions/source-assets/handler.ts";
 
 const { PGRST_URL, JWT_SECRET, PSQL } = process.env;
 assert.ok(PGRST_URL && JWT_SECRET && PSQL, "run through scripts/test-tasks-ui.sh");
@@ -52,6 +53,36 @@ function tinyPng() {
 }
 const PNG = tinyPng();
 
+// The real source-assets handler behind /functions/v1/source-assets ("Record
+// hash"): the caller's JWT is checked against team_members, the stored bytes
+// are the PNG above (Storage stub), and the hash is written the production
+// way, brand_asset_record_hash through PostgREST as the service role.
+const sourceAssetCalls = [];
+const sourceAssets = createSourceAssets({ store: {
+  secret: async () => null,
+  caller: async (jwt) => {
+    const sub = verify(jwt)?.sub;
+    if (!sub || !users.has(sub)) return "none";
+    return { member: sql(`select id from team_members where auth_user_id = '${sub}'`) || null };
+  },
+  client: async (cid) => { const name = sql(`select name from clients where id = '${cid}'`); return name ? { id: cid, name } : null; },
+  assets: async (cid) => {
+    const r = await fetch(`${PGRST_URL}/brand_assets?client_id=eq.${cid}&select=id,client_id,kind,source,label,storage_path,url,mime_type,size_bytes,width,height,content_hash,creative_use&order=created_at`,
+      { headers: { authorization: `Bearer ${serviceKey}` } });
+    return r.json();
+  },
+  read: async (p) => (sql(`select count(*) from storage.objects where bucket_id = 'brand-assets' and name = '${p}'`) === "1"
+    ? { ok: true, bytes: new Uint8Array(PNG) } : { ok: false, reason: "missing" }),
+  record: async (p) => {
+    const r = await fetch(`${PGRST_URL}/rpc/brand_asset_record_hash`, { method: "POST", headers: { authorization: `Bearer ${serviceKey}`, "content-type": "application/json" }, body: JSON.stringify({ p }) });
+    const out = await r.json();
+    if (r.status !== 200) throw new Error(out.message ?? JSON.stringify(out));
+    return out;
+  },
+  uploadSlot: async () => { throw new Error("not used"); },
+  insertAsset: async () => { throw new Error("not used"); },
+} });
+
 const unexpected = [];
 const gateway = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
@@ -76,6 +107,14 @@ const gateway = http.createServer(async (req, res) => {
   if (url.pathname.startsWith("/storage/v1/object/sign/brand-assets/")) {
     res.writeHead(200, { "content-type": "image/png" });
     return res.end(PNG);
+  }
+  if (url.pathname === "/functions/v1/source-assets") {
+    const body = []; for await (const c of req) body.push(c);
+    const raw = Buffer.concat(body);
+    sourceAssetCalls.push(JSON.parse(raw.toString() || "{}"));
+    const r = await sourceAssets.handle(new Request("http://x/source-assets", { method: req.method, headers: { authorization: req.headers.authorization ?? "", "content-type": "application/json" }, body: raw }));
+    res.writeHead(r.status, { "content-type": "application/json" });
+    return res.end(Buffer.from(await r.arrayBuffer()));
   }
   if (url.pathname.startsWith("/rest/v1/")) {
     const body = []; for await (const c of req) body.push(c);
@@ -290,6 +329,36 @@ try {
   assert.equal(row(P3).creative_use, "unreviewed");
   await pctx.close();
   ok("The worker's SQL and a portal contact cannot review; the portal contact never reaches the page");
+
+  // Record hash: an unhashed photo and an uploaded generated graphic (not
+  // reviewed here, but a blog hero needs its hash). source-assets measures the
+  // stored bytes; the page never supplies a hash.
+  const GFX = id(6);
+  sql(`insert into brand_assets (id, client_id, kind, label, source, storage_path, mime_type, width, height, size_bytes)
+       values ('${GFX}', '${C}', 'social_post', 'Uploaded blog header', 'upload', '${C}/1795195997420-0-header.png', 'image/png', 1920, 1080, ${PNG.length})`);
+  sql(`insert into storage.objects (bucket_id, name, metadata) values ('brand-assets', '${C}/1795195997420-0-header.png', '{"size": ${PNG.length}}')`);
+  sql(`update storage.objects set metadata = '{"size": ${PNG.length}}' where bucket_id = 'brand-assets' and name = '${C}/scan/photo-3.jpg'`);
+  const PNG_HASH = createHash("sha256").update(PNG).digest("hex");
+  await page.goto(url, { waitUntil: "networkidle" });
+  const other = page.locator(`[data-unhashed-asset="${GFX}"]`);
+  await other.waitFor();
+  assert.match(await page.locator('[data-section="Other stored files without a hash"]').innerText(), /Uploaded blog header[\s\S]*social_post · stored, not hashed yet/);
+  assert.equal(await card(P1).locator("[data-record-hash-button]").count(), 0, "a hashed file offers no Record hash");
+  await other.locator("[data-record-hash-button]").click();
+  // Once recorded, the refresh drops the file from the unhashed list.
+  await page.waitForFunction((a) => !document.querySelector(`[data-unhashed-asset="${a}"]`), GFX, { timeout: 20000 });
+  const g = row(GFX);
+  assert.deepEqual([g.content_hash, g.width, g.height, g.creative_use], [PNG_HASH, 8, 6, "unreviewed"]);
+  assert.equal(sql(`select actor_kind||'/'||action from creative_governance_events where subject_id = '${GFX}' order by id desc limit 1`), "hasher/hashed");
+  const [inv, hashCall] = sourceAssetCalls.slice(-2);
+  assert.deepEqual([inv.mode, inv.asset_ids, hashCall.mode, hashCall.expect], ["inventory", [GFX], "hash", { [GFX]: PNG_HASH }]);
+  await card(P3).locator("[data-record-hash-button]").click();
+  await page.waitForFunction((a) => document.querySelector(`[data-asset="${a}"] [data-hash-status]`)?.getAttribute("data-hash-status") === "hashed", P3, { timeout: 20000 });
+  assert.equal(row(P3).content_hash, PNG_HASH);
+  // A portal contact calling the function directly is refused.
+  const portalCall = await fetch(`${gatewayUrl}/functions/v1/source-assets`, { method: "POST", headers: { authorization: `Bearer ${tokenFor(PORTAL)}`, "content-type": "application/json" }, body: JSON.stringify({ mode: "inventory", client_id: C }) });
+  assert.equal(portalCall.status, 403);
+  ok("Record hash: source-assets measures the stored file (one-asset inventory, then hash bound to it) for a generated upload and an unhashed photo; the hasher is in the history");
 
   // Phone width.
   const mctx = await contextFor(browser, TEAM, { width: 390, height: 844 });

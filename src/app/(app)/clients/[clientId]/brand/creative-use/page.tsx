@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { historyLine, reviewCounts, type ReviewAsset } from "@/lib/creative-use";
 import { ReviewCard } from "@/components/creative-use/review-card";
+import { RecordHashButton } from "@/components/creative-use/record-hash-button";
+import { isHashableMime } from "@/lib/source-assets-call";
 import { KITS } from "../../../../../../../supabase/functions/creative-engine/kits.ts";
 
 // Creative use (0054 / 0055): which of the client's stored photos and logos
@@ -19,11 +21,19 @@ export default async function CreativeUsePage({ params }: { params: Promise<{ cl
   const { data: client } = await supabase.from("clients").select("id, name").eq("id", clientId).maybeSingle();
   if (!client) notFound();
 
-  const { data: rows } = await supabase.from("brand_assets").select(COLUMNS).eq("client_id", clientId)
-    .in("kind", REVIEWABLE).order("kind").order("sort_order").order("created_at");
+  const [{ data: rows }, { data: otherRows }] = await Promise.all([
+    supabase.from("brand_assets").select(COLUMNS).eq("client_id", clientId)
+      .in("kind", REVIEWABLE).order("kind").order("sort_order").order("created_at"),
+    // Stored files of other kinds (generated social graphics, screenshots)
+    // are not reviewed here, but a blog hero needs them hashed too.
+    supabase.from("brand_assets").select("id, kind, label, storage_path, mime_type, created_at").eq("client_id", clientId)
+      .not("kind", "in", `(${REVIEWABLE.join(",")})`).not("storage_path", "is", null).is("content_hash", null)
+      .order("created_at", { ascending: false }),
+  ]);
   const assets = (rows ?? []) as unknown as (ReviewAsset & { sort_order: number })[];
+  const unhashedOther = (otherRows ?? []).filter((a) => isHashableMime(a.mime_type));
 
-  const paths = assets.map((a) => a.storage_path).filter((p): p is string => !!p);
+  const paths = [...assets.map((a) => a.storage_path), ...unhashedOther.map((a) => a.storage_path)].filter((p): p is string => !!p);
   const signed = new Map<string, string>();
   if (paths.length) {
     const { data } = await supabase.storage.from("brand-assets").createSignedUrls(paths, 3600);
@@ -86,6 +96,33 @@ export default async function CreativeUsePage({ params }: { params: Promise<{ cl
       </div>
       {section("Photos", photos)}
       {section("Logos", logos)}
+      {unhashedOther.length > 0 && (
+        <section className="space-y-3" data-section="Other stored files without a hash">
+          <h2 className="text-sm font-semibold">Other stored files without a hash ({unhashedOther.length})</h2>
+          <p className="text-xs text-muted-foreground">
+            Generated graphics and other uploads are not reviewed here, but a blog draft can use one as its hero
+            image only once source-assets has recorded the stored file&apos;s hash.
+          </p>
+          <ul className="space-y-2">
+            {unhashedOther.map((a) => {
+              const url = a.storage_path ? signed.get(a.storage_path) ?? null : null;
+              return (
+                <li key={a.id} className="surface flex flex-wrap items-start gap-3 p-3" data-unhashed-asset={a.id}>
+                  {url
+                    ? // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                      <img src={url} alt="" className="h-16 w-24 rounded border object-cover" />
+                    : <span className="flex h-16 w-24 items-center justify-center rounded border text-[10px] text-muted-foreground">No preview</span>}
+                  <div className="min-w-0 flex-1 space-y-1 text-xs">
+                    <p className="break-words font-medium">{a.label}</p>
+                    <p className="text-muted-foreground">{a.kind} · stored, not hashed yet</p>
+                    <RecordHashButton clientId={clientId} assetId={a.id} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

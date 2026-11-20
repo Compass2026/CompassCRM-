@@ -10,6 +10,7 @@ import {
   type CreativeUse, type ReviewAsset,
 } from "@/lib/creative-use";
 import { cn } from "@/lib/utils";
+import { RecordHashButton } from "./record-hash-button";
 
 const pct = (v: number | null) => (v == null ? "" : String(Math.round(v * 1000) / 10));
 const useBadge: Record<CreativeUse, string> = {
@@ -101,6 +102,7 @@ export function ReviewCard({ clientId, asset, imageUrl, history }: {
           </dd>
           {status === "hashed" && asset.content_hashed_at && <><dt className="text-muted-foreground">Hashed</dt><dd>{asset.content_hashed_at.slice(0, 10)}</dd></>}
         </dl>
+        {status === "unhashed" && <RecordHashButton clientId={clientId} assetId={asset.id} />}
         <div className="flex flex-wrap gap-x-3 text-xs">
           {imageUrl && <a className="underline underline-offset-2" href={imageUrl} target="_blank" rel="noreferrer" data-full-size>Open full size ↗</a>}
           {asset.url && <a className="max-w-full truncate underline underline-offset-2" href={asset.url} target="_blank" rel="noreferrer" title="The address the file was taken from; it may no longer answer. The stored copy is what you review.">Original address ↗</a>}

@@ -1771,7 +1771,16 @@ scheduled or published by any of it.
   link-only assets reported with the brand-scan import that would store them),
   `hash` records only the assets named in `expect: {asset_id: hash}` from an
   inventory and refuses bytes that changed since. It never writes image bytes
-  or review fields. UI: Brand tab › **Creative use**
+  or review fields. **Uploads are hashed (v3, Nov 20 2026):** `inventory`
+  takes an optional `asset_ids` to measure only those assets; the Brand tab
+  uploader's `registerAssetAction` and Creative use's **Record hash**
+  (`recordAssetHashAction`, also listing other stored unhashed files such as
+  generated `social_post` graphics) call it as the signed-in teammate through
+  `src/lib/source-assets-call.ts` — inventory of the one asset, then `hash`
+  bound to what it measured. The app never computes or supplies a hash; a
+  failure keeps the upload and says why. The blog hero picker names stored
+  but unhashed photos / graphics instead of silently omitting them.
+  UI: Brand tab › **Creative use**
   (`/clients/[id]/brand/creative-use`; `src/lib/creative-use.ts`,
   `src/app/creative-use-actions.ts`, `src/components/creative-use/`):
   Approve for creative / Exclude (reason) / Keep unreviewed, as the signed-in
