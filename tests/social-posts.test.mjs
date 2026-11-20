@@ -108,6 +108,12 @@ test("history names people by name and never shows an Auth UUID", () => {
     describePostEvent({ kind: "submitted", actor_kind: "assistant", actor_id: null, from_value: "draft", to_value: "in_review", detail: {} }, names),
     "An assistant: Submitted for review"
   );
+  // 20261120190000: the obsolete no-image reason is cleared and kept in the history.
+  assert.equal(
+    describePostEvent({ kind: "edited", actor_kind: "system", actor_id: null, from_value: "No verified photo yet", to_value: null,
+      detail: { fields: ["no_image_reason"], cleared_no_image_reason: "No verified photo yet" } }, names),
+    "System: Edited — (no_image_reason) — No-image reason cleared because the post now has an image (was “No verified photo yet”)"
+  );
   const lapse = describePostEvent(
     { kind: "grounding_lapsed", actor_kind: "system", actor_id: null, from_value: "approved", to_value: "in_review", detail: { problems: ["The offer is not confirmed."] } },
     names

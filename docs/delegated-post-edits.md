@@ -23,6 +23,7 @@ revised post in Compass.
 | --- | --- |
 | `20261020200000` | Facebook and Business Profile posts in review; one operation, `replace_media`. |
 | `20261029180000` | A second operation on the same door, `replace_copy` (see "Copy edits" below). |
+| `20261120190000` | `replace_media` clears the obsolete `no_image_reason` in the same transaction, keeping the text on the receipt and in the history. A one-time backfill does the same for posts that already had an image, writing a `system` history row each. |
 
 The Edge Function is `content-approvals` (handler v3), with the same
 delegation key as approvals. The Executive OS tools are `content_stage_media`,
@@ -49,7 +50,13 @@ is described in its `docs/phase-5/CONTENT_EDITS.md`.
 3. **Execute** (`content_edit_execute`). It checks everything before changing
    anything, then withdraws, unlinks the old brand-asset media, files or reuses
    the asset for these bytes, links it and resubmits. The existing grounding
-   check runs, and the review task closes and opens again.
+   check runs, and the review task closes and opens again. Since
+   `20261120190000` the same transaction also clears the post's
+   `no_image_reason` once it has an image. The cleared text is kept in three
+   places: on the receipt (`result.cleared_no_image_reason`), and in an
+   `edited` `post_events` row as `from_value` and
+   `detail.cleared_no_image_reason`, with the assistant as actor. A copy edit
+   never touches the reason.
 
 ## Checks
 

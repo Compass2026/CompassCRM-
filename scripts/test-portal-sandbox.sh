@@ -308,6 +308,10 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_edit_copy.t
 # an approved revision closes its own hold) and revising a rejected post
 # through the delegated door for a fresh review.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/review_pending_changes.test.sql"
+# 20261120190000: an attached image clears the obsolete no-image reason (the
+# delegated media edit in its own transaction, kept on the receipt and in the
+# history; the one-time backfill checked on the replay hooks' seed).
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/no_image_reason.test.sql"
 
 # Monthly delivery standard: per-brand targets, month boundaries, no double
 # counting, the per-brand blog gate and its access boundary (rolled back).
