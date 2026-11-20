@@ -46,6 +46,8 @@ export type WritePayload = {
   copy: string;
   claim_ids: string[];
   asset_ids: string[];
+  // 20261120000000: why a draft has no image (only when asset_ids is empty).
+  no_image_reason?: string;
   // v2: an Authority draft; drafter_write re-checks the opportunity against
   // the expected run inside its transaction and links the post (0053).
   authority_opportunity_id?: string;

@@ -238,3 +238,17 @@ test("Business Profile: unnamed, the only location gives the same brief as befor
   assert.equal(two.status, 422);
   assert.ok(two.body.refusals.some((f) => f.code === "social_account_missing"), JSON.stringify(two.body.refusals));
 });
+
+test("submit: a draft without an image carries its no-image reason to drafter_write (20261120000000)", async () => {
+  const { store, calls } = fakeStore();
+  const d = drafter(store);
+  const hash = await briefHash(d);
+  const r = await call(d, { mode: "submit", client_id: CLIENT, target: TARGET, brief_hash: hash,
+    draft: { ...draft, no_image_reason: "  No approved photo of this service yet.  " }, runtime: "w" });
+  assert.equal(r.status, 201);
+  assert.equal(calls.writes[0].no_image_reason, "No approved photo of this service yet.");
+  const bad = await call(d, { mode: "submit", client_id: CLIENT, target: TARGET, brief_hash: hash,
+    draft: { ...draft, no_image_reason: "x".repeat(301) }, runtime: "w" });
+  assert.equal(bad.status, 400);
+  assert.equal(calls.writes.length, 1);
+});
