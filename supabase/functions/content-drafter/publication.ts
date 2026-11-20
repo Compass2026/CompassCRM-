@@ -20,7 +20,8 @@
 // (compass-blog.json `posts_file`), its body converted from the approved
 // restricted Markdown to the site's Block[] types. No hero (client
 // photography only), no author, no TL;DR slot (the summary is the first
-// paragraph of the body).
+// paragraph of the body). Title = the approved H1; seo.title = the approved
+// meta title (the page's <title>, og:title and twitter:title).
 import { bodyWithTldr } from "./tldr.ts";
 import { blockHrefs, checkFoundationContract, FOUNDATION_ADAPTER, foundationHref, foundationPostsFile, markdownToBlocks,
   readCompassPosts, writeCompassPosts, type Block, type FoundationArticle } from "./foundation-blog.ts";
@@ -180,8 +181,9 @@ export function foundationArticle(r: BlogRelease, releaseHash: string, date: str
   const service = /^\/services\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
   const related = [...new Set([...r.internal_links.map((l) => foundationHref(l.url, site)), ...blockHrefs(body)].filter((h) => service.test(h)))];
   if (!r.h1?.trim() || /[\n<>{}]/.test(r.h1) || !r.meta_description?.trim()) fail("The approved H1 and meta description are required");
+  if (!r.meta_title?.trim() || /[\n<>{}]/.test(r.meta_title)) fail("The approved meta title is required");
   return {
-    slug: r.slug, path: `/blog/${r.slug}`, title: r.h1, seo: { description: r.meta_description }, excerpt: r.meta_description,
+    slug: r.slug, path: `/blog/${r.slug}`, title: r.h1, seo: { title: r.meta_title.trim(), description: r.meta_description }, excerpt: r.meta_description,
     publishedAt: date, ...(related.length ? { relatedServices: related } : {}), body,
     compass: { release_hash: releaseHash, draft_id: r.draft_id, draft_version: r.version, keyword_id: r.keyword_id ?? null },
   };

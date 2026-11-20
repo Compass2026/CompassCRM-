@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { preparePublication, publicationPaths, heroImagePlan } from "../supabase/functions/content-drafter/publication.ts";
-import { markdownToBlocks, parseInline, foundationHref, readCompassPosts, blockLines } from "../supabase/functions/content-drafter/foundation-blog.ts";
+import { markdownToBlocks, parseInline, foundationHref, readCompassPosts, blockLines, foundationDocumentTitle } from "../supabase/functions/content-drafter/foundation-blog.ts";
 import { verifyLiveArticle } from "../supabase/functions/blog-publisher/handler.ts";
 import { detectContentContract, describeAdapter, planMutation, validateContentEntry, assertWriteAllowed } from "../src/lib/content-adapters.ts";
 import { resolvePushPlan } from "../supabase/functions/site-push/plan.ts";
@@ -27,7 +27,7 @@ const CONTRACT = { version: 1, adapter: "foundation_brand_content", brand: "harb
 const release = (over = {}) => ({
   draft_id: "00000000-0000-4000-8000-00000000e2e0", client_id: "00000000-0000-4000-8000-00000000c11e", version: 3,
   keyword_id: "00000000-0000-4000-8000-00000000004b",
-  title: "Compass publishing test", slug: "compass-publishing-test", meta_title: "Compass Publishing Test",
+  title: "Compass publishing test", slug: "compass-publishing-test", meta_title: "Synthetic SEO Title Check",
   meta_description: "A synthetic article used only to verify the Compass blog publishing contract end to end. It is never committed.",
   h1: "Compass publishing test article",
   tldr: "This is a synthetic test summary. It is never published.",
@@ -77,6 +77,8 @@ test("create: one changed file (the posts file) against the read head, everythin
   assert.equal(a.path, "/blog/compass-publishing-test");
   assert.equal(a.title, r.h1, "title is the approved H1");
   assert.equal(a.seo.description, r.meta_description);
+  assert.equal(a.seo.title, r.meta_title, "the approved meta title is the SEO title");
+  assert.notEqual(a.seo.title, a.title, "meta title and H1 stay distinct");
   assert.equal(a.excerpt, r.meta_description);
   assert.equal(a.publishedAt, DATE);
   assert.deepEqual(a.relatedServices, ["/services/residential"]);
@@ -186,11 +188,32 @@ test("verifyLiveArticle against a real Foundation build: the exact release verif
   assert.equal(verifyLiveArticle(live.replaceAll("general reference", "other note"), r, HASH, url), false, "sources note");
   assert.equal(verifyLiveArticle(live.replace(`href="${url}"`, 'href="https://harbor-lane.example/blog/other"'), r, HASH, url), false, "canonical");
   assert.equal(verifyLiveArticle(live.replace(/TL;DR:/, "Summary:"), r, HASH, url), false, "TL;DR label");
+  // <title>, og:title and twitter:title follow the approved meta title (with the
+  // site's " | <site name>" suffix while it fits in 60), while the H1 is the article title.
+  assert.ok(live.includes("<title>Synthetic SEO Title Check | Harbor Lane Plumbing</title>"));
+  assert.ok(live.includes('property="og:title" content="Synthetic SEO Title Check | Harbor Lane Plumbing"'));
+  assert.ok(live.includes('name="twitter:title" content="Synthetic SEO Title Check | Harbor Lane Plumbing"'));
+  assert.equal(verifyLiveArticle(live.replace(/<title>[^<]*<\/title>/, "<title>Compass publishing test article | Harbor Lane Plumbing</title>"), r, HASH, url), false, "<title>");
+  assert.equal(verifyLiveArticle(live.replace(/<title>[^<]*<\/title>/, "<title>Synthetic SEO Title Check</title>"), r, HASH, url), false, "suffix dropped although it fits");
+  assert.equal(verifyLiveArticle(live.replace(/(property="og:title" content=")[^"]*/, "$1Another title"), r, HASH, url), false, "og:title");
+  assert.equal(verifyLiveArticle(live.replace(/(name="twitter:title" content=")[^"]*/, "$1Another title"), r, HASH, url), false, "twitter:title");
+  assert.equal(verifyLiveArticle(live, { ...r, meta_title: "A different approved title" }, HASH, url), false, "another approved meta title");
+  assert.equal(verifyLiveArticle(live.replace(/<\/title>/, "</title><title>Second</title>"), r, HASH, url), false, "exactly one <title>");
   // the expected lines are the visible block text
   assert.ok(blockLines(markdownToBlocks(r.body_markdown, SITE)).includes("Example reference — general reference"));
   // the same HTML judged as another adapter keeps the old absolute-href rule
   const lucas = { ...r, destination: { ...r.destination, content_adapter: "lucas_json" } };
   assert.equal(verifyLiveArticle(live, lucas, HASH, url), false, "existing adapters still require the approved absolute href");
+});
+
+test("document title rule: the brand suffix only while the whole fits in 60 characters, never truncated", () => {
+  assert.equal(foundationDocumentTitle("Synthetic SEO Title Check", "Harbor Lane Plumbing"), "Synthetic SEO Title Check | Harbor Lane Plumbing");
+  const long = "A Longer Synthetic SEO Title Used Only for Publishing Checks";
+  assert.equal(foundationDocumentTitle(long, "Silverback Plumbing"), long);
+  assert.equal(foundationDocumentTitle("x".repeat(38), "Show Me Electrical").length, 59);
+  assert.equal(foundationDocumentTitle("x".repeat(40), "Show Me Electrical"), "x".repeat(40));
+  assert.equal(foundationDocumentTitle("Title", null), "Title");
+  assert.throws(() => preparePublication(release({ meta_title: " " }), HASH, repo(), DATE), /meta title/);
 });
 
 test("content adapters: a recorded posts file makes blog posts a push of that file only; everything else stays a pull request", () => {

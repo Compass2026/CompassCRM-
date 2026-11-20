@@ -24,6 +24,11 @@
 // own host become root-relative paths (the site's typed-link rule); every
 // other link must be https.
 //
+// Titles: the H1 is the Article's `title`; the approved meta title is
+// `seo.title`, which the site uses for <title>, og:title and twitter:title,
+// adding " | <site name>" only while the whole stays within 60 characters
+// (foundationDocumentTitle).
+//
 // Pure: no Deno, no network, so `node --test` imports it.
 
 export type Inline =
@@ -42,7 +47,7 @@ export type Block =
   | { type: "sources"; heading?: string; items: { label: string; href: string; note?: string }[] };
 
 export type FoundationArticle = {
-  slug: string; path: string; title: string; seo: { description: string }; excerpt: string;
+  slug: string; path: string; title: string; seo: { title: string; description: string }; excerpt: string;
   publishedAt: string; relatedServices?: string[]; body: Block[];
   compass: { release_hash: string; draft_id: string; draft_version: number; keyword_id: string | null };
 };
@@ -248,4 +253,11 @@ export function readCompassPosts(content: string): { before: string; posts: Foun
 
 export function writeCompassPosts(file: { before: string; after: string }, posts: FoundationArticle[]): string {
   return `${file.before} ${JSON.stringify(posts, null, 2)} ${file.after}`;
+}
+
+/** The site's document-title rule: the SEO title plus " | <site name>" while the whole fits in 60 characters. */
+export const FOUNDATION_TITLE_MAX = 60;
+export function foundationDocumentTitle(seoTitle: string, siteName: string | null): string {
+  const suffixed = siteName ? `${seoTitle} | ${siteName}` : null;
+  return suffixed && suffixed.length <= FOUNDATION_TITLE_MAX ? suffixed : seoTitle;
 }

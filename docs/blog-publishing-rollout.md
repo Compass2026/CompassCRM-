@@ -107,7 +107,9 @@ Markdown, so the publisher delivers an approved release as a typed
   a Compass post carrying an author or image.
 - `Article.compass` carries `{release_hash, draft_id, draft_version,
   keyword_id}`; the post page renders `data-compass-release` on the
-  `<article>` element. Title = the approved H1; canonical stays
+  `<article>` element. Title = the approved H1; optional `seo.title` = the
+  approved meta title for `<title>` / `og:title` / `twitter:title`
+  (hand-written posts without it render as before); canonical stays
   `NEXT_PUBLIC_SITE_URL + /blog/<slug>`; no byline (decision pending) and no
   hero (client photography only — the CRM never sends one).
 
@@ -133,11 +135,15 @@ Markdown, so the publisher delivers an approved release as a typed
   `relatedServices` lists the internal `/services/...` links.
   Note: `validatePublishableMarkdown` (all adapters) still refuses `>`, so
   a quote never reaches a published release today.
-- Excerpt and `seo.description` are the approved meta description; the
-  approved meta title has no field on the Foundation `Article` (the page
-  title is the H1, with the brand suffix while it fits in 60 characters).
+- Excerpt and `seo.description` are the approved meta description;
+  `seo.title` is the approved meta title. The site renders it as `<title>`,
+  `og:title` and `twitter:title` (" | <site name>" appended only while the
+  whole fits in 60 characters, never truncated); the H1 is `title`.
 - `verifyLiveArticle` for this adapter expects the visible text of the
-  converted blocks (and the CTA) and the root-relative rendered hrefs; the
+  converted blocks (and the CTA) and the root-relative rendered hrefs, and
+  requires exactly one `<title>` equal to the approved meta title under the
+  site's rule (site name read from `og:site_name`), with `og:title` /
+  `twitter:title` matching when present; the
   release marker, the exact canonical, the H1, the TL;DR placement and the
   noindex refusal are unchanged. Other adapters are checked exactly as
   before.
