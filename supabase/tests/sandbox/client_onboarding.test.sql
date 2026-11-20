@@ -343,8 +343,15 @@ begin
   update client_onboarding_items set status = 'claimed', evidence_url = 'https://www.yelp.com/biz/sample-a-roofing' where location_id = loc and item_key = 'citation_yelp';
   if ob.err(format($q$update client_onboarding_items set status = 'verified' where location_id = %L and item_key = 'citation_yelp'$q$, loc)) <> '23514' then
     raise exception 'C2 verified without a current accurate check'; end if;
-  insert into citation_checks (listing_id, checked_on, method, result, observed_name, observed_phone, evidence)
-  values (l, ob.today(), 'visited_url', 'accurate', 'Sample A Roofing LLC', '(316) 555-0100', 'Opened the listing (sample)');
+  -- A name-only (partial) check is not a verified listing (Citations field-level checks).
+  insert into citation_checks (listing_id, checked_on, method, result, observed_name, evidence, name_status, address_status, phone_status, website_status)
+  values (l, ob.today(), 'visited_url', 'partial', 'Sample A Roofing LLC', 'Only the name was reviewed (sample)', 'verified', 'not_checked', 'not_checked', 'not_checked');
+  if ob.err(format($q$update client_onboarding_items set status = 'verified' where location_id = %L and item_key = 'citation_yelp'$q$, loc)) <> '23514' then
+    raise exception 'C2b verified on a partial (name-only) check'; end if;
+  insert into citation_checks (listing_id, checked_on, method, result, observed_name, observed_address, observed_phone, observed_website, evidence,
+    name_status, address_status, phone_status, website_status)
+  values (l, ob.today(), 'visited_url', 'accurate', 'Sample A Roofing LLC', '1 Main St, Wichita, KS 67202', '(316) 555-0100', 'https://www.sample-a.example.test',
+    'Opened the listing (sample)', 'verified', 'verified', 'verified', 'verified');
   update client_onboarding_items set status = 'verified' where location_id = loc and item_key = 'citation_yelp';
   select signal into s from client_onboarding_overview where location_id = loc and item_key = 'citation_yelp';
   if (s->>'listings')::int <> 1 or (s->>'verified')::int <> 1 or s->>'listing_url' <> 'https://www.yelp.com/biz/sample-a-roofing' then raise exception 'C3 signal %', s; end if;

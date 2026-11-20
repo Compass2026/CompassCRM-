@@ -24,6 +24,8 @@ export type FulfillmentStatus = keyof typeof FULFILLMENT_STATUSES;
 export const VERIFICATION_STATUSES = {
   unverified: "Unverified",
   verified_accurate: "Verified accurate",
+  // Derived: the latest check verified some fields; others were not checked, not displayed or could not be viewed.
+  partially_verified: "Partially verified",
   discrepancy: "Discrepancy",
   inaccessible: "Inaccessible",
   confirmed_absent: "Confirmed absent",
@@ -36,6 +38,7 @@ export type VerificationStatus = keyof typeof VERIFICATION_STATUSES;
 export const CHECK_RESULTS = {
   accurate: "Listing matches the approved identity",
   discrepancy: "Listing differs from the approved identity",
+  partial: "Some fields verified; others not checked, not displayed or not viewable",
   inaccessible: "Listing could not be opened",
   not_found: "Searched, not found (not proof of absence)",
   confirmed_absent: "Confirmed absent by the publisher or owner dashboard",
@@ -55,6 +58,7 @@ export type CheckMethod = keyof typeof CHECK_METHODS;
 export const RESULT_METHODS: Record<CheckResult, CheckMethod[]> = {
   accurate: ["visited_url", "owner_dashboard"],
   discrepancy: ["visited_url", "owner_dashboard"],
+  partial: ["visited_url", "owner_dashboard"],
   inaccessible: ["visited_url", "other"],
   not_found: ["publisher_search", "other"],
   confirmed_absent: ["owner_dashboard", "publisher_confirmation"],
@@ -103,6 +107,66 @@ export function identityCurrent(l: { check_identity_version: number | null; iden
   return l.check_identity_version === null || l.check_identity_version === l.identity_version;
 }
 
+// ── Field-level checks ─────────────────────────────────────────────────────
+
+/**
+ * A content check states, for each field, what the teammate saw. The result is
+ * derived from these (the database derives it the same way and has the last
+ * word): any discrepancy is a discrepancy, every field correct is accurate,
+ * anything else is partial. A name-only review is partial, never "verified
+ * accurate". Checks saved before field-level review have coverage
+ * "unrecorded": which fields they covered is unknown and never inferred.
+ */
+export const CHECK_FIELDS = ["name", "address", "phone", "website"] as const;
+export type CheckField = (typeof CHECK_FIELDS)[number];
+export const FIELD_STATUSES = {
+  verified: "Verified (matches)",
+  discrepancy: "Discrepancy",
+  not_displayed: "Not displayed",
+  not_checked: "Not checked",
+  inaccessible: "Could not view",
+} as const;
+export type FieldStatus = keyof typeof FIELD_STATUSES;
+export type FieldStatuses = Record<CheckField, FieldStatus>;
+/** The review options that are a verdict on the listing's content, and those that observe nothing. */
+export const CONTENT_RESULTS: CheckResult[] = ["accurate", "discrepancy", "partial"];
+
+/** Fields the approved identity does not publish: correct when not displayed, never "verified" (a shown hidden street is a discrepancy). */
+export function unpublishedFields(i: Pick<CitationIdentity, "hide_address" | "phone" | "website_url">) {
+  const out = new Set<CheckField>();
+  if (i.hide_address) out.add("address");
+  if (!i.phone.trim()) out.add("phone");
+  if (!i.website_url) out.add("website");
+  return out;
+}
+export function deriveCheckResult(statuses: FieldStatuses, identity: Pick<CitationIdentity, "hide_address" | "phone" | "website_url">): "accurate" | "discrepancy" | "partial" {
+  const unpublished = unpublishedFields(identity);
+  let ok = 0, discrepancy = false;
+  for (const f of CHECK_FIELDS) {
+    const s = statuses[f];
+    if (s === "verified" && unpublished.has(f))
+      throw new Error(f === "address" ? "This is a hidden-address business: a listing that shows a street address is a discrepancy. Choose \"not displayed\" when no street is shown."
+        : `The approved identity has no ${f}, so it cannot be verified. Choose "not displayed", or "discrepancy" if the listing shows one.`);
+    if (s === "discrepancy") discrepancy = true;
+    else if (s === "verified" || (s === "not_displayed" && unpublished.has(f))) ok++;
+  }
+  if (!discrepancy && !ok) throw new Error("Verify at least one field or record a discrepancy. If nothing could be reviewed, record the listing as inaccessible.");
+  return discrepancy ? "discrepancy" : ok === CHECK_FIELDS.length ? "accurate" : "partial";
+}
+
+type CoverageSource = { check_field_coverage: "recorded" | "unrecorded" | null; name_check: FieldStatus | null; address_check: FieldStatus | null; phone_check: FieldStatus | null; website_check: FieldStatus | null };
+export function fieldChecks(l: CoverageSource): Record<CheckField, FieldStatus | null> {
+  return { name: l.name_check, address: l.address_check, phone: l.phone_check, website: l.website_check };
+}
+/** What the latest content check covered, in words: exact field coverage, or that it was not recorded. */
+export function coverageText(l: CoverageSource) {
+  if (!l.check_field_coverage) return "";
+  if (l.check_field_coverage === "unrecorded") return "Not recorded (check made before field-level review)";
+  const by = new Map<FieldStatus, CheckField[]>();
+  for (const [f, s] of Object.entries(fieldChecks(l)) as [CheckField, FieldStatus | null][]) if (s) by.set(s, [...(by.get(s) ?? []), f]);
+  return (Object.keys(FIELD_STATUSES) as FieldStatus[]).filter((s) => by.has(s)).map((s) => `${FIELD_STATUSES[s].replace(/ \(matches\)$/, "")}: ${by.get(s)!.join(", ")}`).join(" · ");
+}
+
 // ── Identity and comparison ────────────────────────────────────────────────
 
 export type CitationIdentity = {
@@ -131,7 +195,19 @@ export function publicAddress(i: CitationIdentity) {
 const ADDRESS_WORDS: Record<string, string> = {
   street: "st", avenue: "ave", road: "rd", drive: "dr", boulevard: "blvd", lane: "ln", court: "ct", place: "pl", highway: "hwy",
   parkway: "pkwy", suite: "ste", apartment: "apt", building: "bldg", north: "n", south: "s", east: "e", west: "w", unit: "ste", "#": "ste",
+  floor: "fl", flr: "fl", plaza: "plz", room: "rm",
 };
+const STATE_CODES: Record<string, string> = {
+  alabama: "al", alaska: "ak", arizona: "az", arkansas: "ar", california: "ca", colorado: "co", connecticut: "ct", delaware: "de", "district of columbia": "dc",
+  florida: "fl", georgia: "ga", hawaii: "hi", idaho: "id", illinois: "il", indiana: "in", iowa: "ia", kansas: "ks", kentucky: "ky", louisiana: "la", maine: "me",
+  maryland: "md", massachusetts: "ma", michigan: "mi", minnesota: "mn", mississippi: "ms", missouri: "mo", montana: "mt", nebraska: "ne", nevada: "nv",
+  "new hampshire": "nh", "new jersey": "nj", "new mexico": "nm", "new york": "ny", "north carolina": "nc", "north dakota": "nd", ohio: "oh", oklahoma: "ok",
+  oregon: "or", pennsylvania: "pa", "rhode island": "ri", "south carolina": "sc", "south dakota": "sd", tennessee: "tn", texas: "tx", utah: "ut", vermont: "vt",
+  virginia: "va", washington: "wa", "west virginia": "wv", wisconsin: "wi", wyoming: "wy",
+};
+// Longest names first, so "west virginia" is never read as "virginia".
+const STATE_NAMES = Object.keys(STATE_CODES).sort((a, b) => b.length - a.length);
+const COUNTRY_SUFFIX = /(^|[\s,]+)(united states of america|united states|u\.?s\.?a?\.?)\s*$/i;
 export function normalizeName(v: string) {
   return v.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9 ]+/g, " ").replace(/\b(llc|inc|co|corp|ltd|the)\b/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -150,22 +226,88 @@ export function normalizeWebsite(v: string) {
   } catch { return v.trim().toLowerCase(); }
 }
 
-export type FieldComparison = "match" | "mismatch" | "not_observed" | "exposed";
+export type FieldComparison = "match" | "equivalent" | "mismatch" | "not_observed" | "exposed";
 export type ObservedFields = { observed_name: string; observed_address: string; observed_phone: string; observed_website: string };
 
-/** Field-by-field comparison against the approved identity. A suggestion for the teammate, never a verdict. */
-export function compareListing(identity: CitationIdentity, observed: ObservedFields): Record<"name" | "address" | "phone" | "website", FieldComparison> {
+/** Address words for the equivalence test: state names as codes, ordinals as numbers, no country suffix. */
+function addressTokens(v: string) {
+  let t = ` ${v.replace(COUNTRY_SUFFIX, "").toLowerCase().replace(/\b(\d{5})-\d{4}\b/g, "$1").replace(/#/g, " # ").replace(/[^a-z0-9# ]+/g, " ").replace(/\s+/g, " ").trim()} `;
+  for (const name of STATE_NAMES) t = t.replaceAll(` ${name} `, ` ${STATE_CODES[name]} `);
+  return t.trim().split(" ").filter(Boolean).map((w) => (ADDRESS_WORDS[w] ?? w).replace(/^(\d+)(st|nd|rd|th)$/, "$1"));
+}
+/** Removes the first contiguous run of seq from tokens; returns where it was, or -1. */
+function take(tokens: (string | null)[], seq: string[]) {
+  outer: for (let i = 0; i + seq.length <= tokens.length; i++) {
+    for (let j = 0; j < seq.length; j++) if (tokens[i + j] !== seq[j]) continue outer;
+    tokens.fill(null, i, i + seq.length);
+    return i;
+  }
+  return -1;
+}
+
+/**
+ * The address text comparison. A suggestion beside the teammate's verdict,
+ * never a verdict itself, and it never changes the raw observation.
+ * - match: the same text after Phase 1 normalization (case, punctuation,
+ *   street-word abbreviations, ZIP+4, a country suffix).
+ * - equivalent: every approved part (street, each suite / floor / building
+ *   part, city, ZIP) is present and nothing else is, but the text needed more:
+ *   a state written out or left out, parts in another order, ordinals.
+ * - mismatch: a part is missing or different, or there is anything extra
+ *   (another suite, floor or building, another state). A missing or different
+ *   suite / floor / building is always material.
+ * - exposed: a hidden-address business shows an address. Never normalized away.
+ * Notes name what differs in general words; they never quote the address.
+ */
+export function compareAddress(identity: CitationIdentity, observed: string): { value: FieldComparison; notes: string[] } {
+  if (!observed.trim()) return { value: "not_observed", notes: [] };
+  if (identity.hide_address) return { value: "exposed", notes: ["an address is shown for a hidden-address business"] };
+  if (normalizeAddress(observed) === normalizeAddress(identityAddress(identity))) return { value: "match", notes: [] };
+  const left: (string | null)[] = addressTokens(observed);
+  const material = new Set<string>(), notes: string[] = [], at: number[] = [];
+  const need = (part: string, problem: string) => {
+    const seq = addressTokens(part);
+    if (!seq.length) return;
+    const i = take(left, seq);
+    if (i < 0) material.add(problem); else at.push(i);
+  };
+  need(identity.address_line1, "street missing or different");
+  for (const unit of identity.address_line2.split(/[,;]/)) need(unit, "suite / floor / building missing or different");
+  need(identity.city, "city missing or different");
+  const state = addressTokens(identity.region);
+  if (state.length) { const i = take(left, state); if (i < 0) notes.push("state not shown"); else at.push(i); }
+  need(identity.postal_code, "ZIP missing or different");
+  if (left.some(Boolean)) material.add("text that is not part of the approved address (for example another suite, floor, building or state)");
+  if (material.size) return { value: "mismatch", notes: [...material] };
+  if (at.some((v, i) => i > 0 && v < at[i - 1])) notes.push("parts in a different order");
+  const code = identity.region.trim().toLowerCase();
+  if (STATE_NAMES.some((n) => STATE_CODES[n] === code && new RegExp(`\\b${n}\\b`, "i").test(observed))) notes.push("state written out");
+  if (COUNTRY_SUFFIX.test(observed)) notes.push("country shown");
+  if (!notes.length) notes.push("abbreviations, ordinals or punctuation differ");
+  return { value: "equivalent", notes };
+}
+
+/** Field-by-field text comparison against the approved identity, with the address notes. A suggestion for the teammate, never a verdict. */
+export function compareListingDetail(identity: CitationIdentity, observed: ObservedFields) {
   const cmp = (seen: string, want: string, norm: (v: string) => string): FieldComparison =>
     !seen.trim() ? "not_observed" : norm(seen) === norm(want) ? "match" : "mismatch";
+  const address = compareAddress(identity, observed.observed_address);
   return {
-    name: cmp(observed.observed_name, identity.business_name, normalizeName),
-    address: identity.hide_address
-      ? observed.observed_address.trim() ? "exposed" : "not_observed"
-      : cmp(observed.observed_address, identityAddress(identity), normalizeAddress),
-    phone: cmp(observed.observed_phone, identity.phone, normalizePhone),
-    website: cmp(observed.observed_website, identity.website_url ?? "", normalizeWebsite),
+    fields: {
+      name: cmp(observed.observed_name, identity.business_name, normalizeName),
+      address: address.value,
+      phone: cmp(observed.observed_phone, identity.phone, normalizePhone),
+      website: cmp(observed.observed_website, identity.website_url ?? "", normalizeWebsite),
+    } as Record<CheckField, FieldComparison>,
+    addressNotes: address.notes,
   };
 }
+export function compareListing(identity: CitationIdentity, observed: ObservedFields): Record<CheckField, FieldComparison> {
+  return compareListingDetail(identity, observed).fields;
+}
+export const COMPARISON_LABELS: Record<FieldComparison, string> = {
+  match: "Matches", equivalent: "Equivalent formatting", mismatch: "Differs", not_observed: "Not recorded", exposed: "Shown but should be hidden",
+};
 
 /** The listing's natural key within a location and directory: its URL, else its external id, else the one URL-less slot. */
 export function listingKey(listingUrl: string | null, externalId: string | null) {
@@ -425,14 +567,17 @@ export function toCsv(rows: unknown[][]) {
 /** The current-evidence projection (citation_listing_overview) plus what a report needs. */
 export type ExportListing = Pick<CitationListingOverview,
   "client_name" | "location_label" | "directory_name" | "listing_url" | "external_id" | "fulfillment_status" | "verification_status"
-  | "last_checked_on" | "last_check_result" | "check_identity_version" | "identity_version" | "current_name" | "current_address" | "current_phone"
+  | "last_check_id" | "last_checked_on" | "last_check_result" | "check_identity_version" | "identity_version" | "current_name" | "current_address" | "current_phone"
   | "current_website" | "source_provider" | "source_observed_on" | "last_imported_at" | "source_name" | "source_address" | "source_phone"
-  | "source_website" | "open_tasks" | "suspected_duplicate"> & { identity: CitationIdentity };
+  | "source_website" | "open_tasks" | "suspected_duplicate" | "check_field_coverage" | "name_check" | "address_check" | "phone_check" | "website_check">
+  & { identity: CitationIdentity };
 
 export const EXPORT_HEADERS = ["Client", "Location", "Directory", "Listing URL", "External id", "Provider status", "Verification", "Evidence",
-  "Last checked", "Last check result", "Checked against identity", "Current identity", "Current name", "Current address", "Current phone",
-  "Current website", "Source", "Source observed", "Imported at", "Source name", "Source address", "Source phone", "Source website",
+  "Last checked", "Last check result", "Field coverage", "Name check", "Address check", "Phone check", "Website check",
+  "Checked against identity", "Current identity", "Current name", "Current address", "Current phone",
+  "Current website", "Address text comparison (automated, not a verdict)", "Source", "Source observed", "Imported at", "Source name", "Source address", "Source phone", "Source website",
   "Open tasks", "Suspected duplicate", "Approved address"];
+const fieldCell = (l: ExportListing, s: FieldStatus | null) => s ? FIELD_STATUSES[s] : l.check_field_coverage === "unrecorded" ? "Not recorded" : "";
 
 /**
  * Report rows from the same projection the pages read. "Current" values are
@@ -447,21 +592,57 @@ export function exportRows(listings: ExportListing[], variant: "client" | "inter
     const hidden = l.identity.hide_address;
     const address = (v: string) => hidden && variant === "client" ? (v ? "Address shown publicly (should be hidden)" : "") : v;
     const approved = variant === "client" ? publicAddress(l.identity) : `${identityAddress(l.identity)}${hidden ? " [HIDDEN — internal only]" : ""}`;
+    const compared = comparisonSource(l);
+    const text = compareAddress(l.identity, compared.fields.observed_address);
     return [l.client_name, l.location_label, l.directory_name, l.listing_url ?? "", l.external_id ?? "", FULFILLMENT_STATUSES[l.fulfillment_status],
       VERIFICATION_STATUSES[l.verification_status], FRESHNESS_LABELS[evidenceFreshness(l.last_checked_on, today, identityCurrent(l))], l.last_checked_on ?? "",
-      l.last_check_result ? CHECK_RESULTS[l.last_check_result] : "", l.check_identity_version ?? "", l.identity_version,
+      l.last_check_result ? CHECK_RESULTS[l.last_check_result] : "", coverageText(l),
+      fieldCell(l, l.name_check), fieldCell(l, l.address_check), fieldCell(l, l.phone_check), fieldCell(l, l.website_check),
+      l.check_identity_version ?? "", l.identity_version,
       l.current_name, address(l.current_address), l.current_phone, l.current_website,
+      compared.from === "none" || text.value === "not_observed" ? ""
+        : `${COMPARISON_LABELS[text.value]}${text.notes.length && text.value !== "exposed" ? ` (${text.notes.join("; ")})` : ""}${compared.from === "source" ? " — imported value, not checked" : ""}`,
       l.source_provider ?? "", l.source_observed_on ?? "", l.last_imported_at ?? "",
       l.source_name, address(l.source_address), l.source_phone, l.source_website,
       l.open_tasks, l.suspected_duplicate ? "yes" : "", approved];
   })];
 }
 
-/** "Action required": a discrepancy, an inaccessible listing, an identity change nobody has rechecked, an open task, or a provider claim nobody has verified. */
+/** "Action required": a discrepancy, an inaccessible listing, a partial review, an identity change nobody has rechecked, an open task, or a provider claim nobody has verified. */
 export function needsAction(l: { verification_status: VerificationStatus; fulfillment_status: FulfillmentStatus; open_tasks: number; suspected_duplicate: boolean }) {
   return l.verification_status === "discrepancy" || l.verification_status === "inaccessible" || l.verification_status === "needs_reverification"
+    || l.verification_status === "partially_verified"
     || l.open_tasks > 0 || l.suspected_duplicate
     || (l.fulfillment_status === "provider_complete" && l.verification_status === "unverified");
+}
+
+/** Counts for one location (or the agency) from the overview projection. */
+export type LocationSummary = {
+  total: number; byVerification: Record<VerificationStatus, number>; providerCompleteUnverified: number; openTasks: number;
+  notCurrent: number; duplicates: number; action: number; lastImport: string | null;
+  /** Listings whose current evidence (latest check, current identity) verified each field. A hidden address kept hidden counts for address. */
+  fieldVerified: Record<CheckField, number>;
+  /** Current content verdicts whose check predates field-level review: which fields they covered is unknown. */
+  coverageUnrecorded: number;
+};
+export function summarize(listings: CitationListingOverview[], openTasks: number, today?: string): LocationSummary {
+  const byVerification = { unverified: 0, verified_accurate: 0, partially_verified: 0, discrepancy: 0, inaccessible: 0, confirmed_absent: 0, needs_reverification: 0 };
+  const fieldVerified = { name: 0, address: 0, phone: 0, website: 0 };
+  let providerCompleteUnverified = 0, notCurrent = 0, duplicates = 0, action = 0, coverageUnrecorded = 0, lastImport: string | null = null;
+  for (const l of listings) {
+    byVerification[l.verification_status]++;
+    if (["verified_accurate", "partially_verified", "discrepancy"].includes(l.verification_status)) {
+      if (l.check_field_coverage === "unrecorded") coverageUnrecorded++;
+      const f = fieldChecks(l);
+      for (const k of CHECK_FIELDS) if (f[k] === "verified" || (k === "address" && l.hide_address && f[k] === "not_displayed")) fieldVerified[k]++;
+    }
+    if (l.fulfillment_status === "provider_complete" && l.verification_status === "unverified") providerCompleteUnverified++;
+    if (evidenceFreshness(l.last_checked_on, today, identityCurrent(l)) !== "current") notCurrent++;
+    if (l.suspected_duplicate) duplicates++;
+    if (needsAction(l)) action++;
+    if (l.last_imported_at && (!lastImport || l.last_imported_at > lastImport)) lastImport = l.last_imported_at;
+  }
+  return { total: listings.length, byVerification, providerCompleteUnverified, openTasks, notCurrent, duplicates, action, lastImport, fieldVerified, coverageUnrecorded };
 }
 
 export function citationText(form: FormData, key: string, max = 1000) {
@@ -495,10 +676,14 @@ export type CitationListingOverview = CitationListing & {
   check_identity_version: number | null; verification_status: VerificationStatus;
   current_name: string; current_address: string; current_phone: string; current_website: string;
   open_tasks: number; suspected_duplicate: boolean;
+  /** The latest content check's field coverage and statuses (null when the latest check is not a content verdict). */
+  check_field_coverage: "recorded" | "unrecorded" | null;
+  name_check: FieldStatus | null; address_check: FieldStatus | null; phone_check: FieldStatus | null; website_check: FieldStatus | null;
 };
 /** The observation a comparison should use: the latest content check, else the import's (flagged as such), else nothing. */
-export function comparisonSource(l: CitationListingOverview): { from: "check" | "source" | "none"; fields: ObservedFields } {
-  if (l.last_check_result === "accurate" || l.last_check_result === "discrepancy")
+export function comparisonSource(l: Pick<CitationListingOverview, "last_check_id" | "last_check_result" | "current_name" | "current_address" | "current_phone"
+  | "current_website" | "source_name" | "source_address" | "source_phone" | "source_website">): { from: "check" | "source" | "none"; fields: ObservedFields } {
+  if (l.last_check_result && CONTENT_RESULTS.includes(l.last_check_result))
     return { from: "check", fields: { observed_name: l.current_name, observed_address: l.current_address, observed_phone: l.current_phone, observed_website: l.current_website } };
   if (!l.last_check_id && (l.source_name || l.source_address || l.source_phone || l.source_website))
     return { from: "source", fields: { observed_name: l.source_name, observed_address: l.source_address, observed_phone: l.source_phone, observed_website: l.source_website } };
@@ -507,6 +692,14 @@ export function comparisonSource(l: CitationListingOverview): { from: "check" | 
 export type CitationCheck = ObservedFields & {
   id: string; seq: number; listing_id: string; identity_version: number; checked_on: string; method: CheckMethod; result: CheckResult;
   evidence: string; evidence_url: string | null; recorded_at: string; recorded_by: string | null;
+  field_coverage: "recorded" | "unrecorded";
+  name_status: FieldStatus | null; address_status: FieldStatus | null; phone_status: FieldStatus | null; website_status: FieldStatus | null;
+};
+/** citation_listing_enrichments: a URL / external id added to an existing listing, with what it replaced (nothing) and why. */
+export type CitationListingEnrichment = {
+  id: string; client_id: string; listing_id: string; listing_url: string | null; external_id: string | null; reason: string; acknowledged_listing_ids: string[];
+  before_url: string | null; before_external_id: string | null; before_key: string; after_url: string | null; after_external_id: string | null; after_key: string;
+  recorded_at: string; recorded_by: string | null;
 };
 export type CitationTask = {
   id: string; client_id: string; location_id: string; listing_id: string | null; kind: CitationTaskKind; reason: string; status: CitationTaskStatus;

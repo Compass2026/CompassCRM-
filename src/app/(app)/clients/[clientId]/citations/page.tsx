@@ -52,7 +52,7 @@ export default async function ClientCitationsPage({ params }: { params: Promise<
             <span className="text-xs text-muted-foreground">{l.status === "archived" ? "Archived · " : ""}identity v{l.identity_version}</span></div>
           <p className="mt-1 text-sm">{l.business_name}</p>
           <p className="text-sm text-muted-foreground">{publicAddress(l)}{l.phone ? ` · ${l.phone}` : ""}</p>
-          <p className="mt-3 text-xs text-muted-foreground">{s.total} listings · {s.byVerification.verified_accurate} verified · {s.byVerification.discrepancy} discrepancies · {s.openTasks} open tasks · <span className="font-semibold text-foreground">{s.action} need action</span></p>
+          <p className="mt-3 text-xs text-muted-foreground">{s.total} listings · {s.byVerification.verified_accurate} verified (all fields) · {s.byVerification.partially_verified} partially verified · {s.byVerification.discrepancy} discrepancies · {s.openTasks} open tasks · <span className="font-semibold text-foreground">{s.action} need action</span></p>
         </Link>;
       })}
       {!locations.length && <p className="surface p-8 text-center text-sm text-muted-foreground lg:col-span-2">No business locations yet. Add the approved identity of each real, listing-eligible location first.</p>}

@@ -3,7 +3,7 @@ import type { RolloutReview, RolloutWrite } from "./agency-rollout";
 import type { BacklinkOpportunity, BacklinkCheck, PortalBacklink } from "./backlinks";
 import type { GrowthMeasurement, SearchHistory, GrowthWork } from "./client-growth";
 import type { OnboardingGap, OnboardingRow, OnboardingStatus } from "./client-onboarding";
-import type { CitationLocation, CitationLocationIdentity, CitationDirectory, CitationListing, CitationListingOverview, CitationCheck, CitationTask, CitationRequest, CitationCreditEntry, CitationCreditBalance, CitationImport } from "./citations";
+import type { CitationLocation, CitationLocationIdentity, CitationDirectory, CitationListing, CitationListingOverview, CitationCheck, CitationTask, CitationRequest, CitationCreditEntry, CitationCreditBalance, CitationImport, CitationListingEnrichment } from "./citations";
 
 export type Json =
   | string
@@ -116,12 +116,21 @@ export type Database = {
       citation_listings: {
         Row: CitationListing
         Insert: Pick<CitationListing, "client_id" | "location_id" | "directory_id"> & Partial<Pick<CitationListing, "id" | "listing_url" | "external_id" | "fulfillment_status" | "source_provider" | "source_observed_on" | "notes" | "source_name" | "source_address" | "source_phone" | "source_website">>
-        Update: Partial<Pick<CitationListing, "fulfillment_status" | "notes" | "archived" | "external_id" | "source_name" | "source_address" | "source_phone" | "source_website">>
+        // URL / external id change only through citation_listing_enrichments (20261118230000).
+        Update: Partial<Pick<CitationListing, "fulfillment_status" | "notes" | "archived" | "source_name" | "source_address" | "source_phone" | "source_website">>
+        Relationships: []
+      }
+      citation_listing_keys: { Row: { location_id: string; directory_id: string; listing_key: string; listing_id: string; recorded_at: string }; Insert: never; Update: never; Relationships: [] }
+      citation_listing_enrichments: {
+        Row: CitationListingEnrichment
+        Insert: Pick<CitationListingEnrichment, "id" | "client_id" | "listing_id" | "reason"> & Partial<Pick<CitationListingEnrichment, "listing_url" | "external_id" | "acknowledged_listing_ids">>
+        Update: never
         Relationships: []
       }
       citation_checks: {
         Row: CitationCheck
-        Insert: Omit<CitationCheck, "seq" | "identity_version" | "recorded_at" | "recorded_by" | "evidence_url"> & { evidence_url?: string | null }
+        // field_coverage is stamped "recorded" by the guard; the result of a content check is derived from the field statuses.
+        Insert: Omit<CitationCheck, "seq" | "identity_version" | "recorded_at" | "recorded_by" | "evidence_url" | "field_coverage"> & { evidence_url?: string | null }
         Update: never
         Relationships: []
       }

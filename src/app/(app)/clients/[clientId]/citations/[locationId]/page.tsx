@@ -7,11 +7,14 @@ import { getCurrentTeamRole, listTeamMembers } from "@/lib/team";
 import { fetchAll } from "@/lib/fetch-all";
 import { inView, listingView, loadListings, summarize, LISTING_VIEWS } from "@/lib/citations-data";
 import {
-  CHECK_METHODS, CHECK_RESULTS, OPEN_TASK_STATUSES, REQUEST_ACTIONS, REQUEST_STATUSES, TASK_KINDS, TASK_STATUSES, compareListing, comparisonSource, identityAddress,
-  type CitationCheck, type CitationLocation, type CitationLocationIdentity, type CitationRequest, type CitationTask,
+  CHECK_FIELDS, CHECK_METHODS, CHECK_RESULTS, FIELD_STATUSES, OPEN_TASK_STATUSES, REQUEST_ACTIONS, REQUEST_STATUSES, TASK_KINDS, TASK_STATUSES,
+  compareListingDetail, comparisonSource, fieldChecks, identityAddress,
+  type CitationCheck, type CitationListingEnrichment, type CitationLocation, type CitationLocationIdentity, type CitationRequest, type CitationTask,
 } from "@/lib/citations";
-import { FieldChip, FreshnessBadge, FulfillmentBadge, PhaseNote, SummaryCards, VerificationBadge, ViewNav } from "@/components/citations/citation-bits";
-import { AddListingForm, CheckForm, EditLocationForm, OpenTaskForm, PROVIDERS, QueueVerificationButton, RequestForm, RequestUpdateForm, TaskUpdateForm } from "@/components/citations/citation-forms";
+import { FieldCheckChip, FieldChip, FreshnessBadge, FulfillmentBadge, PhaseNote, SummaryCards, VerificationBadge, ViewNav } from "@/components/citations/citation-bits";
+import {
+  AddListingForm, CheckForm, EditLocationForm, EnrichListingForm, OpenTaskForm, PROVIDERS, QueueVerificationButton, RequestForm, RequestUpdateForm, TaskUpdateForm,
+} from "@/components/citations/citation-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +31,7 @@ export default async function CitationLocationPage({ params, searchParams }: { p
   const { data: location } = await db.from("citation_locations").select("*").eq("client_id", clientId).eq("id", locationId).maybeSingle();
   if (!location) notFound();
   const loc = location as CitationLocation;
-  const [{ listings, error }, tasksQ, requestsQ, historyQ, dirsQ, trackingQ, brandsQ, team, role] = await Promise.all([
+  const [{ listings, error }, tasksQ, requestsQ, historyQ, dirsQ, trackingQ, brandsQ, team, role, actorsQ] = await Promise.all([
     loadListings(db, { clientId, locationId }),
     fetchAll<CitationTask>((from, to) => db.from("citation_tasks").select("*", { count: "exact" }).eq("client_id", clientId).eq("location_id", locationId).order("opened_at", { ascending: false }).order("id").range(from, to)),
     fetchAll<CitationRequest>((from, to) => db.from("citation_fulfillment_requests").select("*", { count: "exact" }).eq("client_id", clientId).eq("location_id", locationId).order("created_at", { ascending: false }).order("id").range(from, to)),
@@ -37,6 +40,7 @@ export default async function CitationLocationPage({ params, searchParams }: { p
     db.from("locations").select("id, name").eq("client_id", clientId).order("sort_order"),
     db.from("client_brand_workspaces").select("id, name").eq("client_id", clientId).order("name"),
     listTeamMembers(db), getCurrentTeamRole(db),
+    db.from("team_members").select("auth_user_id, name"),
   ]);
   const visible = listings.filter((l) => inView(l, view));
   const pages = Math.max(1, Math.ceil(visible.length / PAGE));
@@ -46,11 +50,14 @@ export default async function CitationLocationPage({ params, searchParams }: { p
   // evidence per listing comes from the overview projection, so a busy
   // listing's history can never displace another listing's latest check.
   const ids = shown.map((l) => l.id);
-  const checksQ = ids.length
-    ? await fetchAll<CitationCheck>((from, to) => db.from("citation_checks").select("*", { count: "exact" }).in("listing_id", ids)
-      .order("checked_on", { ascending: false }).order("recorded_at", { ascending: false }).order("seq", { ascending: false }).range(from, to))
-    : { rows: [] as CitationCheck[], error: null };
-  const failure = error ?? tasksQ.error ?? requestsQ.error ?? dirsQ.error ?? checksQ.error;
+  const [checksQ, enrichmentsQ] = ids.length ? await Promise.all([
+    fetchAll<CitationCheck>((from, to) => db.from("citation_checks").select("*", { count: "exact" }).in("listing_id", ids)
+      .order("checked_on", { ascending: false }).order("recorded_at", { ascending: false }).order("seq", { ascending: false }).range(from, to)),
+    fetchAll<CitationListingEnrichment>((from, to) => db.from("citation_listing_enrichments").select("*", { count: "exact" }).in("listing_id", ids)
+      .order("recorded_at").order("id").range(from, to)),
+  ]) : [{ rows: [] as CitationCheck[], error: null }, { rows: [] as CitationListingEnrichment[], error: null }];
+  const failure = error ?? tasksQ.error ?? requestsQ.error ?? dirsQ.error ?? checksQ.error ?? enrichmentsQ.error;
+  const actor = (id: string | null) => (actorsQ.data ?? []).find((a) => a.auth_user_id === id)?.name ?? "a teammate";
   const tasks = tasksQ.rows;
   const openTasks = tasks.filter((t) => OPEN_TASK_STATUSES.includes(t.status));
   const requests = requestsQ.rows;
@@ -101,8 +108,10 @@ export default async function CitationLocationPage({ params, searchParams }: { p
       {!visible.length && <p className="surface p-8 text-center text-sm text-muted-foreground">No listings in this view.</p>}
       <div className="space-y-3" data-listings>{shown.map((l) => {
         const own = checks.filter((c) => c.listing_id === l.id);
+        const enrichments = enrichmentsQ.rows.filter((e) => e.listing_id === l.id);
         const compared = comparisonSource(l);
-        const cmp = compareListing(loc, compared.fields);
+        const { fields: cmp, addressNotes } = compareListingDetail(loc, compared.fields);
+        const verdict = fieldChecks(l);
         const listingTasks = openTasks.filter((t) => t.listing_id === l.id);
         const hasSource = !!(l.source_name || l.source_address || l.source_phone || l.source_website);
         return <article key={l.id} className="surface min-w-0 p-4" data-listing={l.directory_name} data-listing-url={l.listing_url ?? ""}>
@@ -112,20 +121,36 @@ export default async function CitationLocationPage({ params, searchParams }: { p
             {l.suspected_duplicate && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800" data-duplicate>Suspected duplicate</span>}
             {listingTasks.length > 0 && <span className="text-xs font-medium">{listingTasks.length} open task{listingTasks.length > 1 ? "s" : ""}</span>}
           </div>
-          <p className="mt-2 break-all text-sm">{l.listing_url ? <a className="text-blue-700 underline" href={l.listing_url} target="_blank" rel="noreferrer">{l.listing_url}</a> : <span className="text-muted-foreground">No listing URL{l.external_id ? ` · id ${l.external_id}` : ""}</span>}</p>
+          <p className="mt-2 break-all text-sm">{l.listing_url ? <a className="text-blue-700 underline" href={l.listing_url} target="_blank" rel="noreferrer">{l.listing_url}</a> : <span className="text-muted-foreground">No listing URL</span>}
+            {l.external_id && <span className="text-muted-foreground" data-external-id> · id {l.external_id}</span>}</p>
+          {enrichments.length > 0 && <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground" data-enrichments>{enrichments.map((e) =>
+            <li key={e.id}>{e.recorded_at.slice(0, 10)}: {actor(e.recorded_by)} added {[e.listing_url && "the URL", e.external_id && `id ${e.external_id}`].filter(Boolean).join(" and ")} (was {e.before_url || e.before_external_id ? "identified by its earlier URL / id" : "recorded without a URL or id"}) · {e.reason}
+              {e.acknowledged_listing_ids.length > 0 && ` · reviewed ${e.acknowledged_listing_ids.length} other listing${e.acknowledged_listing_ids.length > 1 ? "s" : ""} with the same URL / id`}</li>)}</ul>}
           {l.verification_status === "needs_reverification" && <p className="mt-2 text-xs text-orange-800" data-reverify>The approved identity is now v{l.identity_version}; the latest check ({l.last_checked_on}) was made against {l.check_identity_version ? `v${l.check_identity_version}` : "no approved identity"}. Record a new check to verify it.</p>}
-          <div className="mt-2 flex flex-wrap items-center gap-1" data-current-evidence={compared.from}>{(["name", "address", "phone", "website"] as const).map((f) => <FieldChip key={f} field={f} value={cmp[f]} />)}
-            <span className="text-xs text-muted-foreground">{compared.from === "check" ? `from the ${l.last_checked_on} check (identity v${l.check_identity_version})`
-              : compared.from === "source" ? "from the imported observation, not verified"
-              : l.last_check_result ? `latest check: ${CHECK_RESULTS[l.last_check_result].toLowerCase()} on ${l.last_checked_on}, nothing observed` : "nothing observed yet"}</span></div>
+          <div className="mt-2 flex flex-wrap items-center gap-1" data-manual-verdict>
+            <span className="text-xs font-medium">Teammate verdict{l.last_checked_on ? ` (${l.last_checked_on}, identity ${l.check_identity_version ? `v${l.check_identity_version}` : "none"})` : ""}:</span>
+            {l.check_field_coverage === "recorded" ? CHECK_FIELDS.map((f) => verdict[f] && <FieldCheckChip key={f} field={f} status={verdict[f]} />)
+              : <span className="text-xs text-muted-foreground" data-coverage={l.check_field_coverage ?? "none"}>{l.check_field_coverage === "unrecorded"
+                ? `${CHECK_RESULTS[l.last_check_result!].toLowerCase()}; which fields were reviewed was not recorded (check made before field-level review)`
+                : l.last_check_result ? `${CHECK_RESULTS[l.last_check_result].toLowerCase()}; no field observed` : "none yet"}</span>}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1" data-current-evidence={compared.from}>
+            <span className="text-xs text-muted-foreground">Automated text comparison (a suggestion, not a verdict){compared.from === "check" ? ` of the values recorded in that check`
+              : compared.from === "source" ? " of the imported observation, not verified" : ""}:</span>
+            {compared.from === "none" ? <span className="text-xs text-muted-foreground">nothing observed yet</span> : (["name", "address", "phone", "website"] as const).map((f) => <FieldChip key={f} field={f} value={cmp[f]} />)}
+            {compared.from !== "none" && addressNotes.length > 0 && cmp.address !== "exposed" && <span className="text-xs text-muted-foreground" data-address-notes>address: {addressNotes.join("; ")}</span>}</div>
           {compared.from === "check" && <dl className="mt-2 grid gap-x-4 text-xs sm:grid-cols-4" data-current-values>{([["Name", l.current_name], ["Address", l.current_address], ["Phone", l.current_phone], ["Website", l.current_website]] as const).map(([k, v]) =>
-            <div key={k}><dt className="text-muted-foreground">Current {k.toLowerCase()}</dt><dd className="break-words" data-current={k.toLowerCase()}>{v || "not recorded"}</dd></div>)}</dl>}
+            <div key={k}><dt className="text-muted-foreground">Current {k.toLowerCase()} (as shown)</dt><dd className="break-words" data-current={k.toLowerCase()}>{v || "not recorded"}</dd></div>)}</dl>}
           <p className="mt-2 text-xs text-muted-foreground" data-source-observation>Imported: {l.source_provider ?? "—"}{l.source_observed_on ? ` · observed ${l.source_observed_on}` : ""}{l.last_imported_at ? ` · imported ${l.last_imported_at.slice(0, 10)}` : ""}
             {hasSource && ` · ${[l.source_name, l.source_phone, l.source_address, l.source_website].filter(Boolean).join(" · ")}`}</p>
           <details className="mt-3 border-t pt-3"><summary className="cursor-pointer text-sm font-medium">Checks &amp; evidence ({own.length})</summary>
-            <div className="mt-3 space-y-3"><CheckForm clientId={clientId} listingId={l.id} />
+            <div className="mt-3 space-y-3"><CheckForm clientId={clientId} listingId={l.id} identity={loc} />
               <ul className="space-y-2 text-xs" data-checks>{own.map((c) => <li key={c.id} className="border-t pt-2"><p className="font-semibold">{c.checked_on} · {CHECK_RESULTS[c.result]} · {CHECK_METHODS[c.method]} · identity {c.identity_version ? `v${c.identity_version}` : "none"}</p>
+                {c.field_coverage === "recorded" && c.name_status && <p className="text-muted-foreground">{CHECK_FIELDS.map((f) => `${f}: ${FIELD_STATUSES[c[`${f}_status`]!].toLowerCase()}`).join(" · ")}</p>}
+                {c.field_coverage === "unrecorded" && ["accurate", "discrepancy"].includes(c.result) && <p className="text-muted-foreground">Fields reviewed: not recorded (before field-level review)</p>}
                 <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{c.evidence}{c.evidence_url && <> · <a className="text-blue-700 underline" href={c.evidence_url} target="_blank" rel="noreferrer">evidence</a></>}</p></li>)}</ul></div></details>
+          {(!l.listing_url || !l.external_id) && <details className="mt-3 border-t pt-3"><summary className="cursor-pointer text-sm font-medium">Add {!l.listing_url && !l.external_id ? "URL / external id" : !l.listing_url ? "URL" : "external id"}</summary>
+            <div className="mt-3"><EnrichListingForm clientId={clientId} listingId={l.id} hasUrl={!!l.listing_url} hasExternalId={!!l.external_id} /></div></details>}
           <details className="mt-3 border-t pt-3"><summary className="cursor-pointer text-sm font-medium">Open a task for this listing</summary>
             <div className="mt-3"><OpenTaskForm clientId={clientId} locationId={locationId} listings={[{ id: l.id, name: listingName(l.id) }]} team={teamOptions} defaultListing={l.id} /></div></details>
         </article>;
