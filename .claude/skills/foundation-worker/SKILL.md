@@ -1687,6 +1687,8 @@ anything:
 | `lucas_json` (`data/locations.json`, `data/blog-posts.json`) | push | push | pull request |
 | `markdown_blog` (`content/blog/*.mdx` + data files) | proposed document | push | pull request |
 | `foundation_brand_content` (`brands/<brand>/content/*.ts`) | pull request | pull request | pull request |
+| `foundation_brand_content` with the Compass blog contract (`compass-blog.json` + `content_paths.posts_file`) | pull request | push — the blog publisher only, appending the approved release to `posts_file`; never hand-write a post there | pull request |
+| `json_blog` (`compass-blog.json` declaring it + `data/blog-posts.json`) | proposed document | push | proposed document |
 | `unsupported` / null | proposed document | proposed document | proposed document |
 
 A **push** goes to the site's recorded branch of record (`sites.branch` —

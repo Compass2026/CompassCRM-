@@ -88,3 +88,88 @@ Scope is BHG Safety Partners / bhgsafety.com. The separate BHG forklift and heav
 ## Repeatable activation for remaining clients
 
 Audit agreement and content allowance, brand/facts/evidence, keyword intent and unique owner pages, usable assets, website adapter, exact social destinations, reviewer, schedule/timezone, and measurement connections. Prove one article plus one Facebook and GBP draft for each client before expanding cadence. Begin blogs with human review, then move only that client's blogs to explicitly enabled automatic mode. Other channels retain their existing approval policy.
+
+## Compass Website Foundation v1 sites (adapter `foundation_brand_content`, Nov 2026)
+
+Foundation sites (Show Me Electrical, Silverback) render typed content, not
+Markdown, so the publisher delivers an approved release as a typed
+`Article` appended to one generated file.
+
+**The site contract** (one PR per site repository):
+
+- `compass-blog.json` at the root: `{"version":1,"adapter":"foundation_brand_content","brand":"<brand>","keyword_provenance":true,"markdown":false,"blocks":true,"seo_fields":true,"tldr":false,"hero_image":false,"posts_file":"brands/<brand>/content/blog/compass-posts.ts","blog_route":"/blog/{slug}"}`.
+- `brands/<brand>/content/blog/compass-posts.ts`: generated; the CRM
+  rewrites only the JSON array between `/* compass:begin */` and
+  `/* compass:end */`.
+- The registry merges `compassPosts` with the hand-written posts
+  (`content/blog/compass.ts`) and the build fails on a duplicate slug, a
+  Compass post whose path is not `/blog/<slug>`, a missing release hash, or
+  a Compass post carrying an author or image.
+- `Article.compass` carries `{release_hash, draft_id, draft_version,
+  keyword_id}`; the post page renders `data-compass-release` on the
+  `<article>` element. Title = the approved H1; optional `seo.title` = the
+  approved meta title for `<title>` / `og:title` / `twitter:title`
+  (hand-written posts without it render as before); canonical stays
+  `NEXT_PUBLIC_SITE_URL + /blog/<slug>`; no byline (decision pending) and no
+  hero (client photography only — the CRM never sends one).
+
+**The CRM** (`content-drafter/foundation-blog.ts`, `publication.ts`):
+
+- `publicationPaths` → `["compass-blog.json", content_paths.posts_file]`.
+- `preparePublication` checks the contract against the site row (brand,
+  posts file, `/blog/{slug}`, blocks, SEO fields, keyword provenance),
+  parses the marker JSON and appends the article. The same slug with the
+  same release hash is `already_present` (no write; the reconcile path
+  verifies the live page); the same slug under another hash, or a
+  hand-written `brands/<brand>/content/blog/<slug>.ts` in the repository
+  tree, is refused.
+- The approved restricted Markdown becomes the site's `Block[]`
+  deterministically: `##` / `###`, paragraphs (soft breaks joined), `-` /
+  `1.` lists, `>` quotes, a `## Sources` / `## References` list of links
+  (optionally ` — note`) as the sources block; inline links, `**strong**`,
+  `*em*` / `_em_`. Links to the site's own host become root-relative paths;
+  every other link must be https. Anything the blocks cannot express
+  (nested or indented lists, code, images, tables, rules, H1/H4+, markup
+  inside headings or links, escapes) refuses the release. The TL;DR is the
+  first paragraph (`tldr: false`) and the approved CTA closes the body.
+  `relatedServices` lists the internal `/services/...` links.
+  Note: `validatePublishableMarkdown` (all adapters) still refuses `>`, so
+  a quote never reaches a published release today.
+- Excerpt and `seo.description` are the approved meta description;
+  `seo.title` is the approved meta title. The site renders it as `<title>`,
+  `og:title` and `twitter:title` (" | <site name>" appended only while the
+  whole fits in 60 characters, never truncated); the H1 is `title`.
+- `verifyLiveArticle` for this adapter expects the visible text of the
+  converted blocks (and the CTA) and the root-relative rendered hrefs, and
+  requires exactly one `<title>` equal to the approved meta title under the
+  site's rule (site name read from `og:site_name`), with `og:title` /
+  `twitter:title` matching when present; the
+  release marker, the exact canonical, the H1, the TL;DR placement and the
+  noindex refusal are unchanged. Other adapters are checked exactly as
+  before.
+- `site-push`: with `content_paths.posts_file` recorded, a push of that
+  file alone to the named branch of record is an authorised content entry;
+  any other file, a mix, or a delete is still a preview + pull request.
+- `blog_publication_finish` is unchanged: a 40-hex commit, a READY
+  production deployment, `live_verified` and the exact URL. No migration was
+  needed — the queue, problems and finish functions do not filter by
+  adapter.
+
+**Site rows** (data steps, done by hand when each site is ready — never by
+the PRs): `content_adapter = 'foundation_brand_content'`,
+`controlled_by_compass = true`, `repo_url`, `branch` = the branch of record,
+and `content_paths` =
+`{"adapter":"foundation_brand_content","brand":"<brand>","content_dir":"brands/<brand>/content","blog_format":"typescript","posts_file":"brands/<brand>/content/blog/compass-posts.ts","blog_route":"/blog/{slug}","city_route":"/service-area/{slug}"}`.
+The live verification fetches `sites.url` + `/blog/<slug>`, so that host
+must serve the branch of record with `NEXT_PUBLIC_ALLOW_INDEXING=true`
+(a noindex page is never verified).
+
+**Detection** (`detectContentContract`, pass `compassBlog` = the file's
+content): `compass-blog.json` declaring `foundation_brand_content` for the
+recorded brand, with its posts file in the tree, adds `posts_file`; a
+`compass-blog.json` declaring `json_blog` with `data/blog-posts.json` and
+`src/content/compass-blog.ts` (Pensacola's Next.js layout, branch
+`compass/launch-readiness`) is `json_blog`, writable once
+`content_paths.blog_route` is recorded (Pensacola: `/{slug}/`,
+`trailingSlash: true`).
+

@@ -14,7 +14,17 @@
 // it between the H1 and the hero; any other site gets it as the first
 // paragraph of the body (`**TL;DR:** …`). Releases approved without one are
 // delivered exactly as before.
+//
+// Foundation v1 (foundation_brand_content, foundation-blog.ts, Nov 2026): the
+// article is a typed Article appended to the site's generated posts file
+// (compass-blog.json `posts_file`), its body converted from the approved
+// restricted Markdown to the site's Block[] types. No hero (client
+// photography only), no author, no TL;DR slot (the summary is the first
+// paragraph of the body). Title = the approved H1; seo.title = the approved
+// meta title (the page's <title>, og:title and twitter:title).
 import { bodyWithTldr } from "./tldr.ts";
+import { blockHrefs, checkFoundationContract, FOUNDATION_ADAPTER, foundationHref, foundationPostsFile, markdownToBlocks,
+  readCompassPosts, writeCompassPosts, type Block, type FoundationArticle } from "./foundation-blog.ts";
 export type BlogHero = {
   asset_id: string; content_hash: string; alt: string; kind: "photo" | "social_post"; illustrative: boolean;
   mime_type: string; width: number; height: number; size_bytes: number; storage_path: string;
@@ -28,7 +38,7 @@ export type BlogRelease = {
   internal_links: { url: string; anchor: string }[];
   destination: {
     site_id: string; url: string; repo_url: string; branch: string;
-    content_adapter: string; content_paths: { blog?: string; blog_dir?: string; blog_route?: string; blog_images?: string };
+    content_adapter: string; content_paths: { blog?: string; blog_dir?: string; blog_route?: string; blog_images?: string; brand?: string; posts_file?: string };
     controlled_by_compass: boolean;
   };
   hero?: BlogHero | null;
@@ -53,6 +63,7 @@ export function publicationUrl(r: BlogRelease): string {
 export function publicationPaths(r: BlogRelease): string[] {
   if (["lucas_json", "json_blog"].includes(r.destination.content_adapter)) return ["compass-blog.json", safePath(r.destination.content_paths.blog ?? "")];
   if (r.destination.content_adapter === "markdown_blog") return ["compass-blog.json", safePath(`${r.destination.content_paths.blog_dir}/${r.slug}.mdx`)];
+  if (r.destination.content_adapter === FOUNDATION_ADAPTER) return ["compass-blog.json", safePath(foundationPostsFile(r.destination.content_paths))];
   return fail("Website adapter needs manual delivery");
 }
 // MDX is executable code. Generated prose is deliberately a restricted Markdown
@@ -97,6 +108,7 @@ export function preparePublication(r: BlogRelease, releaseHash: string, read: Re
   const contractText = read.files.find((f) => f.path === "compass-blog.json")?.content;
   if (!contractText) fail("Website needs the Compass blog renderer upgrade before publishing");
   const contract = JSON.parse(contractText);
+  if (d.content_adapter === FOUNDATION_ADAPTER) return prepareFoundation(r, releaseHash, read, date, contract, tldr);
   if (contract.version !== 1 || contract.adapter !== d.content_adapter || contract.keyword_provenance !== true
       || contract.markdown !== true || contract.seo_fields !== true) fail("Website does not support the complete approved article");
   const url = publicationUrl(r);
@@ -153,4 +165,56 @@ export function preparePublication(r: BlogRelease, releaseHash: string, read: Re
     return fail("Blog slug already exists. Review the existing article before publishing");
   }
   return { expected_head: read.head, url, files: [{ path, content }], already_present: false, hero_src: null, tldr_mode: tldr ? "body" : null };
+}
+
+// ── Foundation v1 (foundation_brand_content) ───────────────────────────────
+/** The approved article as the Foundation site's typed Article. */
+export function foundationArticle(r: BlogRelease, releaseHash: string, date: string, tldr: string | null): FoundationArticle {
+  const site = r.destination.url;
+  const body: Block[] = markdownToBlocks(bodyWithTldr(r.body_markdown, tldr), site);
+  // The approved call to action closes the article, as on the Markdown adapter.
+  const ctaText = r.cta?.text?.trim();
+  if (ctaText) {
+    if (/[\[\]\n\r<>{}*_`\\]/.test(ctaText)) fail("CTA text requires manual review");
+    body.push({ type: "p", text: r.cta.url ? [{ type: "link", text: ctaText, href: foundationHref(r.cta.url, site) }] : ctaText });
+  }
+  const service = /^\/services\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
+  const related = [...new Set([...r.internal_links.map((l) => foundationHref(l.url, site)), ...blockHrefs(body)].filter((h) => service.test(h)))];
+  if (!r.h1?.trim() || /[\n<>{}]/.test(r.h1) || !r.meta_description?.trim()) fail("The approved H1 and meta description are required");
+  if (!r.meta_title?.trim() || /[\n<>{}]/.test(r.meta_title)) fail("The approved meta title is required");
+  return {
+    slug: r.slug, path: `/blog/${r.slug}`, title: r.h1, seo: { title: r.meta_title.trim(), description: r.meta_description }, excerpt: r.meta_description,
+    publishedAt: date, ...(related.length ? { relatedServices: related } : {}), body,
+    compass: { release_hash: releaseHash, draft_id: r.draft_id, draft_version: r.version, keyword_id: r.keyword_id ?? null },
+  };
+}
+
+/** The hrefs the Foundation page renders for the approved links (root-relative on the site's own host). */
+export function foundationRenderedHrefs(r: BlogRelease): string[] {
+  const site = r.destination.url;
+  const bodyUrls = [...r.body_markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
+  return [...new Set([...r.internal_links.map((l) => l.url), ...bodyUrls, ...(r.cta?.url ? [r.cta.url] : [])].map((u) => foundationHref(u, site)))];
+}
+
+function prepareFoundation(r: BlogRelease, releaseHash: string, read: RepositoryRead, date: string, contract: Record<string, unknown>, tldr: string | null) {
+  const d = r.destination;
+  const path = safePath(checkFoundationContract(contract, d.content_paths));
+  // Client photography only: the CRM never sends a hero to this adapter.
+  if (r.hero) heroImagePlan(r, contract);
+  const url = publicationUrl(r);
+  const dir = path.slice(0, path.lastIndexOf("/"));
+  const handWritten = `${dir}/${r.slug}.ts`;
+  if (handWritten === path || r.slug === "index") fail("Blog slug is reserved by the website's blog registry");
+  const existing = read.files.find((f) => f.path === path);
+  if (!existing?.content) fail("The site's Compass posts file could not be read; no overwrite is allowed");
+  const file = readCompassPosts(existing!.content!);
+  const matches = file.posts.filter((p) => p?.slug === r.slug);
+  const base = { expected_head: read.head, url, hero_src: null, tldr_mode: tldr ? "body" as const : null };
+  if (matches.length) {
+    if (matches.length === 1 && matches[0].compass?.release_hash === releaseHash) return { ...base, files: [], already_present: true };
+    return fail("Blog slug already exists. Review the existing article before publishing");
+  }
+  if (read.files.some((f) => f.path === handWritten)) fail(`Blog slug already exists as a hand-written article (${handWritten}). Review it before publishing`);
+  const article = foundationArticle(r, releaseHash, date, tldr);
+  return { ...base, files: [{ path, content: writeCompassPosts(file, [...file.posts, article]) }], already_present: false };
 }

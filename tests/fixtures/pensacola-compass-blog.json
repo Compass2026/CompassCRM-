@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "adapter": "json_blog",
+  "keyword_provenance": true,
+  "markdown": true,
+  "seo_fields": true,
+  "hero_image": true,
+  "hero_image_dir": "public/blog/images",
+  "hero_image_url_prefix": "/blog/images/",
+  "tldr": true
+}

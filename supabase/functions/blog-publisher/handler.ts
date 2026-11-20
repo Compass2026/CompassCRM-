@@ -1,4 +1,5 @@
-import { preparePublication, publicationPaths, type BlogRelease, type HeroBytes, type RepositoryRead } from "../content-drafter/publication.ts";
+import { foundationRenderedHrefs, preparePublication, publicationPaths, type BlogRelease, type HeroBytes, type RepositoryRead } from "../content-drafter/publication.ts";
+import { blockLines, FOUNDATION_ADAPTER, foundationDocumentTitle, markdownToBlocks } from "../content-drafter/foundation-blog.ts";
 import { buildBlogBrief, type BlogBrief, type DraftRow } from "../content-drafter/brief.ts";
 import { lintBlog } from "../content-drafter/lint.ts";
 import { parseBlogDraft } from "../content-drafter/handler.ts";
@@ -41,6 +42,20 @@ export async function loadHero(deps: Deps, r: BlogRelease): Promise<HeroBytes | 
 const plain = (s: string) => s.replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi," ").replace(/<\/(?:p|h[1-6]|li|div|article)>/gi," ").replace(/<[^>]*>/g,"").replace(/&(?:amp|#38);/g,"&").replace(/&(?:quot|#34);/g,'"')
   .replace(/&(?:apos|#39|#x27);/g,"'").replace(/&nbsp;/g," ").replace(/\s+/g," ").trim();
 const attr = (tag: string, name: string) => new RegExp(`\\s${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "i").exec(tag);
+// Foundation pages: exactly one <title>, equal to the approved meta title
+// under the site's rule (" | <og:site_name>" only while the whole fits in 60
+// characters); og:title and twitter:title, when present, say the same.
+const metaContent = (html: string, key: string) => [...html.matchAll(/<meta\b[^>]*>/gi)]
+  .map(([tag]) => tag).filter((tag) => (attr(tag, "property") ?? attr(tag, "name"))?.slice(2).find((v) => v !== undefined) === key)
+  .map((tag) => { const c = attr(tag, "content"); return c ? plain(c[2] ?? c[3]) : null; });
+function foundationTitlesMatch(html: string, metaTitle: string): boolean {
+  const titles = [...html.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)].map((m) => plain(m[1]));
+  if (titles.length !== 1 || !metaTitle?.trim()) return false;
+  const siteName = metaContent(html, "og:site_name")[0] ?? null;
+  const expected = foundationDocumentTitle(plain(metaTitle), siteName);
+  if (titles[0] !== expected) return false;
+  return ["og:title", "twitter:title"].every((key) => metaContent(html, key).every((v) => v === expected));
+}
 export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, url: string, heroSrc: string | null = null): boolean {
   // The approved hero renders with its approved alt text (src may be absolute).
   if (r.hero) {
@@ -55,11 +70,23 @@ export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, ur
       || /<meta[^>]+(?:name|http-equiv)=["'](?:robots|x-robots-tag)["'][^>]+noindex/i.test(html)) return false;
   const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1] ?? "";
   if (plain(h1) !== r.h1) return false;
+  if (r.destination?.content_adapter === FOUNDATION_ADAPTER && !foundationTitlesMatch(html, r.meta_title)) return false;
   const text = plain(html);
-  const prose = r.body_markdown.replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[*_`#]/g,"");
-  // Check every authored nonempty line, not just a title that might also occur
-  // on a 404, old article or listing page.
-  const lines = prose.split(/\n+/).map((s)=>s.replace(/^\s*(?:-|\d+\.)\s+/,"").trim()).filter(Boolean);
+  // A Foundation site renders typed blocks, not Markdown: its expected lines
+  // are the visible text of the converted blocks (plus the closing CTA), and
+  // its links to its own host render root-relative. Every other adapter is
+  // checked exactly as before.
+  const foundation = r.destination?.content_adapter === FOUNDATION_ADAPTER;
+  let lines: string[];
+  if (foundation) {
+    try { lines = blockLines(markdownToBlocks(r.body_markdown, r.destination.url)); } catch { return false; }
+    if (r.cta?.text?.trim()) lines.push(r.cta.text.trim());
+  } else {
+    const prose = r.body_markdown.replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[*_`#]/g,"");
+    // Check every authored nonempty line, not just a title that might also occur
+    // on a 404, old article or listing page.
+    lines = prose.split(/\n+/).map((s)=>s.replace(/^\s*(?:-|\d+\.)\s+/,"").trim()).filter(Boolean);
+  }
   if (!lines.every((s)=>text.includes(plain(s)))) return false;
   // The approved TL;DR shows once, labelled, after the H1 and before the article
   // (and before the hero image when there is one).
@@ -75,8 +102,14 @@ export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, ur
       if (label < 0 || (img >= 0 && img < label)) return false;
     }
   }
-  const bodyUrls = [...r.body_markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
-  return [...r.internal_links.map((l) => l.url), ...bodyUrls].every((url)=>html.includes(`href="${url.replaceAll("&","&amp;")}"`));
+  let hrefs: string[];
+  if (foundation) {
+    try { hrefs = foundationRenderedHrefs(r); } catch { return false; }
+  } else {
+    const bodyUrls = [...r.body_markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
+    hrefs = [...r.internal_links.map((l) => l.url), ...bodyUrls];
+  }
+  return hrefs.every((url)=>html.includes(`href="${url.replaceAll("&","&amp;")}"`));
 }
 export function createBlogPublisher(deps: Deps) {
   return async (req: Request): Promise<Response> => {
