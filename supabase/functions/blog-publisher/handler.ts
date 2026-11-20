@@ -1,4 +1,5 @@
-import { preparePublication, publicationPaths, type BlogRelease, type HeroBytes, type RepositoryRead } from "../content-drafter/publication.ts";
+import { foundationRenderedHrefs, preparePublication, publicationPaths, type BlogRelease, type HeroBytes, type RepositoryRead } from "../content-drafter/publication.ts";
+import { blockLines, FOUNDATION_ADAPTER, markdownToBlocks } from "../content-drafter/foundation-blog.ts";
 import { buildBlogBrief, type BlogBrief, type DraftRow } from "../content-drafter/brief.ts";
 import { lintBlog } from "../content-drafter/lint.ts";
 import { parseBlogDraft } from "../content-drafter/handler.ts";
@@ -56,10 +57,21 @@ export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, ur
   const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1] ?? "";
   if (plain(h1) !== r.h1) return false;
   const text = plain(html);
-  const prose = r.body_markdown.replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[*_`#]/g,"");
-  // Check every authored nonempty line, not just a title that might also occur
-  // on a 404, old article or listing page.
-  const lines = prose.split(/\n+/).map((s)=>s.replace(/^\s*(?:-|\d+\.)\s+/,"").trim()).filter(Boolean);
+  // A Foundation site renders typed blocks, not Markdown: its expected lines
+  // are the visible text of the converted blocks (plus the closing CTA), and
+  // its links to its own host render root-relative. Every other adapter is
+  // checked exactly as before.
+  const foundation = r.destination?.content_adapter === FOUNDATION_ADAPTER;
+  let lines: string[];
+  if (foundation) {
+    try { lines = blockLines(markdownToBlocks(r.body_markdown, r.destination.url)); } catch { return false; }
+    if (r.cta?.text?.trim()) lines.push(r.cta.text.trim());
+  } else {
+    const prose = r.body_markdown.replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[*_`#]/g,"");
+    // Check every authored nonempty line, not just a title that might also occur
+    // on a 404, old article or listing page.
+    lines = prose.split(/\n+/).map((s)=>s.replace(/^\s*(?:-|\d+\.)\s+/,"").trim()).filter(Boolean);
+  }
   if (!lines.every((s)=>text.includes(plain(s)))) return false;
   // The approved TL;DR shows once, labelled, after the H1 and before the article
   // (and before the hero image when there is one).
@@ -75,8 +87,14 @@ export function verifyLiveArticle(html: string, r: BlogRelease, hash: string, ur
       if (label < 0 || (img >= 0 && img < label)) return false;
     }
   }
-  const bodyUrls = [...r.body_markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
-  return [...r.internal_links.map((l) => l.url), ...bodyUrls].every((url)=>html.includes(`href="${url.replaceAll("&","&amp;")}"`));
+  let hrefs: string[];
+  if (foundation) {
+    try { hrefs = foundationRenderedHrefs(r); } catch { return false; }
+  } else {
+    const bodyUrls = [...r.body_markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
+    hrefs = [...r.internal_links.map((l) => l.url), ...bodyUrls];
+  }
+  return hrefs.every((url)=>html.includes(`href="${url.replaceAll("&","&amp;")}"`));
 }
 export function createBlogPublisher(deps: Deps) {
   return async (req: Request): Promise<Response> => {

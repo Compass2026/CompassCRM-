@@ -32,6 +32,8 @@ export interface ContentPaths {
   blog_images?: string;
   services_dir?: string;
   content_dir?: string;
+  /** Foundation v1 blog contract: the generated posts file the CRM rewrites (brands/<brand>/content/blog/compass-posts.ts). */
+  posts_file?: string;
   verify?: string[];
 }
 
@@ -74,11 +76,25 @@ const blogImagesDir = (paths: ContentPaths) => (paths.blog_images ?? DEFAULT_BLO
 const isBlogImage = (path: string, paths: ContentPaths) =>
   new RegExp(`^${escape(blogImagesDir(paths))}/[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{12}\\.(png|jpe?g|webp)$`).test(path);
 
+/**
+ * The Foundation's generated Compass posts file, when the site row records a
+ * valid one: directly inside brands/<recorded brand>/content/blog/, a .ts file,
+ * not the hand-written registry. Null otherwise (no blog publishing push).
+ */
+export function foundationPostsFile(paths: ContentPaths): string | null {
+  const brand = paths.brand ?? "";
+  const file = paths.posts_file ?? "";
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(brand)) return null;
+  if (!new RegExp(`^brands/${escape(brand)}/content/blog/[a-z0-9]+(-[a-z0-9]+)*\\.ts$`).test(file) || file.endsWith("/index.ts")) return null;
+  return file;
+}
+
 export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}): AdapterDescription {
   switch (key) {
     case "foundation_brand_content": {
       const brand = paths.brand ?? "<brand>";
       const dir = paths.content_dir ?? `brands/${brand}/content`;
+      const posts = foundationPostsFile(paths);
       // Layout of the accepted foundation (94014af): brands/<brand>/content/
       // {blog,cities,services,legal}/ with an index.ts registry in each —
       // verified against the tree fixture in tests/content-adapters.test.mjs.
@@ -87,20 +103,25 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
         label: "Compass Website Foundation v1 (typed brand content)",
         writes: {
           city_page: `${dir}/cities/<slug>.ts + registry entry in ${dir}/cities/index.ts`,
-          blog_post: `${dir}/blog/<slug>.ts + registry entry in ${dir}/blog/index.ts`,
+          blog_post: posts ? `${posts} (generated Compass posts file; one approved Article appended)` : `${dir}/blog/<slug>.ts + registry entry in ${dir}/blog/index.ts`,
           service_page: `${dir}/services/<slug>.ts + registry entry in ${dir}/services/index.ts`,
           faq_addition: "the page's typed content file",
         },
         // Typed TypeScript content is compiled: nothing reaches the branch of
         // record without a build, the crawl and the manifest passing, so every
         // change is a pull request with that evidence — never a data push.
-        mutation: { city_page: "pull_request", blog_post: "pull_request", service_page: "pull_request", faq_addition: "pull_request" },
+        // The one exception (Nov 2026): a site that advertises the Compass blog
+        // contract (compass-blog.json) and records its generated posts file
+        // takes an approved blog post as a data entry in that file only; the
+        // registry's build check refuses a duplicate slug or a wrong path.
+        mutation: { city_page: "pull_request", blog_post: posts ? "push" : "pull_request", service_page: "pull_request", faq_addition: "pull_request" },
         allowedPaths: [`${dir}/`, "docs/page-plan.md", "docs/route-manifest.md"],
         verify: ["npm run typecheck", `COMPASS_BRAND=${brand} npx next build`, `COMPASS_BRAND=${brand} npm run qa:manifest`, "npm run qa:crawl -- <preview> --host <production host> --assets remap"],
         routes: { city: "/service-area/{slug}", blog: "/blog/{slug}", service: "/services/{hub}/{slug}", location: "/locations/{slug}" },
         notes: [
           "Served-city pages live at /service-area/[city]; physical locations are a separate registry at /locations/[slug]. Never write a city into the locations registry.",
           "Content files are TypeScript, not JSON: an entry is a typed object plus a registry import. The city gate (coverage confirmed + distinctive local material) applies before a city page is registered.",
+          ...(posts ? [`Approved blog posts are published as data entries in ${posts} (the JSON between /* compass:begin */ and /* compass:end */); hand-written posts, pages and components stay pull requests.`] : []),
         ],
       };
     }
@@ -180,6 +201,23 @@ export interface DetectOptions {
   fictionalBrands?: string[];
   /** When known (read from brands/registry.ts), the brands actually registered. */
   registeredBrands?: string[];
+  /**
+   * The repository's compass-blog.json (raw text or parsed), when it has one.
+   * The file is the site's own declaration of its blog renderer; a tree path
+   * alone never says which adapter it declares.
+   */
+  compassBlog?: string | Record<string, unknown> | null;
+}
+
+function parseCompassBlog(v: DetectOptions["compassBlog"]): Record<string, unknown> | null {
+  if (!v) return null;
+  if (typeof v !== "string") return v;
+  try {
+    const parsed = JSON.parse(v);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The fictional demonstration brand shipped with the accepted foundation. */
@@ -200,9 +238,15 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
   const has = (re: RegExp) => treePaths.some((p) => re.test(p));
   const reasons: string[] = [];
   const fictional = new Set(options.fictionalBrands ?? FOUNDATION_FICTIONAL_BRANDS);
+  const contract = has(/^compass-blog\.json$/) ? parseCompassBlog(options.compassBlog) : null;
+  const contractBrand = contract?.adapter === "foundation_brand_content" && typeof contract.brand === "string" ? contract.brand : null;
 
-  const brandDirs = [...new Set(treePaths.map((p) => p.match(/^brands\/([^/]+)\/site\.config\.ts$/)?.[1]).filter((b): b is string => !!b))].sort();
-  if (has(/^brands\/registry\.ts$/) && has(/^lib\/routes\.ts$/) && brandDirs.length > 0) {
+  const configBrands = [...new Set(treePaths.map((p) => p.match(/^brands\/([^/]+)\/site\.config\.ts$/)?.[1]).filter((b): b is string => !!b))].sort();
+  const foundationLayout = has(/^brands\/registry\.ts$/) && has(/^lib\/routes\.ts$/) && configBrands.length > 0;
+  const declaredFoundation = !!contractBrand && has(new RegExp(`^brands/${escape(contractBrand)}/content/`));
+  // A brand the contract declares and whose content directory is in the tree counts as present.
+  const brandDirs = [...new Set([...configBrands, ...(declaredFoundation ? [contractBrand!] : [])])].sort();
+  if (foundationLayout || declaredFoundation) {
     const clientBrands = brandDirs.filter((b) => !fictional.has(b) && (!options.registeredBrands || options.registeredBrands.includes(b)));
     const missing: string[] = [];
     let brand: string | null = null;
@@ -222,11 +266,26 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
     } else {
       brand = rec;
     }
-    reasons.push(`brands/registry.ts, lib/routes.ts and ${brandDirs.length} brand dir(s) present (${brandDirs.join(", ")}); ${brand ? `client brand ${brand} verified` : "client brand not verified"}`);
+    reasons.push(foundationLayout
+      ? `brands/registry.ts, lib/routes.ts and ${brandDirs.length} brand dir(s) present (${brandDirs.join(", ")}); ${brand ? `client brand ${brand} verified` : "client brand not verified"}`
+      : `compass-blog.json declares foundation_brand_content for brands/${contractBrand}/content/; ${brand ? `client brand ${brand} verified` : "client brand not verified"}`);
     const dir = brand ? `brands/${brand}/content` : undefined;
+    // The blog contract: publishing is a data entry in the generated posts
+    // file only when compass-blog.json declares it for THIS (recorded) brand
+    // and the file is in the tree. Otherwise blog posts stay pull requests —
+    // a bad contract never blocks the rest of the Foundation work.
+    let postsFile: string | null = null;
+    if (contract && contract.adapter === "foundation_brand_content" && brand) {
+      const candidate = foundationPostsFile({ brand, posts_file: typeof contract.posts_file === "string" ? contract.posts_file : undefined });
+      if (contract.brand !== brand) reasons.push(`compass-blog.json brand "${String(contract.brand)}" is not the recorded brand ${brand}: blog posts stay pull requests`);
+      else if (contract.version !== 1 || contract.keyword_provenance !== true || contract.blocks !== true || contract.seo_fields !== true || contract.blog_route !== "/blog/{slug}") reasons.push("compass-blog.json does not declare the complete Foundation blog contract (version 1, keyword_provenance, blocks, seo_fields, /blog/{slug}): blog posts stay pull requests");
+      else if (!candidate) reasons.push(`compass-blog.json posts_file is not a generated .ts file in brands/${brand}/content/blog/: blog posts stay pull requests`);
+      else if (!treePaths.includes(candidate)) reasons.push(`compass-blog.json names ${candidate}, which is not in the tree: blog posts stay pull requests`);
+      else { postsFile = candidate; reasons.push(`Compass blog contract: approved posts are data entries in ${candidate}`); }
+    }
     return {
       adapter: "foundation_brand_content",
-      paths: { adapter: "foundation_brand_content", ...(brand ? { brand, content_dir: dir } : {}), blog_format: "typescript", city_route: "/service-area/{slug}", blog_route: "/blog/{slug}" },
+      paths: { adapter: "foundation_brand_content", ...(brand ? { brand, content_dir: dir } : {}), blog_format: "typescript", city_route: "/service-area/{slug}", blog_route: "/blog/{slug}", ...(postsFile ? { posts_file: postsFile } : {}) },
       foundation: { brand, version: "v1", brands: brandDirs },
       reasons,
       missing_inputs: missing,
@@ -239,6 +298,22 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
       && has(/^scripts\/prerender\.m?js$/)) {
     return { adapter: "json_blog", paths: { adapter: "json_blog", blog: "data/blog-posts.json", blog_format: "json", blog_route: recorded?.blog_route ?? "/blog/{slug}/" },
       reasons: ["Explicit Compass blog contract, JSON loader, routes and prerender pipeline are present"], missing_inputs: [], writable: true };
+  }
+
+  // The Next.js JSON blog (Pensacola, compass/launch-readiness): the contract
+  // file itself declares json_blog, with the JSON data and its loader. The
+  // route is the site's own (Pensacola serves posts at the root), so it is
+  // never assumed: it must be recorded on the site row.
+  if (contract?.adapter === "json_blog" && has(/^data\/blog-posts\.json$/) && has(/^src\/content\/compass-blog\.ts$/)) {
+    const route = recorded?.blog_route ?? null;
+    const heroDir = typeof contract.hero_image_dir === "string" ? contract.hero_image_dir : null;
+    return {
+      adapter: "json_blog",
+      paths: { adapter: "json_blog", blog: "data/blog-posts.json", blog_format: "json", ...(route ? { blog_route: route } : {}), ...(heroDir ? { blog_images: heroDir } : {}) },
+      reasons: ["compass-blog.json declares json_blog; data/blog-posts.json and its loader src/content/compass-blog.ts are present"],
+      missing_inputs: route ? [] : ["content_paths.blog_route is not recorded: record the route the site serves its posts at (e.g. /{slug} or /blog/{slug})"],
+      writable: !!route,
+    };
   }
 
   const locations = recorded?.locations ?? "data/locations.json";
@@ -353,6 +428,10 @@ function matchesWritePath(adapter: ContentAdapterKey, kind: ChangeKind, path: st
       if (kind === "city_page" || kind === "faq_addition") return path === loc;
       if (kind === "blog_post") return path === blog || isBlogImage(path, paths);
       return false;
+    }
+    case "foundation_brand_content": {
+      const posts = foundationPostsFile(paths);
+      return kind === "blog_post" && !!posts && path === posts;
     }
     case "markdown_blog": {
       const dir = (paths.blog_dir ?? "content/blog").replace(/\/$/, "");

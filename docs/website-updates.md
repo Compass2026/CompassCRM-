@@ -51,6 +51,8 @@ the adapter:
 | `lucas_json` | `data/locations.json` + `data/blog-posts.json` + `/service-areas/[city]` | push | push | pull request |
 | `markdown_blog` | `content/blog/*.mdx` + JSON data files (BHG) | proposed document | push | pull request |
 | `foundation_brand_content` | Compass Website Foundation v1: `brands/<brand>/content/*.ts`, `/service-area/[city]`, `/locations/[slug]` separate | pull request | pull request | pull request |
+| `foundation_brand_content` + Compass blog contract | the same, plus `compass-blog.json` and a recorded `content_paths.posts_file` (`brands/<brand>/content/blog/compass-posts.ts`) | pull request | push (approved release appended to `posts_file` only) | pull request |
+| `json_blog` | `compass-blog.json` declaring `json_blog` + `data/blog-posts.json` (Ginger's Vite/prerender layout, or Pensacola's Next.js layout with `src/content/compass-blog.ts`; route recorded on the site row) | proposed document | push | proposed document |
 | `unsupported` | anything else, or a tree not yet inspected | proposed document | proposed document | proposed document |
 
 A push names the site's recorded branch of record explicitly (never
