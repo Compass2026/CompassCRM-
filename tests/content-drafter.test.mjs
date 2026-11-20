@@ -72,6 +72,8 @@ test("brief: refusals — a web page, no intent, an unapproved board, no usable 
   assert.equal(derived.brief.target.primary_keyword, "how long does a roof last");
   const unapproved = lucas(); unapproved.board.status = "draft";
   no(unapproved, draftRow(), "brand_board_not_approved");
+  const boardRefusal = buildBlogBrief(unapproved, draftRow()).refusals.find((x) => x.code === "brand_board_not_approved");
+  assert.equal(boardRefusal.message, `Brand board v${unapproved.board.version} is draft, not approved. Approve brand board v${unapproved.board.version} on the Foundation tab.`);
   const noClaims = lucas(); noClaims.claims = noClaims.claims.filter((c) => c.status === "unverified");
   no(noClaims, draftRow(), "no_usable_claim");
 });

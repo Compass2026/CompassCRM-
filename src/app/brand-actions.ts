@@ -280,8 +280,11 @@ export async function deleteAssetAction(clientId: string, assetId: string) {
   revalidateBrand(clientId);
 }
 
-// ── Approval (closes the "Build brand board" task) ─────────────────────────
-export async function approveBrandBoardAction(clientId: string) {
+// ── Brand profile approval (closes the "Build brand board" task) ───────────
+// This stamps client_brands (the Brand tab profile) only. It is NOT the brand
+// board approval the drafters gate on: that is brand_boards.status, approved
+// on the Foundation tab by approveBrandBoardAction in foundation-actions.ts.
+export async function approveBrandProfileAction(clientId: string) {
   const supabase = await createClient();
   const email = await currentUserEmail();
   const now = new Date().toISOString();
@@ -298,7 +301,7 @@ export async function approveBrandBoardAction(clientId: string) {
   revalidateBrand(clientId);
 }
 
-export async function reopenBrandBoardAction(clientId: string) {
+export async function reopenBrandProfileAction(clientId: string) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("client_brands")
