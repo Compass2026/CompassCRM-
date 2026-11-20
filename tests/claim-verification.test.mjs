@@ -6,12 +6,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  EXCERPT_MIN,
+  EXCERPT_PLACEHOLDER,
   METHOD_EVIDENCE,
   REASON_TEXT,
+  decisionErrorText,
   decisionLine,
   evidenceChoices,
   evidenceLine,
+  excerptProblem,
   formatBytes,
+  keptDraftState,
+  pickedWarning,
   reviewOptions,
   shortHash,
 } from "../src/lib/claim-registry.ts";
@@ -106,4 +112,40 @@ test("lines: the evidence a verification stands on, and the last decision when i
   assert.equal(decisionLine(claim({ verification: { record: {}, last_decision: { action: "verify", at: "2026-11-04T18:00:00Z", by: "Pat" } } })), null);
   assert.equal(shortHash(SHA), "aaaaaaaa…abcd");
   assert.deepEqual([formatBytes(900), formatBytes(2048), formatBytes(3 * 1024 * 1024)], ["900 B", "2 KB", "3.0 MB"]);
+});
+
+// PR2a.1 (20261116170000): A7 recorded the form's placeholder as the excerpt.
+const HARDEN = readFileSync("supabase/migrations/20261116170000_claim_verification_hardening.sql", "utf8");
+
+test("excerpt: the form refuses what claim_reviews_excerpt_quotes refuses, with the same placeholder and minimum", () => {
+  assert.ok(HARDEN.includes(`<> '${EXCERPT_PLACEHOLDER.toLowerCase()}'`), "the migration names the form's placeholder");
+  assert.ok(HARDEN.includes(`length(btrim(excerpt)) >= ${EXCERPT_MIN}`), "the migration's minimum is the form's");
+  assert.match(excerptProblem(EXCERPT_PLACEHOLDER, ""), /placeholder/);
+  assert.match(excerptProblem("  quote THE words   that support the claim ", null), /placeholder/);
+  assert.match(excerptProblem("3 years", ""), /at least 12 characters/);
+  assert.match(excerptProblem("Warranted for three (3) years", " Warranted for three (3) years "), /same text/);
+  assert.equal(excerptProblem("Warranted for three (3) years", "Excerpt only; terms apply"), null);
+  assert.equal(excerptProblem("Licence R-12345: active", ""), null);
+  assert.match(decisionErrorText({ code: "23514", message: 'new row for relation "claim_reviews" violates check constraint "claim_reviews_excerpt_quotes"' }), /Quote the words/);
+  assert.equal(decisionErrorText({ code: "22023", message: "An expiry must be after the day examined" }), "An expiry must be after the day examined");
+});
+
+test("upload: a picked file whose name and reported type disagree is called out before upload", () => {
+  assert.match(pickedWarning({ name: "warranty.png", type: "image/jpeg" }), /name says PNG .+ image\/jpeg/);
+  assert.equal(pickedWarning({ name: "warranty.jpeg", type: "image/jpeg" }), null);
+  assert.equal(pickedWarning({ name: "agreement.PDF", type: "application/pdf" }), null);
+  assert.equal(pickedWarning({ name: "scan", type: "image/png" }), null);
+});
+
+test("kept draft: reused only for the same claim fingerprint and decision, within the TTL", () => {
+  const now = Date.parse("2026-11-16T18:00:00Z");
+  const cur = { fingerprint: "f".repeat(64), reviewId: "r1" };
+  assert.equal(keptDraftState(null, cur, now), "none");
+  assert.equal(keptDraftState({ at: now - 60_000, ...cur }, cur, now), "matches");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: "e".repeat(64), reviewId: "r1" }, cur, now), "changed");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: cur.fingerprint, reviewId: "r0" }, cur, now), "changed");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: cur.fingerprint, reviewId: null }, cur, now), "changed");
+  assert.equal(keptDraftState({ at: now - 60_000, fingerprint: cur.fingerprint, reviewId: null }, { ...cur, reviewId: null }, now), "matches");
+  assert.equal(keptDraftState({ at: now - 25 * 3600_000, ...cur }, cur, now), "expired");
+  assert.equal(keptDraftState({ at: now + 60_000, ...cur }, cur, now), "expired");
 });

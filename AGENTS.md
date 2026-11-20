@@ -75,6 +75,15 @@ review, Executive OS 11454716).
   `claims_registry_guard` refuses any change that does not match a review
   written in this transaction by this caller. **A claim with any review history
   cannot be deleted** (23001); retire / supersede are PR2b.
+- **PR2a.1 (`20261116170000`, after A7):** a new decision's excerpt must quote
+  the evidence (`claim_reviews_excerpt_quotes`, `NOT VALID`: at least 12
+  characters, not the form's placeholder, not the note). The verify form never
+  pre-chooses evidence, shows a read-back of the exact file before recording,
+  and keeps unsent values in the tab's session storage, tied to the claim's
+  fingerprint and review id (a changed claim's draft is held back). Evidence
+  rows have **View** (a 60-second link signed with the teammate's own session).
+  The upload form shows the picked file's type, size and SHA-256 and can refuse
+  any file but an expected hash. See `docs/claim-registry.md` §PR2a.1.
 - **Evidence:**
   - Files are private, content-addressed (`<client>/<sha256>.<ext>`) in the
     `claim-evidence` bucket, which has a team read policy and no write policy.

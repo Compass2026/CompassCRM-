@@ -66,6 +66,8 @@ const governedBefore = digest();
 // ── Storage, as the hosted service behaves for these calls ─────────────────
 const objects = new Map(); // path → { bytes, type }
 const tokens = new Map(); // token → path
+const viewTokens = new Map(); // read token → path
+const views = []; // who asked to look at which file
 const BUCKET = "claim-evidence";
 const cors = {
   "access-control-allow-origin": "*",
@@ -82,6 +84,25 @@ async function storage(req, res, url) {
   };
   if (req.method === "OPTIONS") return send(204, "");
   const sub = url.pathname.slice("/storage/v1".length);
+  // View (PR2a.1, H4): a signed read link, asked for with a teammate's own
+  // session (the bucket's team-read policy), served once the token matches.
+  const viewPrefix = `/object/sign/${BUCKET}/`;
+  if (sub.startsWith(viewPrefix)) {
+    const path = decodeURIComponent(sub.slice(viewPrefix.length));
+    if (req.method === "POST") {
+      const who = verify((req.headers.authorization ?? "").replace(/^Bearer /, ""));
+      if (!who?.sub || !users.has(who.sub)) return send(403, { error: "Unauthorized", message: "team members only" });
+      if (!objects.has(path)) return send(404, { error: "not_found", message: "Object not found" });
+      const token = randomUUID();
+      viewTokens.set(token, path);
+      views.push({ path, by: who.sub });
+      return send(200, { signedURL: `${viewPrefix}${path}?token=${token}` });
+    }
+    if (req.method === "GET") {
+      const o = viewTokens.get(url.searchParams.get("token")) === path && objects.get(path);
+      return o ? send(200, o.bytes, { "content-type": o.type }) : send(400, { error: "InvalidSignature", message: "invalid token" });
+    }
+  }
   const signPrefix = `/object/upload/sign/${BUCKET}/`;
   if (sub.startsWith(signPrefix)) {
     const path = decodeURIComponent(sub.slice(signPrefix.length));
@@ -151,6 +172,8 @@ const gateway = http.createServer(async (req, res) => {
     return res.end(out);
   }
   if (url.pathname.startsWith("/storage/v1/")) return storage(req, res, url);
+  // The View tab is a page on this origin; its browser asks for an icon.
+  if (url.pathname === "/favicon.ico") return res.writeHead(404).end();
   if (url.pathname === "/functions/v1/claim-evidence") {
     const body = await readBody(req);
     const r = await fnHandler(new Request(`http://localhost${url.pathname}`, { method: req.method, headers: { authorization: req.headers.authorization ?? "", "content-type": "application/json" }, body: req.method === "POST" ? body : undefined }));
@@ -225,8 +248,23 @@ try {
   ok("The verification owner sees Classify on every claim, and why verifying waits for a classification");
 
   // ── Upload a PDF; the server's SHA-256 is shown ───────────────────────────
+  // PR2a.1 H5: the picked file's name, type, size and SHA-256 show before anything uploads.
+  await evCard.locator('input[name="file"]').setInputFiles({ name: "agreement.png", mimeType: "application/pdf", buffer: PDF });
+  await evCard.locator("[data-picked-warning]").waitFor({ timeout: 30000 });
+  assert.match(await evCard.locator("[data-picked-warning]").textContent(), /name says PNG but the browser reports application\/pdf/);
   await evCard.locator('input[name="file"]').setInputFiles({ name: "agreement.pdf", mimeType: "application/pdf", buffer: PDF });
+  await evCard.locator(`[data-picked-sha]:text-is("${PDF_SHA}")`).waitFor({ timeout: 30000 });
+  assert.equal(await evCard.locator("[data-picked-warning]").count(), 0);
+  assert.match(await evCard.locator("[data-picked]").textContent(), /agreement\.pdf · application\/pdf/);
   await evCard.locator('input[name="label"]').fill("Signed project agreement, section 7 (fictional)");
+  await evCard.locator('input[name="expected_sha256"]').fill("b".repeat(64));
+  await evCard.locator('[data-form="evidence-upload"] button[type="submit"]').click();
+  await evCard.locator("[data-upload-error]").waitFor({ timeout: 30000 });
+  assert.match(await evCard.locator("[data-upload-error]").textContent(), new RegExp(`its SHA-256 is ${PDF_SHA}, not b{64}\\. Nothing was uploaded`));
+  assert.equal(sql(`select count(*) from claim_evidence_uploads`), "0");
+  assert.equal(sql(`select count(*) from storage.objects where bucket_id = 'claim-evidence'`), "0");
+  ok("Before upload: the picked file's name, type, size and SHA-256 show, a name/type mismatch is called out, and a wrong expected hash stops it with nothing sent");
+  await evCard.locator('input[name="expected_sha256"]').fill(PDF_SHA);
   await evCard.locator('[data-form="evidence-upload"] button[type="submit"]').click();
   await evCard.locator("[data-upload-done]").waitFor({ timeout: 60000 });
   assert.match(await evCard.locator("[data-upload-done]").textContent(), new RegExp(`Registered · SHA-256 ${PDF_SHA}`));
@@ -240,6 +278,14 @@ try {
   await evCard.locator("[data-check-result]", { hasText: "still hash to the registered SHA-256" }).waitFor({ timeout: 30000 });
   ok("Re-check: the stored bytes are re-hashed and match");
 
+  const [viewed] = await Promise.all([ctx.waitForEvent("page"), evCard.locator('[data-action="view"]').first().click()]);
+  await viewed.waitForURL(/\/storage\/v1\/object\/sign\/claim-evidence\/.+\?token=/, { timeout: 30000 });
+  const viewedBytes = await (await viewed.request.get(viewed.url())).body();
+  assert.equal(createHash("sha256").update(viewedBytes).digest("hex"), PDF_SHA);
+  assert.deepEqual(views, [{ path: `${L}/${PDF_SHA}.pdf`, by: OWNER.id }]);
+  await viewed.close();
+  ok("View: a short-lived link signed with the teammate's own session opens the exact registered file");
+
   // ── Classify, then a refusal shown in place, then verify ──────────────────
   await row(W).locator('[data-action="classify"]').click();
   await row(W).locator('[data-form="classify"] select[name="kind"]').selectOption("warranty_guarantee");
@@ -251,18 +297,97 @@ try {
 
   await row(W).locator('[data-action="verify"]').click();
   const vf = row(W).locator('[data-form="verify"]');
+  const draftKey = `compass:claim-verify:${W}`;
+  const EV = sql(`select id from claim_evidence where client_id = '${L}'`);
+  const claimNow = () => sql(`select claim_fingerprint(client_id, claim, source, kind) || '|' || review_id from claims where id = '${W}'`).split("|");
   assert.deepEqual(await vf.locator('select[name="method"] option').evaluateAll((o) => o.map((x) => x.value)), ["client_contract", "manufacturer_document"]);
-  assert.equal(await vf.locator('select[name="evidence"] option').count(), 1);
+  // ChatGPT's review of PR #226, correction 2: the evidence is never chosen for the owner.
+  assert.deepEqual(await vf.locator('select[name="evidence"] option').evaluateAll((o) => o.map((x) => x.value)), ["", EV]);
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), "");
   await vf.locator('textarea[name="excerpt"]').fill("Workmanship is warranted for three (3) years.");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "Choose the evidence this decision rests on" }).waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback]").count(), 0);
+  ok("No evidence is pre-chosen: nothing goes to the read-back until the owner picks the file");
+  await vf.locator('select[name="evidence"]').selectOption(EV);
+
+  // PR2a.1 H1: the placeholder, a few characters, or the note's own text is refused before anything is sent.
+  await vf.locator('textarea[name="excerpt"]').fill("Quote the words that support the claim");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "placeholder" }).waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback]").count(), 0);
+  await vf.locator('textarea[name="excerpt"]').fill("3 years");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "at least 12 characters" }).waitFor({ timeout: 30000 });
+  assert.equal(sql(`select count(*) from claim_reviews where claim_id = '${W}'`), "1");
+  ok("The quote must be the evidence's words: the placeholder and a few characters are refused in place, nothing written");
+
+  // H3: unsent values survive a reload, in this tab only, stamped with the claim as it was.
+  await vf.locator('textarea[name="excerpt"]').fill("Workmanship is warranted for three (3) years.");
+  await vf.locator('input[name="note"]').fill("Section 7 of the fictional agreement.");
+  await page.reload({ waitUntil: "networkidle" });
+  await row(W).locator('[data-action="verify"]').click();
+  assert.equal(await vf.locator('textarea[name="excerpt"]').inputValue(), "Workmanship is warranted for three (3) years.");
+  assert.equal(await vf.locator('input[name="note"]').inputValue(), "Section 7 of the fictional agreement.");
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), EV);
+  const kept = JSON.parse(await page.evaluate((k) => sessionStorage.getItem(k), draftKey));
+  const [fpNow, reviewNow] = claimNow();
+  assert.deepEqual([kept.fingerprint, kept.reviewId], [fpNow, reviewNow]);
+  assert.equal(await page.evaluate(() => localStorage.length), 0);
+  ok("Kept: the quote, note and evidence typed before a reload come back, from this tab's session storage, tied to the claim's fingerprint and decision");
+
+  // Correction 1: a draft written before the claim changed is held back, never filled in silently.
+  await page.evaluate(([k, v]) => sessionStorage.setItem(k, v), [draftKey, JSON.stringify({ ...kept, fingerprint: "0".repeat(64) })]);
+  await page.reload({ waitUntil: "networkidle" });
+  await row(W).locator('[data-action="verify"]').click();
+  await vf.locator("[data-held-draft]").waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator('textarea[name="excerpt"]').inputValue(), "");
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), "");
+  await vf.locator('select[name="evidence"]').selectOption(EV);
+  await vf.locator('textarea[name="excerpt"]').fill("Workmanship is warranted for three (3) years.");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "Use or discard the values kept" }).waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback]").count(), 0);
+  await vf.locator('[data-action="restore-draft"]').click();
+  assert.equal(await vf.locator("[data-held-draft]").count(), 0);
+  assert.equal(await vf.locator('input[name="note"]').inputValue(), "Section 7 of the fictional agreement.");
+  ok("A draft from before the claim changed is not filled in: the owner must choose to look at it or discard it before anything is reviewed");
+
+  // Correction 2: a kept pick that is no longer offered is not replaced by another file.
+  await page.evaluate(([k, v]) => sessionStorage.setItem(k, v), [draftKey, JSON.stringify({ ...kept, at: Date.now(), draft: { ...kept.draft, evidence: "00000000-0000-4000-8000-00000000dead" } })]);
+  await page.reload({ waitUntil: "networkidle" });
+  await row(W).locator('[data-action="verify"]').click();
+  await vf.locator("[data-evidence-gone]").waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator('select[name="evidence"]').inputValue(), "");
+  await vf.locator('button[type="submit"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "no longer offered" }).waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback]").count(), 0);
+  await vf.locator('select[name="evidence"]').selectOption(EV);
+  assert.equal(await vf.locator("[data-evidence-gone]").count(), 0);
+  ok("A kept evidence pick that is no longer offered is refused and left empty, never swapped for the first file");
+
   await vf.locator('input[name="expires_on"]').fill(today);
   await vf.locator('button[type="submit"]').click();
-  await row(W).locator("[data-review-error]").waitFor({ timeout: 30000 });
+  // H2: nothing is sent until the read-back is confirmed; it names the exact file.
+  await vf.locator("[data-readback]").waitFor({ timeout: 30000 });
+  assert.equal(await vf.locator("[data-readback-method]").textContent(), "Client contract");
+  assert.equal(await vf.locator("[data-readback-evidence]").getAttribute("data-readback-evidence"), EV);
+  assert.match(await vf.locator("[data-readback-evidence]").textContent(),
+    /^Signed project agreement, section 7 \(fictional\) \(agreement\.pdf\) · application\/pdf · \d+ B · uploaded /);
+  assert.equal(await vf.locator("[data-readback-sha256]").textContent(), PDF_SHA);
+  assert.equal(await vf.locator("[data-readback-excerpt]").textContent(), "“Workmanship is warranted for three (3) years.”");
+  assert.equal(await vf.locator("[data-readback-note]").textContent(), "Section 7 of the fictional agreement.");
+  assert.equal(sql(`select count(*) from claim_reviews where claim_id = '${W}'`), "1");
+  ok("Read-back: method, the exact chosen file (name, type, size, full SHA-256), the quote and the note are shown before anything is recorded");
+  await vf.locator('[data-readback] [data-action="record"]').click();
+  await row(W).locator("[data-review-error]", { hasText: "expiry" }).waitFor({ timeout: 30000 });
   assert.match(await row(W).locator("[data-review-error]").textContent(), /An expiry must be after the day examined and after today/);
   assert.equal(sql(`select count(*) from claim_reviews where claim_id = '${W}'`), "1");
   ok("A refusal from the database shows in place, and nothing is written");
 
   await vf.locator('input[name="expires_on"]').fill("");
   await vf.locator('button[type="submit"]').click();
+  await vf.locator('[data-readback] [data-action="record"]').click();
   await card.locator(`[data-bucket="verified"] [data-claim="${W}"]`).waitFor({ state: "attached", timeout: 30000 });
   // Verified is the one group that starts folded (good news last).
   await card.locator('[data-bucket="verified"] > summary').click();
@@ -281,6 +406,9 @@ try {
 
   assert.equal(sql(`select string_agg(action || ':' || (reviewer_id = '${id(91)}'), ',' order by action) from claim_reviews where claim_id = '${W}'`), "classify:true,verify:true");
   assert.equal(sql(`select evidence_sha256 from claim_reviews where claim_id = '${W}' and action = 'verify'`), PDF_SHA);
+  assert.equal(sql(`select excerpt || '|' || note from claim_reviews where claim_id = '${W}' and action = 'verify'`),
+    "Workmanship is warranted for three (3) years.|Section 7 of the fictional agreement.");
+  assert.equal(await page.evaluate((k) => sessionStorage.getItem(k), draftKey), null);
   assert.equal(digest(), governedBefore);
   assert.equal(sql(`select status from claims where id = '${W}'`), "confirmed");
   ok("The ledger holds both decisions by the owner, pinned to the file's SHA-256; no claim's status, text or source moved");
