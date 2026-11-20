@@ -269,6 +269,10 @@ export function describePostEvent(e: PostEvent, names: Map<string, string>): str
   if (e.kind === "published" && d.manual === true) extra.push("by hand");
   if (e.kind === "published" && typeof d.published_url === "string") extra.push(d.published_url);
   if (e.kind === "edited" && Array.isArray(d.fields)) extra.push(`(${d.fields.join(", ")})`);
+  // 20261120190000: an attached image makes the "no image" explanation obsolete; the cleared text is kept here.
+  if (e.kind === "edited" && typeof d.cleared_no_image_reason === "string") {
+    extra.push(`No-image reason cleared because the post now has an image (was “${d.cleared_no_image_reason}”)`);
+  }
   return [`${who}: ${base}`, ...extra].join(" — ");
 }
 
