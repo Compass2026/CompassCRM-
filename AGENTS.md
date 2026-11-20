@@ -1214,7 +1214,7 @@ standard; see `docs/delivery-standard.md`) planned 8 Facebook + 8 GBP posts per 
   are queued, and a task whose location has other open slots that day
   tells the worker to choose a different service and topic.
 
-## Weekly delivery standard (Oct 30 2026; `20261030180000` applied)
+## Weekly delivery standard (Oct 30 2026; `20261030180000` applied Oct 31 2026; Lucas and Logic adopted from Nov 2, Ginger, MADHAIRLAB, Silverback, Pensacola and Show Me Electrical from Nov 9, BHG not yet)
 
 **Current standard (Tom, Nov 6 2026):** per eligible website 5 Facebook,
 5 GBP and 3 blogs a week plus one webpage refresh a month; BHG's shared GBP
@@ -1223,7 +1223,7 @@ Wisdom, Resilient and Shewmaker are deferred. The operating rules (read the
 CRM first, foundation corrections before drafting, preserve existing work,
 in review is not published) are in `docs/delivery-standard.md` § Current
 standard. The monthly 8 / 8 / 8 standard and the open BHG question below are
-**superseded** and kept as history. Lucas and Logic are adopted from Nov 2.
+**superseded** and kept as history.
 
 
 Tom (Executive OS decision `0b407d66-de7d-4086-b6de-013f793bcbd4`): per
@@ -1243,8 +1243,21 @@ and open decisions in `docs/delivery-standard.md`; sandbox suite
 - **GBP collision rule:** at most `gbp_daily_location_cap` (1) post per
   location per Chicago day. Over-capacity slots are opened and flagged by
   `social_slot_readiness` (`Over capacity: …`), never dropped, never queued.
-  Three sites on one location: 7 of 15 fit a week — that client's cadence is an
-  open decision for Tom; 7 does not meet the 15 he asked for.
+  Three sites on one location: 7 of 15 fit a week. Tom decided that client's
+  cadence on Nov 3 2026 (decision `367b12c0`): see the cadence override below.
+- **Cadence override** (`20261103180000`, **not applied**; sandbox suite
+  `gbp_cadence_override.test.sql`): `client_delivery_overrides` is a
+  per-client, append-only record (`gbp_posts`, `round_robin`, 1–7 a week,
+  from a Monday not in the past; `standard` ends it). In weeks the weekly
+  standard governs, the planner opens `weekly_total` GBP slots, one a day, in
+  a continuous round robin over the sites by slug (7 over three sites →
+  3 / 2 / 2, the extra post rotating each week); the standard's unattached
+  GBP slots for such a week are retired, never deleted. `delivery_week_report`
+  and `delivery_targets` (via `delivery_override_month_delta`, 0 for
+  everyone else) report the override's target, so the dropped slots are
+  neither missed nor over capacity. Facebook, blogs and refreshes are
+  unchanged. The migration records no override; the BHG row is a data step
+  after review.
 - **Reconciliation:** v1 slots with work attached stay and count once by
   date (the Oct 29 pilots in the week of Oct 26); unattached v1 slots from
   the first weekly week are retired (blocked, `retired_at`, old hold kept),
