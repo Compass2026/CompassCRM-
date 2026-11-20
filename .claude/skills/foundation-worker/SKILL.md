@@ -2004,10 +2004,13 @@ a slot.
    `brand_assets` with `creative_use = 'approved'`, a stored file, and for a
    `photo` `depicts_own_work = true` (a brand site's draft: only ids in
    `client_brand_workspaces.asset_ids`). Prefer one whose `label`,
-   `subjects` or `notes` match the service, then one not attached to another
-   open draft (`post_assets` on `social_posts.review_status in
-   ('draft','in_review')`; drafter_write refuses an image already on an open
-   Facebook or GBP draft). Never a stock, AI or another client's image,
+   `subjects` or `notes` match the service. The only reuse limit is per
+   channel: drafter_write refuses an image already on another open
+   (`draft` / `in_review`) drafted post **of the same channel** — a photo on
+   open Facebook drafts is still free for a Business Profile draft, and one
+   on an approved or published post is free for both. Do not give up an
+   approved photo for a stricter rule than that (Nov 19: two Lucas drafts
+   went out without the free photos db8e7148 / c7db9166). Never a stock, AI or another client's image,
    never an `unreviewed` or `excluded` file, never a photo that does not
    show this client's work, and never a photo whose label names another
    place than the post's market. Put its id in `assetIds` (one image). If
