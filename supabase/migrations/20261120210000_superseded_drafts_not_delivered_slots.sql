@@ -41,8 +41,8 @@
 --     guards. The promotion-hold conflict lists counted every non-rejected
 --     draft and now skip superseded ones too.
 --
--- Rollback: supabase/rollback/20261120210000_content_draft_supersede.down.sql
--- (only while no draft is superseded).
+-- Rollback: supabase/rollback/20261120210000_superseded_drafts_not_delivered_slots.down.sql
+-- (only while no draft is superseded and no slot is closed as not delivered).
 
 -- ── 1. The state and its record ─────────────────────────────────────────────
 alter table content_drafts
