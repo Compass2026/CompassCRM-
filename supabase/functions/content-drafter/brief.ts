@@ -115,7 +115,12 @@ export type BlogBrief = {
     differentiators_citable: false;
   };
   links: { site: string | null; required: LinkTarget[]; allowed: LinkTarget[];
-    money_pages: LinkTarget[]; external: { url: string; claim_ids: string[] }[];
+    money_pages: LinkTarget[];
+    // The money pages in the article's own service family (the target
+    // service's segment, plus unsegmented services and the owner page). The
+    // money-link minimum counts these only (Nov 20 2026).
+    relevant_money_pages: LinkTarget[];
+    external: { url: string; claim_ids: string[] }[];
     guidance: string[] };
   cta: { text: string | null; url: string | null };
   tldr: { label: typeof TLDR_LABEL; required: true; rules: typeof TLDR_RULES; guidance: readonly string[] };
@@ -194,6 +199,16 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
   for (const g of input.pageGroups) if (g.status === "approved") add(g.target_url, g.name, "page");
   for (const p of sitePages) add(p.url, p.title, "article");
   const required = pageUrl ? allowed.filter((l) => normalizeUrl(l.url) === normalizeUrl(pageUrl)) : [];
+  // Relevant money pages (Nov 20 2026): a small site's other service family
+  // (Commercial on a Residential article) is not a relevant destination, so
+  // the money-link minimum never forces one. A service without a segment, or
+  // an article without a segmented service, keeps every service page.
+  const family = service?.segment?.trim().toLowerCase() || null;
+  const relevantUrls = new Set(input.services
+    .filter((s) => s.status === "approved" && (!family || !s.segment?.trim() || s.segment.trim().toLowerCase() === family))
+    .map((s) => normalizeUrl(s.page_url)));
+  if (pageUrl) relevantUrls.add(normalizeUrl(pageUrl));
+  const moneyPages = allowed.filter((l) => l.kind === "service");
 
   const differentiators = (input.brand?.differentiators ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
   // The same approved places as the post brief (active locations ∪ approved markets).
@@ -260,13 +275,14 @@ export function buildBlogBrief(input: DrafterInput, draft: DraftRow, sitePages: 
       },
       links: {
         site, required, allowed,
-        money_pages: allowed.filter((l) => l.kind === "service"),
+        money_pages: moneyPages,
+        relevant_money_pages: moneyPages.filter((l) => relevantUrls.has(normalizeUrl(l.url))),
         external: [...new Set(eligible.map((c) => citationUrl(c.source)).filter((url): url is string => !!url && hostOf(url) !== siteHost))]
           .map((url) => ({ url, claim_ids: eligible.filter((c) => citationUrl(c.source) === url).map((c) => c.id) })),
         guidance: [
-          "Use 3–4 distinct relevant money-page destinations in contextual body links. The separate CTA, repeats, fragments, home page and article links do not count.",
+          "Use 3–4 distinct relevant money-page destinations in contextual body links, chosen from links.relevant_money_pages (the service pages in this article's service family). The separate CTA, repeats, fragments, home page and article links do not count.",
           "Keep the keyword owner page linked. Choose related services only; never introduce an unrelated service to fill a quota.",
-          "If fewer than three money pages are available, link the relevant available pages and retain the review warning identifying the page gap. Never invent URLs.",
+          "If fewer than three relevant money pages are available, link the relevant ones and, where they genuinely help the reader, relevant pages from links.allowed (contact, service area, published articles); the review warning identifies the page gap. Never link another service family or invent URLs to reach a count.",
           "Include at least one external citation from links.external. Cite its eligible claim in claim_ids and state that claim in the article, with descriptive link text nearby.",
           "Use only the exact sourced external URL, not a homepage or an invented URL on the same domain. If none is available, source a relevant credible reference in CRM before drafting.",
         ],
