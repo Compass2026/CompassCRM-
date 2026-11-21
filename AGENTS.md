@@ -808,9 +808,20 @@ a pull request against it — the production branch never moves by itself),
 dropped at intake and content lands as proposed documents). **Content
 adapters** (`src/lib/content-adapters.ts`) are detected from the actual
 repository tree, never inferred from another site or from a template
-version: `foundation_brand_content` (typed TS content; pull requests only),
+version: `foundation_brand_content` (typed TS content; pull requests only,
+except approved blog posts on a site whose `compass-blog.json` declares the
+generated posts file — and, opted in with `hero_image` / `tldr`, the post's
+content-addressed hero in `public/blog/images/` and its TL;DR slot),
 `lucas_json` (the Sept 14 contract; data pushes), `markdown_blog` (BHG's
 shape; blog pushes, city pages as documents), `unsupported` (documents).
+
+**Explicit releases** (site-push v12, Nov 2026): a site whose Vercel project
+is deliberately not Git-linked records `content_paths.vercel_deploy =
+"explicit"` (Show Me Electrical's `showmeelectrical-main`). site-push then
+makes the one production deployment of a content-entry commit itself, and
+refuses before pushing unless production serves the branch head the entry
+builds on, so a blog post can never ship unreleased code. Code still ships
+only through the site's own deployment plan.
 
 **The worker never touches GitHub; the CRM pushes for it.** A cloud session
 reaches github.com only through a credential-protecting proxy that permits

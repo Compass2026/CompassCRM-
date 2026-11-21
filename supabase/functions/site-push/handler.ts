@@ -89,8 +89,8 @@
 
 import { archiveAllowed, CRM_COMMIT_IDENTITY, resolvePushPlan, type SiteRowForPlan } from "./plan.ts";
 
-export const SITE_PUSH_VERSION = 11;
-export const SITE_PUSH_FEATURES = ["branch_of_record", "preview", "pull_request_base", "archive", "content_entry_boundary", "work_modes", "version", "native_git_deploy"] as const;
+export const SITE_PUSH_VERSION = 12;
+export const SITE_PUSH_FEATURES = ["branch_of_record", "preview", "pull_request_base", "archive", "content_entry_boundary", "work_modes", "version", "native_git_deploy", "explicit_release"] as const;
 
 type FileIn = { path: string; content: string; encoding?: "utf-8" | "base64" };
 
@@ -484,6 +484,19 @@ export function createSitePushHandler(deps: HandlerDeps) {
       branch === base && (!mutating || plan.deployTarget === "production") ? "production" : undefined;
     /** This request asked for a preview, so production is out of bounds for it. */
     const previewPush = mutating && plan.deployTarget === "preview";
+    // ── Explicit releases (v12, Nov 2026) ───────────────────────────────
+    // A site whose Vercel project is deliberately NOT linked to Git (Show Me
+    // Electrical's showmeelectrical-main: production changes only by an
+    // explicit deployment of a pinned commit, so a merge can never ship
+    // unreleased code) records `content_paths.vercel_deploy: "explicit"`.
+    // There is no Git integration to make a deployment, so this function
+    // makes exactly one — and only when it cannot ship anything but the
+    // change itself: the push must be an authorised content entry (or a Put
+    // it back revert) on the branch of record, the project must really be
+    // unlinked, and production must be serving the very commit the change
+    // is built on. The new deployment then differs from production by the
+    // content entry alone. Anything else is refused before the push.
+    const explicitRelease = (siteRow?.content_paths as { vercel_deploy?: string } | null | undefined)?.vercel_deploy === "explicit";
 
     // ── Vercel client, shared by the domain mode and the deploy step ────
     const vercelCtx = async () => {
@@ -606,7 +619,7 @@ export function createSitePushHandler(deps: HandlerDeps) {
     };
 
     /** What the preflight established, for the deploy step to reuse. */
-    type Preflight = { projectId: string | null; created: boolean; skipped: boolean };
+    type Preflight = { projectId: string | null; created: boolean; skipped: boolean; explicit?: { productionSha: string } };
 
     // ── Vercel preflight — BEFORE any commit or ref move ────────────────
     // Ordering is the safety property here, not the checks themselves.
@@ -634,6 +647,11 @@ export function createSitePushHandler(deps: HandlerDeps) {
           return blocked(
             "VERCEL_TOKEN is not in Vault, so it cannot be confirmed that this project already has a production deployment. A preview push into a project without one is promoted to PRODUCTION by Vercel. Refusing before anything is pushed.",
           );
+        }
+        // An explicitly released project has no Git integration: without the
+        // token nothing would ever deploy the push.
+        if (explicitRelease && !previewPush) {
+          return blocked("VERCEL_TOKEN is not in Vault, and this project is released explicitly (not Git-linked), so the push could not be deployed. Refusing before anything is pushed.");
         }
         return { ok: { projectId: null, created: false, skipped: true } };
       }
@@ -680,6 +698,33 @@ export function createSitePushHandler(deps: HandlerDeps) {
       }
 
       // ── Production push ──────────────────────────────────────────────
+      if (explicitRelease) {
+        if (!(revertOnly || (mutating && plan.grant === "content_entry"))) {
+          return blocked(`${project} is released explicitly (content_paths.vercel_deploy = "explicit"): only an authorised content entry or a Put it back revert is deployed from here. Release code through the site's deployment plan. Nothing was pushed.`, { project });
+        }
+        if (existing.status === 404) return blocked(`Vercel project ${project} does not exist; an explicitly released project is never created here. Nothing was pushed.`, { project });
+        if (!existing.ok) return blocked(`Could not read Vercel project ${project} (${existing.status}). Nothing was pushed.`, { project });
+        const proj = await existing.json();
+        if ((proj?.link as { repo?: string } | undefined)?.repo) {
+          return blocked(`Vercel project ${project} is linked to Git, so its Git integration deploys every push; an explicit deployment would be a second one. Remove content_paths.vercel_deploy or unlink the project. Nothing was pushed.`, { project });
+        }
+        const projectId = proj?.id ?? null;
+        // What production serves now: the deployment behind the project's
+        // production alias (an Instant Rollback moves it; the newest READY
+        // production deployment might not be it).
+        const live = await vc(`/v13/deployments/${encodeURIComponent(`${project}.vercel.app`)}`);
+        if (!live.ok) return blocked(`Could not read the deployment serving ${project}.vercel.app (${live.status}), so it cannot be confirmed that a deployment would ship only this change. Nothing was pushed.`, { project });
+        const d = await live.json();
+        const productionSha = (d?.meta as Record<string, string | undefined> | undefined)?.githubCommitSha ?? null;
+        const liveProject = (d?.project as { id?: string } | undefined)?.id ?? d?.projectId ?? null;
+        if (d?.target !== "production" || String(d?.readyState ?? d?.state ?? "") !== "READY" || (projectId && liveProject && liveProject !== projectId)) {
+          return blocked(`${project}.vercel.app is not served by a READY production deployment of ${project}. Nothing was pushed.`, { project });
+        }
+        if (!productionSha || !headInfo || productionSha !== headInfo.sha) {
+          return blocked(`Production for ${project} serves ${productionSha ?? "an unrecorded commit"}, but ${branch} is at ${headInfo?.sha ?? "no commit"}. Deploying a change on top of it would also ship whatever is between them. Release ${branch} through the site's deployment plan first, then retry. Nothing was pushed.`, { project, production_sha: productionSha });
+        }
+        return { ok: { projectId, created: false, skipped: false, explicit: { productionSha } } };
+      }
       if (existing.status === 404) {
         // Create and LINK before pushing, so the Git integration sees the
         // push and makes exactly one production deployment — no second
@@ -844,6 +889,67 @@ export function createSitePushHandler(deps: HandlerDeps) {
       };
     };
 
+    // The one deployment of an explicitly released content commit (see
+    // explicitRelease). Idempotent: a deployment that already exists for the
+    // commit is reported, never doubled.
+    const explicitProductionDeploy = async (
+      vc: (path: string, init?: RequestInit) => Promise<Response>,
+      project: string,
+      projectId: string | null,
+      repoId: number | string | null,
+      sha: string,
+    ): Promise<Record<string, unknown>> => {
+      if (!repoId) return { status: "failed", project, commit: sha, detail: "no GitHub repo id for the deployment" };
+      const prior = await vc(`/v6/deployments?projectId=${encodeURIComponent(projectId ?? project)}&sha=${encodeURIComponent(sha)}&limit=20`);
+      if (!prior.ok) return { status: "failed", project, commit: sha, detail: `could not check for deployments of ${sha} (${prior.status}) — not deploying` };
+      const existingRows = (((await prior.json())?.deployments ?? []) as DeploymentRow[]).filter((x) => !["ERROR", "CANCELED"].includes(String(x.state ?? "")));
+      if (existingRows.length > 1) {
+        return { status: "duplicate", project, commit: sha, count: existingRows.length, detail: `Vercel already holds ${existingRows.length} deployments of ${sha}; exactly one is expected.` };
+      }
+      let id: string | null = existingRows[0]?.id ?? null;
+      let settled: Record<string, unknown> = {};
+      if (!id) {
+        const dep = await vc(`/v13/deployments`, {
+          method: "POST",
+          body: JSON.stringify({ name: project, project, target: "production", gitSource: { type: "github", repoId, ref: branch, sha } }),
+        });
+        if (!dep.ok) return { status: "failed", project, commit: sha, detail: `Vercel refused the deployment (${dep.status}): ${(await dep.text()).slice(0, 300)}` };
+        settled = await dep.json();
+        id = (settled.id as string | undefined) ?? null;
+      }
+      const deadline = Date.now() + FIND_MS + SETTLE_MS;
+      while (id) {
+        const st = String(settled.readyState ?? settled.state ?? "");
+        if (st === "READY" || st === "ERROR" || st === "CANCELED" || Date.now() >= deadline) break;
+        if (st) await new Promise((r) => setTimeout(r, POLL_MS));
+        const poll = await vc(`/v13/deployments/${id}`);
+        if (!poll.ok) break;
+        settled = await poll.json();
+      }
+      const readyState = String(settled.readyState ?? settled.state ?? "QUEUED");
+      const target = (settled.target ?? null) as string | null;
+      const meta = (settled.meta ?? {}) as Record<string, string | undefined>;
+      if (meta.githubCommitSha && meta.githubCommitSha !== sha) {
+        return { status: "failed", project, commit: sha, deployment_id: id, detail: `the deployment is for commit ${meta.githubCommitSha}, not ${sha}` };
+      }
+      if (target !== "production") {
+        return { status: "failed", project, commit: sha, deployment_id: id, target, ready_state: readyState, detail: "the explicit deployment did not target production" };
+      }
+      return {
+        status: readyState === "ERROR" || readyState === "CANCELED" ? "failed" : "deployed",
+        source: "rest-api",
+        explicit_release: true,
+        project,
+        target,
+        ready_state: readyState,
+        error_message: settled.errorMessage ?? null,
+        staging_url: `https://${project}.vercel.app`,
+        deployment_id: id,
+        deployment_url: settled.url ? `https://${settled.url}` : null,
+        inspector_url: settled.inspectorUrl ?? null,
+      };
+    };
+
     const vercelStep = async (commitSha?: string | null, pf?: Preflight): Promise<Record<string, unknown>> => {
       const vToken = await secret("VERCEL_TOKEN");
       if (!vToken) return { status: "skipped", detail: "VERCEL_TOKEN not in Vault" };
@@ -872,6 +978,12 @@ export function createSitePushHandler(deps: HandlerDeps) {
           if (!existing.ok) throw fail("vercel project lookup", existing, await existing.text());
           projectId = (await existing.json())?.id ?? null;
           created = false;
+        }
+        if (explicitRelease) {
+          if (!commitSha || !pf?.explicit) {
+            return { status: "skipped", project, detail: `${project} is released explicitly and is not Git-linked: nothing is deployed for this request. Deploy a pinned commit through the site's deployment plan.` };
+          }
+          return await explicitProductionDeploy(vc, project, projectId, repoId, commitSha);
         }
         // ── Find Vercel's own deployment for this commit ───────────────
         // The Git integration made it; we locate it rather than making a

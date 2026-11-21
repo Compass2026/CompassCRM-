@@ -18,10 +18,14 @@
 // Foundation v1 (foundation_brand_content, foundation-blog.ts, Nov 2026): the
 // article is a typed Article appended to the site's generated posts file
 // (compass-blog.json `posts_file`), its body converted from the approved
-// restricted Markdown to the site's Block[] types. No hero (client
-// photography only), no author, no TL;DR slot (the summary is the first
-// paragraph of the body). Title = the approved H1; seo.title = the approved
-// meta title (the page's <title>, og:title and twitter:title).
+// restricted Markdown to the site's Block[] types. No author. Title = the
+// approved H1; seo.title = the approved meta title (the page's <title>,
+// og:title and twitter:title). Opt-ins, each off unless compass-blog.json
+// says so (a site that says neither gets exactly the article it got before):
+// `hero_image: true` (+ hero_image_dir / hero_image_url_prefix) carries the
+// approved hero as `heroImage`, its file committed with the article as on the
+// JSON blogs; `tldr: true` puts the summary in the Article's `tldr` slot
+// (rendered between the H1 and the hero) instead of the body's first paragraph.
 import { bodyWithTldr } from "./tldr.ts";
 import { blockHrefs, checkFoundationContract, FOUNDATION_ADAPTER, foundationHref, foundationPostsFile, markdownToBlocks,
   readCompassPosts, writeCompassPosts, type Block, type FoundationArticle } from "./foundation-blog.ts";
@@ -81,7 +85,7 @@ const HERO_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jp
 export function heroImagePlan(r: BlogRelease, contract: Record<string, unknown>): { path: string; src: string } {
   const h = r.hero!;
   if (contract.hero_image !== true) fail("Website needs the Compass blog hero image upgrade before publishing this article");
-  if (!["lucas_json", "json_blog"].includes(r.destination.content_adapter)) fail("This website's adapter cannot carry a hero image yet");
+  if (!["lucas_json", "json_blog", FOUNDATION_ADAPTER].includes(r.destination.content_adapter)) fail("This website's adapter cannot carry a hero image yet");
   const dir = String(contract.hero_image_dir ?? "");
   const prefix = String(contract.hero_image_url_prefix ?? "");
   const recorded = (r.destination.content_paths.blog_images ?? "public/blog/images").replace(/\/$/, "");
@@ -92,6 +96,18 @@ export function heroImagePlan(r: BlogRelease, contract: Record<string, unknown>)
   if (!h.alt?.trim()) fail("The approved hero image needs alt text");
   const name = `${r.slug}-${h.content_hash.slice(0, 12)}.${HERO_EXT[h.mime_type]}`;
   return { path: `${dir}/${name}`, src: `${prefix}${name}` };
+}
+// The image file: already committed (content-addressed, same size) or added
+// in the same commit as the article. A different file at that path refuses.
+function heroFilesFor(r: BlogRelease, hero: { path: string } | null, read: RepositoryRead, heroBytes?: HeroBytes): PublicationFile[] {
+  if (!hero) return [];
+  const inTree = read.files.find((f) => f.path === hero.path);
+  if (inTree) {
+    if (inTree.size != null && inTree.size !== r.hero!.size_bytes) fail("A different file already occupies the hero image path");
+    return [];
+  }
+  if (!heroBytes?.base64) fail("The approved hero image could not be loaded");
+  return [{ path: hero.path, content: heroBytes!.base64, encoding: "base64" }];
 }
 export function preparePublication(r: BlogRelease, releaseHash: string, read: RepositoryRead, date: string, heroBytes?: HeroBytes): {
   expected_head: string; url: string; files: PublicationFile[]; already_present: boolean; hero_src: string | null;
@@ -108,7 +124,7 @@ export function preparePublication(r: BlogRelease, releaseHash: string, read: Re
   const contractText = read.files.find((f) => f.path === "compass-blog.json")?.content;
   if (!contractText) fail("Website needs the Compass blog renderer upgrade before publishing");
   const contract = JSON.parse(contractText);
-  if (d.content_adapter === FOUNDATION_ADAPTER) return prepareFoundation(r, releaseHash, read, date, contract, tldr);
+  if (d.content_adapter === FOUNDATION_ADAPTER) return prepareFoundation(r, releaseHash, read, date, contract, tldr, heroBytes);
   if (contract.version !== 1 || contract.adapter !== d.content_adapter || contract.keyword_provenance !== true
       || contract.markdown !== true || contract.seo_fields !== true) fail("Website does not support the complete approved article");
   const url = publicationUrl(r);
@@ -121,18 +137,7 @@ export function preparePublication(r: BlogRelease, releaseHash: string, read: Re
   // In the body, the summary would land under the hero: the order is title, TL;DR, hero.
   if (tldr && hero && !tldrSlot) fail("Website needs the Compass blog TL;DR upgrade (tldr: true) to show the summary above its hero image");
   const body = tldrSlot ? r.body_markdown : bodyWithTldr(r.body_markdown, tldr);
-  // The image file: already committed (content-addressed, same size) or added
-  // in the same commit as the article. A different file at that path refuses.
-  const heroFiles: PublicationFile[] = [];
-  if (hero) {
-    const inTree = read.files.find((f) => f.path === hero.path);
-    if (inTree) {
-      if (inTree.size != null && inTree.size !== r.hero!.size_bytes) fail("A different file already occupies the hero image path");
-    } else {
-      if (!heroBytes?.base64) fail("The approved hero image could not be loaded");
-      heroFiles.push({ path: hero.path, content: heroBytes!.base64, encoding: "base64" });
-    }
-  }
+  const heroFiles = heroFilesFor(r, hero, read, heroBytes);
   if (["lucas_json", "json_blog"].includes(d.content_adapter)) {
     if (!existing?.content) fail("The site's blog JSON could not be read; no overwrite is allowed");
     const posts = JSON.parse(existing!.content!);
@@ -168,10 +173,16 @@ export function preparePublication(r: BlogRelease, releaseHash: string, read: Re
 }
 
 // ── Foundation v1 (foundation_brand_content) ───────────────────────────────
-/** The approved article as the Foundation site's typed Article. */
-export function foundationArticle(r: BlogRelease, releaseHash: string, date: string, tldr: string | null): FoundationArticle {
+/**
+ * The approved article as the Foundation site's typed Article. `tldrSlot`
+ * moves the summary from the body into the Article's `tldr`; `hero` adds
+ * `heroImage`. Without either, the Article is exactly what it was before.
+ */
+export function foundationArticle(r: BlogRelease, releaseHash: string, date: string, tldr: string | null,
+  opts: { tldrSlot?: boolean; hero?: { src: string } | null } = {}): FoundationArticle {
   const site = r.destination.url;
-  const body: Block[] = markdownToBlocks(bodyWithTldr(r.body_markdown, tldr), site);
+  const tldrSlot = !!tldr && opts.tldrSlot === true;
+  const body: Block[] = markdownToBlocks(bodyWithTldr(r.body_markdown, tldrSlot ? null : tldr), site);
   // The approved call to action closes the article, as on the Markdown adapter.
   const ctaText = r.cta?.text?.trim();
   if (ctaText) {
@@ -183,8 +194,10 @@ export function foundationArticle(r: BlogRelease, releaseHash: string, date: str
   if (!r.h1?.trim() || /[\n<>{}]/.test(r.h1) || !r.meta_description?.trim()) fail("The approved H1 and meta description are required");
   if (!r.meta_title?.trim() || /[\n<>{}]/.test(r.meta_title)) fail("The approved meta title is required");
   return {
-    slug: r.slug, path: `/blog/${r.slug}`, title: r.h1, seo: { title: r.meta_title.trim(), description: r.meta_description }, excerpt: r.meta_description,
-    publishedAt: date, ...(related.length ? { relatedServices: related } : {}), body,
+    slug: r.slug, path: `/blog/${r.slug}`, title: r.h1, ...(tldrSlot ? { tldr: tldr! } : {}),
+    seo: { title: r.meta_title.trim(), description: r.meta_description }, excerpt: r.meta_description, publishedAt: date,
+    ...(opts.hero ? { heroImage: { src: opts.hero.src, alt: r.hero!.alt, width: r.hero!.width, height: r.hero!.height, illustrative: r.hero!.illustrative === true } } : {}),
+    ...(related.length ? { relatedServices: related } : {}), body,
     compass: { release_hash: releaseHash, draft_id: r.draft_id, draft_version: r.version, keyword_id: r.keyword_id ?? null },
   };
 }
@@ -196,11 +209,16 @@ export function foundationRenderedHrefs(r: BlogRelease): string[] {
   return [...new Set([...r.internal_links.map((l) => l.url), ...bodyUrls, ...(r.cta?.url ? [r.cta.url] : [])].map((u) => foundationHref(u, site)))];
 }
 
-function prepareFoundation(r: BlogRelease, releaseHash: string, read: RepositoryRead, date: string, contract: Record<string, unknown>, tldr: string | null) {
+function prepareFoundation(r: BlogRelease, releaseHash: string, read: RepositoryRead, date: string, contract: Record<string, unknown>,
+  tldr: string | null, heroBytes?: HeroBytes) {
   const d = r.destination;
   const path = safePath(checkFoundationContract(contract, d.content_paths));
-  // Client photography only: the CRM never sends a hero to this adapter.
-  if (r.hero) heroImagePlan(r, contract);
+  // A hero only on a site that opted in (hero_image + its folder), never dropped.
+  const hero = r.hero ? heroImagePlan(r, contract) : null;
+  const tldrSlot = !!tldr && contract.tldr === true;
+  // In the body, the summary would land under the hero: the order is title, TL;DR, hero.
+  if (tldr && hero && !tldrSlot) fail("Website needs the Compass blog TL;DR upgrade (tldr: true) to show the summary above its hero image");
+  if (hero && /[\x00-\x1f\x7f\u2028\u2029]/.test(r.hero!.alt)) fail("The hero image alt text requires manual review");
   const url = publicationUrl(r);
   const dir = path.slice(0, path.lastIndexOf("/"));
   const handWritten = `${dir}/${r.slug}.ts`;
@@ -209,12 +227,16 @@ function prepareFoundation(r: BlogRelease, releaseHash: string, read: Repository
   if (!existing?.content) fail("The site's Compass posts file could not be read; no overwrite is allowed");
   const file = readCompassPosts(existing!.content!);
   const matches = file.posts.filter((p) => p?.slug === r.slug);
-  const base = { expected_head: read.head, url, hero_src: null, tldr_mode: tldr ? "body" as const : null };
+  const heroFiles = heroFilesFor(r, hero, read, heroBytes);
+  const base = { expected_head: read.head, url, hero_src: hero?.src ?? null, tldr_mode: tldr ? (tldrSlot ? "slot" as const : "body" as const) : null };
   if (matches.length) {
-    if (matches.length === 1 && matches[0].compass?.release_hash === releaseHash) return { ...base, files: [], already_present: true };
+    if (matches.length === 1 && matches[0].compass?.release_hash === releaseHash) {
+      if (heroFiles.length) fail("The approved article is on the site but its hero image is missing. Review the repository");
+      return { ...base, files: [], already_present: true };
+    }
     return fail("Blog slug already exists. Review the existing article before publishing");
   }
   if (read.files.some((f) => f.path === handWritten)) fail(`Blog slug already exists as a hand-written article (${handWritten}). Review it before publishing`);
-  const article = foundationArticle(r, releaseHash, date, tldr);
-  return { ...base, files: [{ path, content: writeCompassPosts(file, [...file.posts, article]) }], already_present: false };
+  const article = foundationArticle(r, releaseHash, date, tldr, { tldrSlot, hero });
+  return { ...base, files: [{ path, content: writeCompassPosts(file, [...file.posts, article]) }, ...heroFiles], already_present: false };
 }

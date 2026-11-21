@@ -35,6 +35,13 @@ export interface ContentPaths {
   /** Foundation v1 blog contract: the generated posts file the CRM rewrites (brands/<brand>/content/blog/compass-posts.ts). */
   posts_file?: string;
   verify?: string[];
+  /**
+   * "explicit": the site's Vercel project is deliberately not linked to Git
+   * (production changes only by an explicit deployment of a pinned commit).
+   * site-push then deploys an authorised content entry itself, and only when
+   * production serves the commit the entry is built on (site-push v12).
+   */
+  vercel_deploy?: "explicit";
 }
 
 export interface AdapterDescription {
@@ -103,7 +110,9 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
         label: "Compass Website Foundation v1 (typed brand content)",
         writes: {
           city_page: `${dir}/cities/<slug>.ts + registry entry in ${dir}/cities/index.ts`,
-          blog_post: posts ? `${posts} (generated Compass posts file; one approved Article appended)` : `${dir}/blog/<slug>.ts + registry entry in ${dir}/blog/index.ts`,
+          blog_post: posts
+            ? `${posts} (generated Compass posts file; one approved Article appended, + its approved hero image in ${blogImagesDir(paths)}/ when the site opted in)`
+            : `${dir}/blog/<slug>.ts + registry entry in ${dir}/blog/index.ts`,
           service_page: `${dir}/services/<slug>.ts + registry entry in ${dir}/services/index.ts`,
           faq_addition: "the page's typed content file",
         },
@@ -115,7 +124,7 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
         // takes an approved blog post as a data entry in that file only; the
         // registry's build check refuses a duplicate slug or a wrong path.
         mutation: { city_page: "pull_request", blog_post: posts ? "push" : "pull_request", service_page: "pull_request", faq_addition: "pull_request" },
-        allowedPaths: [`${dir}/`, "docs/page-plan.md", "docs/route-manifest.md"],
+        allowedPaths: [`${dir}/`, ...(posts ? [`${blogImagesDir(paths)}/`] : []), "docs/page-plan.md", "docs/route-manifest.md"],
         verify: ["npm run typecheck", `COMPASS_BRAND=${brand} npx next build`, `COMPASS_BRAND=${brand} npm run qa:manifest`, "npm run qa:crawl -- <preview> --host <production host> --assets remap"],
         routes: { city: "/service-area/{slug}", blog: "/blog/{slug}", service: "/services/{hub}/{slug}", location: "/locations/{slug}" },
         notes: [
@@ -283,9 +292,10 @@ export function detectContentContract(treePaths: string[], recorded: ContentPath
       else if (!treePaths.includes(candidate)) reasons.push(`compass-blog.json names ${candidate}, which is not in the tree: blog posts stay pull requests`);
       else { postsFile = candidate; reasons.push(`Compass blog contract: approved posts are data entries in ${candidate}`); }
     }
+    const heroDir = postsFile && contract?.hero_image === true && typeof contract.hero_image_dir === "string" ? contract.hero_image_dir : null;
     return {
       adapter: "foundation_brand_content",
-      paths: { adapter: "foundation_brand_content", ...(brand ? { brand, content_dir: dir } : {}), blog_format: "typescript", city_route: "/service-area/{slug}", blog_route: "/blog/{slug}", ...(postsFile ? { posts_file: postsFile } : {}) },
+      paths: { adapter: "foundation_brand_content", ...(brand ? { brand, content_dir: dir } : {}), blog_format: "typescript", city_route: "/service-area/{slug}", blog_route: "/blog/{slug}", ...(postsFile ? { posts_file: postsFile } : {}), ...(heroDir ? { blog_images: heroDir } : {}) },
       foundation: { brand, version: "v1", brands: brandDirs },
       reasons,
       missing_inputs: missing,
@@ -430,8 +440,10 @@ function matchesWritePath(adapter: ContentAdapterKey, kind: ChangeKind, path: st
       return false;
     }
     case "foundation_brand_content": {
+      // An approved post may carry its hero image (content-addressed file);
+      // validateContentEntry also requires the posts file in the same request.
       const posts = foundationPostsFile(paths);
-      return kind === "blog_post" && !!posts && path === posts;
+      return kind === "blog_post" && !!posts && (path === posts || isBlogImage(path, paths));
     }
     case "markdown_blog": {
       const dir = (paths.blog_dir ?? "content/blog").replace(/\/$/, "");
@@ -462,6 +474,12 @@ export function validateContentEntry(
   }
   if (filePaths.length === 0) {
     return { ok: false, kinds: [], reason: "no files" };
+  }
+  // Foundation (Nov 2026): a hero image is only ever part of a post's commit,
+  // so an image without the generated posts file beside it is not a data entry.
+  const foundationPosts = adapter === "foundation_brand_content" ? foundationPostsFile(paths ?? {}) : null;
+  if (foundationPosts && !filePaths.includes(foundationPosts) && filePaths.some((p) => isBlogImage(p, paths ?? {}))) {
+    return { ok: false, kinds: [], reason: `a hero image is published only in the same commit as its post (${foundationPosts}): use a preview branch and a pull request` };
   }
   const kinds = new Set<ChangeKind>();
   for (const p of filePaths) {

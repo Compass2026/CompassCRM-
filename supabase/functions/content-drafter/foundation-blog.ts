@@ -14,6 +14,11 @@
 //
 //   export const compassPosts: Article[] = /* compass:begin */ [] /* compass:end */;
 //
+// Optional upgrades the site may advertise instead of the two false flags: "tldr":true (the Article's
+// `tldr` slot) and "hero_image":true with "hero_image_dir" (the recorded
+// content_paths.blog_images folder) and "hero_image_url_prefix" (the URL it
+// serves that folder at) for the Article's `heroImage`. See publication.ts.
+//
 // Only the JSON array between the markers changes (a JSON array of Article
 // objects is valid TypeScript). The site's registry merges compassPosts with
 // its hand-written posts and fails the build on a duplicate slug.
@@ -47,8 +52,13 @@ export type Block =
   | { type: "sources"; heading?: string; items: { label: string; href: string; note?: string }[] };
 
 export type FoundationArticle = {
-  slug: string; path: string; title: string; seo: { title: string; description: string }; excerpt: string;
-  publishedAt: string; relatedServices?: string[]; body: Block[];
+  slug: string; path: string; title: string;
+  /** The approved TL;DR, only on a site advertising `tldr: true` (else it is the body's first paragraph). */
+  tldr?: string;
+  seo: { title: string; description: string }; excerpt: string; publishedAt: string;
+  /** The approved hero, only on a site advertising `hero_image: true`; `illustrative` is internal, never a caption. */
+  heroImage?: { src: string; alt: string; width: number; height: number; illustrative: boolean };
+  relatedServices?: string[]; body: Block[];
   compass: { release_hash: string; draft_id: string; draft_version: number; keyword_id: string | null };
 };
 
