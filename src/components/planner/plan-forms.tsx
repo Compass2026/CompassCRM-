@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import {
+  closeNotDeliveredAction,
   createPlanItemAction,
   deletePlanItemAction,
   linkOutputAction,
@@ -191,6 +192,30 @@ export function HoldForm({ clientId, itemId, hold }: { clientId: string; itemId:
         <Input name="hold_reason" placeholder="What it is waiting on (blocked) or a note" maxLength={500} />
         <Input name="output_url" type="url" placeholder="Where it went live (optional), https://…" />
         <Button type="submit" size="sm" variant="outline" disabled={pending}>Save</Button>
+        <Message state={state} />
+      </form>
+    </details>
+  );
+}
+
+// Close as not delivered by decision (20261120210000): a slot, or a slot task
+// with no slot. Terminal and kept as history.
+export function NotDeliveredForm({ clientId, planItemId, taskId }: { clientId: string; planItemId?: string; taskId?: string }) {
+  const [state, action, pending] = useActionState(closeNotDeliveredAction.bind(null, clientId, { planItemId, taskId }), {});
+  if (state.ok) return <p role="status" className="text-xs text-muted-foreground">Closed as not delivered by decision.</p>;
+  return (
+    <details className="text-xs" data-not-delivered-form>
+      <summary className="cursor-pointer text-muted-foreground">Close as not delivered (decision)</summary>
+      <form action={action} className="mt-2 space-y-2">
+        <p className="text-muted-foreground">
+          For work decided against (e.g. no backfill of missed dates). Kept as history; neither delivered nor pending; its open task closes.
+        </p>
+        <Input name="reason" placeholder="Why (the decision and who made it)" maxLength={500} required />
+        <label className="flex items-start gap-2">
+          <input type="checkbox" name="confirm" required className="mt-0.5" />
+          <span>I understand this is final: the slot is never drafted or backfilled.</span>
+        </label>
+        <Button type="submit" size="sm" variant="outline" disabled={pending}>Close as not delivered</Button>
         <Message state={state} />
       </form>
     </details>

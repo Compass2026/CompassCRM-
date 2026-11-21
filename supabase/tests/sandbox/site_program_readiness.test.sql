@@ -378,7 +378,8 @@ select spr.ok('H2 known conflicts: Gate B ready, Gate C limited with the count b
   and (spr.reason(spr.p('Q')->'gate_c', 'hold_conflicts_open')->>'count')::int = 4
   and (spr.p('Q')->'holds'->>'open_conflicts_client')::int = 4);
 select spr.ok('H3 the three canonical definitions are the ones the twin mirrors (any change fails here until reviewed)',
-  md5(pg_get_functiondef('public.promotion_hold_conflicts(uuid)'::regprocedure)) = '9e2a9ac16d8a01f4d94aa5a92f2cf2f4'
+  -- 20261120210000: both lists skip superseded drafts (the twin changed with it).
+  md5(pg_get_functiondef('public.promotion_hold_conflicts(uuid)'::regprocedure)) = '960d7d45970a464cd29ba01968a22aad'
   and md5(pg_get_functiondef('public.content_draft_program(content_drafts)'::regprocedure)) = 'ed1fbd205e241e063a63d6da25d34d79'
   and md5(pg_get_functiondef('public.content_draft_hold_text(content_drafts)'::regprocedure)) = 'cac7e98eb46807f12b98b4d0db65dd67');
 

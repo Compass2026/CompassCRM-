@@ -36,7 +36,7 @@ export const purposeLabels: Record<Purpose, string> = {
   real_work: "Real Work / Project",
 };
 
-export const PLAN_STATUSES = ["planned", "ready_to_generate", "drafting", "in_review", "approved", "delivered", "blocked"] as const;
+export const PLAN_STATUSES = ["planned", "ready_to_generate", "drafting", "in_review", "approved", "delivered", "blocked", "not_delivered"] as const;
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
 export const planStatusLabels: Record<PlanStatus, { label: string; className: string }> = {
   planned: { label: "Planned", className: "border-slate-200 bg-slate-100 text-slate-700" },
@@ -46,6 +46,8 @@ export const planStatusLabels: Record<PlanStatus, { label: string; className: st
   approved: { label: "Approved", className: "border-green-200 bg-green-100 text-green-800" },
   delivered: { label: "Delivered", className: "border-emerald-300 bg-emerald-600 text-white" },
   blocked: { label: "Blocked", className: "border-red-200 bg-red-100 text-red-800" },
+  // 20261120210000: closed by a decision (e.g. no backfill); neither delivered nor pending.
+  not_delivered: { label: "Not delivered (decision)", className: "border-zinc-200 bg-zinc-100 text-zinc-600" },
 };
 export const isPlanStatus = (v: unknown): v is PlanStatus => PLAN_STATUSES.includes(v as PlanStatus);
 

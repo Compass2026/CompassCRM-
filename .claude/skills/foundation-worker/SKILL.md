@@ -1938,7 +1938,10 @@ the brand voice (`get_brand_profile`), sourced facts only.
    Then **claim** it: `select content_draft_claim('<draft_id>',
    'worker-routine');` — `claimed: false` (`claimed_by_other`: someone else
    is writing this week's post; `draft_not_open`: it is already written)
-   → stop without writing and report it.
+   → stop without writing and report it. A `409 open_refused` whose message
+   starts `draft_superseded:` (or `draft_status: superseded`) means a
+   teammate retired the request as a duplicate (20261120210000): it is
+   terminal and its task is closed — never redraft, reopen or re-request it.
 3. **Write it** exactly as the *Content draft request* playbook below does
    (brief → write → check → submit with `"claimant": "worker-routine"`, the
    same rules and stops, `409 claimed_by_other` included), for this

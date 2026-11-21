@@ -453,6 +453,7 @@ reset session authorization;
 -- ── Rollback, with the weekly data present (confirmed) ──────────────────────
 savepoint before_down;
 select set_config('compass.weekly_rollback', 'confirmed', true);
+\ir undo_later_delivery_patches.sql
 \ir ../../rollback/20261030180000_weekly_delivery_standard.down.sql
 select wd.ok('RB1 rollback with data: v1 holds restored, unattached weekly slots removed, attached and refresh slots kept, adoptions kept aside, functions exact, cron gone',
   (select hold is null from content_plan_items where id = wd.id('v1.fb.nov5'))
@@ -475,6 +476,7 @@ rollback;
 -- Rollback with no weekly data at all: everything the migration added goes,
 -- standard 2 and the cadence columns included.
 begin;
+\ir undo_later_delivery_patches.sql
 \ir ../../rollback/20261030180000_weekly_delivery_standard.down.sql
 do $$ begin
   if exists (select 1 from information_schema.columns where table_name = 'delivery_standards' and column_name in ('cadence', 'gbp_daily_location_cap'))

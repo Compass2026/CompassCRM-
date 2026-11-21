@@ -5,12 +5,12 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isUuid, formatStamp, actorName } from "@/lib/tasks";
 import { listTeamMembers } from "@/lib/team";
-import { draftActions, draftStatusLabels, isDraftStatus } from "@/lib/content-drafts";
+import { draftActions, draftStatusLabels, isDraftStatus, supersedeCandidates } from "@/lib/content-drafts";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { MarkdownPreview } from "@/components/drafts/markdown-preview";
 import { CopyMarkdownButton } from "@/components/drafts/copy-markdown";
-import { DraftSteps, EditDraftForm, RegenerateForm, ReviewDraftForms } from "@/components/drafts/draft-forms";
+import { DraftSteps, EditDraftForm, RegenerateForm, ReviewDraftForms, SupersedeDraftForm } from "@/components/drafts/draft-forms";
 import { HeroPicker, type HeroOption } from "@/components/drafts/hero-picker";
 import { BRAND_BUCKET, SIGNED_URL_TTL } from "@/lib/brand";
 import { toMarkdown } from "../../../../../../../supabase/functions/content-drafter/markdown.ts";
@@ -73,6 +73,21 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
   const names = new Map(members.map((m) => [m.id, m.name]));
   const status = draftStatusLabels[d.status];
   const actions = draftActions(d);
+  // Superseded (20261120210000): the draft that replaced this request, the
+  // requests this draft replaced, and the drafts that could replace it.
+  const [{ data: survivor }, { data: replaced }, { data: siblings }] = await Promise.all([
+    d.superseded_by ? supabase.from("content_drafts").select("id, title, topic, status").eq("id", d.superseded_by).maybeSingle() : Promise.resolve({ data: null }),
+    supabase.from("content_drafts").select("id, title, topic, superseded_at").eq("superseded_by", draftId).order("superseded_at"),
+    actions.includes("supersede")
+      ? supabase.from("content_drafts").select("id, title, topic, status, keyword_id, primary_keyword, updated_at")
+          .eq("client_id", clientId).eq("deliverable", d.deliverable).neq("status", "superseded").neq("id", draftId).order("updated_at", { ascending: false }).limit(200)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const candidates = supersedeCandidates(d, siblings ?? []).map((c) => ({
+    id: c.id,
+    label: `${c.title ?? c.topic} · ${isDraftStatus(c.status) ? draftStatusLabels[c.status].label.toLowerCase() : c.status}`
+      + `${c.primary_keyword ? ` · “${c.primary_keyword}”` : ""} · ${c.id.slice(0, 8)}`,
+  }));
   const outline = (Array.isArray(d.outline) ? d.outline : []) as Outline;
   const links = (Array.isArray(d.internal_links) ? d.internal_links : []) as Links;
   const cta = (d.cta ?? {}) as Cta;
@@ -104,6 +119,24 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
         <p className="surface p-4 text-sm" data-draft-waiting>
           The drafter is writing this {kind.toLowerCase()}. It appears here for review when it is done (usually within a few minutes);
           reload to check.
+        </p>
+      )}
+      {d.status === "superseded" && (
+        <p role="note" className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800" data-draft-superseded>
+          Retired as superseded by {actorName(d.superseded_actor, names)}{d.superseded_at ? ` on ${formatStamp(d.superseded_at)}` : ""}:
+          {" "}“{d.superseded_reason}”. {survivor
+            ? <>Replaced by <Link href={`/clients/${clientId}/drafts/${survivor.id}`} className="underline" data-superseded-by>{survivor.title ?? survivor.topic}</Link>{" "}
+                ({isDraftStatus(survivor.status) ? draftStatusLabels[survivor.status].label.toLowerCase() : survivor.status}).</>
+            : null}{" "}
+          Nothing drafts this request again; it is kept as history.
+        </p>
+      )}
+      {(replaced ?? []).length > 0 && (
+        <p className="text-xs text-muted-foreground" data-draft-replaces>
+          Replaces retired request{(replaced ?? []).length > 1 ? "s" : ""}:{" "}
+          {(replaced ?? []).map((r, i) => (
+            <span key={r.id}>{i > 0 ? ", " : ""}<Link href={`/clients/${clientId}/drafts/${r.id}`} className="underline">{r.title ?? r.topic}</Link></span>
+          ))}
         </p>
       )}
       {d.status === "rejected" && d.review_note && (
@@ -216,6 +249,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
               <p className="text-xs text-muted-foreground" data-hero-locked>
                 {d.status === "in_review" ? "Withdraw the draft to change its hero image; the change needs a fresh review."
                   : d.status === "approved" ? "Approved with this hero. Reopen the draft to change it (that clears the approval)."
+                  : d.status === "superseded" ? "Retired as superseded; kept as history."
                   : "The hero image can be chosen once the draft is written."}
               </p>
             )}
@@ -242,7 +276,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
             <ul className="list-disc pl-5">{lint!.warnings!.map((w, i) => <li key={i}>{w.message}</li>)}</ul>
           </div>
         )}
-        {d.status !== "requested" && d.status !== "approved" && (notReady.length > 0 ? (
+        {d.status !== "requested" && d.status !== "approved" && d.status !== "superseded" && (notReady.length > 0 ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" data-draft-problems>
             <p className="font-medium">Not ready for approval:</p>
             <ul className="mt-1 list-disc pl-5">{notReady.map((m) => <li key={m}>{m}</li>)}</ul>
@@ -255,6 +289,7 @@ export default async function DraftPage({ params }: { params: Promise<{ clientId
         <DraftSteps clientId={clientId} draftId={draftId} status={d.status} version={d.version} actions={actions} />
         {actions.includes("approve") && <ReviewDraftForms clientId={clientId} draftId={draftId} version={d.version} ready={notReady.length === 0} />}
         {actions.includes("regenerate") && <RegenerateForm clientId={clientId} draftId={draftId} />}
+        {actions.includes("supersede") && <SupersedeDraftForm clientId={clientId} draftId={draftId} candidates={candidates} />}
       </section>
 
       {actions.includes("edit") && (

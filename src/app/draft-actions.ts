@@ -157,6 +157,27 @@ export async function saveDraftAction(clientId: string, draftId: string, version
   return { ok: true, text: "Saved." };
 }
 
+// Retire a requested or draft request as superseded by another draft
+// (20261120210000). Never a delete: the row, its request and its task history
+// stay; the database closes its open tasks and refuses any further drafting.
+export async function supersedeDraftAction(clientId: string, draftId: string, _prev: DraftFormState, form: FormData): Promise<DraftFormState> {
+  if (!isUuid(clientId) || !isUuid(draftId)) return { error: "Unknown draft." };
+  const survivor = String(form.get("superseded_by") ?? "");
+  const reason = String(form.get("reason") ?? "").replace(/\s+/g, " ").trim();
+  if (!isUuid(survivor)) return { error: "Choose the draft that replaces this request." };
+  if (!reason) return { error: "Say why this request is retired." };
+  if (reason.length > 500) return { error: "Keep the reason to 500 characters." };
+  const supabase = await start();
+  if (!supabase) return { error: NOT_TEAM };
+  const { data: own } = await supabase.from("content_drafts").select("id").eq("id", draftId).eq("client_id", clientId).maybeSingle();
+  if (!own) return { error: "Draft not found." };
+  const { error } = await supabase.rpc("content_draft_supersede", { p_draft_id: draftId, p_superseded_by: survivor, p_reason: reason });
+  if (error) return { error: error.message };
+  revalidateDraft(clientId, draftId);
+  revalidatePath(`/clients/${clientId}/drafts/${survivor}`);
+  return { ok: true, text: "Retired as superseded. Nothing will draft it; its history stays here." };
+}
+
 export async function deleteDraftAction(clientId: string, draftId: string): Promise<DraftFormState> {
   if (!isUuid(clientId) || !isUuid(draftId)) return { error: "Unknown draft." };
   const supabase = await start();

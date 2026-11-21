@@ -11,6 +11,7 @@ import {
   reviseDraftAction,
   saveDraftAction,
   submitDraftAction,
+  supersedeDraftAction,
   withdrawDraftAction,
   type DraftFormState,
 } from "@/app/draft-actions";
@@ -91,6 +92,38 @@ export function ReviewDraftForms({ clientId, draftId, version, ready }: { client
         <Message state={rejectState} />
       </form>
     </div>
+  );
+}
+
+export type SupersedeCandidate = { id: string; label: string };
+export function SupersedeDraftForm({ clientId, draftId, candidates }: { clientId: string; draftId: string; candidates: SupersedeCandidate[] }) {
+  const [state, action, pending] = useActionState(supersedeDraftAction.bind(null, clientId, draftId), {});
+  if (state.ok) return <Message state={state} />;
+  return (
+    <form action={action} className="space-y-2" data-supersede-draft>
+      <Label htmlFor="supersede_by">Retire as superseded</Label>
+      <p className="text-xs text-muted-foreground">
+        For a duplicate or replaced request. The request and its history stay; nothing drafts it again, its open task closes
+        without counting as delivered, and its plan slot is released.
+      </p>
+      {candidates.length === 0 ? (
+        <p className="text-xs text-muted-foreground" data-supersede-none>No other draft of this client can replace it.</p>
+      ) : (
+        <div className="space-y-2">
+          <select id="supersede_by" name="superseded_by" required defaultValue={candidates[0].id}
+            className="h-9 w-full max-w-xl rounded-md border bg-background px-2 text-sm">
+            {candidates.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+          <Textarea name="reason" rows={2} maxLength={500} required placeholder="Why (e.g. duplicate request for the same keyword)" className="max-w-xl" />
+          <label className="flex items-start gap-2 text-xs">
+            <input type="checkbox" name="confirm" required className="mt-0.5" />
+            <span>I understand this is final: the request is never drafted again and cannot be reopened.</span>
+          </label>
+          <Button type="submit" size="sm" variant="outline" disabled={pending}>{pending ? "Retiring…" : "Retire request"}</Button>
+        </div>
+      )}
+      <Message state={state} />
+    </form>
   );
 }
 
