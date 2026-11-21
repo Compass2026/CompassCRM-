@@ -100,8 +100,7 @@ export function SupersedeDraftForm({ clientId, draftId, candidates }: { clientId
   const [state, action, pending] = useActionState(supersedeDraftAction.bind(null, clientId, draftId), {});
   if (state.ok) return <Message state={state} />;
   return (
-    <form action={action} className="space-y-2" data-supersede-draft
-      onSubmit={(e) => { if (!window.confirm("Retire this request as superseded? It is never drafted again and cannot be reopened; its history stays.")) e.preventDefault(); }}>
+    <form action={action} className="space-y-2" data-supersede-draft>
       <Label htmlFor="supersede_by">Retire as superseded</Label>
       <p className="text-xs text-muted-foreground">
         For a duplicate or replaced request. The request and its history stay; nothing drafts it again, its open task closes
@@ -116,6 +115,10 @@ export function SupersedeDraftForm({ clientId, draftId, candidates }: { clientId
             {candidates.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
           <Textarea name="reason" rows={2} maxLength={500} required placeholder="Why (e.g. duplicate request for the same keyword)" className="max-w-xl" />
+          <label className="flex items-start gap-2 text-xs">
+            <input type="checkbox" name="confirm" required className="mt-0.5" />
+            <span>I understand this is final: the request is never drafted again and cannot be reopened.</span>
+          </label>
           <Button type="submit" size="sm" variant="outline" disabled={pending}>{pending ? "Retiring…" : "Retire request"}</Button>
         </div>
       )}

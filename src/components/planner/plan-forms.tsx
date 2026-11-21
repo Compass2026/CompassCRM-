@@ -206,12 +206,15 @@ export function NotDeliveredForm({ clientId, planItemId, taskId }: { clientId: s
   return (
     <details className="text-xs" data-not-delivered-form>
       <summary className="cursor-pointer text-muted-foreground">Close as not delivered (decision)</summary>
-      <form action={action} className="mt-2 space-y-2"
-        onSubmit={(e) => { if (!window.confirm("Close this slot as not delivered? It is never drafted or backfilled, and this cannot be undone here.")) e.preventDefault(); }}>
+      <form action={action} className="mt-2 space-y-2">
         <p className="text-muted-foreground">
           For work decided against (e.g. no backfill of missed dates). Kept as history; neither delivered nor pending; its open task closes.
         </p>
         <Input name="reason" placeholder="Why (the decision and who made it)" maxLength={500} required />
+        <label className="flex items-start gap-2">
+          <input type="checkbox" name="confirm" required className="mt-0.5" />
+          <span>I understand this is final: the slot is never drafted or backfilled.</span>
+        </label>
         <Button type="submit" size="sm" variant="outline" disabled={pending}>Close as not delivered</Button>
         <Message state={state} />
       </form>
