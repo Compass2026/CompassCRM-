@@ -28,7 +28,7 @@ export interface ContentPaths {
   blog_dir?: string;
   city_route?: string;
   blog_route?: string;
-  /** Repository folder a blog's approved hero image is committed to (JSON blogs; default public/blog/images). */
+  /** Repository folder a blog's approved hero image is committed to (JSON, Foundation posts-file and Markdown blogs; default public/blog/images). */
   blog_images?: string;
   services_dir?: string;
   content_dir?: string;
@@ -76,7 +76,7 @@ const DOC_ONLY: Record<ChangeKind, MutationMode> = {
   faq_addition: "proposed_document",
 };
 
-/** The folder approved blog hero images are committed to on a JSON blog. */
+/** The folder approved blog hero images are committed to on a JSON, Foundation posts-file or Markdown blog. */
 export const DEFAULT_BLOG_IMAGES = "public/blog/images";
 const blogImagesDir = (paths: ContentPaths) => (paths.blog_images ?? DEFAULT_BLOG_IMAGES).replace(/\/$/, "");
 /** A content-addressed hero image file directly inside the folder: <slug>-<hash12>.<ext>. */
@@ -165,7 +165,7 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
         key,
         label: "Next.js with a Markdown/MDX blog",
         writes: {
-          blog_post: `${paths.blog_dir ?? "content/blog"}/<slug>.mdx (front-matter like its neighbours)`,
+          blog_post: `${paths.blog_dir ?? "content/blog"}/<slug>.mdx (front-matter like its neighbours; + its approved hero image in ${blogImagesDir(paths)}/)`,
           city_page: paths.locations ?? "data/locations.json",
           service_page: paths.services_dir ? `${paths.services_dir}/<slug> entry` : "data/services.json entry",
           faq_addition: "data/services.json (per-service faqs[])",
@@ -174,10 +174,10 @@ export function describeAdapter(key: ContentAdapterKey, paths: ContentPaths = {}
         // no local material, which the city gate does not accept; it is a
         // proposed document until the template carries real local content.
         mutation: { city_page: "proposed_document", blog_post: "push", service_page: "pull_request", faq_addition: "pull_request" },
-        allowedPaths: [`${paths.blog_dir ?? "content/blog"}/`, paths.locations ?? "data/locations.json", "data/services.json"],
+        allowedPaths: [`${paths.blog_dir ?? "content/blog"}/`, `${blogImagesDir(paths)}/`, paths.locations ?? "data/locations.json", "data/services.json"],
         verify: ["front-matter keys match the neighbours", "fetch the new URL: 200, one H1, canonical"],
         routes: { city: paths.city_route ?? "/locations/{state}/{city}", blog: paths.blog_route ?? "/blog/{slug}", service: "/services/{slug}" },
-        notes: ["The blog directory is the only push path; everything else is reviewed."],
+        notes: ["The blog directory (and an approved post's content-addressed hero image beside it) is the only push path; everything else is reviewed."],
       };
     default:
       return {
@@ -447,7 +447,9 @@ function matchesWritePath(adapter: ContentAdapterKey, kind: ChangeKind, path: st
     }
     case "markdown_blog": {
       const dir = (paths.blog_dir ?? "content/blog").replace(/\/$/, "");
-      if (kind === "blog_post") return new RegExp(`^${escape(dir)}/[^/]+\\.(mdx?|markdown)$`).test(path);
+      // A post may carry its approved hero image (content-addressed file);
+      // validateContentEntry also requires the post itself in the same request.
+      if (kind === "blog_post") return new RegExp(`^${escape(dir)}/[^/]+\\.(mdx?|markdown)$`).test(path) || isBlogImage(path, paths);
       return false;
     }
     default:
@@ -489,6 +491,18 @@ export function validateContentEntry(
       return { ok: false, kinds: [], reason: `${p} is not a ${d.label} data entry (push paths: ${pushKinds.map((k) => d.writes[k]).join("; ")}): use a preview branch and a pull request` };
     }
     kinds.add(kind);
+  }
+  // Markdown blog (Nov 2026): a hero image is only ever part of its own post's
+  // commit. An image with no <blog_dir>/<slug>.mdx beside it in the request is
+  // not a data entry.
+  if (adapter === "markdown_blog") {
+    const dir = (paths?.blog_dir ?? "content/blog").replace(/\/$/, "");
+    for (const p of filePaths.filter((f) => isBlogImage(f, paths ?? {}))) {
+      const slug = p.slice(p.lastIndexOf("/") + 1).replace(/-[0-9a-f]{12}\.(png|jpe?g|webp)$/, "");
+      if (!filePaths.includes(`${dir}/${slug}.mdx`)) {
+        return { ok: false, kinds: [], reason: `${p}: a hero image is published only in the same commit as its post (${dir}/${slug}.mdx): use a preview branch and a pull request` };
+      }
+    }
   }
   return { ok: true, kinds: [...kinds], reason: `${d.label}: ${[...kinds].join(", ")} entries on the recorded write paths` };
 }

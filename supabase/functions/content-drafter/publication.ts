@@ -8,6 +8,8 @@
 // `hero_image: true` and the folder it serves; an older site refuses the
 // article rather than publishing it without its image. A storage URL is never
 // published: brand-assets is a private bucket and its signed URLs expire.
+// The Markdown adapter (Nov 2026) carries the same hero as a `hero_image`
+// block mapping in the post's front matter, under the same contract keys.
 //
 // TL;DR (tldr.ts, Oct 18 2026): an approved summary is delivered exactly once.
 // A site advertising `tldr: true` gets the article's `tldr` field and renders
@@ -81,11 +83,13 @@ export function validatePublishableMarkdown(body: string): void {
   }
 }
 const HERO_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+/** Adapters whose article can carry a hero: the JSON blogs (heroImage), the Foundation posts file, and the Markdown blog (front matter, Nov 2026). */
+const HERO_ADAPTERS = ["lucas_json", "json_blog", "markdown_blog", FOUNDATION_ADAPTER];
 /** Where the approved hero lives in the repository and the URL the site serves it at. */
 export function heroImagePlan(r: BlogRelease, contract: Record<string, unknown>): { path: string; src: string } {
   const h = r.hero!;
   if (contract.hero_image !== true) fail("Website needs the Compass blog hero image upgrade before publishing this article");
-  if (!["lucas_json", "json_blog", FOUNDATION_ADAPTER].includes(r.destination.content_adapter)) fail("This website's adapter cannot carry a hero image yet");
+  if (!HERO_ADAPTERS.includes(r.destination.content_adapter)) fail("This website's adapter cannot carry a hero image yet");
   const dir = String(contract.hero_image_dir ?? "");
   const prefix = String(contract.hero_image_url_prefix ?? "");
   const recorded = (r.destination.content_paths.blog_images ?? "public/blog/images").replace(/\/$/, "");
@@ -161,15 +165,24 @@ export function preparePublication(r: BlogRelease, releaseHash: string, read: Re
   const q = (v: string) => JSON.stringify(v);
   if (r.cta.url && !/^https:\/\/[^\s<>()[\]{}]+$/.test(r.cta.url)) fail("CTA URL is invalid");
   if (/[\[\]\n\r<>{}]/.test(r.cta.text)) fail("CTA text requires manual review");
+  // The hero (Nov 2026) is a block mapping in the front matter, after the
+  // provenance keys; a hero-less article is byte-for-byte what it was.
+  if (hero && /[\x00-\x1f\x7f\u2028\u2029]/.test(r.hero!.alt)) fail("The hero image alt text requires manual review");
+  const heroFront = hero ? ["hero_image:", `  src: ${q(hero.src)}`, `  alt: ${q(r.hero!.alt)}`, `  width: ${r.hero!.width}`,
+    `  height: ${r.hero!.height}`, `  illustrative: ${r.hero!.illustrative === true}`] : [];
   const content = ["---", `title: ${q(r.title)}`, `meta_title: ${q(r.meta_title)}`, `h1: ${q(r.h1)}`,
     `date: ${q(date)}`, `excerpt: ${q(r.meta_description)}`, `compass_draft_id: ${q(r.draft_id)}`,
-    `compass_release_hash: ${q(releaseHash)}`, `keyword_id: ${q(r.keyword_id)}`, "---", "",
+    `compass_release_hash: ${q(releaseHash)}`, `keyword_id: ${q(r.keyword_id)}`, ...heroFront, "---", "",
     body, "", r.cta.url ? `[${r.cta.text}](${r.cta.url})` : r.cta.text, ""].join("\n");
+  const heroSrc = hero?.src ?? null;
   if (existing) {
-    if (existing.content === content) return { expected_head: read.head, url, files: [], already_present: true, hero_src: null, tldr_mode: tldr ? "body" : null };
+    if (existing.content === content) {
+      if (heroFiles.length) fail("The approved article is on the site but its hero image is missing. Review the repository");
+      return { expected_head: read.head, url, files: [], already_present: true, hero_src: heroSrc, tldr_mode: tldr ? "body" : null };
+    }
     return fail("Blog slug already exists. Review the existing article before publishing");
   }
-  return { expected_head: read.head, url, files: [{ path, content }], already_present: false, hero_src: null, tldr_mode: tldr ? "body" : null };
+  return { expected_head: read.head, url, files: [{ path, content }, ...heroFiles], already_present: false, hero_src: heroSrc, tldr_mode: tldr ? "body" : null };
 }
 
 // ── Foundation v1 (foundation_brand_content) ───────────────────────────────
