@@ -63,3 +63,12 @@ test("what a teammate may type", () => {
   no({ deliverable: "gbp", purpose: "service", topic: "x", planned_date: "2026-10-12" }, /inside this week/);
   no({ deliverable: "gbp", purpose: "service", topic: "x", service_id: "not-a-uuid" }, /Unknown service/);
 });
+
+test("a slot closed as not delivered by decision is neither done nor anything pending (20261120210000)", async () => {
+  const { isPlanStatus, planStatusLabels } = await import("../src/lib/content-planner.ts");
+  assert.ok(isPlanStatus("not_delivered"));
+  assert.match(planStatusLabels.not_delivered.label, /Not delivered/);
+  const s = summarize([{ deliverable: "blog", status: "not_delivered" }, { deliverable: "blog", status: "approved" }]);
+  assert.equal(s.blog.done, 1, "a decision is not delivered work");
+  assert.equal(s.blog.byStatus.not_delivered, 1);
+});

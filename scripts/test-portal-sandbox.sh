@@ -272,6 +272,14 @@ psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/blog_publication_de
 # 20261015175146: binding claims — a fresh foreign claim blocks the drafter's
 # write, an expired one does not, an unclaimed task writes as before.
 psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_draft_claims.test.sql"
+# 20261120210000: retire a draft request as superseded — team-only RPC,
+# refusals, terminal in every drafting path (claim, write, open_weekly,
+# regenerate, approve, sweeps, review queue), history kept, slot released.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_draft_supersede.test.sql"
+# 20261120210000 part 2: close a slot / its task as not delivered by decision
+# (no backfill) — team-only, terminal, neither delivered nor pending, skipped
+# by every sweep while later slots stay eligible.
+psql_as postgres -d sandbox -f "$ROOT/supabase/tests/sandbox/content_slot_not_delivered.test.sql"
 # 20261015175410: the same for Authority Draft with AI requests — a fresh
 # foreign claim blocks drafter_write, an expired one does not, an unclaimed
 # request writes as before.

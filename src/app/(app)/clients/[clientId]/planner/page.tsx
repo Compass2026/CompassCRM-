@@ -22,6 +22,7 @@ import {
   EditPlanItemForm,
   HoldForm,
   LinkOutputForm,
+  NotDeliveredForm,
   PlanFromAuthorityForm,
   UnlinkOutputButton,
 } from "@/components/planner/plan-forms";
@@ -178,7 +179,7 @@ export default async function PlannerPage({ params, searchParams }: {
                       {post && (<><dt className="text-muted-foreground">Draft</dt><dd><Link href={`${base}/social/${post.id}`} className="underline">{excerpt(post.copy)}</Link> ({post.review_status})</dd></>)}
                       {blog && (<><dt className="text-muted-foreground">Blog</dt><dd><Link href={`${base}/content`} className="underline">{blog.title}</Link> ({blog.status})</dd></>)}
                       {i.output_url && (<><dt className="text-muted-foreground">Delivered at</dt><dd><a href={i.output_url} className="underline" target="_blank" rel="noreferrer">{i.output_url}</a></dd></>)}
-                      {i.hold_reason && (<><dt className="text-muted-foreground">{i.hold === "blocked" ? "Waiting on" : "Note"}</dt><dd>{i.hold_reason}</dd></>)}
+                      {i.hold_reason && (<><dt className="text-muted-foreground">{i.status === "not_delivered" ? "Decision" : i.hold === "blocked" ? "Waiting on" : "Note"}</dt><dd>{i.hold_reason}</dd></>)}
                       {i.notes && (<><dt className="text-muted-foreground">Notes</dt><dd>{i.notes}</dd></>)}
                     </dl>
                     {onStandard && d === "web_page" && (
@@ -210,16 +211,25 @@ export default async function PlannerPage({ params, searchParams }: {
                               : "Next: draft the page, then mark it delivered with its link."}
                       </p>
                     )}
+                    {i.status === "not_delivered" ? (
+                      <p className="text-xs text-muted-foreground" data-not-delivered>
+                        Closed as not delivered by decision: kept as history, neither delivered nor pending, never drafted again.
+                      </p>
+                    ) : (<>
                     <div className="flex flex-wrap items-start gap-2">
                       <LinkOutputForm clientId={clientId} itemId={i.id} outputs={outputs} />
                       {(i.social_post_id || i.content_post_id) && <UnlinkOutputButton clientId={clientId} itemId={i.id} />}
                       {!i.social_post_id && !i.content_post_id && <DeletePlanItemButton clientId={clientId} itemId={i.id} />}
                     </div>
                     <HoldForm clientId={clientId} itemId={i.id} hold={i.hold} />
+                    {!i.social_post_id && !i.content_post_id && !i.draft_id && i.hold !== "delivered" && (
+                      <NotDeliveredForm clientId={clientId} planItemId={i.id} />
+                    )}
                     <EditPlanItemForm clientId={clientId} week={week} services={services} keywords={keywords} locations={locations}
                       item={{ id: i.id, deliverable: i.deliverable, purpose: i.purpose, topic: i.topic, search_intent: i.search_intent,
                               service_id: i.service_id, keyword_id: i.keyword_id, target_url: i.target_url, planned_date: i.planned_date, notes: i.notes,
                               gbp_location_id: locationOf.get(i.id) ?? null }} />
+                    </>)}
                   </li>
                 );
               })}

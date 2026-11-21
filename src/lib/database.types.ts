@@ -4787,6 +4787,10 @@ export type Database = {
           slug: string | null
           source_task_id: string | null
           status: string
+          superseded_actor: string | null
+          superseded_at: string | null
+          superseded_by: string | null
+          superseded_reason: string | null
           structured_data: Json | null
           submitted_at: string | null
           target_url: string | null
@@ -4839,6 +4843,10 @@ export type Database = {
           slug?: string | null
           source_task_id?: string | null
           status?: string
+          superseded_actor?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          superseded_reason?: string | null
           structured_data?: Json | null
           submitted_at?: string | null
           target_url?: string | null
@@ -4891,6 +4899,10 @@ export type Database = {
           slug?: string | null
           source_task_id?: string | null
           status?: string
+          superseded_actor?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          superseded_reason?: string | null
           structured_data?: Json | null
           submitted_at?: string | null
           target_url?: string | null
@@ -5047,6 +5059,9 @@ export type Database = {
           id: string
           keyword_id: string | null
           notes: string | null
+          not_delivered_at: string | null
+          not_delivered_by: string | null
+          not_delivered_reason: string | null
           output_url: string | null
           planned_date: string | null
           purpose: string
@@ -5082,6 +5097,9 @@ export type Database = {
           id?: string
           keyword_id?: string | null
           notes?: string | null
+          not_delivered_at?: string | null
+          not_delivered_by?: string | null
+          not_delivered_reason?: string | null
           output_url?: string | null
           planned_date?: string | null
           purpose: string
@@ -5117,6 +5135,9 @@ export type Database = {
           id?: string
           keyword_id?: string | null
           notes?: string | null
+          not_delivered_at?: string | null
+          not_delivered_by?: string | null
+          not_delivered_reason?: string | null
           output_url?: string | null
           planned_date?: string | null
           purpose?: string
@@ -13628,7 +13649,15 @@ export type Database = {
         Args: { p_note?: string; p_page_type?: string; p_plan_item_id: string }
         Returns: Json
       }
+      content_draft_supersede: {
+        Args: { p_draft_id: string; p_reason: string; p_superseded_by: string }
+        Returns: Json
+      }
       content_draft_write: { Args: { p: Json }; Returns: Json }
+      content_slot_not_delivered: {
+        Args: { p_plan_item_id?: string; p_reason: string; p_task_id?: string }
+        Returns: Json
+      }
       content_draft_write_with_hero: { Args: { p: Json }; Returns: Json }
       content_drafter_session_active: { Args: never; Returns: boolean }
       converge_client: { Args: { p_client_id: string }; Returns: boolean }

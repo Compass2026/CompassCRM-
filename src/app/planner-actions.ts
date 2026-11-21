@@ -155,6 +155,31 @@ export async function setHoldAction(clientId: string, itemId: string, _prev: Pla
   return { ok: true };
 }
 
+// Close a slot (or a slot task with no slot) as not delivered by decision —
+// e.g. no backfill of missed dates (20261120210000). Terminal: kept as
+// history, neither delivered nor pending; its open tasks close.
+export async function closeNotDeliveredAction(clientId: string, target: { planItemId?: string; taskId?: string }, _prev: PlanFormState, form: FormData): Promise<PlanFormState> {
+  if (!isUuid(clientId) || (target.planItemId && !isUuid(target.planItemId)) || (target.taskId && !isUuid(target.taskId))
+      || (!target.planItemId && !target.taskId)) return { error: "Unknown slot." };
+  const reason = String(form.get("reason") ?? "").replace(/\s+/g, " ").trim();
+  if (!reason) return { error: "Say why this slot is not delivered." };
+  if (reason.length > 500) return { error: "Keep the reason to 500 characters." };
+  const supabase = await start();
+  if (!supabase) return { error: NOT_TEAM };
+  const own = target.planItemId
+    ? await supabase.from("content_plan_items").select("id").eq("id", target.planItemId).eq("client_id", clientId).maybeSingle()
+    : await supabase.from("tasks").select("id").eq("id", target.taskId!).eq("client_id", clientId).maybeSingle();
+  if (!own.data) return { error: "Slot not found." };
+  const { error } = await supabase.rpc("content_slot_not_delivered", {
+    p_reason: reason, ...(target.taskId ? { p_task_id: target.taskId } : {}), ...(target.planItemId ? { p_plan_item_id: target.planItemId } : {}),
+  });
+  if (error) return { error: error.message };
+  revalidatePlanner(clientId);
+  revalidatePath("/tasks");
+  if (target.taskId) revalidatePath(`/tasks/${target.taskId}`);
+  return { ok: true };
+}
+
 // Plan an Authority opportunity into this week: the slot, topic, intent,
 // service, keyword and target page come from the opportunity.
 export async function planFromAuthorityAction(clientId: string, weekParam: string, opportunityId: string, _prev: PlanFormState, form: FormData): Promise<PlanFormState> {

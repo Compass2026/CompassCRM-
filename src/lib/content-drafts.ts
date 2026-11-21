@@ -2,7 +2,7 @@
 // and a small, escaping Markdown preview. The database enforces every rule
 // again; this only decides what the draft page offers.
 
-export const DRAFT_STATUSES = ["requested", "draft", "in_review", "approved", "rejected"] as const;
+export const DRAFT_STATUSES = ["requested", "draft", "in_review", "approved", "rejected", "superseded"] as const;
 export type DraftStatus = (typeof DRAFT_STATUSES)[number];
 export const isDraftStatus = (v: unknown): v is DraftStatus => DRAFT_STATUSES.includes(v as DraftStatus);
 
@@ -12,21 +12,36 @@ export const draftStatusLabels: Record<DraftStatus, { label: string; className: 
   in_review: { label: "In review", className: "border-amber-200 bg-amber-100 text-amber-900" },
   approved: { label: "Approved", className: "border-green-200 bg-green-100 text-green-800" },
   rejected: { label: "Rejected", className: "border-red-200 bg-red-100 text-red-800" },
+  superseded: { label: "Superseded", className: "border-zinc-200 bg-zinc-100 text-zinc-600" },
 };
 
-export type DraftAction = "edit" | "submit" | "withdraw" | "approve" | "reject" | "regenerate" | "reopen" | "delete" | "export";
+export type DraftAction = "edit" | "submit" | "withdraw" | "approve" | "reject" | "regenerate" | "reopen" | "supersede" | "delete" | "export";
 
+// "supersede" (20261120210000): retire a requested or draft request in favour
+// of another draft. Superseded is terminal: nothing but export, never delete.
 export function draftActions(d: { status: string; final_content_post_id: string | null; title: string | null }): DraftAction[] {
   const out: DraftAction[] = [];
   switch (d.status) {
-    case "draft": out.push("edit", "submit", "regenerate"); break;
+    case "requested": out.push("supersede"); break;
+    case "draft": out.push("edit", "submit", "regenerate", "supersede"); break;
     case "rejected": out.push("edit", "regenerate"); break;
     case "in_review": out.push("approve", "reject", "withdraw"); break;
     case "approved": out.push("reopen"); break;
   }
-  if (d.status !== "approved" && !d.final_content_post_id) out.push("delete");
+  if (d.status !== "approved" && d.status !== "superseded" && !d.final_content_post_id) out.push("delete");
   if (d.title) out.push("export");
   return out;
+}
+
+// Drafts that may replace this one: the same client and kind, not this one,
+// not retired. The same keyword first (a duplicate request), then newest.
+export function supersedeCandidates<T extends { id: string; status: string; keyword_id: string | null; updated_at: string }>(
+  self: { id: string; keyword_id: string | null }, drafts: T[],
+): T[] {
+  return drafts
+    .filter((d) => d.id !== self.id && d.status !== "superseded")
+    .sort((a, b) => Number(b.keyword_id !== null && b.keyword_id === self.keyword_id) - Number(a.keyword_id !== null && a.keyword_id === self.keyword_id)
+      || b.updated_at.localeCompare(a.updated_at));
 }
 
 // ── Markdown preview ────────────────────────────────────────────────────────

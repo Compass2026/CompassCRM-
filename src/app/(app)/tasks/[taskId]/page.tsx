@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { TaskCommentForm, TaskEditForm } from "@/components/task-forms";
+import { NotDeliveredForm } from "@/components/planner/plan-forms";
 import { autonomyLabels } from "@/components/task-list";
 import { ownerLabels } from "@/lib/labels";
 import { getCurrentTeamMember, listTeamMembers } from "@/lib/team";
@@ -29,7 +30,7 @@ export default async function TaskPage({ params }: { params: Promise<{ taskId: s
     supabase
       .from("tasks")
       .select(
-        "id, title, status, owner, autonomy_level, playbook_step, flagged_for_review, recommendation, due_date, notes, created_at, updated_at, completed_at, assignee_id, created_by, updated_by, client_id, monthly_cycle_id, clients(id, name), client_stages(stages(name)), monthly_cycles(period)"
+        "id, title, status, key, owner, autonomy_level, playbook_step, flagged_for_review, recommendation, due_date, notes, created_at, updated_at, completed_at, assignee_id, created_by, updated_by, client_id, monthly_cycle_id, clients(id, name), client_stages(stages(name)), monthly_cycles(period)"
       )
       .eq("id", taskId)
       .maybeSingle(),
@@ -106,6 +107,13 @@ export default async function TaskPage({ params }: { params: Promise<{ taskId: s
         >
           Open the post to approve or reject it &rarr;
         </Link>
+      )}
+
+      {task.client_id && task.status !== "done" && (task.key === "blog_post" || task.key?.startsWith("social_slot:")) && (
+        <section className="surface p-4 sm:p-5 space-y-2" data-task-not-delivered>
+          <h2 className="text-sm font-semibold">Slot decision</h2>
+          <NotDeliveredForm clientId={task.client_id} taskId={task.id} />
+        </section>
       )}
 
       <section className="surface p-4 sm:p-5 space-y-3">
