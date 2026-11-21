@@ -23,7 +23,7 @@ const SITE = {
 };
 const REPOS = { [REPO]: { id: 77, default_branch: "careers", branches: { careers: { author: "Tom" }, [BRANCH]: { author: "Tom" } } } };
 
-function setup({ site = SITE, token = true, linked = false, liveSha = "head", liveTarget = "production" } = {}) {
+function setup({ site = SITE, token = true, linked = false, liveSha = "head", liveTarget = "production", compare = null } = {}) {
   const supabase = fakeSupabase({
     secrets: { SYNC_CRON_SECRET: "cron", GITHUB_TOKEN: "ghp_fake", ...(token ? { VERCEL_TOKEN: "vt_fake" } : {}) },
     tables: { clients: [{ id: CLIENT, name: "SME Test", website_url: "https://sme.example" }], sites: [{ id: "site-sme", client_id: CLIENT, ...site }] },
@@ -34,6 +34,10 @@ function setup({ site = SITE, token = true, linked = false, liveSha = "head", li
   const head = () => gh.model[REPO].refs[BRANCH];
   const fetch = async (url, init = {}) => {
     const u = new URL(String(url));
+    // GitHub's compare API: what lies between production and the head.
+    if (u.host === "api.github.com" && u.pathname.startsWith(`/repos/${REPO}/compare/`)) {
+      return compare ? json(200, compare) : json(404, { message: "Not Found" });
+    }
     if (u.host !== "api.vercel.com") return gh.fetch(url, init);
     const method = (init.method ?? "GET").toUpperCase();
     const body = init.body ? JSON.parse(init.body) : null;
@@ -112,6 +116,24 @@ test("production behind the branch head: refused before anything is pushed (it w
   assert.equal(head(), before);
   assert.equal(gh.writes().length, 0);
   assert.equal(vercel.created.length, 0);
+});
+
+test("the head ahead of production by docs/ only (a re-pin commit) still deploys; anything else between them refuses", async () => {
+  const docs = setup({ liveSha: "a".repeat(40), compare: { status: "ahead", files: [{ filename: "docs/deployment-plan.md" }] } });
+  const ok = await docs.post(entry());
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(docs.vercel.created.length, 1);
+  for (const compare of [
+    { status: "ahead", files: [{ filename: "docs/deployment-plan.md" }, { filename: "app/page.tsx" }] },
+    { status: "diverged", files: [{ filename: "docs/x.md" }] },
+    { status: "ahead", files: [] },
+  ]) {
+    const s = setup({ liveSha: "a".repeat(40), compare });
+    const r = await s.post(entry());
+    assert.equal(r.status, 409, JSON.stringify(compare));
+    assert.equal(s.gh.writes().length, 0);
+    assert.equal(s.vercel.created.length, 0);
+  }
 });
 
 test("refused before the push: a linked project, a preview-target alias, no Vercel token, or a code change", async () => {

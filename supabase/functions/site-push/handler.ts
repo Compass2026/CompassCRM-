@@ -720,8 +720,21 @@ export function createSitePushHandler(deps: HandlerDeps) {
         if (d?.target !== "production" || String(d?.readyState ?? d?.state ?? "") !== "READY" || (projectId && liveProject && liveProject !== projectId)) {
           return blocked(`${project}.vercel.app is not served by a READY production deployment of ${project}. Nothing was pushed.`, { project });
         }
-        if (!productionSha || !headInfo || productionSha !== headInfo.sha) {
-          return blocked(`Production for ${project} serves ${productionSha ?? "an unrecorded commit"}, but ${branch} is at ${headInfo?.sha ?? "no commit"}. Deploying a change on top of it would also ship whatever is between them. Release ${branch} through the site's deployment plan first, then retry. Nothing was pushed.`, { project, production_sha: productionSha });
+        // The head may be ahead of production by documentation only (the
+        // deployment plan's own re-pin commits): docs/ never reaches the
+        // build, so that is still exactly what production serves.
+        let docsOnlyAhead = false;
+        if (productionSha && headInfo && productionSha !== headInfo.sha) {
+          const cmp = await gh(`/repos/${owner}/${name}/compare/${productionSha}...${headInfo.sha}`);
+          if (cmp.ok) {
+            const c = await cmp.json();
+            const changed = Array.isArray(c?.files) ? (c.files as { filename?: string }[]) : null;
+            docsOnlyAhead = c?.status === "ahead" && !!changed && changed.length > 0 && changed.length < 300
+              && changed.every((f) => typeof f.filename === "string" && f.filename.startsWith("docs/"));
+          }
+        }
+        if (!productionSha || !headInfo || (productionSha !== headInfo.sha && !docsOnlyAhead)) {
+          return blocked(`Production for ${project} serves ${productionSha ?? "an unrecorded commit"}, but ${branch} is at ${headInfo?.sha ?? "no commit"} with changes outside docs/ in between. Deploying a change on top of it would also ship them. Release ${branch} through the site's deployment plan first, then retry. Nothing was pushed.`, { project, production_sha: productionSha });
         }
         return { ok: { projectId, created: false, skipped: false, explicit: { productionSha } } };
       }
