@@ -136,10 +136,11 @@ test("the contract and the posts file are checked before any write", () => {
   assert.throws(() => preparePublication(release(), HASH, { ...repo(), branch: "other" }, DATE), /destination changed/);
 });
 
-test("no hero for this adapter: heroImagePlan still refuses heroes on non-JSON adapters", () => {
+test("a hero needs the site's opt-in: a contract without hero_image refuses the article (see foundation-blog-hero.test.mjs)", () => {
   const hero = { asset_id: "a", content_hash: "c".repeat(64), alt: "Alt", kind: "photo", illustrative: false, mime_type: "image/webp", width: 10, height: 10, size_bytes: 10, storage_path: "x" };
   assert.throws(() => preparePublication(release({ hero }), HASH, repo(), DATE), /hero image upgrade/);
-  assert.throws(() => heroImagePlan(release({ hero }), { hero_image: true, hero_image_dir: "public/blog/images", hero_image_url_prefix: "/blog/images/" }), /cannot carry a hero image/);
+  const plan = heroImagePlan(release({ hero }), { hero_image: true, hero_image_dir: "public/blog/images", hero_image_url_prefix: "/blog/images/" });
+  assert.equal(plan.path, `public/blog/images/compass-publishing-test-${"c".repeat(12)}.webp`);
 });
 
 test("Markdown → blocks: deterministic, own-host links root-relative, sources block, refusals for what blocks cannot express", () => {
