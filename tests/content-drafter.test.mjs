@@ -312,3 +312,110 @@ test("handler: an unclaimed or stale task writes as today; the database's CD409 
   assert.equal(r.body.error, "claimed_by_other");
   assert.ok((await call(fn, { mode: "version" })).body.features.includes("claims"));
 });
+
+// Relevant money pages (Nov 20 2026): the money-link minimum counts the
+// article's own service family, so a small site is never forced to pad with
+// another family's page; a site with enough relevant pages keeps the full gate.
+const svc = (id, name, segment, url) => ({ id, name, status: "approved", page_url: url, primary_keyword_id: null, parent_service_id: null, segment });
+const bodyWith = (links) => GOOD_BLOG.body_markdown + "\n" + links.map(([a, u]) => `See [${a}](${u}).`).join(" ") + "\n";
+const lintWith = (b, over) => lintBlog(b, { ...clone(GOOD_BLOG), ...over }, { gazetteer: GAZETTEER });
+
+test("relevant money pages: a site with enough pages in the family keeps the three-link gate", () => {
+  const input = lucas();
+  input.services.push(svc("roof-maint", "Roof Maintenance", "Roofing", `${SITE}/maintenance`), svc("siding", "Siding Installation", "Siding", `${SITE}/siding`));
+  const b = buildBlogBrief(input, draftRow()).brief;
+  assert.deepEqual(b.links.relevant_money_pages.map((l) => l.url).sort(), [PAGE, `${SITE}/maintenance`, `${SITE}/roofing-repairs/`].sort());
+  assert.ok(b.links.money_pages.some((l) => l.url === `${SITE}/siding`), "another family stays linkable");
+  // Two of three family pages: still short, and another family's page does not make up the count.
+  assert.ok(codes(lintWith(b, {})).includes("money_links_missing"));
+  assert.ok(codes(lintWith(b, { body_markdown: bodyWith([["siding", `${SITE}/siding`]]) })).includes("money_links_missing"));
+  const full = lintWith(b, { body_markdown: bodyWith([["roof maintenance", `${SITE}/maintenance`]]) });
+  assert.equal(full.ok, true, JSON.stringify(full.problems));
+  assert.ok(!full.warnings.some((w) => w.code === "money_page_gap"));
+});
+
+test("relevant money pages: a small site's other service family is never required", () => {
+  const input = lucas();
+  input.services.push(svc("commercial", "Commercial Roofing", "Commercial", `${SITE}/commercial-roofing`));
+  const b = buildBlogBrief(input, draftRow()).brief;
+  assert.deepEqual(b.links.relevant_money_pages.map((l) => l.url).sort(), [PAGE, `${SITE}/roofing-repairs/`].sort());
+  // Before Nov 20 the minimum was three of every service page, so this draft
+  // could pass only by linking the commercial page.
+  const r = lintWith(b, {});
+  assert.equal(r.ok, true, JSON.stringify(r.problems));
+  assert.ok(r.warnings.some((w) => w.code === "money_page_gap"), "the gap stays visible for page planning");
+  // The family's own pages are still required, and so is the owner page.
+  const swap = (from) => ({ body_markdown: GOOD_BLOG.body_markdown.replace(`(${from})`, `(${SITE}/commercial-roofing)`) });
+  assert.ok(codes(lintWith(b, swap(`${SITE}/roofing-repairs/`))).includes("money_links_missing"));
+  assert.ok(codes(lintWith(b, swap(PAGE))).includes("required_link_missing"));
+  // Unapproved or invented destinations are still refused.
+  assert.ok(codes(lintWith(b, { body_markdown: bodyWith([["our gallery", `${SITE}/gallery`]]) })).includes("link_not_allowed"));
+});
+
+test("relevant money pages: an article without a segmented service, or a brief from before Nov 20, counts every service page", () => {
+  const input = lucas();
+  input.services.push(svc("commercial", "Commercial Roofing", "Commercial", `${SITE}/commercial-roofing`));
+  for (const s of input.services) s.segment = null;
+  const unsegmented = buildBlogBrief(input, draftRow()).brief;
+  assert.equal(unsegmented.links.relevant_money_pages.length, unsegmented.links.money_pages.length);
+  assert.ok(codes(lintWith(unsegmented, {})).includes("money_links_missing"));
+  const old = buildBlogBrief(lucas(), draftRow()).brief;
+  old.links.money_pages.push({ url: `${SITE}/commercial-roofing`, label: "Commercial Roofing", kind: "service" });
+  delete old.links.relevant_money_pages;
+  assert.ok(codes(lintWith(old, {})).includes("money_links_missing"));
+});
+
+test("live site articles: the client's sitemap lists linkable posts on its own blog route only", async () => {
+  const { sitemapArticles, sitemapChildren } = await import("../supabase/functions/content-drafter/links.ts");
+  const xml = `<?xml version="1.0"?><urlset>
+    <url><loc>${SITE}/blog</loc></url>
+    <url><loc>${SITE}/blog/gutters-and-your-roof</loc></url>
+    <url><loc>https://www.lucasconstructionmo.com/blog/signs-of-hail-damage/</loc></url>
+    <url><loc>${SITE}/blog/a/b</loc></url>
+    <url><loc>${SITE}/blog/with-query?x=1</loc></url>
+    <url><loc>${SITE}/services/roof-replacement</loc></url>
+    <url><loc>https://elsewhere.test/blog/not-ours</loc></url>
+    <url><loc>http://lucasconstructionmo.com/blog/plain-http</loc></url>
+  </urlset>`;
+  assert.deepEqual(sitemapArticles(xml, SITE), [
+    { url: `${SITE}/blog/gutters-and-your-roof`, title: "Gutters and your roof" },
+    { url: "https://www.lucasconstructionmo.com/blog/signs-of-hail-damage/", title: "Signs of hail damage" },
+  ]);
+  assert.deepEqual(sitemapArticles(`<urlset><url><loc>${SITE}/news/storm-season</loc></url></urlset>`, SITE, "/news/{slug}").map((a) => a.url), [`${SITE}/news/storm-season`]);
+  assert.deepEqual(sitemapChildren(`<sitemapindex><sitemap><loc>${SITE}/sitemap-posts.xml</loc></sitemap><sitemap><loc>https://cdn.test/x.xml</loc></sitemap></sitemapindex>`, SITE), [`${SITE}/sitemap-posts.xml`]);
+  assert.deepEqual(sitemapChildren(xml, SITE), []);
+  // A live article is an allowed destination; it never counts as a money page.
+  const b = buildBlogBrief(lucas(), draftRow(), sitemapArticles(xml, SITE)).brief;
+  assert.ok(b.links.allowed.some((l) => l.kind === "article" && l.url.endsWith("/signs-of-hail-damage/")));
+  assert.ok(!b.links.relevant_money_pages.some((l) => l.url.includes("/blog/")));
+  const linked = lintWith(b, { body_markdown: bodyWith([["hail damage signs", "https://www.lucasconstructionmo.com/blog/signs-of-hail-damage/"]]) });
+  assert.equal(linked.ok, true, JSON.stringify(linked.problems));
+});
+
+test("live site articles: the store adds sitemap posts to the CRM's own and never fails on an unreadable sitemap", async () => {
+  const { createStore } = await import("../supabase/functions/content-drafter/store.ts");
+  const rows = {
+    content_posts: [{ url: `${SITE}/blog/gutters-and-your-roof`, title: "Gutters and your roof" }],
+    clients: { website_url: SITE },
+    sites: [{ url: SITE, content_paths: { blog_route: "/blog/{slug}" } }],
+  };
+  const query = (table) => {
+    const q = { select: () => q, eq: () => q, not: () => q, order: () => q,
+      maybeSingle: async () => ({ data: rows[table], error: null }),
+      then: (ok) => ok({ data: rows[table], error: null }) };
+    return q;
+  };
+  const supabase = { from: query };
+  const seen = [];
+  const sitemap = `<urlset><url><loc>${SITE}/blog/gutters-and-your-roof</loc></url><url><loc>${SITE}/blog/signs-of-hail-damage</loc></url></urlset>`;
+  const live = createStore(supabase, async (url) => { seen.push(url); return new Response(sitemap, { status: 200 }); });
+  const pages = await live.sitePages("client");
+  assert.deepEqual(seen, [`${SITE}/sitemap.xml`]);
+  assert.deepEqual(pages.map((p) => p.url), [`${SITE}/blog/gutters-and-your-roof`, `${SITE}/blog/gutters-and-your-roof`, `${SITE}/blog/signs-of-hail-damage`]);
+  const b = buildBlogBrief(lucas(), draftRow(), pages).brief;
+  assert.equal(b.links.allowed.filter((l) => l.url.endsWith("/gutters-and-your-roof")).length, 1, "the CRM's record wins the duplicate");
+  const down = createStore(supabase, async () => { throw new Error("offline"); });
+  assert.deepEqual((await down.sitePages("client")).map((p) => p.url), [`${SITE}/blog/gutters-and-your-roof`]);
+  const missing = createStore(supabase, async () => new Response("no", { status: 404 }));
+  assert.equal((await missing.sitePages("client")).length, 1);
+});

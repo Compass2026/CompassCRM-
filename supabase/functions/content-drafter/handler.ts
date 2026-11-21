@@ -36,7 +36,7 @@ import { lintBlog, type BlogDraft } from "./lint.ts";
 import { claimedByOther } from "../post-drafter/claims.ts";
 import type { Store } from "./store.ts";
 
-export const HANDLER_VERSION = 7;
+export const HANDLER_VERSION = 8;
 export const MODES = ["brief", "check", "submit", "open", "version"] as const;
 
 export type Deps = { store: Store; gazetteer?: Record<string, string[]> };
@@ -115,7 +115,7 @@ export function createContentDrafter(deps: Deps) {
     const body = (await req.json().catch(() => null)) as Json | null;
     if (!body || typeof body !== "object") return reply(400, { error: "JSON body required" });
     const mode = body.mode;
-    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations", "claims", "hero_images", "tldr"] });
+    if (mode === "version") return reply(200, { version: HANDLER_VERSION, drafter: CONTENT_DRAFTER_VERSION, modes: MODES, kinds: ["blog"], features: ["weekly_open", "money_page_links", "sourced_external_citations", "claims", "hero_images", "tldr", "relevant_money_pages", "live_site_articles"] });
     if (mode === "open") {
       if (who.via !== "worker") return reply(403, { error: "open is the worker's (the weekly blog task)" });
       const taskId = body.task_id;

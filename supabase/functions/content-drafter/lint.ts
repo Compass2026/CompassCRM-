@@ -147,10 +147,15 @@ export function lintBlog(brief: BlogBrief, draft: BlogDraft, opts: { gazetteer?:
     }
   }
   const moneyUrls = new Set(brief.links.money_pages.map((l) => normalizeUrl(l.url)));
-  const moneyCount = new Set(bodyLinks.map((l) => normalizeUrl(l.url)).filter((url) => moneyUrls.has(url))).size;
-  const minimum = Math.min(R.money_links_min, moneyUrls.size);
-  if (moneyCount < minimum) add("money_links_missing", `Use at least ${minimum} distinct relevant money-page destinations in the body; found ${moneyCount}. The CTA and repeated destinations do not count.`);
-  if (moneyUrls.size < R.money_links_min) warn("money_page_gap", `Target ${R.money_links_min}–${R.money_links_preferred_max} distinct money pages. Only ${moneyUrls.size} approved service-page destinations are available. Plan relevant service pages; do not pad with duplicate links.`);
+  // The minimum counts the article's own service family only (Nov 20 2026);
+  // a brief from before then carries no relevant list and counts every page.
+  const relevantUrls = new Set((brief.links.relevant_money_pages ?? brief.links.money_pages).map((l) => normalizeUrl(l.url)));
+  const linkedUrls = new Set(bodyLinks.map((l) => normalizeUrl(l.url)));
+  const moneyCount = [...linkedUrls].filter((url) => moneyUrls.has(url)).length;
+  const relevantCount = [...linkedUrls].filter((url) => relevantUrls.has(url)).length;
+  const minimum = Math.min(R.money_links_min, relevantUrls.size);
+  if (relevantCount < minimum) add("money_links_missing", `Use at least ${minimum} distinct relevant money-page destinations in the body; found ${relevantCount}. The CTA, repeated destinations and other service families do not count.`);
+  if (relevantUrls.size < R.money_links_min) warn("money_page_gap", `Target ${R.money_links_min}–${R.money_links_preferred_max} distinct money pages. Only ${relevantUrls.size} approved service-page destinations are relevant to this article. Plan relevant service pages; link relevant live pages where they help, never padding or another service family.`);
   if (moneyCount > R.money_links_preferred_max) warn("money_links_above_target", `The article links ${moneyCount} money pages; review relevance against the ${R.money_links_min}–${R.money_links_preferred_max} target.`);
   if (cited.size < R.external_citations_min) add("external_citation_missing", external.length
     ? "Include at least one sourced external citation supporting an eligible claim in the article."

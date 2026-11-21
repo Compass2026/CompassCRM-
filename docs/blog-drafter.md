@@ -188,6 +188,21 @@ The minimum is three, or the number of approved service destinations if fewer
 exist. A small site receives a visible `money_page_gap` lint warning for human
 review and service-page planning. Do not fill a count with unrelated services.
 
+**Relevant service family (November 20, 2026).** The minimum counts only
+`links.relevant_money_pages`: the approved service pages in the article's own
+service family (the target service's `segment`), plus services with no segment
+and the owner page. It is three, or the number of relevant pages if fewer.
+Another family's page stays linkable but never counts, so a residential
+article on a site with two residential pages is not pushed onto the commercial
+page (Show Me Electrical, Nov 20 2026). An article without a segmented service
+counts every service page, as before. Beyond the money pages, relevant
+`links.allowed` destinations (contact, service area, published articles) may
+be linked where they help the reader. Published articles include the posts
+the client's live sitemap lists under its blog route (`sites.content_paths.
+blog_route`, default `/blog/{slug}`), so posts that predate the CRM are
+linkable; the publisher rebuilds the brief the same way, and a post that
+leaves the sitemap fails the publish lint.
+
 At least one external citation is required. `links.external` contains only
 exact HTTPS source URLs from relevant eligible CRM claims. Source prose,
 unsupported claims and arbitrary pages on a source's domain are not permitted.
